@@ -830,6 +830,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
 
     last_tools: set = set()
     agapi_out = False   # Sasha 261 · an AgAPI outage's line was said this turn
+    read_back_said = False   # Sasha 262 · the read-back's one line was said this turn (item 10)
     for step in range(MAX_STEPS):
         # Sasha 205 · the fast model talks and summarises (incl. a proposal, a total, a booking); the big one only weighs
         # search results (flights, stays, venues) to choose among them
@@ -896,6 +897,16 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 spoken_any = True
                 yield {"type": "text", "delta": line + " "}
                 yield {"type": "say", "text": SP.speakable(line)}
+            rb = _V.read_back_line(u.name, r) if honest else ""   # Sasha 262 · S2 item 10: the read-back's ONE line, said by code;
+            if rb:                                                 # the turn ends on it (the model once added "I need a clear yes first")
+                read_back_said = True
+                if rb not in said:
+                    for e in await flush():
+                        yield e
+                    said.append(rb)
+                    spoken_any = True
+                    yield {"type": "text", "delta": rb + " "}
+                    yield {"type": "say", "text": SP.speakable(rb)}
             kept = ((r.get("result") or {}).get("keep") or {}).get("say_first") if r.get("ok") and isinstance(r.get("result"), dict) else None
             if kept and surface != "s2" and kept not in said:   # Sasha 228 · S1: "I have your passport (ES ••••456) and will apply it." —
                 for e in await flush():                           # said by code, up front, in this turn (the mask only); never twice
@@ -909,6 +920,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                    **({"error": r["error"]["code"]} if not r.get("ok") else {})}
             if r.get("ok") and u.name in _CHANGES_TRIP:
                 tstate["drawn"] = True   # Sasha 251 · the trip view refreshes
+                tstate["priced"] = tstate.get("priced") or u.name in _V.TOTAL_TOOLS   # Sasha 262 · item 3: this turn priced the trip
                 yield {"type": "trip_changed"}
             if surface == "s2" and not wa and r.get("ok") and u.name == "book_venue" and (r.get("result") or {}).get("status") == "confirmed":
                 bev = await booked_event(account)   # Sasha 249 · ONE STATUS: /s2's "Booked" card comes from this event only (never
@@ -939,8 +951,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r, u.name), default=str)[:12000]})
             agapi_out = agapi_out or (r.get("error") or {}).get("code") == "agapi_unreachable"
         msgs.append({"role": "user", "content": results})
-        if agapi_out:   # Sasha 261 · production (o261): after the line she offered a retry, an alternative, then said it twice —
-            break       # an AgAPI outage's line, said by code, is the turn's answer about it: the model doesn't carry on
+        if agapi_out or read_back_said:   # Sasha 261 · production (o261): after the line she offered a retry, an alternative, then
+            break       # said it twice — an AgAPI outage's line, said by code, is the turn's answer about it: the model doesn't carry on.
+            #             Sasha 262 · the same for the read-back's one line (S2 item 10): the card carries the rest
     text = " ".join(said).strip()
     figures: Dict[str, Any] = {}   # Sasha 249 · get_total's trip_figures (read only — the guard never re-prices the trip)
     allowed |= await _basket_amounts(ctx, figures)
@@ -987,6 +1000,13 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         said.insert(0, pre)
         guard_log.append(f"rules' words put in front: {pre[:80]}")
         yield {"type": "replace", "text": text, "speak": True, "say": SP.speakable(pre)}
+    tline = _V.total_line(figures, text) if honest and tstate.get("priced") and not agapi_out else ""
+    if tline:   # Sasha 262 · S2 item 3 (row 911): ONE TOTAL — the trip's figure (the Trip tab's ALL IN) when her reply left it out
+        text = f"{text} {tline}".strip()
+        said.append(tline)
+        guard_log.append(f"the one total said: {tline}")
+        yield {"type": "text", "delta": " " + tline}
+        yield {"type": "say", "text": SP.speakable(tline)}
     if len(text) > TRIM_CHARS:   # Sasha 205 · the safety trim: a very long reply ends at a sentence
         cut = text[:TRIM_CHARS]
         text = cut[: max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! ")) + 1] or cut

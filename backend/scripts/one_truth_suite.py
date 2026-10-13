@@ -158,6 +158,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # timeout / unreachable once — the founder emailed at most once an hour — and the turn says voice.outage_line by code
     "T43": ("an AgAPI outage is named: one transport, one plain line said by code, the founder told once an hour, never 'didn't work'",
             ["tests.test_s261"]),
+    # Sasha 262 · row 911 (S2 items 10, 3): the read-back's one line and the trip's one total, said by code from voice.py; "Handle it"
+    # on book_venue reads it back too (never "I need a clear yes first")
+    "T44": ("item 10: one read-back line by code, the turn ends there; item 3: the one total said when she leaves it out",
+            ["tests.test_s262"]),
 }
 
 _RUNNER = """

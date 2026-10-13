@@ -229,8 +229,10 @@ async def read_booking_route(ctx, a: dict) -> dict:
             "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
 
 
-#: Sasha 256 · the one line over a venue read-back card (its details are on the card, never recited)
-READ_BACK_ASK = "Shall I send this to {venue}? Every detail is on the card."
+from app.agent.voice import READ_BACK_ASK   # noqa: E402 · Sasha 262 · the one read-back line lives in her voice (app/agent/voice.py)
+#: Sasha 262 · S2 item 10 (row 911): the booking the ONE question was asked about (account → its hold args, when). On "Handle it" the
+#: model sometimes called book_venue (no yes yet → "I need a clear yes first") instead of hold_venue: that turn now reads it back too
+_ASKED_ROUTE: Dict[str, dict] = {}
 
 
 def chosen_route(said: Optional[str]) -> Optional[str]:
@@ -650,6 +652,7 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
     venue = GW.plain_venue(rd["venue"])
     kinds = {c["kind"] for c in d.get("channels") or []}
     if action == "ask_one_question":   # R2 · the ONE question, word for word (voice.ASK_BOOK is this phrase)
+        _ASKED_ROUTE[ctx.account] = {"a": {k: v for k, v in a.items() if k != "route"}, "at": datetime.now(timezone.utc)}   # Sasha 262
         return _said({"status": "choose_route", "venue": rd["venue"], "ask": d["say_text"],
                       "options": [dict(o) for o in BD.CHOICES],
                       "how": "Say `say` word for word, then hold_venue again with the route they chose (Prefilled form → page; "
@@ -1068,6 +1071,9 @@ async def book_venue(ctx, a: dict) -> dict:
     GW = _API()
     said = ((a.get("approval") or {}).get("said")) or ""
     if not yes_to_book(said):
+        q, picked = _ASKED_ROUTE.get(ctx.account), chosen_route(ctx.user_said)
+        if q and picked and not stale(q["at"]) and one_path(ctx):   # Sasha 262 · their answer to the one question ("Handle it"):
+            return await hold_venue(ctx, {**q["a"], "route": picked})   # the read-back, as hold_venue gives it — never "a clear yes first"
         raise _err("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book_venue")
     held = _HELD.get(ctx.account)
     if not held:

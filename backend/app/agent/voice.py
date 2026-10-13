@@ -6,6 +6,7 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
   CHOICES      → its two answers, as buttons / a list
   done_form()  → the confirmation once a prefilled form is on their screen
   SENT         → the confirmation once a request has gone to the venue
+  READ_BACK_ASK / read_back_line() → Sasha 262 · the one line over a read-back card, said by code (sasha.turn)
   faults()     → a transcript's breaches: a channel named, or a second question for the same detail
   SHOWS / SAYS → Sasha 251 · which tools put something on screen; FAILED / failed_line() → what she says when one failed and
                  nothing was drawn; claims_shown() / honest_faults() → a claim of what isn't there (sasha.turn acts on it)
@@ -22,6 +23,38 @@ CHOICES = ({"title": "Prefilled form", "route": "page"}, {"title": "Handle it", 
 DONE_FORM = "Done — it's on your screen, tap to confirm."
 DONE_FORM_WA = "Done — it's below, tap to confirm."   # WhatsApp: the card arrives as the next message, not "on your screen"
 SENT = "Sent. I'll tell you when they reply."
+#: Sasha 256 · the one line over a venue read-back card (its details are on the card, never recited). Sasha 262 (S2 item 10, row 911):
+#: said BY CODE and the turn ends there (sasha.turn) — the model once added "I haven't booked it yet. I need a clear yes first."
+READ_BACK_ASK = "Shall I send this to {venue}? Every detail is on the card."
+
+
+#: Sasha 262 · S2 item 3 (row 911): ONE TOTAL — a turn that priced the trip says the trip's one figure (basket.trip_figures, the Trip
+#: tab's ALL IN). EU 257's run: her reply carried no € total at all, the Trip tab said €482. When she leaves it out, it's said by code.
+TOTAL_LINE = "All in, that's about €{eur}."
+TOTAL_TOOLS = ("propose_trip", "swap_stay", "choose_offer")
+_EUROS = re.compile(r"€\s?(\d[\d.,]*)|(\d[\d.,]*)\s?(?:€|euros?\b|EUR\b)", re.I)
+
+
+def total_line(figures: dict, text: str) -> str:
+    """The one total's line when her reply doesn't already say that figure (within €1), else ""."""
+    t = (figures or {}).get("total_eur")
+    if not isinstance(t, (int, float)) or t <= 0:
+        return ""
+    for m in _EUROS.finditer(text or ""):
+        try:
+            if abs(float((m.group(1) or m.group(2)).replace(",", "").rstrip(".")) - t) <= 1:
+                return ""
+        except ValueError:
+            continue
+    return TOTAL_LINE.format(eur=f"{round(t):,}")
+
+
+def read_back_line(tool: str, r: dict) -> str:
+    """The read-back line a booking tool's result carries on a screen (hold_venue / book_venue: awaiting_yes + its card), else ""."""
+    res = (r or {}).get("result") if (r or {}).get("ok") else None
+    if tool not in ("hold_venue", "book_venue") or not isinstance(res, dict) or res.get("status") != "awaiting_yes":
+        return ""
+    return res["ask"] if res.get("read_back") and res.get("ask") and res["ask"] == READ_BACK_ASK.format(venue=res.get("venue")) else ""
 
 # the channels she never names (EU 246 §2 rule 1), and the booking platforms the code knows by name
 CHANNEL_NAMES = ("WhatsApp", "Instagram", "Booksy", "SevenRooms", "CoverManager", "FareHarbor", "Restaurantic", "TheFork", "OpenTable",
@@ -272,6 +305,6 @@ def outage_line(kind: str, tool: str) -> str:
     return OUTAGE.get(kind, OUTAGE["slow"]).format(what=what, service=service)
 
 
-__all__ = ["OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
+__all__ = ["TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

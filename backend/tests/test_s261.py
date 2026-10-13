@@ -172,7 +172,7 @@ class SheSaysItPlainly(unittest.TestCase):
         self.assertIn("agapi_outage(r, met, u.name) if honest else r", src)
         # production (o261): she carried on after the line — a retry offer, an alternative, the line again. The line ends the turn.
         self.assertIn('agapi_out = agapi_out or (r.get("error") or {}).get("code") == "agapi_unreachable"', src)
-        self.assertIn("if agapi_out:", src)
+        self.assertIn("if agapi_out or read_back_said:", src)   # Sasha 262: the read-back's one line ends the turn the same way
 
 
 if __name__ == "__main__":

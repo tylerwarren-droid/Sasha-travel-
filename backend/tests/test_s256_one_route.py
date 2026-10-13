@@ -30,7 +30,8 @@ DECIDES = re.compile(r"""\b_?AR\.(?:route|money_target|endpoint|_in_their_basket
                      r"""|\busing\(\s*["'](?:live|sandbox)["']\)|agapi-(?:live|sandbox)-production|getenv\(\s*["']SASHA_AGAPI_(?:TEST_)?(?:URL|KEY)["']"""
                      r"""|getenv\(\s*["']SASHA_\w+_VIA["']""")
 #: the allowed exceptions, by file and the exact decision
-ALLOWED = {("agapi/person_access.py", 'AR.endpoint("live")')}   # the access record lives on agapi-live, whatever the person's mode
+ALLOWED = {("agapi/person_access.py", 'AR.endpoint("live")'),   # the access record lives on agapi-live, whatever the person's mode
+           ("agapi/test_venues.py", "AR.person_mode(")}       # Sasha 256 · what a test person may BOOK (Kanoe's test venue), not a route
 
 
 def _scanned():

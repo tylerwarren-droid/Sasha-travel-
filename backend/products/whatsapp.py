@@ -54,6 +54,12 @@ START_WORD = {"relocation": "relocation", "campus": "campus", "health": "españa
 PRODUCT_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "EspañaMe"}
 
 
+def _names(product: str, body: str, payload: str) -> bool:
+    """Sasha 256 · their own message names this product (its word at the start, or its own button) — entering it, never parking it."""
+    rx = {"campus": _CAMPUS, "relocation": _RELOC, "health": _HEALTH, "diligence": _DILIGENCE}.get(product)
+    return bool((payload and payload.startswith(PREFIX.get(product, ("\0",)))) or (rx and rx.match(body or "")))
+
+
 def _lev(a: str, b: str) -> int:
     prev = list(range(len(b) + 1))
     for i, ca in enumerate(a, 1):
@@ -304,6 +310,21 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
                 asked_last, st["pending"] = None, None
         except (TypeError, ValueError):
             pass
+    if asked_last and not _names(asked_last, body, payload) and not (_EXIT.match(body) and not payload) \
+            and not payload.startswith("so:") and (payload or start_over(body) is None):   # their own word for it: its own path
+        # Sasha 256 · found on Tyler's WhatsApp (13 Oct 11:03): "Sasha" → "You're in Sasha (travel)", then "Can you make a reservation
+        # for me in Madrid" was answered by CampusMe's old "Which universities?" (the web's own state still held it). A pending
+        # question belongs to ITS space: only the CURRENT space's may answer. Any other is parked — kept, said once — and the message
+        # goes on to the current space (Sasha travel by default; a space changes only by their own word).
+        from . import space as SPC
+        if SPC.normalize(asked_last) != await SPC.current_space(ch.get("account_id")):
+            st["pending"] = {**pend, "touched": now.isoformat(), "parked": True}
+            await _set_aside(st, ch)
+            st["pending"] = None
+            if asked_last in PRODUCT_NAME:
+                out.text(f"Your {PRODUCT_NAME[asked_last]} question is saved for later — say “{_RESUME_WORD[asked_last]}” to carry on.")
+            log.info("[products] %s's question parked: not the current space", asked_last)
+            asked_last, pend = None, {}
     if payload.startswith("so:"):                              # CR 39 · the answer to "Start <product> from the beginning?"
         _, yes_no, prod = (payload.split(":", 2) + ["", ""])[:3]
         if prod in START_WORD:

@@ -125,6 +125,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # another time ("proposed" is never a booking: the person decides); cancel goes through venue.cancel_booking on their yes
     "T35": ("manage a booking: the venue's own answer on the one status; cancel through AgAPI on their yes",
             ["tests.test_s256_manage"]),
+    # Sasha 256 · URGENT (Tyler's WhatsApp, 13 Oct 11:03): "Sasha" → travel, then a reservation request was answered by CampusMe's old
+    # question (the web's own state still held it). A pending question belongs to its space: only the CURRENT space's answers
+    "T36": ("a pending question belongs to its space: after a switch, a travel request reaches the brain, never the old question",
+            ["tests.test_s256_space_pending"]),
 }
 
 _RUNNER = """

@@ -51,7 +51,12 @@ async def current_space(user_id: Optional[str]) -> Optional[str]:
         pend = (await _state(f"web:{user_id}")).get("pending") or {}
     except Exception:
         return None
-    return pend.get("product") if pend.get("kind") == "product" else None
+    prod = pend.get("product") if pend.get("kind") == "product" else None
+    if prod:   # Sasha 256 · the web's own state answers only while it IS the account's space (products/space: the one record)
+        from . import space as SPC
+        if SPC.normalize(prod) != await SPC.current_space(user_id):
+            return None
+    return prod
 
 
 async def _save(key: str, account: str, st: dict) -> None:
@@ -122,6 +127,8 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
         early.append(text)
     ch = {"wa_id_sha256": key, "account_id": user_id, "number_e164": None, "channel": "web"}
     try:
+        from . import space as SPC
+        space_before = SPC.from_pending(st.get("pending"))
         handled = await PW.product_turn(ch, "web", p, st, out, now, early=_early, media=web_media(media))
     except Exception as e:
         log.error("[products.web] the product turn failed: %s: %s", type(e).__name__, e)
@@ -129,8 +136,8 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
                 "quick_replies": [], "media": [], "handoff": None}
     await _save(key, user_id, st)
     try:   # Sasha 249 · ONE SPACE: the space the web's products ended this turn in, kept per account (products/space.py)
-        from . import space as SPC
-        await SPC.set_space(user_id, SPC.from_pending(st.get("pending")), "web")
+        if SPC.from_pending(st.get("pending")) != space_before:   # Sasha 256 · only when THIS turn moved it (their word)
+            await SPC.set_space(user_id, SPC.from_pending(st.get("pending")), "web")
     except Exception as e:
         log.warning("[products.web] space not kept: %s", type(e).__name__)
     texts = list(early)

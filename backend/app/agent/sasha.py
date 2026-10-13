@@ -213,7 +213,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     # said "Done — it's on your screen" and the card was never drawn, because only book_venue's result rendered it
     if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
         return {"type": "render", "kind": "prepared", **res["prepared"]}
-    if tool == "book_venue" and (res.get("view_url") or res.get("page_url")):
+    # Sasha 254 · hold_venue too: the booking rules' take-over link (their page) when they hand it over or won't contact the venue
+    if tool in ("book_venue", "hold_venue") and (res.get("view_url") or res.get("page_url")):
         return {"type": "render", "kind": "handover", "url": res.get("view_url") or res.get("page_url"),
                 "external": not res.get("view_url"), **({"focus": (res.get("card") or {}).get("place_id")} if res.get("card") else {})}
     if tool == "propose_trip":   # Sasha 210 · the proposal arrives WITH its flights: a card per leg, the chosen one marked

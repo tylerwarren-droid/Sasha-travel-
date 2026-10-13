@@ -28,6 +28,8 @@ HAMMAM = {"link": {"value": "https://hammamalandalus.com/es/madrid/reservas"}, "
 
 class Base(unittest.TestCase):
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         VN._HELD.pop(ACCT, None)
         self.api = FormApi()
         for p in (mock.patch.object(GW, "api", self.api), mock.patch.object(GA, "founder", lambda a: False),
@@ -55,10 +57,10 @@ class OnePath(Base):
     def test_next_under_parity_is_the_same_path(self):
         self.assertEqual(self.hold("s1", HAMMAM)["ask"], V.ASK_BOOK)
 
-    def test_old_s1_keeps_its_ladder(self):
+    def test_old_s1_asks_the_same_rules(self):   # Sasha 254 · one decider for every surface (old S1's schema unchanged)
         with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"}):
             out = self.hold("s1", HAMMAM)
-        self.assertNotEqual(out.get("ask"), V.ASK_BOOK)
+        self.assertEqual(out.get("ask"), V.ASK_BOOK)
 
     def test_how_it_books_is_the_same_channel(self):
         ctx = API.Ctx(account=ACCT, mode="test", user_said="", session="s251", surface="s2")
@@ -66,10 +68,12 @@ class OnePath(Base):
             r = asyncio.run(VN.read_booking_route(ctx, {"name": "Hammam Al Ándalus Salesas", "city": "Madrid"}))
         self.assertEqual(r["routes"], ["page", "email"])
 
-    def test_nothing_to_book_by_is_said_so(self):
-        with self.assertRaises(Exception) as e:
-            self.hold("s2", {})
-        self.assertIn("can't see a way to book", str(getattr(e.exception, "message", e.exception)))
+    def test_nothing_to_book_by_is_said_so(self):   # Sasha 254 · the rules' own words (no_channel) + the take-over, nothing sent
+        from agapi.booking_rules import booking_rules as BR
+        out = self.hold("s2", {})
+        self.assertEqual((out["status"], out["rules"]["say_key"]), ("not_contacted", "no_channel"))
+        self.assertEqual(out["say"], BR.PHRASES["no_channel"])
+        self.assertEqual(self.api.calls[-1][1], "/api/booking/contact")
 
 
 class UnderAnotherName(Base):

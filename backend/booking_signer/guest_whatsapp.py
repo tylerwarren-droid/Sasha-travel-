@@ -1873,7 +1873,10 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         route = payload.split(":", 2)[2] if payload.startswith(f"lad:{pend['nonce']}:") else None
         if route is None:
             t = (body or "").lower()
-            route = ("no" if re.search(r"\b(no|nope|not now|cancel)\b", t) else "email" if "email" in t else
+            route = ("no" if re.search(r"\b(no|nope|not now|cancel)\b", t) else
+                     # Sasha 254 · the booking rules' ONE question's two answers: "handle it" (the form) / "prefilled form" (their page)
+                     "form" if re.search(r"\bhandle\b", t) and "form" in opts.values() else
+                     "page" if re.search(r"\bprefilled\b", t) and "page" in opts.values() else "email" if "email" in t else
                      "call" if re.search(r"\bcall\b", t) else "page" if re.search(r"\b(now|page|send|link)\b", t) else
                      next((r for r in opts.values() if r != "no"), None) if re.search(r"\b(yes|ok|okay|sure|go ahead|book it|please)\b", t) else None)
         if route is None or (route != "no" and route not in opts.values()):
@@ -2709,45 +2712,17 @@ def _hours_of(read: dict, now) -> dict:
 OWN_PAGE = "their own booking page"   # Sasha 246 · rung 2's "platform" name: the venue's own site (ladder.own_page)
 
 
-def ladder_of(rd: dict, reservation: dict, now) -> Optional[dict]:
-    """Sasha 195 · the ladder's offer for this venue and this booking (decide.ladder): its line and options."""
-    from . import decide as D, venue_read as V
-    rungs = rd.get("rungs") or {}
-    link = (rungs.get("link") or {}).get("value") or ""
-    at = (reservation.get("when") or {}).get("at")
-    hours = None
-    if at:
-        try:
-            from zoneinfo import ZoneInfo
-            tz = (V.COUNTRIES.get(rd.get("country") or "") or (None, None, None, "Europe/Madrid"))[3]
-            hours = (datetime.fromisoformat(at).replace(tzinfo=ZoneInfo(tz)) - now).total_seconds() / 3600
-        except Exception:
-            hours = None
-    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or "their booking page") if "link" in rungs
-                else OWN_PAGE if "own_page" in rungs else None,   # Sasha 246 · rung 2: their own booking page
-                phone="phone" in rungs, email="email" in rungs, hours_until=hours, own_page="own_page" in rungs and "link" not in rungs,
-                challenge=any(f.get("kind") == "challenge" for f in rd.get("facts") or []))
-    return D.ladder(v, plain_venue(rd.get("venue")) or "them", summary(reservation))
+def ladder_of(rd: dict, reservation: dict, now, account: Optional[str] = None) -> Optional[dict]:
+    """Sasha 254 · no longer a decider: the booking rules' ONE question (R2) when they ask it, from agapi.booking_decide (the old
+    flow's and the web card's shape: {"line", "options": [(title, route)]}), else None. decide.ladder is retired."""
+    from agapi import booking_decide as BD
+    return BD.legacy_ladder(rd, reservation, now, account)
 
 
 def route_line_of(rd: dict, dv) -> str:
-    """Sasha 161 · the decision's one plain line for this venue (decide.line). Sasha 187 · a page that asks the guest to prove
-    they're human says so."""
-    line = _route_line(rd, dv)
-    if dv.route == "one_tap" and any(f.get("kind") == "challenge" for f in rd.get("facts") or []):
-        line = line.replace("— tap, then book.", "— tap, then book.") + " Their page asks you to prove you're human — I've sent it to your phone."
-    return line
-
-
-def _route_line(rd: dict, dv) -> str:
-    from . import decide as D
-    rungs = rd.get("rungs") or {}
-    link = (rungs.get("link") or {}).get("value") or ""
-    from . import venue_read as V
-    v = D.Venue(form="form" in rungs, platform=((V.platform_of(link) if link.startswith("http") else link) or None) if "link" in rungs
-                else OWN_PAGE if "own_page" in rungs else None, own_page="own_page" in rungs and "link" not in rungs,   # Sasha 246
-                phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"))
-    return D.line(v, dv, plain_venue(rd.get("venue")) or "them")
+    """Sasha 254 · the decision's one plain line = the booking rules' say_text + the take-over (agapi.booking_decide.say), the same
+    words on every surface. decide.line is retired."""
+    return dv.reason
 
 
 def plain_venue(name: Optional[str]) -> str:
@@ -2756,36 +2731,11 @@ def plain_venue(name: Optional[str]) -> str:
 
 
 def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None, account: Optional[str] = None):
-    """Sasha 130 · the read, as the decision workflow sees it. Sasha 131 · `at` (the booking's local time) makes it urgent."""
-    from . import calls as C, decide as D, venue_read as V
-    rungs = rd.get("rungs") or {}
-    country = V.COUNTRIES.get(rd.get("country") or "") or (None, None, "en", "Europe/Madrid")
-    lang = country[2]
-    hours = None
-    if at and now:
-        try:
-            from zoneinfo import ZoneInfo
-            hours = (datetime.fromisoformat(at).replace(tzinfo=ZoneInfo(country[3])) - now).total_seconds() / 3600
-        except Exception:
-            hours = None
-    link = (rungs.get("link") or {}).get("value") or ""   # the link rung's value is the platform's NAME ("CoverManager")
-    name = (V.platform_of(link) if link.startswith("http") else link) or "an online booking platform"
-    # Sasha 193 · only a REAL venue's own page goes to his phone; the demo stand-in (spa CAPTCHA, tattoo email) keeps its own
-    # flow — live in the meeting the spa's stand-in page was sent as a link instead of Sasha filling it with the CAPTCHA on the phone
-    demo = bool(account and _founder_demo(account)) and "(TEST stand-in)" not in str(rd.get("venue") or "") \
-        and "Sasha Test Venue" not in str(rd.get("venue") or "")
-    if demo and "form" in rungs and "link" not in rungs and prefer != "form":
-        # Sasha 187 · the founder's restaurants: their own booking page opens on HIS phone (the 175 flow) — never filled by Sasha
-        return D.decide(D.Venue(form=False, platform="their own booking page", phone="phone" in rungs, email="email" in rungs,
-                                open_now=rd.get("open_now"), opens_at=rd.get("opens_at"), scripted=lang in C.LANGUAGES,
-                                language_label=C.LANGUAGE_NAMES.get(lang, ""), calls_on=(prefer == "call"), hours_until=hours), prefer)
-    return D.decide(D.Venue(form="form" in rungs and not (demo and "link" in rungs),
-                            platform=name if "link" in rungs else OWN_PAGE if "own_page" in rungs else None,   # Sasha 246 · rung 2
-                            own_page="own_page" in rungs and "link" not in rungs, phone="phone" in rungs, email="email" in rungs, open_now=rd.get("open_now"), opens_at=rd.get("opens_at"),
-                            scripted=lang in C.LANGUAGES, language_label=C.LANGUAGE_NAMES.get(lang, ""),
-                            # Sasha 187 · NO CALLS on the founder's demo account unless he says "call them" (never chosen for him)
-                            calls_on=(prefer == "call") or not (account and _founder_demo(account)),
-                            hours_until=hours), prefer)
+    """Sasha 254 · no longer a decider: the booking rules' Decision (agapi.booking_decide.legacy_decision) in the old flow's shape
+    (.route, .reason, .then, .alternatives). decide.decide is retired; the founder-demo's own channel choices (Sasha 187/193) went
+    with it — the rules decide for every account."""
+    from agapi import booking_decide as BD
+    return BD.legacy_decision(rd, prefer, at, now, account)
 
 
 _NEED_Q = {"what": "What should I book there — a table, a massage, a class…?", "when": "Which day and time?",
@@ -2865,7 +2815,7 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
     dv = decision_of(rd, {"form": "form", "email": "email", "page": "one_tap", "call": "call"}.get(lr) or pend.get("prefer"),
                      (reservation.get("when") or {}).get("at"), ctx["now"], ctx.get("account"))
     if not d.get("nights") and not lr:   # Sasha 195 · THE LADDER'S WORDS, asked once
-        lad = ladder_of(rd, reservation, ctx["now"])
+        lad = ladder_of(rd, reservation, ctx["now"], ctx.get("account"))
         if lad:
             nonce = uuid.uuid4().hex[:6]
             out.ask(lad["line"], [(t, f"lad:{nonce}:{r}") for t, r in lad["options"]])
@@ -3329,34 +3279,6 @@ def _draft_of(b: dict) -> dict:
             "what": {"activity": b.get("what") or "a table", "activity_venue_lang": b.get("what") or "a table", "category": b.get("category") or "restaurant"},
             "where": {}, "when": {"mode": "at", "at": f"{b['date']}T{b['time']}"},
             "how_many": {"count": b.get("count") or b.get("party") or 2, "unit": "people"}}
-
-
-async def auto_email_from_link(ch: dict, l: dict, read_row: dict) -> str:
-    """Sasha 132 · the one-tap wasn't pressed in time and the guest's yes covered it: the email is prepared and SENT under
-    that yes (the server verifies the plan from its own records), then the guest is told. The email carries the rest of
-    the plan (the call after 24 h) in its own read-back."""
-    from . import escalation as ESC, decide as D, guest_receipt as GR
-    account = l["account_id"]
-    kinds = {f.get("kind") for f in ((read_row or {}).get("read") or {}).get("facts") or []}
-    _s, cj = await api(account, "GET", "/api/booking/contact")
-    name = ((cj or {}).get("contact") or {}).get("name") or ""
-    mine = await GR.address_of(account)
-    rest = ESC.plan_line(f"If they don't reply within {D._h(D.reply_hours())}, I'll call them", None) if "phone" in kinds else None
-    s, ej = await api(account, "POST", "/api/booking/emails", {"read_id": l["read_id"], "date": l["local_date"].isoformat(),
-                                                                "time": l["local_time"].strftime("%H:%M"), "party": l.get("party_size") or 2,
-                                                                "name": name, "email": mine or "", **({"plan_line": rest} if rest else {})})
-    if s != 200:
-        await _tell(ch, f"You hadn't booked on {l['venue']}'s page, and I couldn't prepare the email to them: {refusal_words(ej, s)}.")
-        return f"not prepared: {s}"
-    s2, sj = await api(account, "POST", f"/api/booking/emails/{ej['email_id']}/send",
-                       {"read_back_sha256": ej["read_back"]["sha256"], "approval": {"how": "escalation_plan", "from": {"kind": "link", "id": l["link_id"]}}})
-    if s2 != 200 or sj.get("status") != "sent":
-        await _tell(ch, f"You hadn't booked on {l['venue']}'s page; I tried to email them as agreed, but it wasn't sent: {sj.get('say') or refusal_words(sj, s2)}.")
-        return "not sent"
-    await _tell(ch, f"You hadn't booked on {l['venue']}'s page for {SN.day_words(l['local_date'].isoformat())} at {l['local_time'].strftime('%H:%M')}, "
-                    f"so — as you agreed — I've emailed them. Not booked yet: I'll show you their reply word for word."
-                    + (" If there's no reply in 24 hours, I'll call them." if rest else ""))
-    return "sent"
 
 
 async def auto_call_from_email(ch: dict, b: dict, email_id: str) -> str:

@@ -1,74 +1,23 @@
-"""Sasha 130 (2) · Sasha 131 · THE DECISION WORKFLOW — the founder's ESCALATION POLICY, decided in ONE place, with the reason
-the guest is shown.
+"""Sasha 130 (2) · Sasha 131 — once THE DECISION WORKFLOW. Sasha 254 · RETIRED as a decider: every venue booking is decided by the
+vendored booking rules (agapi/booking_rules: decide(ctx)), through ONE adapter (agapi/booking_decide). What stays here is only the
+words parser the old WhatsApp flow (and the old voice avatar through it) uses to hear "call them instead" / "email them" — the
+person's preference, which the rules then weigh (they decide; it never routes by itself).
 
-    own form                                → fill it after the guest's yes
-    otherwise                               → ONE-TAP on the guest's phone (the default): the venue's booking page; the
-                                              guest presses; Sasha files the confirmation email from Gmail
-    one-tap not completed within the window → EMAIL the venue (offered on WhatsApp, its own read-back and yes)
-    no venue reply to the email in 24 h     → CALL (offered the same way)
-    URGENT (the booking is within 24 h)     → CALL + EMAIL at once, on ONE yes
-    no page, no form                        → email (then the call after 24 h); a phone only → call
-    the guest can always override           → any route that exists ("call them", "email them", "send me the link")
-
-Calls are no longer the default for an open venue (Sasha 131). Every threshold is a setting (below). Pure: no I/O;
-nothing here dials, sends or presses — each route keeps its own read-back and yes.
+Retired (Sasha 254), each replaced by the rules:
+  decide()          → booking_rules.decide (via booking_decide.legacy_decision for the old flow's shape)
+  ladder()          → booking_rules' ONE question, R2 (booking_decide.legacy_ladder)
+  line()            → booking_rules.PHRASES (booking_decide.say)
+  urgent_hours()    → booking_rules.URGENT_HOURS (48) / HOTEL_ARRIVAL_CALL_HOURS (24) — SASHA_URGENT_HOURS is read nowhere
+  reply_hours()     → booking_rules.HOTEL_NO_REPLY_HOURS (24, hotels) — SASHA_EMAIL_REPLY_HOURS is read nowhere
+  tap_window_min()  → none: the rules have no "page not pressed" escalation (proactive.tap_offers retired)
+  available(), urgent(), _then(), Venue, Decision → the rules' ctx and Decision
 """
 from __future__ import annotations
 
-import os
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional
-
-
-def _num(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, "") or default)
-    except ValueError:
-        return default
-
-
-def tap_window_min() -> float:
-    """How long the guest has to press on the platform before the email is offered."""
-    return _num("SASHA_TAP_WINDOW_MIN", 30)
-
-
-def reply_hours() -> float:
-    """How long an email waits for the venue's reply before the call is offered."""
-    return _num("SASHA_EMAIL_REPLY_HOURS", 24)
-
-
-def urgent_hours() -> float:
-    """A booking this soon is URGENT: call and email at once. Sasha 194 · the founder's 48-hour rule (was 24)."""
-    return _num("SASHA_URGENT_HOURS", 48)
-
+from typing import Optional
 
 ROUTES = ("form", "one_tap", "call", "email", "call_email")
-
-
-@dataclass(frozen=True)
-class Venue:
-    form: bool = False                 #: their own website's form, mapped and allowed
-    platform: Optional[str] = None     #: a booking platform's page ("CoverManager"), when that's how they take bookings
-    phone: bool = False                #: a number read for them
-    email: bool = False                #: an address read for them
-    open_now: Optional[bool] = None    #: None = their hours aren't known
-    opens_at: Optional[str] = None     #: "13:00", their next opening today, when known
-    scripted: bool = True              #: Sasha has a reviewed call script in their language
-    calls_on: bool = True              #: calls are on, for this account and the server
-    language_label: str = ""           #: "Vietnamese", for the reason when unscripted
-    hours_until: Optional[float] = None  #: hours from now to the booking; None = not a fixed time
-    challenge: bool = False            #: Sasha 195 · their own page asks the guest to prove they're human (a CAPTCHA)
-    own_page: bool = False             #: Sasha 246 · rung 2: `platform` is THEIR OWN booking page (ladder.own_page), not a platform's
-
-
-@dataclass(frozen=True)
-class Decision:
-    route: Optional[str]               #: one of ROUTES, or None when nothing can be done from here
-    reason: str                        #: shown to the guest, before any read-back
-    then: Optional[str] = None         #: the follow-up, said now ("if they haven't replied by 13:00, I'll offer to call")
-    alternatives: List[str] = field(default_factory=list)   #: the routes the guest may choose instead
-
 
 _PREFER = (("call_email", re.compile(r"\b(call and email|email and call|both)\b", re.I)),
            ("call", re.compile(r"\b(call|phone|ring|llama|llamar|llámales|telefonea)\b", re.I)),
@@ -78,164 +27,11 @@ _PREFER = (("call_email", re.compile(r"\b(call and email|email and call|both)\b"
 
 
 def preference(text: str) -> Optional[str]:
-    """The route the guest asked for in words, or None. "Call them instead" → "call"."""
+    """The route the guest asked for in words, or None. "Call them instead" → "call". (A preference — the rules decide.)"""
     for route, rx in _PREFER:
         if rx.search(text or ""):
             return route
     return None
 
 
-def available(v: Venue) -> List[str]:
-    """Every route that exists for this venue right now, in the default order."""
-    out = []
-    if v.form:
-        out.append("form")
-    if v.platform:
-        out.append("one_tap")
-    if v.phone and v.calls_on and v.email:
-        out.append("call_email")
-    if v.phone and v.calls_on:
-        out.append("call")
-    if v.email:
-        out.append("email")
-    return out
-
-
-def urgent(v: Venue) -> bool:
-    return v.hours_until is not None and v.hours_until < urgent_hours()
-
-
-def decide(v: Venue, prefer: Optional[str] = None) -> Decision:
-    can = available(v)
-    alts = lambda r: [x for x in can if x != r]   # noqa: E731
-    if prefer in can:
-        return Decision(prefer, _REASON_ASKED[prefer], _then(v, prefer), alts(prefer))
-    asked_but = f"{_CANT[prefer](v)} " if prefer in _CANT else ""
-    english = "" if v.scripted else f" I can't speak {v.language_label or 'their language'}, so the call is in English."
-    if v.form:
-        return Decision("form", asked_but + "They take bookings on their own website's form — I'll fill it in after your yes.",
-                        None, alts("form"))
-    if v.own_page and v.platform:
-        # Sasha 246 · rung 2 comes before a call or an email, soon or not: their own page, prepared, the guest finishes it
-        return Decision("one_tap", asked_but + "They take bookings on their own website. I'll send you their booking page with your "
-                        "day, time and number — you finish it there (I can't press it for you).", _then(v, "one_tap"), alts("one_tap"))
-    if urgent(v) and "call_email" in can:
-        return Decision("call_email", asked_but + f"It's within {_h(urgent_hours())}, so I'll call them and email them at once — "
-                        f"one yes covers both.{english}", None, alts("call_email"))
-    if urgent(v) and "call" in can:
-        return Decision("call", asked_but + f"It's within {_h(urgent_hours())}, so I'll call them, after your yes.{english}",
-                        None, alts("call"))
-    if v.platform:
-        return Decision("one_tap", asked_but + f"They book through {v.platform}. I'll send you their booking page, filled in where "
-                        f"{v.platform} allows — you press confirm (I can't press it for you), and I'll file their confirmation "
-                        f"email from your Gmail.", _then(v, "one_tap"), alts("one_tap"))
-    if v.email:
-        why = ("they're closed right now" if v.open_now is False else
-               "they have no booking page or form" if v.phone else "email is the only way they publish")
-        return Decision("email", asked_but + f"I'll email them — {why}.", _then(v, "email"), alts("email"))
-    if v.phone and v.calls_on:
-        when = (" when they open" + (f" at {v.opens_at}" if v.opens_at else "")) if v.open_now is False else ""
-        return Decision("call", asked_but + f"A phone is the only way they publish — I'll call them{when}, after your yes.{english}",
-                        None, alts("call"))
-    return Decision(None, asked_but + ("They publish only a phone, and calls are off." if v.phone else
-                                       "I found no way to book them that I may use."), None, [])
-
-
-def line(v: Venue, d: Decision, venue: str) -> str:
-    """Sasha 161 · the route in ONE plain line, then the question — the same words on the web, WhatsApp and voice. The call
-    script, the plan's mechanics and the read-back stay in the call itself and the logs, never in the chat."""
-    venue = venue or "them"
-    if d.route == "form":
-        return "They take bookings online. I'll fill it in and book it for you. Book it?"
-    if d.route == "one_tap" and v.own_page:   # Sasha 246
-        return "They take bookings on their own website. I'll send their booking page to your phone — tap, then book. Shall I?"
-    if d.route == "one_tap":
-        return f"They book through {v.platform or 'their booking page'}. I'll send their page to your phone — tap, then book. Shall I?"   # Sasha 163
-    if d.route == "call_email":
-        return f"There's no online booking for {venue}, and it's soon — I'll call them and email them at once. Shall I?"
-    if d.route == "call":
-        only = "they only take bookings by phone" if not v.email else "the quickest way is a call"
-        if v.open_now is False:
-            when = f"when they open at {v.opens_at}" if v.opens_at else "when they open"
-            return f"There's no online booking for {venue} — {only}. They're closed now, so I'll call {when}. Shall I?"
-        return f"There's no online booking for {venue} — {only}. I'll call them now. Shall I?"
-    if d.route == "email":
-        if v.phone:
-            return (f"There's no online booking for {venue}. I'll email them, and call if they haven't replied in "
-                    f"{_h(reply_hours())}. Shall I?")
-        return f"There's no online booking or phone number for {venue} — only email. I'll email them and tell you as soon as they reply. Shall I?"
-    return f"I can't find a way to book {venue} — no online booking, phone or email. Want me to try somewhere similar nearby?"
-
-
-def ladder(v: Venue, venue: str, when: str) -> Optional[dict]:
-    """Sasha 195 · THE LADDER'S WORDS, exactly as the founder wrote them (restaurant and spa; web, WhatsApp, the avatar):
-    {"line", "options": [(title, route)]} — route ∈ form | email | page | call | no. None: nothing Sasha may use.
-    More than 48 h (urgent_hours): a venue Sasha can book directly (its own form, no CAPTCHA) → "I can book … directly";
-    otherwise "We have time…" — email them, or their page now. Within 48 h: their page now together, or a call (only on a yes).
-    No form or platform: email (> 48 h) or a call (within 48 h)."""
-    venue = venue or "them"
-    far = v.hours_until is None or v.hours_until > urgent_hours()
-    direct = v.form and not v.challenge
-    page = bool(v.platform) or (v.form and v.challenge)
-    if direct:
-        return {"line": f"I can book {venue} for you directly — {when}. Shall I?", "options": [("Yes, book it", "form"), ("No", "no")]}
-    if v.own_page and v.platform:
-        # Sasha 246 · RUNG 2 — their own website books: their page, prepared, FIRST; email (> 48 h) or a call (within) after it
-        human = " It asks you to prove you're human, so that step is yours." if v.challenge else ""
-        alt = [("Email them", "email")] if far and v.email else [("Call them", "call")] if not far and v.phone else []
-        return {"line": f"{venue} take bookings on their own website. I'll send you their booking page — {when} — and you finish "
-                        f"it there.{human} Shall I?", "options": [("Send their page", "page")] + (alt or [("No", "no")])}
-    if page and far:
-        if v.email:
-            return {"line": f"We have time. Would you like me to email {venue} and confirm as soon as they reply, or would you like to "
-                            "book with them now?", "options": [("Email them", "email"), ("Book now", "page")]}
-        return {"line": f"I'll send {venue}'s booking page to your phone — {when} — tap, then book. Shall I?", "options": [("Send it", "page"), ("No", "no")]}
-    if page:
-        opts = [("Send the page", "page")] + ([("Call them", "call")] if v.phone else [])
-        return {"line": "It's soon, so I recommend we book it now together — I'll send their booking page to your phone."
-                        + (" Or I can call them for you." if v.phone else ""), "options": opts}
-    if v.email and (far or not v.phone):
-        return {"line": "They don't take online bookings — I'll email them and update you as soon as they reply. OK?",
-                "options": [("OK", "email"), ("No", "no")]}
-    if v.phone:
-        return {"line": "They only take bookings by phone — shall I call them?", "options": [("Call them", "call"), ("No", "no")]}
-    return None
-
-
-def _h(hours: float) -> str:
-    return f"{int(hours)} hours" if hours != 1 else "an hour"
-
-
-def _then(v: Venue, route: str) -> Optional[str]:
-    """Sasha 132 · THE PLAN the guest's one yes covers, in plain words (escalation.plan_line) — or None when there is no
-    further step. The caller puts it in the read-back, so the yes is given to it."""
-    from .escalation import plan_line
-    lang = "" if v.scripted else " (in English)"
-    call = f"if they don't reply within {_h(reply_hours())}, I'll call them{lang}"
-    if route == "one_tap" and v.email:
-        return plan_line(f"If you haven't booked on their page within {int(tap_window_min())} minutes, I'll email them",
-                         call if v.phone and v.calls_on else None)
-    if route == "one_tap" and v.phone and v.calls_on:
-        return plan_line(f"If you haven't booked on their page within {int(tap_window_min())} minutes, I'll call them{lang}", None)
-    if route == "email" and v.phone and v.calls_on:
-        return plan_line(call[0].upper() + call[1:], None)
-    return None
-
-
-_REASON_ASKED = {
-    "form": "As you asked: their own website's form, filled in after your yes.",
-    "one_tap": "As you asked: their booking page — you press confirm, and I'll file their confirmation email from your Gmail.",
-    "call": "As you asked: I'll call them, after your yes.",
-    "email": "As you asked: I'll email them, after your yes.",
-    "call_email": "As you asked: I'll call them and email them at once — one yes covers both.",
-}
-
-_CANT = {
-    "form": lambda v: "They have no form I may fill in.",
-    "one_tap": lambda v: "They have no booking page I found.",
-    "call": lambda v: ("I can't call them: calls are off." if v.phone else "I can't call them: they publish no number."),
-    "email": lambda v: "I can't email them: they publish no address.",
-    "call_email": lambda v: "I can't do both: they publish " + ("no address." if v.phone else "no number." if v.email else "neither."),
-}
-
-__all__ = ["Venue", "Decision", "decide", "preference", "available", "urgent", "ROUTES", "tap_window_min", "reply_hours", "urgent_hours"]
+__all__ = ["preference", "ROUTES"]

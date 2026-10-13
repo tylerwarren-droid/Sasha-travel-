@@ -76,6 +76,23 @@ T = {   # invariant → (what it holds, the test classes that hold it)
              "tests.test_s253_one_brain_all.InFront", "tests.test_s253_wa_caps.Cancel", "tests.test_s253_wa_caps.TheList",
              "tests.test_s253_wa_caps.Tonight", "tests.test_s253_wa_caps.Cuisine", "tests.test_s253_wa_caps.Receipts",
              "tests.test_s253_wa_caps.VoiceNote", "tests.test_s253_wa_caps.Rehearsal"]),
+    # Sasha 254 · item 2: every venue booking chooser (/s2, WhatsApp, /next, old S1, the old flow, the sweep) asks the vendored booking
+    # rules through ONE adapter (agapi/booking_decide); each rule end to end; the retired deciders and env vars read nowhere
+    "T27": ("every booking decision from the one rules file",
+            ["tests.test_s254_one_decider.R1ChannelOrder", "tests.test_s254_one_decider.R2TheOneQuestion",
+             "tests.test_s254_one_decider.R3R4FortyEightHours", "tests.test_s254_one_decider.R4CallsOff",
+             "tests.test_s254_one_decider.R6Hotel", "tests.test_s254_one_decider.R5HotelNoReplySweep",
+             "tests.test_s254_one_decider.R7R8R9TheCall", "tests.test_s254_one_decider.R8DepositAsked",
+             "tests.test_s254_one_decider.R10Limits", "tests.test_s254_one_decider.R10CallRoutes",
+             "tests.test_s254_one_decider.R11R12", "tests.test_s254_one_decider.R13R14",
+             "tests.test_s254_one_decider.AccessTest", "tests.test_s254_one_decider.AccessSendsOff",
+             "tests.test_s254_one_decider.AccessOf", "tests.test_s254_one_decider.EverySurface",
+             "tests.test_s254_one_decider.Retired"]),
+    # Sasha 254 · item 3: "I'll handle it" live — the rules' send is AgAPI's venue.submit_booking (read-back first, sent on their yes,
+    # said in her voice; not_allowed kindly with their page), and venue.booking_status feeds get_status
+    "T28": ("\"I'll handle it\" sends through AgAPI, read back first, said in her voice",
+            ["tests.test_s254_handle_it_live.TheSend", "tests.test_s254_handle_it_live.Live",
+             "tests.test_s254_handle_it_live.TheStatus", "tests.test_s254_handle_it_live.TheRoute"]),
 }
 
 _RUNNER = """

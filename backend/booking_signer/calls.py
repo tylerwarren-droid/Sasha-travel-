@@ -39,8 +39,10 @@ BLAND_CALLS_URL = "https://api.bland.ai/v1/calls"
 #: The model that reads a finished call. Its reading is labelled as an AI reading wherever it is shown.
 READER_MODEL = "claude-sonnet-5"
 READ_BY = f"an AI reading of the call transcript ({READER_MODEL})"
-#: A voice call longer than this is cut off by Bland. A table booking is a two-minute call.
-MAX_CALL_MINUTES = 4
+#: A voice call longer than this is cut off by Bland. A table booking is a two-minute call. Sasha 254 · the booking rules' own limit
+#: (R9: CALL_PAYLOAD["max_minutes"]), never a number of Sasha's.
+from agapi.booking_rules import booking_rules as BR  # noqa: E402
+MAX_CALL_MINUTES = BR.CALL_PAYLOAD["max_minutes"]
 
 
 class CallRefused(Exception):
@@ -271,7 +273,8 @@ LANGUAGES = {
         for_n=lambda n: f"for {_EN_NUM[n] if n < len(_EN_NUM) else n}",
         on_day=lambda wd: f"on {wd}", on_date=lambda wd, d, mo: f"on {wd}, {d} {mo},",
         at=_en_at,
-        opening="Hello, this is Sasha, an AI concierge from Kanoe Technologies SL, calling {party} to book a table {what} {when} {at}. Is that possible?",
+        # Sasha 254 · R7: the English opening IS booking_rules.call_opening (the AI disclosure, exactly, then the request)
+        opening=BR.call_opening("calling {party} to book a table {what} {when} {at}. Is that possible?"),
         check="I'll need to check that with {who}.",
         cancel_opening="Hello, this is Sasha, an AI concierge from Kanoe Technologies SL. I'm calling to cancel {cancel_when} under the name {surname}.",
     ),
@@ -430,10 +433,11 @@ def barge_in(code: str) -> str:
     return _BARGE.get((code or "en")[:2], _BARGE["en"])
 
 
-#: S-81 tier 0 · the guest pays the venue DIRECTLY: Sasha agrees to nothing, gives no card (never on a phone call — it
-#: would sit in a transcript), and asks how they take it. A money "yes" still reads as unclear (_MONEY).
-DEPOSIT_RULE = ("Agree to no deposit, give no card. If they need one: ask how they take it (a payment link is best), "
-                "say the guest pays them directly, get the amount, thank them, end. ")
+#: Sasha 254 · R8 (Tyler, 12 Oct: deposits are REFUSED, never asked about) — the booking rules' own call rule, verbatim
+#: (booking_rules.CALL_RULES[1]): no deposit, no fee, no other time, no card; asked for one → thank them and END the call, never
+#: ask the amount. (It replaced S-81 tier 0's "ask how they take it… a payment link is best… get the amount".) A money "yes" still
+#: reads as unclear (_MONEY), and the person is told (call_routes._follow_up → booking_rules.stopped).
+DEPOSIT_RULE = BR.CALL_RULES[1] + " "
 
 
 def already_said(code: str, opening: str) -> str:
@@ -479,7 +483,7 @@ def _task_text(lang: Lang, *, place: str, what: str, booking: str, never: str, o
         f"The booking: {booking}"
         "If asked: an AI, never the guest or a human. "
         f"NEVER: {never}"
-        f"{DEPOSIT_RULE}Any other fee: say exactly \"{check}\" and end. "
+        f"{DEPOSIT_RULE}Before you end, say exactly \"{check}\" "
         f"{spell}"
         f"{contact}"
         "No other guest details. "
@@ -609,9 +613,10 @@ def bland_payload(brief: Mapping[str, Any], call_id: str) -> dict:
         "first_sentence": brief["first_sentence"],
         "language": brief["language"],
         "wait_for_greeting": True,
-        "record": False,
-        "max_duration": MAX_CALL_MINUTES,
-        "voicemail": {"action": "hangup"},
+        # Sasha 254 · R9 — the booking rules' CALL_PAYLOAD, as Bland names it: no recording, hang up on a machine, the call's limit
+        "record": BR.CALL_PAYLOAD["record"],
+        "max_duration": BR.CALL_PAYLOAD["max_minutes"],
+        "voicemail": dict(BR.CALL_PAYLOAD["voicemail"]),
         "metadata": {"sasha_call_id": call_id, "venue_key": brief["venue_key"]},
         # S-36 · Sasha's own number as caller ID once it exists (it must be imported into Bland first, or Bland
         # refuses — and that refusal is shown in Bland's own words, like any other)

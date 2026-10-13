@@ -75,15 +75,29 @@ async def main() -> bool:
         res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
                "when": {"at": (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT17:00")}, "what": {"category": "spa"}}
         at = res["when"]["at"]
-        q = await VN._engine_route(ctx, {}, rd, res, at, datetime.now(timezone.utc), None, ch, HAMMAM)
-        check("(b) asks before acting", q.get("status") == "choose_route" and q.get("ask") == VT.ASK_FILL
-              and [o["route"] for o in q["options"]] == ["page", "email"], str(q)[:200])
-        check("(b) its two answers are her voice's", [o["title"] for o in q["options"]] == ["Prefilled form", "Handle it"])
-        out = await VN._engine_route(ctx, {}, rd, res, at, datetime.now(timezone.utc), "page", ch, HAMMAM)
+        # Sasha 254 · the booking rules decide (agapi.booking_decide → booking_rules.decide), the executors run what they said
+        from agapi import booking_decide as BD
+        from agapi.booking_rules import booking_rules as BR
+        real_access = BD.access_of
+
+        async def live(account):
+            return {"mode": "live", "calls": "on", "real_venue_sends": "on"}
+        BD.access_of = live
+        try:
+            d = await VN.rules_for(ctx, {}, rd, res, at, ch, HAMMAM, None)
+            q = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), d, ch, HAMMAM)
+            check("(b) asks before acting — the rules' ONE question", q.get("status") == "choose_route" and q.get("ask") == VT.ASK_FILL
+                  == BR.PHRASES["ask_book"] and [o["route"] for o in q["options"]] == ["page", "form"], str(q)[:200])
+            check("(b) its two answers are her voice's", [o["title"] for o in q["options"]] == ["Prefilled form", "Handle it"])
+            d = await VN.rules_for(ctx, {}, rd, res, at, ch, HAMMAM, "page")
+            out = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), d, ch, HAMMAM)
+        finally:
+            BD.access_of = real_access
         # Sasha 249 · ONE QUESTION: "prefilled form" is the go-ahead — the form goes on their screen, no second yes
         check("(b) 'prefilled form' → on their screen at once, no second yes", out.get("status") in ("page_on_phone", "page_link")
               and out.get("booked") is False and ctx.account not in VN._HELD, str(out)[:200])
-        check("(b) the short confirmation, in her voice", str(out.get("say", "")).startswith(V.DONE_FORM) and not V.check([out["say"]]), str(out.get("say")))
+        check("(b) the short confirmation, the rules' words + the take-over", str(out.get("say", "")).startswith(BR.PHRASES["prepared_link"])
+              and BR.PHRASES["takeover"] in out["say"] and not V.check([out["say"]]), str(out.get("say")))
         from app.agent import sasha as AG0
         ev0 = AG0.render("hold_venue", out, {})   # Sasha 250 · "it's on your screen" only when it IS drawn (found live)
         check("(b) the prefilled form is DRAWN from hold_venue (what she says is on screen, is)", (ev0 or {}).get("kind") == "prepared", str(ev0)[:120])

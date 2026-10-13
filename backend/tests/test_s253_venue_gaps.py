@@ -81,6 +81,8 @@ class Base(unittest.TestCase):
     surface, session = "s2", "s254"
 
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         VN._HELD.pop(ACCT, None)
         self.api = Api()
         self.taps, self.told = [], []
@@ -188,13 +190,17 @@ class G7NoSlot(Base):
         self.assertEqual(self.api.bodies("/api/booking/emails")[0]["quote"],
                          {"what": "tattoo — please tell me what you can offer", "dates": ""})
 
-    def test_whenever_they_have_space_by_phone_is_the_availability_call(self):
+    def test_whenever_they_have_space_by_phone_only_the_rules_wait(self):
+        # Sasha 254 · the booking rules (R3): no form and no time (so not within 48 h) → no call now — a call closer to the day,
+        # and with no day there is nothing to call closer to: she asks for one (the old flow's instant availability call is retired)
         out = self.hold({"phone": {"fact_index": 2}}, what="a 60-minute massage", open_slot="whenever")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "call"))
+        self.assertEqual((out["status"], out["rules"]["action"]), ("need_day", "wait"))
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
+        out = self.hold({"phone": {"fact_index": 2}}, what="a 60-minute massage", open_slot="whenever", day=LATER)
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "call", "wait"))
         res = self.api.bodies("/api/booking/calls")[0]["reservation"]
         self.assertEqual((res["when"], res["flow"]), ({"mode": "venue_proposes"}, "availability"))   # the old flow's reservation
         self.assertTrue(out["when"].startswith("whenever they have space"))                        # GW.summary
-        self.assertEqual(self.yes()["status"], "placed")
 
     def test_the_venue_engines_own_page_never_takes_a_request_with_no_slot(self):
         eng = {"kind": "own_engine", "url": "https://casagate.es/reservas", "from": "engine", "ask": True,
@@ -226,7 +232,12 @@ class G8HotelOnTheLadder(Base):
     def test_book_with_hotel_sends_its_own_engine_with_the_stay(self):
         """hotel_ladder_s138 OnWhatsApp.test_book_with_hotel_sends_its_own_engine_with_the_stay, on the brain's path."""
         self.session = "wa:s254"
+        # Sasha 254 · the booking rules: SynXis is a booking platform (R14) — its page handed over; with the hotel's OWN email too,
+        # the email comes first (R1: own channels before a platform)
         out = self.hold(self.HOTEL, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "email", "request_email"))
+        VN._HELD.pop(ACCT, None)
+        out = self.hold({"link": self.HOTEL["link"]}, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
         self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "page"))                  # no "email or book now?"
         link = self.api.bodies("/api/booking/links")[0]
         self.assertEqual((link["nights"], link["date"], link["party"]), (2, LATER, 2))
@@ -290,9 +301,10 @@ class G8HotelOnTheLadder(Base):
         self.assertIn(f"(check-in {LATER}, check-out {OUT_DAY})", m["text"])
 
     def test_the_same_stay_held_again_is_the_same_read_back(self):
-        self.hold(self.HOTEL, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
+        hotel = {"link": self.HOTEL["link"]}
+        self.hold(hotel, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
         VN._HELD[ACCT]["at"] -= timedelta(minutes=1)
-        with mock.patch.object(VN, "_read", reader(self.HOTEL, "Hotel Test Madrid")):
+        with mock.patch.object(VN, "_read", reader(hotel, "Hotel Test Madrid")):
             again = run(VN.hold_venue(self.ctx(), {"name": "Hotel Test Madrid", "city": "Madrid", "country": "ES", "what": "hotel",
                                                    "party": 2, "day": LATER, "nights": 2}))
         self.assertIn("same_read_back", again)
@@ -304,6 +316,8 @@ class G8OnWhatsApp(ScriptedBrain):
     hotel's own engine with the stay, read back first, sent on the yes — the old flow's OnWhatsApp test, on the one brain."""
 
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         super().setUp()
         self.link()
         TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": TG.NOW, "link_tries": []}))
@@ -315,8 +329,8 @@ class G8OnWhatsApp(ScriptedBrain):
         async def fake(account, method, path, body=None, timeout=90.0):
             if path == "/api/booking/venues/read":
                 return 200, {"read_id": "r-h", "venue": "Hotel Test", "country": "ES", "listing": {"name": "Hotel Test Madrid"}, "say": "x",
-                             "facts": [], "rungs": [{"rung": "link", "available": True, "fact_index": 1, "value": "SynXis"},
-                                                    {"rung": "email", "available": True, "fact_index": 2, "value": "res@hoteltest.es"}]}
+                             # Sasha 254 · its engine only: with its own email too, the booking rules ask by email first (R1)
+                             "facts": [], "rungs": [{"rung": "link", "available": True, "fact_index": 1, "value": "SynXis"}]}
             if path == "/api/booking/links":
                 self.links.append(body)
                 return 200, {"link_id": "l-h", "platform": "SynXis", "slot_filled": False,
@@ -350,13 +364,13 @@ ITEM = {"id": "v-1", "kind": "identifier", "provider": "club.kanoe.ai", "label":
 class G14Loyalty(Base):
     def test_a_matching_number_goes_into_the_form_by_its_keep_id_never_its_value(self):
         LY.find_for.return_value = ITEM
-        self.hold({"form": {}}, venue="Sasha Test Venue", day=LATER, time="21:00")
+        self.hold({"form": {}}, venue="Sasha Test Venue", day=LATER, time="21:00", route="form")   # Sasha 254 · "Handle it"
         body = self.api.bodies("/api/booking/forms")[0]
         self.assertEqual(body["loyalty_item_id"], "v-1")                    # the booking API names it in the read-back, opens it at the send
         LY.find_for.assert_awaited_with(ACCT, "Sasha Test Venue", "restaurant")
 
     def test_no_match_no_number(self):
-        self.hold({"form": {}}, day=LATER, time="21:00")
+        self.hold({"form": {}}, day=LATER, time="21:00", route="form")
         self.assertNotIn("loyalty_item_id", self.api.bodies("/api/booking/forms")[0])
 
     def test_the_prepared_page_names_it_masks_it_and_puts_the_value_only_on_their_phone(self):
@@ -374,7 +388,8 @@ class G14Loyalty(Base):
         eng = {"kind": "own_engine", "url": "https://sashatest.es/reservar", "from": "engine"}
         with mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VC, "use", use), \
                 mock.patch("agapi.venue_truth.prepare", mock.AsyncMock(return_value=None)):
-            out = self.hold({"own_page": {"value": "https://sashatest.es/reservar"}}, venue="Sasha Test Venue", day=LATER, time="21:00")
+            out = self.hold({"own_page": {"value": "https://sashatest.es/reservar"}}, venue="Sasha Test Venue", day=LATER, time="21:00",
+                            route="page")   # Sasha 254 · "Prefilled form" — the answer to the rules' one question
         said = json.dumps(out, ensure_ascii=False)
         self.assertNotIn("KTC-778899", said)                                                  # never in what she's given / says
         self.assertIn(LY.TOKEN, said)                                                         # the mask in the fields
@@ -392,7 +407,7 @@ class G14Loyalty(Base):
         eng = {"kind": "own_engine", "url": "https://sashatest.es/reservar", "from": "engine"}
         with mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VC, "use", refused), \
                 mock.patch("agapi.venue_truth.prepare", mock.AsyncMock(return_value=None)):
-            self.hold({"own_page": {}}, venue="Sasha Test Venue", day=LATER, time="21:00")
+            self.hold({"own_page": {}}, venue="Sasha Test Venue", day=LATER, time="21:00", route="page")
         self.assertIn("Kanoe Test Club: (not added — it's in your Keep)", self.told[-1])
 
 
@@ -404,6 +419,8 @@ class G14Luxury(unittest.TestCase):
     """guest_whatsapp_s75 test_sasha104_luxury_puts_three_euro_signs_first, on the brain's venue search."""
 
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         async def api(account, method, path, body=None, timeout=90.0):
             return 200, {"candidates": CANDS, "ranking": {"default": "rated", "orders": {"rated": ["p1", "p0", "p2", "p3"]}}, "show": 3}
         for p in (mock.patch.object(GW, "api", api), mock.patch.object(VN, "photos_for", mock.AsyncMock())):
@@ -437,6 +454,8 @@ class OldS1Untouched(Base):
     surface = "s1"
 
     def setUp(self):
+        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
+        live_access(self)
         super().setUp()
         p = mock.patch.dict(os.environ, PARITY_OFF)
         p.start()

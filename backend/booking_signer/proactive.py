@@ -512,9 +512,13 @@ def _daytime(now: datetime, tz: str) -> bool:
 
 
 async def no_reply_offers(now: datetime) -> List[dict]:
-    """Sasha 131 · an email with no venue reply after SASHA_EMAIL_REPLY_HOURS (24 h) → ONE WhatsApp question: "shall I call
-    them?" — when they're open (by their hours), else in the daytime when their hours aren't known."""
-    from . import decide as D, guest_whatsapp as GW, hours as H, ladder_routes as LR
+    """Sasha 254 · R5 — the no-reply follow-up's TIMING is the booking rules' (booking_rules.decide with state.request_sent_at /
+    venue_replied for each open email request), never a number of Sasha's (SASHA_EMAIL_REPLY_HOURS / decide.reply_hours are gone).
+    decide() says call → the call under the person's one yes (the plan in the email's read-back), else ONE WhatsApp question;
+    the rules refuse the call (3 a day, 30 minutes, calls off) → booking_rules.stopped(), and the person is TOLD. A call goes
+    only when they're open by their hours, else in the daytime (the rules' follow-up: "venue open or 10:00–20:00")."""
+    from . import guest_whatsapp as GW, hours as H, ladder_routes as LR
+    from agapi import booking_decide as BD
     if not no_reply_call_on() or STORE is None or GW.STORE is None or LR.LADDER_STORE is None:
         return []
     done: List[dict] = []
@@ -523,73 +527,51 @@ async def no_reply_offers(now: datetime) -> List[dict]:
         for b in await GW._upcoming(account, names=False):   # email bookings: no receipt name to re-read
             if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id") or not b.get("requested_at"):
                 continue
-            if now - datetime.fromisoformat(b["requested_at"]) < timedelta(hours=D.reply_hours()):
-                continue
             row = await LR.LADDER_STORE.get_read(account, str(b["read_id"]))
             read = (row or {}).get("read") or {}
-            if not any(f.get("kind") == "phone" for f in read.get("facts") or []):
-                continue
+            from . import escalation as ESC
+            email = await LR.LADDER_STORE.get_email(account, str(b.get("intent_id") or "")) if b.get("intent_id") else None
+            planned = bool(email and ESC.has_plan(email.get("read_back_lines")))   # the person's one yes covered the call
+            kinds = {f.get("kind") for f in read.get("facts") or []}
+            chans = [{"kind": "email", "value": "read"}] + ([{"kind": "phone", "value": "read"}] if "phone" in kinds else [])
+            d = await BD.decide_for(account, channels=chans, vtype="hotel" if planned or BD.venue_type(b.get("type")) == "hotel" else BD.venue_type(b.get("type")),
+                                    test=BD.is_test_venue({"venue": b.get("venue")}), local_at=f"{b.get('date')}T{b.get('time') or '12:00'}" if b.get("date") else None,
+                                    country=read.get("country"), venue_key=f"read:{b['read_id']}", now=now,
+                                    extra_state={"request_sent_at": BD._iso(datetime.fromisoformat(b["requested_at"])), "venue_replied": False})
+            refused_call = any(r.get("rule") == "R10" for r in d.get("refusals") or [])
+            if d["action"] not in ("call", "call_and_email") and not refused_call:
+                continue   # the rules: still a request, and wait
             tz = b.get("timezone") or "Europe/Madrid"
             try:
                 st = H.status(read, now, tz)
             except Exception:
                 st = {"known": False}
-            if not (st.get("open_now") if st.get("known") else _daytime(now, tz)):
+            if not refused_call and not (st.get("open_now") if st.get("known") else _daytime(now, tz)):
                 continue
             sid = await STORE.claim({"account_id": account, "trip_item_id": b["id"], "kind": "no_reply_call",
                                      "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": b.get("status")})
             if sid is None:
                 continue
-            from . import escalation as ESC
-            email = await LR.LADDER_STORE.get_email(account, str(b.get("intent_id") or "")) if b.get("intent_id") else None
-            if email and ESC.has_plan(email.get("read_back_lines")):   # Sasha 132 · the guest's one yes covered this call
+            if refused_call:   # R12 · an automatic stop is told, never only logged
+                told = await BD.tell_stopped(account, f"the follow-up call to {b.get('venue') or 'the venue'}",
+                                             {"calls_cap": "today's calls are made", "too_soon": "I called them less than 30 minutes ago"}
+                                             .get(d["say"], "calls are off for your account"))
+                outcome = f"stopped: {told.get('told')}"
+            elif planned:
                 outcome = await GW.auto_call_from_email(ch, b, str(email["email_id"]))
             else:
                 outcome = await GW.offer_no_reply_call(ch, b, row)
             await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)
-            done.append({"kind": "no_reply_call", "booking": b["id"], "outcome": outcome})
+            done.append({"kind": "no_reply_call", "booking": b["id"], "outcome": outcome, "rules": d["action"]})
     return done
 
 
 async def tap_offers(now: datetime) -> List[dict]:
-    """Sasha 131 · a one-tap page not pressed within SASHA_TAP_WINDOW_MIN → ONE question: email them (or, urgent, call and
-    email; or, with no address, call). Its yes leads to that route's own read-back and yes."""
-    from . import decide as D, guest_whatsapp as GW, ladder_routes as LR
-    if not tap_escalation_on() or STORE is None or GW.STORE is None or LR.LADDER_STORE is None or not hasattr(LR.LADDER_STORE, "stale_links"):
-        return []
-    done: List[dict] = []
-    chans = {c["account_id"]: c for c in await GW.STORE.all_channels()}
-    for l in await LR.LADDER_STORE.stale_links(now - timedelta(minutes=D.tap_window_min())):
-        ch = chans.get(l["account_id"])
-        if not ch or not l.get("local_date"):
-            continue
-        row = await LR.LADDER_STORE.get_read(l["account_id"], l["read_id"])
-        kinds = {f.get("kind") for f in ((row or {}).get("read") or {}).get("facts") or []}
-        tz = l.get("local_timezone") or "Europe/Madrid"
-        start = datetime.combine(l["local_date"], l["local_time"], tzinfo=ZoneInfo(tz))
-        soon = (start - now) < timedelta(hours=D.urgent_hours())
-        prefer = "call_email" if soon and {"phone", "email"} <= kinds else "email" if "email" in kinds else "call" if "phone" in kinds else None
-        if prefer is None:
-            continue
-        sid = await STORE.claim({"account_id": l["account_id"], "trip_item_id": l["trip_item_id"], "kind": "tap_expired",
-                                 "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": "link_sent"})
-        if sid is None:
-            continue
-        from . import escalation as ESC
-        if ESC.has_plan(l.get("read_back_lines")) and "email" in kinds:   # Sasha 132 · the guest's one yes covered this email
-            outcome = await GW.auto_email_from_link(ch, l, row)
-            await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", f"auto: {outcome}")
-            done.append({"kind": "tap_expired", "booking": l["trip_item_id"], "outcome": f"auto: {outcome}"})
-            continue
-        b = {"id": l["trip_item_id"], "venue": l["venue"], "date": l["local_date"].isoformat(), "time": l["local_time"].strftime("%H:%M"),
-             "party": l.get("party_size"), "read_id": l["read_id"]}
-        ask = {"email": ("email them instead", "Yes, prepare the email"), "call": ("call them instead", "Yes, prepare the call"),
-               "call_email": ("call and email them now — it's soon", "Yes, prepare both")}[prefer]
-        outcome = await GW.offer_escalation(ch, b, row, prefer, f"Not booked on {l['venue']}'s page yet for {SN.day_words(b['date'])} at "
-                                            f"{b['time']}. Shall I {ask[0]}? I'll show you exactly what I'll send first.", ask[1])
-        await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)
-        done.append({"kind": "tap_expired", "booking": l["trip_item_id"], "outcome": outcome})
-    return done
+    """RETIRED by Sasha 254 (the booking rules): a page handed to the person is theirs to finish — R14 hands a platform's page over
+    and nothing else, R11 says they can take it over at any point. The rules have no "page not pressed in N minutes → email them /
+    call them" step, so neither does Sasha (SASHA_TAP_WINDOW_MIN / decide.tap_window_min / decide.urgent_hours are read nowhere).
+    Kept as a name so nothing imports a ghost; it offers nothing."""
+    return []
 
 
 # ── the loop (the retention pattern) ────────────────────────────────────────────────────────────────────────────────
@@ -601,7 +583,7 @@ async def _forever() -> None:
     while True:
         try:
             await tick(NOW())
-            for what in await no_reply_offers(NOW()) + await tap_offers(NOW()):   # Sasha 130/131 · the escalation policy
+            for what in await no_reply_offers(NOW()):   # Sasha 254 · the booking rules' R5 follow-up (tap_offers retired)
                 log.info("[proactive] %s", what)
             from . import invitations as IV   # S-80 · an invitation's booking confirmed or cancelled → the invitee told
             for what in await IV.tick():

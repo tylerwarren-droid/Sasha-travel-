@@ -71,43 +71,44 @@ async def itinerary(a: str, conduct) -> None:
 
 
 async def restaurant(a: str) -> None:
-    from booking_signer import decide as D, slot_link as SL, voice_turn as VT, guest_whatsapp as GW
-    V = D.Venue
-    d = D.decide(V(form=True, platform="CoverManager", phone=True, email=True, open_now=True, opens_at=None, scripted=True, calls_on=True, hours_until=200))
-    ok("REST ladder: their own form first", d.route == "form", d.route)
-    d = D.decide(V(form=False, platform="CoverManager", phone=True, email=True, open_now=True, opens_at=None, scripted=True, calls_on=True, hours_until=200))
-    ok("REST ladder: a platform → its page on the phone (one tap)", d.route == "one_tap", d.route)
-    d = D.decide(V(form=False, platform=None, phone=True, email=True, open_now=True, opens_at=None, scripted=True, calls_on=True, hours_until=72))
-    ok("REST 48 h rule: more than 48 h away, no page → email first", d.route == "email", d.route)
-    d = D.decide(V(form=False, platform=None, phone=True, email=True, open_now=True, opens_at=None, scripted=True, calls_on=True, hours_until=30))
-    ok("REST 48 h rule: within 48 h → call and email at once", d.route == "call_email", d.route)
+    # Sasha 254 · the routing rules are the vendored BOOKING RULES (agapi/booking_rules), asked through the one adapter — the old
+    # decide.decide / decide.ladder (and their words) are retired
+    from booking_signer import slot_link as SL, voice_turn as VT, guest_whatsapp as GW
+    from agapi import booking_decide as BD
+    from agapi.booking_rules import booking_rules as BR
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    LIVE = {"mode": "live", "calls": "on", "real_venue_sends": "on"}
+
+    def R(chans, hours, pref=None, vtype="restaurant"):
+        now = _dt.now(_tz.utc)
+        return BR.decide(BD.ctx_for(channels=chans, vtype=vtype, test=False, booking_at_utc=(now + _td(hours=hours)).isoformat(), now=now,
+                                    access=LIVE, preference=pref, state={"server_cap": BD.SERVER_CALLS_PER_DAY}))
+    F, P, E, T = {"kind": "form", "value": "https://casa.example/reservas"}, {"kind": "platform"}, {"kind": "email", "value": "r@casa.example"}, {"kind": "phone", "value": "+34910000000"}
+    d = R([F, P, E, T], 200)
+    ok("REST rules: their own form first — the ONE question", d["action"] == "ask_one_question" and d["say_text"] == BR.PHRASES["ask_book"], d["action"])
+    d = R([P, T], 200)
+    ok("REST rules: a platform (no own form, WhatsApp or email) → its page handed over, never booked", d["action"] == "hand_over_platform_link", d["action"])
+    d = R([E, T], 72)
+    ok("REST 48 h rule: more than 48 h away, no form → a request (email), never a call", d["action"] == "request_email", d["action"])
+    d = R([E, T], 30)
+    ok("REST 48 h rule: within 48 h → a call", d["action"] == "call", d["action"])
+    d = R([E, T], 18, vtype="hotel")
+    ok("REST hotel within 24 h → call and email at once", d["action"] == "call_and_email", d["action"])
+    ok("REST every answer carries the take-over", all(R(c, h)["takeover"]["say"] == BR.PHRASES["takeover"] for c, h in (([F], 72), ([P], 72), ([T], 72), ([], 72))))
     read = {"facts": [{"kind": "platform", "value": "CoverManager", "source_label": "their website", "source_url": "https://example.test/",
                        "detail": {"link": "https://www.covermanager.com/reservation/module_restaurant/restaurante-ejemplo/spanish"}}]}
     page = SL.platform_page(read)
     ok("REST platform: the venue's own CoverManager page is the one sent (never fetched)", bool(page) and "covermanager.com" in page[1], str(page)[:100])
-    W = "Saturday 10 October at 21:00, 2 people"
-    L = lambda **k: (D.ladder(V(**k), "Casa Ejemplo", W) or {}).get("line", "")
-    ok("LADDER >48 h, books directly: “I can book Casa Ejemplo for you directly — … Shall I?”",
-       L(form=True, phone=True, email=True, hours_until=72) == f"I can book Casa Ejemplo for you directly — {W}. Shall I?")
-    ok("LADDER >48 h, a page: “We have time. Would you like me to email … or … book with them now?”",
-       L(platform="CoverManager", phone=True, email=True, hours_until=72).startswith("We have time. Would you like me to email Casa Ejemplo"))
-    ok("LADDER within 48 h, a page: “It's soon, so I recommend we book it now together … Or I can call them for you.”",
-       L(platform="CoverManager", phone=True, email=True, hours_until=20) == "It's soon, so I recommend we book it now together — I'll send their booking page to your phone. Or I can call them for you.")
-    ok("LADDER a CAPTCHA page counts as a page (never 'directly')", L(form=True, challenge=True, email=True, hours_until=72).startswith("We have time"))
-    ok("LADDER no online booking, >48 h: “They don't take online bookings — I'll email them …”",
-       L(phone=True, email=True, hours_until=72) == "They don't take online bookings — I'll email them and update you as soon as they reply. OK?")
-    ok("LADDER no online booking, within 48 h: “They only take bookings by phone — shall I call them?”",
-       L(phone=True, hours_until=20) == "They only take bookings by phone — shall I call them?")
     real = GW.rehearsal
     GW.rehearsal = lambda acct: True   # this process only: the guest's cards end with OUR test venue (contacts no one)
     try:
         h = []
-        for said in ("dinner for 2 in Chamberí, Madrid on Saturday at 9pm", "Sasha Test Venue", "Suite Guest +34 600 000 000", "yes"):
+        for said in ("dinner for 2 in Chamberí, Madrid on Saturday at 9pm", "Sasha Test Venue", "Suite Guest +34 600 000 000", "Handle it", "yes"):
             v = await VT.turn(a, said, h)
             h = (v or {}).get("messages") or h
-            if said.startswith("Suite Guest"):
-                ok("REST typed: the ladder's words — “I can book Sasha Test Venue for you directly — … Shall I?”",
-                   "I can book Sasha Test Venue for you directly" in _said(v), _said(v)[:120])
+            if said.startswith("Suite Guest"):   # Sasha 254 · the booking rules' ONE question (R2), word for word
+                ok("REST typed: the rules' one question — “I'll book it. Want a prefilled form you just confirm, or shall I handle it…?”",
+                   BR.PHRASES["ask_book"] in _said(v), _said(v)[:120])
         ok("REST typed → booked at the test venue, with its reference", re.search(r"✅|[Bb]ooked|confirmed", _said(v)) is not None, _said(v)[:120])
         h = []
         for said in ("Uh, a table for two in Chamberí, Madrid, Saturday at nine at night, please.", "the third one", "yes"):
@@ -120,7 +121,7 @@ async def restaurant(a: str) -> None:
 
 
 async def spa(a: str) -> None:
-    from booking_signer import ladder_routes as LR, captcha_test as CT, decide as D
+    from booking_signer import ladder_routes as LR, captcha_test as CT
     real_s = LR.standin
     LR.standin = lambda acct: bool(acct)   # this process only: the founder's demo setting (real spas, online only)
     try:
@@ -137,9 +138,12 @@ async def spa(a: str) -> None:
         ok("SPA live: never our test venue among real spas", not any(x.get("place_id") == LR.REHEARSAL_ID for x in c), "")
     finally:
         LR.standin = real_s
-    W = "Saturday 10 October at 16:00, 2 people"
-    line = (D.ladder(D.Venue(form=True, challenge=True, hours_until=20), "Spa Ejemplo", W) or {}).get("line", "")
-    ok("SPA a CAPTCHA page within 48 h → their page on the phone, now", line.startswith("It's soon, so I recommend we book it now together"), line[:100])
+    from agapi import booking_decide as BD   # Sasha 254 · R13: a CAPTCHA page is theirs — prepared, never zero-touch
+    from agapi.booking_rules import booking_rules as BR
+    d = BR.decide(BD.ctx_for(channels=[{"kind": "form", "value": "https://spa.example", "captcha": True}], vtype="spa", test=False,
+                             booking_at_utc=None, access={"mode": "live", "calls": "on", "real_venue_sends": "on"}, preference="form"))
+    ok("SPA a CAPTCHA page → their page, prepared — never zero-touch, even when asked to handle it",
+       (d["action"], d["say"]) == ("prepared_link", "prepared_link_captcha"), str((d["action"], d["say"])))
     ok("SPA “send me the captcha test” still answered", CT.asked("send me the captcha test"), "")
 
 

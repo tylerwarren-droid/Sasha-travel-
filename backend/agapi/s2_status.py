@@ -87,7 +87,9 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
     d = decide(st, held=account in API._HELD, ledger_open=open_n)
     refs = [r["booking_reference"] for r in rows if r["state"] == "booked" and r.get("booking_reference")] + \
            [b["reference"] for b in vb if b.get("status") in ("confirmed", "guest_booked") and b.get("reference")]
-    return {**st, **d, "refs": list(dict.fromkeys(refs)), "ledger_open": open_n}
+    from agapi import booking_decide as BD   # Sasha 254 · R12 — an automatic stop is said here too, never only logged
+    stops = BD.stops_of(account)
+    return {**st, **d, "refs": list(dict.fromkeys(refs)), "ledger_open": open_n, **({"stopped": stops} if stops else {})}
 
 
 def public(st: Dict[str, Any]) -> Dict[str, Any]:

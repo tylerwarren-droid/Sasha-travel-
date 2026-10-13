@@ -33,7 +33,8 @@ RUNG = {"form": ("zero_touch", "web_form"), "handover": ("human_tap", "page_hand
         "draft": ("request_reply", "whatsapp"), "email": ("request_reply", "email"), "call": ("phone", "phone"),
         "prepared": ("human_tap", "page_handover")}   # Sasha 248 · "fill it now": their page + every detail, they confirm there
 NOW_STATE = {"confirmed": "confirmed", "requested": "sent", "tap_to_finish": "sent", "page_on_phone": "sent", "page_link": "sent",
-             "draft_on_phone": "sent", "draft_message": "sent", "scheduled": "sent", "placed": "sent", "calling": "sent", "not_sent": "failed"}
+             "draft_on_phone": "sent", "draft_message": "sent", "scheduled": "sent", "placed": "sent", "calling": "sent", "not_sent": "failed",
+             "not_allowed": "failed", "stopped": "failed"}   # Sasha 254 · AgAPI's "not allowed"; a call the rules stopped
 LATER = {"confirmed": "confirmed", "guest_booked": "confirmed", "declined": "declined", "failed": "failed", "unreachable": "failed"}
 SWEEP_EVERY_S = 600
 
@@ -90,6 +91,9 @@ async def _send(op: str, body: dict, account: Optional[str] = None) -> Optional[
 async def booked(account: str, held: dict, venue: str, city: Optional[str], result: Optional[dict] = None, error: Optional[str] = None) -> None:
     """book_venue acted: record the attempt and what happened at once. Never raises."""
     rung, channel = RUNG.get(held.get("rung") or "", ("phone", "phone"))
+    if held.get("rung") == "agapi":   # Sasha 254 · AgAPI's send: the rung the booking rules chose (agapi.venues.AGAPI_RUNG)
+        from agapi.venues import AGAPI_RUNG
+        rung, channel = AGAPI_RUNG.get(str(held.get("agapi_action") or ""), ("request_reply", "email"))
     if held.get("rung") == "draft" and held.get("channel") == "instagram":
         channel = "instagram"
     st = "failed" if error else NOW_STATE.get(str((result or {}).get("status") or ""), "sent")

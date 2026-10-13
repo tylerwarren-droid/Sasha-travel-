@@ -73,9 +73,14 @@ async def main() -> bool:
         @staticmethod
         def plain_venue(v): return str(v).replace(" (test)", "")
     real_api, real_addr = VN._API, GR.address_of
+    from agapi import booking_decide as BD
+    from agapi.booking_rules import booking_rules as BR
+    real_access = BD.access_of
 
     async def addr(account): return "guest@example.com"
-    VN._API, GR.address_of = (lambda: GW), addr
+
+    async def live(account): return {"mode": "live", "calls": "on", "real_venue_sends": "on"}
+    VN._API, GR.address_of, BD.access_of = (lambda: GW), addr, live
     said: list = []
     acct = "00000000-0000-4000-8000-000000000250"
     try:
@@ -86,19 +91,21 @@ async def main() -> bool:
             res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
                    "when": {"at": (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%dT21:00")}, "what": {"category": "restaurant"}}
             at = res["when"]["at"]
-            q = await VN._engine_route(ctx, {}, rd, res, at, datetime.now(timezone.utc), None, ch, venue)
-            said += [q.get("ask") or ""] + [o["title"] for o in q.get("options") or []] + list(q.get("read_back") or [])
-            got = await VN._engine_route(ctx, {}, rd, res, at, datetime.now(timezone.utc), "page", ch, venue)
+            # Sasha 254 · the booking rules decide (agapi.booking_decide), the executors run what they said — the words are theirs
+            q = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), await VN.rules_for(ctx, {}, rd, res, at, ch, venue, None), ch, venue)
+            said += [q.get("ask") or "", q.get("say") or ""] + [o["title"] for o in q.get("options") or []] + list(q.get("read_back") or [])
+            got = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), await VN.rules_for(ctx, {}, rd, res, at, ch, venue, "page"), ch, venue)
             said += [got.get("say") or "", got.get("line") or ""] + list(got.get("read_back") or [])
             VN._HELD.pop(acct, None)
         check("3 the question, word for word", V.ASK_BOOK in said, str(said[:2]))
         check("3 both choices", "Prefilled form" in said and "Handle it" in said)
-        check("3 the prefilled form's confirmation", any(s.startswith(V.DONE_FORM) for s in said))
+        check("3 the prefilled form's confirmation — the rules' words + the take-over",
+              any(s.startswith(BR.PHRASES["prepared_link"]) and BR.PHRASES["takeover"] in s for s in said))
         lines = [s for s in said if s]
         check("3 nothing she's handed names a channel", V.check(lines) == [], str(V.check(lines)))
         check("3 the request's confirmation is her voice", V.SENT == "Sent. I'll tell you when they reply." and V.check([V.SENT, V.DONE_FORM, V.DONE_FORM_WA]) == [])
     finally:
-        VN._API, GR.address_of = real_api, real_addr
+        VN._API, GR.address_of, BD.access_of = real_api, real_addr, real_access
         VN._HELD.pop(acct, None)
 
     # 4 ── Sasha 251 · honest results: a failed tool is never followed by a claim of what it would have shown

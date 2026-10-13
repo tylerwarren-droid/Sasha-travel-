@@ -31,7 +31,7 @@ PG_URL = os.getenv("BOOKING_TEST_DATABASE_URL", "")
 
 MONDAY = datetime(2026, 10, 5, 11, 0, tzinfo=timezone.utc)
 ENV = {"SASHA_BOOKING_KEY": "test-booking-key", "SASHA_CALL_SWEEP": "0", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "test-key-not-real", "SASHA_TEST_CALL_NUMBER": "+351 912 000 000",
-       "SASHA_TEST_CALL_LANGUAGE": "en", "SASHA_TEST_CALL_TIMEZONE": "Europe/Lisbon", "SASHA_CALLS_PER_DAY": "3"}
+       "SASHA_TEST_CALL_LANGUAGE": "en", "SASHA_TEST_CALL_TIMEZONE": "Europe/Lisbon"}
 JOHNSON = {"venue": "test-line", "date": "2026-10-08", "time": "20:00", "party": 4, "name": "Anna Johnson"}
 
 
@@ -149,7 +149,8 @@ class Script(unittest.TestCase):
     def test_the_brief_carries_every_rule_and_the_read_back_says_what_she_will_do(self):
         b = C.build_call(C.test_line(), C.parse_call_particulars(JOHNSON), MONDAY)
         t = b["brief"]["task"]
-        for must in ("Never accept another date", "Agree to no deposit, give no card", "I'll need to check that with the Johnsons.",
+        from agapi.booking_rules import booking_rules as BR   # Sasha 254 · R8: the rules' own call rule, verbatim
+        for must in ("Never accept another date", BR.CALL_RULES[1], "I'll need to check that with the Johnsons.",
                      "an AI, never the guest or a human", "No voicemail", "no phone number to give",
                      "Name: Johnson; if not caught, spell: \"J as in Juliett, O as in Oscar", "Could you give me a booking reference"):
             self.assertIn(must, t)
@@ -391,7 +392,10 @@ class CallRoutes:
         v = self.status(prep["call_id"])
         self.assertEqual(v["status"], "not_reached", v)
         self.assertEqual(self.bland_id(prep["call_id"]), "ae18c3c8-log")
-        self.assertEqual(self.yes(again).json()["status"], "placed")  # resolved: the retry may go
+        self.assertEqual(self.yes(again).json()["rule"], "too_soon")   # Sasha 254 · R10: 30 minutes between calls to one venue
+        self.now = self.now + timedelta(minutes=31)
+        again = self.prepare()
+        self.assertEqual(self.yes(again).json()["status"], "placed")  # resolved, and the rules' 30 minutes passed: the retry may go
 
     def test_nothing_in_blands_log_after_ten_minutes_is_not_placed_and_says_so(self):
         self.bland.place_answer = ReadTimeout("timed out")
@@ -481,9 +485,13 @@ class CallRoutes:
         acct = founder_account()
         call = self.c.portal.call(self.store.get_call, str(acct), prep["call_id"])
         before = len(self.bland.requests)
-        self.assertEqual(self.c.portal.call(call_routes.confirm_unclear, call), "placed")
-        self.assertEqual(len(self.bland.requests), before + 1)
+        # Sasha 254 · R10 — never an instant redial: the confirmation call waits the rules' 30 minutes (covered by the same yes)
+        self.assertEqual(self.c.portal.call(call_routes.confirm_unclear, call), f"scheduled for {(self.now + timedelta(minutes=30)).strftime('%H:%M')} UTC")
+        self.assertEqual(len(self.bland.requests), before)                                       # nothing dialled now
         conf_id = self.c.portal.call(self.store.confirming, prep["call_id"])
+        self.now = self.now + timedelta(minutes=31)
+        self.assertEqual(self.c.portal.call(call_routes.place_due), 1)                          # 30 minutes on: placed
+        self.assertEqual(len(self.bland.requests), before + 1)
         conf = self.c.portal.call(self.store.get_call, str(acct), conf_id)
         self.assertEqual(str(conf["trip_item_id"]), str(call["trip_item_id"]))                 # the SAME reservation
         self.assertEqual((conf["approval"]["how"], conf["approval"]["kind"]), ("auto", "confirm_unclear"))
@@ -531,6 +539,7 @@ class CallRoutes:
         self.yes(prep)
         self.c.portal.call(self.store.record_reading, prep["call_id"],
                            C.CallReading(state="answered", outcome="unclear", venue_words="Sí, sí.", quote="Sí, sí.", why=""), {}, self.now)
+        self.now = self.now + timedelta(minutes=31)   # Sasha 254 · R10: 30 minutes between two calls to the same venue
         cx = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]}).json()
         self.c.post(f"/api/booking/calls/{cx['call_id']}/place", json={"read_back_sha256": cx["read_back"]["sha256"], "approval": {"how": "button"}})
         cancel = self.c.portal.call(self.store.get_call, acct, cx["call_id"])
@@ -575,9 +584,11 @@ class CallRoutes:
         self.assertEqual(self.yes(prep).json()["rule"], "read_back_expired")
         self.assertEqual(self.bland.requests, [])
 
-    def test_the_daily_ceiling(self):
-        with mock.patch.dict(os.environ, {"SASHA_CALLS_PER_DAY": "1"}):
+    def test_the_daily_ceiling(self):   # Sasha 254 · the server's net is booking_decide.SERVER_CALLS_PER_DAY (no env var)
+        from agapi import booking_decide as BD
+        with mock.patch.object(BD, "SERVER_CALLS_PER_DAY", 1):
             self.assertEqual(self.yes(self.prepare()).json()["status"], "placed")
+            self.now = self.now + timedelta(minutes=31)   # past R10's 30 minutes: only the ceiling stands in the way
             r = self.yes(self.prepare())
             self.assertEqual((r.status_code, r.json()["rule"]), (429, "daily_call_limit"))
         self.assertEqual(len(self.bland.requests), 1)
@@ -630,6 +641,7 @@ class CallRoutes:
     def test_a_cancellation_is_prepared_from_the_booking_and_cancels_that_reservation(self):
         """S-47 · everything read from the booking call; a confirmed cancellation marks the SAME reservation cancelled."""
         booking = self._confirmed_booking()
+        self.now = self.now + timedelta(minutes=31)   # Sasha 254 · R10: 30 minutes between two calls to the same venue
         c = self.c.post("/api/booking/calls", json={"cancels_call_id": booking["call_id"]})
         self.assertEqual(c.status_code, 200, c.text)
         lines = c.json()["read_back"]["lines"]

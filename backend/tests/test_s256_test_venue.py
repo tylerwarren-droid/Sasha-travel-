@@ -93,6 +93,36 @@ class ALivePerson(Base):
         self.assertEqual(run(TV.vet(ctx(), dict(a))), a)
 
 
+class TheirWordsPickTheOption(Base):
+    """Found live on production (/s2, the test venue): "Prefilled form" was sent by the model as route "form" and became Sasha sending
+    it (a read-back of a send). Their words naming ONE option decide the route in hold_venue (venues.chosen_route)."""
+
+    def test_the_words_map_to_the_rules_options(self):
+        self.assertEqual(VN.chosen_route("Prefilled form"), "page")
+        self.assertEqual(VN.chosen_route("prefilled form please"), "page")
+        self.assertEqual(VN.chosen_route("Handle it"), "form")
+        self.assertEqual(VN.chosen_route("handle it and let me know"), "form")
+        for said in ("Yes, send it.", "book it", "the prefilled one, or handle it?", ""):
+            self.assertIsNone(VN.chosen_route(said), said)
+
+    def test_prefilled_form_is_the_page_whatever_the_model_sent(self):
+        seen = []
+        real = VN._read
+
+        async def rd(c, a):
+            seen.append(a.get("route"))
+            return await reader({"link": {"value": "https://x.test/api/booking/test-venue/plain"}})(c, a)
+        with mock.patch.object(VN, "_read", rd):
+            try:
+                run(VN.hold_venue(ctx("Prefilled form"), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid",
+                                                          "country": "ES", "what": "dinner", "party": 2, "day": LATER, "time": "20:00",
+                                                          "route": "form"}))
+            except Exception:
+                pass   # the page's preparation is AgAPI's (not faked here) — what matters is the route it was held with
+        self.assertIn("page", seen)
+        self.assertNotIn("form", seen)
+
+
 class EverySurfaceSearchesHere(unittest.TestCase):
     def test_the_one_search_asks_the_test_venues_first(self):
         import inspect

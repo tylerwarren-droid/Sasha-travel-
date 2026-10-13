@@ -229,6 +229,20 @@ async def read_booking_route(ctx, a: dict) -> dict:
             "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
 
 
+def chosen_route(said: Optional[str]) -> Optional[str]:
+    """Sasha 256 · found live (test venue, /s2): "Prefilled form" was sent as route "form" (the word "form" is in it) and became Sasha
+    sending it. Their own words naming exactly ONE of the rules' options (booking_decide.CHOICES) pick its route; anything else → None."""
+    import re as _re
+    from agapi import booking_decide as BD
+    t = " " + _re.sub(r"[^a-z]+", " ", str(said or "").lower()) + " "
+    named = {o["route"] for o in BD.CHOICES if f" {o['title'].lower()} " in t}
+    if " prefilled " in t or " pre filled " in t:
+        named.add("page")
+    if _re.search(r" handle (it|this|that) ", t):
+        named.add("form")
+    return next(iter(named)) if len(named) == 1 else None
+
+
 def one_path(ctx) -> bool:
     """Sasha 251 · the one path's SCHEMA and asks (under / open_slot / nights, the contact asked once, a Keep loyalty number) on /s2,
     WhatsApp's brain and /next under S1 parity; old S1 (SASHA_S1_PARITY=off) keeps its own schema byte-identical. Sasha 254 · the
@@ -529,6 +543,10 @@ async def hold_venue(ctx, a: dict) -> dict:
     from agapi.v0 import stale
     from agapi import test_venues as TV
     a = await TV.vet(ctx, a)   # Sasha 256 · the test venue: held for a test person only — a live person's hold naming it is refused
+    picked = chosen_route(ctx.user_said)
+    if picked and one_path(ctx) and a.get("route") != picked:   # Sasha 256 · their words name the option: it decides, not the model
+        log.info("[venues] %r names %s — the route is %s (the model sent %s)", (ctx.user_said or "")[:40], picked, picked, a.get("route"))
+        a = {**a, "route": picked}
     GW = _API()
     held = _HELD.get(ctx.account)
     # Sasha 217 · THE SAME BOOKING held again (she re-holds on the yes turn): the read-back they already heard, as it is. A new hold

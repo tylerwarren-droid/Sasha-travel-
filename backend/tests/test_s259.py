@@ -118,6 +118,33 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TheTripTabReadsTheOneBookingRecord(unittest.TestCase):
+    """Found on 259's production proof: a confirmed AgAPI table (TV-CCFD94-87) was on get_status and in the calendar, but the Trip
+    tab's Booked / Everything were empty — journeys read only the reservations. It reads venue_submit.bookings too now."""
+
+    def test_an_agapi_table_is_in_booked_and_everything_a_request_in_waiting(self):
+        from agapi import venue_submit as VS
+        from booking_signer import journeys as JN
+        acts = [{"trip_item_id": None, "act_id": "act_tv1", "venue": "Sasha Test Venue", "date": "2026-11-06", "time": "20:30", "party": 2,
+                 "status": "confirmed", "type": "venue", "reference": "TV-CCFD94-87"},
+                {"trip_item_id": None, "act_id": "act_tc1", "venue": "Taverna Correo", "date": "2026-11-07", "time": "21:00", "party": 2,
+                 "status": "requested", "type": "venue"}]
+        with mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=acts)), mock.patch.object(JN, "_run", lambda: None), \
+                mock.patch.object(JN, "_extra", mock.AsyncMock(return_value=({}, []))), mock.patch.object(JN, "product_rows", mock.AsyncMock(return_value=[])):
+            j = run(JN.journeys(ACCT, []))
+        self.assertEqual([r["id"] for r in j["receipts"]], ["act_tv1"])
+        self.assertEqual(j["receipts"][0]["booking_reference"], "TV-CCFD94-87")
+        self.assertIn("TEST", j["receipts"][0]["status_words"])                # a test venue's booking is never shown as a real one
+        self.assertEqual([r["id"] for r in j["requests"]], ["act_tc1"])
+        self.assertEqual(len(j["everything"]), 2)
+
+    def test_agapi_not_answering_adds_nothing_and_never_fails_the_tab(self):
+        from agapi import venue_submit as VS
+        from booking_signer import journeys as JN
+        with mock.patch.object(VS, "bookings", mock.AsyncMock(side_effect=RuntimeError("down"))):
+            self.assertEqual(run(JN.agapi_rows(ACCT)), [])
+
+
 class NoRecordReachesTheTestVenue(unittest.TestCase):
     """EU 255 (row 890): a fresh account with NO access record got "Sacha Restaurant", not the test card — the test-venue check read
     the routing mode (no record → the guest marker → live). What a person may book is their RECORD: no record → test (fails closed)."""

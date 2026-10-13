@@ -199,6 +199,27 @@ async def _extra(account: str) -> tuple:
         return {}, []
 
 
+async def agapi_rows(account: Optional[str]) -> List[dict]:
+    """Sasha 259 · the person's AgAPI venue bookings — the one booking record get_status and the calendar read (venue_submit.bookings)
+    — as reservation rows, so the Trip tab's Booked / Waiting / Everything show a table sent through AgAPI too. At most 5 s; not read
+    → none added (the reservations still show)."""
+    if not account:
+        return []
+    try:
+        import asyncio
+        from agapi import s2_status as ST, venue_submit as VS
+        acts = await asyncio.wait_for(VS.bookings(account), timeout=5)
+    except Exception as e:
+        log.info("[journeys] AgAPI bookings not read: %s", type(e).__name__)
+        return []
+    words = {"confirmed": "Confirmed", "requested": ST.WORDS["requested"], "proposed": ST.WORDS["proposed"],
+             "declined": ST.WORDS["declined"], "cancelled": "Cancelled"}
+    return [{"id": a["act_id"], "venue": a.get("venue") or "", "date": a.get("date"), "time": a.get("time"), "status": a.get("status"),
+             "party": a.get("party"), "type": "venue", "channel": "agapi", "booking_reference": a.get("reference"),
+             **({"status_words": words[a["status"]]} if a.get("status") in words else {})}
+            for a in acts if a.get("act_id")]
+
+
 async def journeys(account: Optional[str], rows: List[dict]) -> dict:
     """The tabs, from the account's reservations (each carries its trip_id)."""
     run = _run()
@@ -210,7 +231,7 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
             log.info("[journeys] no plans: %s", type(e).__name__)
     cities, saved = await _extra(account) if account else ({}, [])
     from . import plan_store as PS
-    rows = PS.truthful(list(rows)) + saved   # Sasha 179 · TEST never "Confirmed"; Sasha 178 · parked, unbooked: in their tab AND in Requests
+    rows = PS.truthful(list(rows) + await agapi_rows(account)) + saved   # Sasha 179 · TEST never "Confirmed"; Sasha 178 · parked, unbooked: in their tab AND in Requests
     ids = {p["trip_id"] for p in plans}
     # Sasha 177 (3) · EVERY PRODUCT WRITES HERE: CampusMe visits, RelocateMe's deadlines and appointments, EspañaMe's follow-ups
     prod = await product_rows(account)

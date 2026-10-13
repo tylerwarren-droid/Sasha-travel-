@@ -15,7 +15,6 @@ Never the person's card; their name / phone / email only to prepare_booking (AgA
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import secrets
 import time
@@ -41,7 +40,6 @@ ACTS_KEEP = 30
 
 async def _agapi(op: str, body: dict, approval: Optional[str] = None, account: Optional[str] = None) -> Dict[str, Any]:
     """The transport: the venues family's AgAPI, its own key (never printed). A person's mode picks live or the sandbox."""
-    import httpx
     from agapi import agapi_route as AR
     url, key = await AR.client_for(FAMILY, account)
     if not key:
@@ -49,12 +47,7 @@ async def _agapi(op: str, body: dict, approval: Optional[str] = None, account: O
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2vs_" + secrets.token_hex(12)}
     if approval:
         h["AgAPI-Approval-Id"] = approval
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT_S)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
-        return r.json()
-    except Exception as e:
-        return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    return await AR.post(url, key, op, body, h, TIMEOUT_S)   # Sasha 261 · the one transport (agapi_route.post): an AgAPI outage is named there, once, for every family
 
 
 CALL: Callable[..., Awaitable[Dict[str, Any]]] = _agapi   # tests replace it

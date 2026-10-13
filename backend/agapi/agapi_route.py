@@ -226,6 +226,30 @@ async def client_for(family: str, account: Optional[str] = None, flight: Optiona
     return endpoint(await target_for(family, account, flight, booking_reference))
 
 
+async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str], timeout: float) -> Dict:
+    """Sasha 261 · THE ONE TRANSPORT every family's client sends through: AgAPI's envelope, or the transport's own (timeout /
+    unreachable). An AgAPI outage (402/429, a timeout, unreachable) is noted once here — on the tool call in progress, and the
+    founder told (agapi_health) — so every surface and family says it the same way."""
+    import json
+    import httpx
+    from agapi import agapi_health as AH
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as c:
+            r = await c.post(f"{url}/v1/{op}", headers=headers, content=json.dumps(body))
+        try:
+            env = r.json()
+        except Exception:   # not AgAPI's envelope (a proxy's error page): AgAPI didn't answer
+            env = {"ok": False, "error": {"code": "unreachable", "message": f"HTTP {r.status_code}"}}
+    except httpx.TimeoutException as e:
+        env = {"ok": False, "error": {"code": "timeout", "message": type(e).__name__}}
+    except Exception as e:
+        env = {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    kind = AH.kind_of(env)
+    if kind:
+        await AH.note(kind, op, url, key)
+    return env
+
+
 def key_name(target: str) -> str:
     """Sasha 249 · the key's variable NAME, for a 'not configured' line (never its value)."""
     return ENDPOINTS["live" if target == "live" else "sandbox"][2]
@@ -239,4 +263,4 @@ def ctx_mode() -> str:
 
 
 __all__ = ["acting", "person_mode", "FAMILIES", "PINNED", "ROUTED", "TEST_AIRLINES", "table", "route", "current", "using", "money_target", "endpoint", "target_for", "client_for",
-           "key_name", "ctx_mode"]
+           "post", "key_name", "ctx_mode"]

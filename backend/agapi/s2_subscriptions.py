@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import os
 import secrets
 import time
@@ -89,7 +88,6 @@ def keep_statement(account: str, raw: bytes, media_type: str) -> str:
 
 
 async def _agapi(op: str, body: dict, approval: Optional[str] = None) -> Dict[str, Any]:
-    import httpx
     from agapi import agapi_route as AR
     url, key = await AR.client_for("subscriptions")   # Sasha 249 · ONE ROUTE (the copied URL/key block is gone)
     if not key:
@@ -97,14 +95,8 @@ async def _agapi(op: str, body: dict, approval: Optional[str] = None) -> Dict[st
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2sub_" + secrets.token_hex(12)}
     if approval:
         h["AgAPI-Approval-Id"] = approval
-    try:   # Sasha 260 · reading a mailbox's receipts takes AgAPI longer than any other call (READ_TIMEOUT_S)
-        async with httpx.AsyncClient(timeout=httpx.Timeout(READ_TIMEOUT_S if body.get("emails") else CALL_TIMEOUT_S)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
-        return r.json()
-    except httpx.TimeoutException as e:
-        return {"ok": False, "error": {"code": "timeout", "message": type(e).__name__}}
-    except Exception as e:
-        return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    # Sasha 260 · reading a mailbox's receipts takes AgAPI longer than any other call (READ_TIMEOUT_S); Sasha 261 · the one transport (agapi_route.post): an AgAPI outage is named there, once, for every family
+    return await AR.post(url, key, op, body, h, READ_TIMEOUT_S if body.get("emails") else CALL_TIMEOUT_S)
 
 
 CALL: Callable[..., Awaitable[Dict[str, Any]]] = _agapi   # tests replace it

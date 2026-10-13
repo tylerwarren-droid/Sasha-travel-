@@ -44,7 +44,6 @@ FAMILY = "s2_reads"   # Sasha 249 · agapi_route's family for these reads (live 
 
 async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     """One AgAPI live call as this guest. → the envelope (ok/result/error); a transport failure is an envelope too."""
-    import httpx
     from agapi import agapi_route as AR
     url, key = await AR.client_for(FAMILY)   # Sasha 249 · ONE ROUTE
     if not key:
@@ -53,12 +52,7 @@ async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     tok = GUEST_TOKEN.get()
     if tok:
         h["X-Sasha-Guest-Token"] = tok
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT_S)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
-        return r.json()
-    except Exception as e:
-        return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    return await AR.post(url, key, op, body, h, TIMEOUT_S)   # Sasha 261 · the one transport (agapi_route.post): an AgAPI outage is named there, once, for every family
 
 
 CALL: Callable[[str, dict], Awaitable[Dict[str, Any]]] = _agapi   # tests replace it

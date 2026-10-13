@@ -32,6 +32,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from agapi import v0 as API
 from app.agent import spoken as SP
 from app.agent import voice as _V   # Sasha 251 · honest results: which tools show something, and her line when one failed
+from agapi import agapi_health as _AH   # Sasha 261 · an AgAPI outage met by a tool's calls (said as voice.outage_line)
+from agapi.s2_subscriptions import TOOL_NAMES as _SUBS_TOOLS   # Sasha 261 · subscriptions keep their own 260 line
 from app.services import persona as P
 
 log = logging.getLogger("agent.sasha")
@@ -589,6 +591,15 @@ def outage(r: dict) -> Optional[str]:
     return e.get("message") if not r.get("ok") and str(e.get("code") or "").endswith("_unreachable") else None
 
 
+def agapi_outage(r: dict, met: List[str], tool: str) -> dict:
+    """Sasha 261 · a tool that FAILED while its AgAPI calls met an outage (402/429, a timeout, unreachable) → voice.outage_line, as an
+    `*_unreachable` failure: said by code, word for word, and the model told not to retry or work round it. A tool that worked, or
+    failed for another reason, is as it was; subscriptions keep their own 260 line."""
+    if not met or r.get("ok") or tool in _SUBS_TOOLS:
+        return r
+    return {"ok": False, "error": {"code": "agapi_unreachable", "message": _V.outage_line(met[0], tool)}}
+
+
 def model_result(r: dict, name: str = "") -> dict:
     if r.get("ok"):
         return {"ok": True, "result": clean_for_model(r["result"]), **({"untrusted_data": _DATA_NOTE} if name in _OUTSIDE_TEXT else {})}
@@ -861,7 +872,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 args["idempotency_key"] = f"{turn_key}:{u.name}:{hashlib.sha256(json.dumps(u.input, sort_keys=True).encode()).hexdigest()[:12]}"
             if u.name in ("book", "book_venue", "cancel_venue", "send_email", "send_whatsapp", "running_late", "change_booking", "cancel_booking"):
                 args["approval"] = {"said": message}   # the REAL words of this turn — never the model's (CR 60: the email's too)
-            r = await run(ctx, u.name, args)
+            with _AH.watching() as met:
+                r = await run(ctx, u.name, args)
+            r = agapi_outage(r, met, u.name) if honest else r   # Sasha 261 · off on /next with parity off (byte-identical)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
                 if honest and _V.told_line(r["result"]):   # Sasha 254 · off on /next with parity off (byte-identical)

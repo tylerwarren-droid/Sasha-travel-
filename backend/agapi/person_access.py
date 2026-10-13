@@ -19,7 +19,6 @@ The key is never logged or printed."""
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import secrets
 import time
@@ -84,14 +83,8 @@ async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     url, key = AR.endpoint("live")
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "the access record isn't readable here (no key)"}}
-    import httpx
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2pa_" + secrets.token_hex(12)}
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT_S)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
-        return r.json()
-    except Exception as e:
-        return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    return await AR.post(url, key, op, body, h, TIMEOUT_S)   # Sasha 261 · the one transport (agapi_route.post): an AgAPI outage is named there, once, for every family
 
 
 CALL: Callable[[str, dict], Awaitable[Dict[str, Any]]] = _agapi

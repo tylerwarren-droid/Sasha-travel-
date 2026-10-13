@@ -16,7 +16,6 @@ machine; a booking platform is never read (dive refuses one).
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -49,18 +48,12 @@ def _host(url: Optional[str]) -> str:
 
 async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     """The engine's transport — the family's AgAPI (agapi_route), its own key. Never printed."""
-    import httpx
     from agapi import agapi_route as AR
     url, key = await AR.client_for(FAMILY)   # Sasha 249 · ONE ROUTE (the copied URL/key block is gone)
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "the venue engine isn't switched on"}}
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(ENGINE_TIMEOUT_S)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers={"Authorization": f"Bearer {key}", "content-type": "application/json",
-                                                         "Idempotency-Key": "s2vt_" + secrets.token_hex(12)}, content=json.dumps(body))
-        return r.json()
-    except Exception as e:
-        return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    return await AR.post(url, key, op, body, {"Authorization": f"Bearer {key}", "content-type": "application/json",
+                                             "Idempotency-Key": "s2vt_" + secrets.token_hex(12)}, ENGINE_TIMEOUT_S)   # Sasha 261 · the one transport (agapi_route.post): an AgAPI outage is named there, once, for every family
 
 
 CALL: Callable[..., Awaitable[Dict[str, Any]]] = _agapi   # tests / the gate replace it (scripts/venue_engine_fake.py)

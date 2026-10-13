@@ -10,6 +10,7 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
   SHOWS / SAYS → Sasha 251 · which tools put something on screen; FAILED / failed_line() → what she says when one failed and
                  nothing was drawn; claims_shown() / honest_faults() → a claim of what isn't there (sasha.turn acts on it)
   TOLD / told_line() / told_prefix() → Sasha 254 · the booking rules' refusals and stops, said in the rules' words (sasha.turn)
+  OUTAGE / outage_line() → Sasha 261 · an AgAPI outage (its budget spent, rate-limited, not answering), one plain line (sasha.turn)
 """
 from __future__ import annotations
 
@@ -257,6 +258,20 @@ def tap_line(code: str) -> str:
     return TAP_SAYS.get(code, "That didn't go through — nothing was sent. Shall I try again?")
 
 
-__all__ = ["TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
+# ── Sasha 261 · AN AGAPI OUTAGE, SAID (rows 897/900: the sandbox key's budget spent → "didn't work", or a statement offered) ──────
+#: a tool failed and its AgAPI calls met an outage (agapi_health: "limit" = 402/429, "slow" = a timeout / unreachable) → ONE line,
+#: said by code (sasha.turn), never a retry or an improvised alternative. The founder is emailed by agapi_health (once an hour).
+OUTAGE = {"limit": "I can't {what} right now — the {service} has hit its limit. Kanoe has been told; nothing was sent.",
+          "slow": "I can't {what} right now — the {service} didn't answer in time. Kanoe has been told; nothing was sent."}
+OUTAGE_BOOKING = ("book_venue", "hold_venue", "read_booking_route", "cancel_venue", "book", "cancel_booking", "change_booking",
+                  "running_late")
+
+
+def outage_line(kind: str, tool: str) -> str:
+    what, service = ("book", "booking service") if tool in OUTAGE_BOOKING else ("do that", "service I use for it")
+    return OUTAGE.get(kind, OUTAGE["slow"]).format(what=what, service=service)
+
+
+__all__ = ["OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

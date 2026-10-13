@@ -122,7 +122,7 @@ class TheReadGetsAgapisOwnTime(unittest.TestCase):
             async def post(self, url, headers, content):
                 raise httpx.ReadTimeout("slow")
         with mock.patch("agapi.agapi_route.client_for", mock.AsyncMock(return_value=("https://agapi.test", "k"))), \
-                mock.patch.object(httpx, "AsyncClient", Client):
+                mock.patch.object(httpx, "AsyncClient", Client), mock.patch("agapi.agapi_health.note", mock.AsyncMock()):   # 261: no email
             r = asyncio.run(SUBS._agapi("subscriptions.find", {"end_user": "u", "emails": {"messages": []}}))
             self.assertEqual(seen["timeout"].read, SUBS.READ_TIMEOUT_S)
             self.assertEqual(r["error"]["code"], "timeout")

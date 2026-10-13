@@ -154,6 +154,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # job now (in the turn when quick, else on the page when read); an AgAPI that didn't answer is said as that
     "T42": ("a slow receipts read is never a statement offer: in the turn when quick, else on the page when read; an AgAPI that didn't answer said plainly",
             ["tests.test_s260"]),
+    # Sasha 261 · rows 897/900: the sandbox key's budget spent → "didn't work". The one transport (agapi_route.post) names a 402 / 429 /
+    # timeout / unreachable once — the founder emailed at most once an hour — and the turn says voice.outage_line by code
+    "T43": ("an AgAPI outage is named: one transport, one plain line said by code, the founder told once an hour, never 'didn't work'",
+            ["tests.test_s261"]),
 }
 
 _RUNNER = """

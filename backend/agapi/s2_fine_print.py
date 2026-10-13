@@ -253,20 +253,14 @@ def keep_image(account: str, raw: bytes, media_type: str) -> str:
 
 
 async def _agapi(op: str, body: dict, approval: Optional[str] = None) -> Dict[str, Any]:
-    import httpx
     from agapi import agapi_route as AR
     url, key = await AR.client_for("cards")   # Sasha 249 · ONE ROUTE: the call in progress (run_tool's `using`), else cards' route
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "card fine print isn't switched on yet"}}
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(90.0)) as c:
-            h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2fp_" + secrets.token_hex(12)}
-            if approval:
-                h["AgAPI-Approval-Id"] = approval
-            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
-        return r.json()
-    except Exception as e:
-        return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2fp_" + secrets.token_hex(12)}
+    if approval:
+        h["AgAPI-Approval-Id"] = approval
+    return await AR.post(url, key, op, body, h, 90.0)   # Sasha 261 · the one transport (agapi_route.post): an AgAPI outage is named there, once, for every family
 
 
 CALL: Callable[..., Awaitable[Dict[str, Any]]] = _agapi   # tests replace it

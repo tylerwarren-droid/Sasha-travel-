@@ -21,7 +21,6 @@ attempts back up (restore(), at start-up) instead of forgetting them."""
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import secrets
@@ -51,18 +50,12 @@ def via() -> str:
 
 
 async def _agapi(op: str, body: dict) -> Dict[str, Any]:
-    import httpx
     from agapi import agapi_route as AR
     url, key = await AR.client_for("outcomes")   # Sasha 249 · ONE ROUTE (the copied URL/key block is gone)
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "the outcomes ledger isn't switched on"}}
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s2out_" + secrets.token_hex(12)}
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as c:
-            r = await c.post(f"{url}/v1/{op}", headers=h, content=json.dumps(body))
-        return r.json()
-    except Exception as e:
-        return {"ok": False, "error": {"code": "unreachable", "message": type(e).__name__}}
+    return await AR.post(url, key, op, body, h, 15.0)   # Sasha 261 · the one transport (agapi_route.post): an AgAPI outage is named there, once, for every family
 
 
 CALL: Callable[..., Awaitable[Dict[str, Any]]] = _agapi   # tests replace it

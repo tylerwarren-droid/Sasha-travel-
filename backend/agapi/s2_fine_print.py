@@ -324,34 +324,57 @@ async def _card_item(uid: str, words: str) -> Optional[str]:
 
 
 async def _with_yes(ctx, key: str, op: str, body: dict) -> Dict[str, Any]:
-    """AgAPI's read-back first; their OWN words in a LATER turn are the yes (sandbox: AgAPI's rules decide; live: their tap)."""
+    """AgAPI's read-back first; their OWN words in a LATER turn are the yes (sandbox: AgAPI's rules decide; live: their tap).
+    Sasha 255 · the read-back waiting for a yes belongs to ITS case: a new case drops it. A yes AgAPI refuses for any reason but the
+    words (the read-back already answered — AgAPI hands back the same read-back for the same act — or expired) is never "not a clear
+    yes": the approval already given is used while it's valid, else the stale read-back is dropped and the act held again."""
     pend = _PEND.get(key)
+    if pend and pend.get("case") and body.get("case_id") and pend["case"] != body["case_id"]:
+        _PEND.pop(key, None)   # Sasha 255 · a read-back from an earlier case never catches this case's yes
+        pend = None
     if pend and pend["at"] < ctx.started.timestamp():
         if via() == "sandbox":
             a = await CALL("sandbox.simulate_approval", {"read_back_id": pend["read_back_id"], "said": ctx.user_said or ""})
-            if not a.get("ok"):
-                return {"ok": False, "error": {"code": (a.get("error") or {}).get("code") or "no_explicit_yes",
-                                               "message": "that wasn't a clear yes — ask them again before sending"}}
-            apv = a["result"]["approval_id"]
+            code = (a.get("error") or {}).get("code") if not a.get("ok") else None
+            if code in (None, "") and not a.get("ok"):
+                code = "no_explicit_yes"
+            if code == "no_explicit_yes":
+                return {"ok": False, "error": {"code": code, "message": "that wasn't a clear yes — ask them again before sending"}}
+            apv = a["result"]["approval_id"] if a.get("ok") else await _valid_approval(pend["read_back_id"])
+            if not apv:   # answered or expired, and nothing valid to use: a fresh read-back, never a refusal of their yes
+                log.info("[fine_print] %s: the waiting read-back can't take a yes (%s) — held again", op, code)
+                _PEND.pop(key, None)
+                return await _hold(key, op, body, again=True)
         else:
-            st = await CALL("approvals.status", {"read_back_id": pend["read_back_id"]})
-            ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
-            if not ap.get("approval_id") or ap.get("state") != "valid":
+            apv = await _valid_approval(pend["read_back_id"])
+            if not apv:
                 return {"ok": True, "result": {"status": "waiting_for_their_tap"}}
-            apv = ap["approval_id"]
         r = await CALL(op, body, approval=apv)
         if r.get("ok"):
             _PEND.pop(key, None)
         return r
+    return await _hold(key, op, body)
+
+
+async def _valid_approval(read_back_id: str) -> Optional[str]:
+    """The approval AgAPI holds for this read-back, while it's valid (its 15 minutes); else None."""
+    st = await CALL("approvals.status", {"read_back_id": read_back_id})
+    ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
+    return ap["approval_id"] if ap.get("approval_id") and ap.get("state") == "valid" else None
+
+
+async def _hold(key: str, op: str, body: dict, again: bool = False) -> Dict[str, Any]:
     r = await CALL(op, body)
     e = r.get("error") or {}
     if e.get("code") == "approval_required":
         d = e.get("details") or {}
-        _PEND[key] = {"read_back_id": d["read_back_id"], "at": time.time()}
+        _PEND[key] = {"read_back_id": d["read_back_id"], "at": time.time(), **({"case": body["case_id"]} if body.get("case_id") else {})}
         if via() == "live":
             await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
         lines = (d.get("read_back") or {}).get("lines") or []
-        return {"ok": True, "result": {"status": "awaiting_yes", "read_back": lines, "ask": "Read this back and ask; it goes only on their yes, in their next message.",
+        ask = ("The read-back they answered can't take a yes any more, and nothing has been sent: read this one back and ask again."
+               if again else "Read this back and ask; it goes only on their yes, in their next message.")
+        return {"ok": True, "result": {"status": "awaiting_yes", "read_back": lines, "ask": ask,
                                        "render": {"kind": "read_back", "read_back": lines, "what": "email", "status": "ready"}}}
     return r
 
@@ -411,7 +434,8 @@ async def _hydrate(account: str) -> None:
     if isinstance(m, dict):
         for op, v in m.items():
             if isinstance(v, dict) and v.get("read_back_id"):
-                _PEND.setdefault(f"{a}|{op}", {"read_back_id": v["read_back_id"], "at": float(v.get("at") or 0)})
+                _PEND.setdefault(f"{a}|{op}", {"read_back_id": v["read_back_id"], "at": float(v.get("at") or 0),
+                                               **({"case": v["case"]} if v.get("case") else {})})
 
 
 async def _persist(account: str, before: Dict[str, Any], target_now: str) -> None:

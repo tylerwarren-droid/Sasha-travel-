@@ -108,6 +108,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # request … nothing was set up". The prepared page is on the record get_status reads: prepared, waiting for them, not booked
     "T31": ("a prepared page is on the one status: prepared, not booked — never \"nothing\"",
             ["tests.test_s254_said_and_status.OneTruthPreparedPage"]),
+    # Sasha 255 · found live (EU's scoreboard, item 16): "Yes, send it." to a money-back read-back → "that wasn't a clear yes" — a stale
+    # read-back (answered or expired, from an earlier conversation) caught every later yes. It belongs to its case now; an answered one
+    # uses the approval AgAPI holds, or is held again — never a refusal of a clear yes
+    "T32": ("a claim's yes is never refused for a stale read-back",
+            ["tests.test_s255_claim_yes"]),
 }
 
 _RUNNER = """

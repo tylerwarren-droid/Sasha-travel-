@@ -88,6 +88,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
              "tests.test_s254_one_decider.AccessTest", "tests.test_s254_one_decider.AccessSendsOff",
              "tests.test_s254_one_decider.AccessOf", "tests.test_s254_one_decider.EverySurface",
              "tests.test_s254_one_decider.Retired"]),
+    # Sasha 254 · item 3: "I'll handle it" live — the rules' send is AgAPI's venue.submit_booking (read-back first, sent on their yes,
+    # said in her voice; not_allowed kindly with their page), and venue.booking_status feeds get_status
+    "T28": ("\"I'll handle it\" sends through AgAPI, read back first, said in her voice",
+            ["tests.test_s254_handle_it_live.TheSend", "tests.test_s254_handle_it_live.Live",
+             "tests.test_s254_handle_it_live.TheStatus", "tests.test_s254_handle_it_live.TheRoute"]),
 }
 
 _RUNNER = """

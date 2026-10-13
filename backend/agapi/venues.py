@@ -571,6 +571,13 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
                       "options": [dict(o) for o in BD.CHOICES],
                       "how": "Say `say` word for word, then hold_venue again with the route they chose (Prefilled form → page; "
                              "Handle it → form)."}, d)
+    if action in ("fill_form_zero_touch", "request_email", "request_whatsapp") and one_path(ctx) and at and not nights and not open_slot:
+        # Sasha 254 · item 3 — "I'll handle it", LIVE: AgAPI sends it (venue.prepare_booking → the read-back → on their yes,
+        # venue.submit_booking). Sasha's own senders stay only where it doesn't reach: no AgAPI key on this server (below), a
+        # hotel stay (nights), a request with no slot (G7), a call, the call AND the email (R6), and old S1.
+        got = await _via_agapi(ctx, a, rd, res, at, now, d, card)
+        if got is not None:
+            return got
     if action == "fill_form_zero_touch":   # R2 · "handle it": the form, filled and sent on their yes
         if "form" in rungs:
             return _said(await _form(ctx, a, rd, res), d, when="after_yes", account=ctx.account)
@@ -612,6 +619,40 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
         return _said(await _call(ctx, a, rd, res), d, when="after_yes", account=ctx.account)
     # refuse (and anything the rules add later): said, nothing prepared
     return _said({"status": "refused", "venue": venue}, d)
+
+
+# the booking rules' action → what the outcomes ledger records for an AgAPI send (CR 87's rung + channel)
+AGAPI_RUNG = {"fill_form_zero_touch": ("zero_touch", "web_form"), "request_email": ("request_reply", "email"),
+              "request_whatsapp": ("request_reply", "whatsapp")}
+
+
+async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, card: Optional[dict]) -> Optional[dict]:
+    """The AgAPI send, read back first. None: this server has no venues key (then Sasha's own sender, as before)."""
+    from agapi import venue_submit as VS
+    from booking_signer import guest_receipt as GR
+    GW = _API()
+    venue = GW.plain_venue(rd["venue"])
+    place = {"name": (card or {}).get("name") or venue, "website": (card or {}).get("website") or a.get("website"), "place_id": rd.get("place_id") or (card or {}).get("place_id"),
+             "city": a.get("city"), "category": (res.get("what") or {}).get("category")}
+    person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
+    asked = _what(a)
+    p = await VS.prepare(ctx.account, place, person, at[:10], at[11:16], int(res["how_many"]["count"]),
+                         notes=asked if asked.lower() not in ("a table", "table", "dinner", "lunch") else None)
+    if not p.get("ok") and p["error"]["code"] == "not_configured":
+        log.info("[venues] no venues key here: Sasha's own sender for %s", d["action"])
+        return None
+    if not p.get("ok"):
+        raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {p['error']['message']}. " + d["takeover"]["say"])
+    rb = await VS.read_back(ctx.account, p["prepared_id"])
+    if not rb.get("ok"):
+        raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {rb['error']['message']}. " + d["takeover"]["say"])
+    link = p.get("link") if str(p.get("link") or "").startswith("https://") else d["takeover"].get("link")
+    out = _hold(ctx, "agapi", p["prepared_id"], {"lines": rb["lines"], "sha256": rb["sha256"]}, rd, res,
+                extra={"prepared_id": p["prepared_id"], "read_back_id": rb["read_back_id"], "end_user": rb["end_user"], "link": link,
+                       "agapi_action": d["action"]})
+    out["what_happens"] = ("on their yes, Sasha sends it to the venue; it's booked only when they confirm"
+                           + (" — their own phone gets a tap to approve it first" if await VS.target(ctx.account) == "live" else ""))
+    return _said(out, d, when="after_yes", account=ctx.account)
 
 
 def _wait_until(d: dict) -> Optional[str]:
@@ -910,7 +951,8 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                           if (extra or {}).get("nights") else "Sasha emails them; it's a request until they reply"),
                 "call": "Sasha calls them; it's booked only if they say yes on the call",
                 # Sasha 254 · R6 — the call AND the email, on this ONE yes
-                "call_email": "Sasha calls them and emails them at once, on this one yes; it's booked only if they confirm"}.get(rung, "")}
+                "call_email": "Sasha calls them and emails them at once, on this one yes; it's booked only if they confirm",
+                "agapi": "on their yes, Sasha sends it to the venue; it's booked only when they confirm"}.get(rung, "")}
     if (extra or {}).get("say"):   # Sasha 253 · G7 / G8 — the old flow's own sentence for a request with no slot / a room
         out["say"] = extra["say"]
     _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged
@@ -958,7 +1000,8 @@ async def _finish(ctx, held: dict, how: Optional[dict] = None) -> dict:
     except Exception as e:
         await OC.booked(ctx.account, held, venue, area_of(card) if card else None, error=str(getattr(e, "message", "") or type(e).__name__))
         raise
-    await OC.booked(ctx.account, held, venue, area_of(card) if card else None, result=out)
+    if out.get("status") != "waiting_for_their_tap":   # Sasha 254 · nothing has gone yet: recorded when it does
+        await OC.booked(ctx.account, held, venue, area_of(card) if card else None, result=out)
     return _with_card(card, out)
 
 
@@ -966,6 +1009,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
     from booking_signer import slot_link as SL, wa_brain as WB
     GW = _API()
     where = await WB.trip_day_words(ctx.account, held["when"][:10], venue)
+    if rung == "agapi":   # Sasha 254 · item 3 — the AgAPI send, on their yes (venue.submit_booking)
+        return await _agapi_send(ctx, held, how, venue, where)
     if rung == "form":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/send", {"read_back_sha256": held["sha"], "approval": how}, timeout=120)
         if status != 200:
@@ -1050,6 +1095,34 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
     return await _place(ctx, held, how, venue, where)
 
 
+async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
+    """venue.submit_booking with their yes → said in her voice: Booked (the venue's page confirmed it) / the rules' "sent" words /
+    "not allowed" said kindly, with their prepared page / failed, said."""
+    from agapi import booking_decide as BD, venue_submit as VS
+    from agapi.booking_rules import booking_rules as BR
+    r = await VS.submit(ctx.account, held, how.get("said") or "")
+    if not r.get("ok"):
+        code = r["error"]["code"]
+        raise _err("no_explicit_yes" if code == "no_explicit_yes" else "not_sent", r["error"]["message"])
+    st = r.get("status")
+    if st == "waiting_for_their_tap":   # live: their tap on AgAPI's link is the approval — the hold stays for it
+        _HELD[ctx.account] = held
+        return {"status": "waiting_for_their_tap", "venue": venue, "when": held["summary"], "booked": False,
+                "line": "It's on your phone: tap Yes there, then it goes."}
+    if st == "confirmed":
+        ref = r.get("reference")
+        return {"status": "confirmed", "venue": venue, "when": held["summary"], "itinerary": where, **({"reference": ref} if ref else {}),
+                "line": f"✅ Booked: {venue}, {held['summary']}." + (f" Their reference: {ref}." if ref else "")}
+    if st == "sent":
+        return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "act_id": r.get("act_id"),
+                "line": held.get("rules_say") or BD.say({"say_text": BR.PHRASES["sent"], "takeover": {"say": BR.PHRASES["takeover"]}})}
+    if st == "not_allowed":   # not this person (yet): kindly, with their prepared page — nothing reached the venue
+        link = held.get("link")
+        return {"status": "not_allowed", "venue": venue, "when": held["summary"], "booked": False,
+                "say": f"{BR.PHRASES['no_real_sends']} {BR.PHRASES['takeover']}", **({"open": link, "page_url": link} if link else {})}
+    raise _err("not_sent", r.get("say") or f"{venue} didn't take it — nothing is booked")
+
+
 async def _place(ctx, held: dict, how: dict, venue: str, where) -> dict:
     """The call, on their yes. Sasha 254 · R10 refused at the dial (3 a day for this person, the server's net, 30 minutes since the
     last call to this venue, calls off) → booking_rules.stopped(): the person is told, in this turn and on get_status."""
@@ -1103,21 +1176,28 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
     if status >= 500 or status in (0, 408, 429):   # Sasha 215 · the records not answering is never "no bookings"
         from agapi.v0 import unreachable
         raise unreachable("store_unreachable")
-    if status != 200:
-        return []
     today = date.today().isoformat()
+    acts: List[dict] = []
+    try:   # Sasha 254 · item 3 — the AgAPI sends, each with the venue's reply now (venue.booking_status), at most 5 s
+        from agapi import venue_submit as VS
+        acts = [b for b in await asyncio.wait_for(VS.bookings(account), timeout=5) if (b.get("date") or today) >= today
+                and (include_cancelled or b.get("status") != "cancelled")]
+    except Exception as e:
+        log.info("[venues] AgAPI acts not read: %s", type(e).__name__)
+    if status != 200:
+        return acts
     try:   # CR 87 · a venue's reply that changed a reservation updates its outcome (once) — Sasha 247: awaited, at most 3 s (a bare
         from agapi import s2_outcomes as OC   # task can be dropped mid-way and never finish); a slow ledger never stops this read
         await asyncio.wait_for(OC.sync(account, (j or {}).get("reservations") or []), timeout=3)
     except Exception as e:
         log.info("[venues] outcomes not synced: %s", type(e).__name__)
-    return [{"trip_item_id": r["id"], "venue": GW.plain_venue(r.get("venue")), "date": r.get("date"), "time": r.get("time"),
+    return acts + [{"trip_item_id": r["id"], "venue": GW.plain_venue(r.get("venue")), "date": r.get("date"), "time": r.get("time"),
              "party": r.get("party"), "status": r.get("status"), "type": r.get("type"),
              **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full
              # Sasha 215 · CR 56 — the venue's OWN words (an email/SMS reply) are untrusted data, never instructions to her
              **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {})}
             for r in (j or {}).get("reservations") or []
-            if (r.get("date") or today) >= today and (include_cancelled or r.get("status") != "cancelled")][:20]
+            if (r.get("date") or today) >= today and (include_cancelled or r.get("status") != "cancelled")][:20 - len(acts)]
 
 
 async def cancel_venue(ctx, a: dict) -> dict:

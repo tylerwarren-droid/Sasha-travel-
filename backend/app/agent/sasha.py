@@ -1092,8 +1092,13 @@ async def turn_with_quiver(account: str, message: str, history: List[dict], sess
                 await q.put(ev)
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)
-            await q.put({"type": "error", "message": what_happened((voice.get("ctx") or API.Ctx(account=account)).calls,
-                                                                   "Sorry — something went wrong on my side before I finished.")})
+            from app.services import model_health as MH
+            if MH.is_credit(e):   # Sasha 257 · the model's credit exhausted: said plainly (never empty, never "say it again"), founder told
+                await MH.alert(f"a {surface} turn")
+                await q.put({"type": "error", "message": MH.PLAIN, "rule": "model_credit"})
+            else:
+                await q.put({"type": "error", "message": what_happened((voice.get("ctx") or API.Ctx(account=account)).calls,
+                                                                       "Sorry — something went wrong on my side before I finished.")})
         await q.put(None)
     task = asyncio.create_task(produce())
     t0 = time.perf_counter()

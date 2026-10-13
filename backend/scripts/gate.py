@@ -28,6 +28,15 @@ async def _clean_orphans(since) -> None:
 
 
 async def main() -> int:
+    # Sasha 257 · FIRST: can the model answer at all? An exhausted Anthropic credit stops the gate here, by name (and the founder is
+    # told) — before, it failed 40 unrelated-looking checks and production went silent with nobody told
+    from app.services import model_health as MH
+    ok, why = await MH.preflight()
+    print(f"gate: model preflight — {why}")
+    if not ok:
+        await MH.alert("the deploy gate's preflight")
+        print(f"GATE FAIL · {why}")
+        return 1
     from scripts import places_fake   # Sasha 213 · NO live Google Places from a suite (it costs money) — the founder's say-so only
     places_fake.install()
     # Sasha 247 · the gate's test bookings never go in the LIVE outcomes ledger (found by CR: after the switch, the restart's gate

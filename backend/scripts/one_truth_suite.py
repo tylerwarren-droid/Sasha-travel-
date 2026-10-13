@@ -133,6 +133,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # rotating holding line first (never a claim, never for a fast reply) on WhatsApp, /s2 and /next — one phrasebook (voice.py)
     "T37": ("the holding line: one short line when her reply is slow, never a claim, never for a fast reply",
             ["tests.test_s257_holding"]),
+    # Sasha 257 · 13 Oct ~10:40 UTC: the Anthropic credit ran out — empty replies for everyone, the gate failing 40 unrelated-looking
+    # checks, nobody told. Every turn now says it plainly and the founder is emailed (once an hour); the gate's first check names it
+    "T38": ("an exhausted model credit is named: a plain line to the person, the founder told, the gate stopped by name",
+            ["tests.test_s257_model_credit"]),
 }
 
 _RUNNER = """

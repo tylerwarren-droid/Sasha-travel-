@@ -33,6 +33,37 @@ log = logging.getLogger("agapi.venues")
 _READS: Dict[str, Dict[str, dict]] = {}   # account → venue key → the read (read_id, rungs, facts…)
 _HELD: Dict[str, dict] = {}               # account → the prepared booking (route, id, sha, when it was said)
 _CANCEL: Dict[str, dict] = {}             # account → the prepared cancellation
+_PREPARED: Dict[str, List[dict]] = {}     # Sasha 254 · account → the pages prepared for them to book (their tap pending)
+PREPARED_KIND = "prepared_pages"          # … kept in s2_memory too (the table is the truth when it answers)
+
+
+# ── Sasha 254 · ONE TRUTH: a prepared page is on the record get_status reads ────────────────────────────────────────────────────
+# Found live on /s2 (Hammam Al Ándalus, 29 Oct): hold_venue drew their prefilled page three times and said "It's in your bookings",
+# and get_status answered "no booking or request … nothing was set up". The prepared rung wrote nothing anywhere: _finish popped
+# _HELD, no trip_items row exists for it, and the outcomes ledger keeps no open entry without one. Now it is written here, and
+# agapi.s2_status reads it: "prepared — waiting for you to book it on their page, not booked".
+
+async def prepared_pages(account: Optional[str]) -> List[dict]:
+    """The pages prepared for this account to book themselves (today or later): the table's when it answers, else this process's."""
+    if not account:
+        return []
+    from agapi import s2_memory as M
+    kept = await M.kind(account, PREPARED_KIND)
+    rows = [dict(r) for r in kept if isinstance(r, dict)] if isinstance(kept, list) else list(_PREPARED.get(account) or [])
+    today = date.today().isoformat()
+    return [r for r in rows if str(r.get("date") or today) >= today]
+
+
+async def note_prepared(account: str, venue: str, when: str, party: Any, url: Optional[str]) -> None:
+    """A prepared page drawn for them: on the record (the same booking prepared again replaces its line, never a second one)."""
+    row = {"venue": venue, "date": str(when or "")[:10], "time": str(when or "")[11:16], "party": int(party or 0),
+           **({"url": url} if url else {}), "at": datetime.now(timezone.utc).isoformat()}
+    same = lambda r: _base(r.get("venue") or "") == _base(venue) and r.get("date") == row["date"] and r.get("time") == row["time"]
+    rows = ([r for r in await prepared_pages(account) if not same(r)] + [row])[-10:]
+    _PREPARED[account] = rows
+    from agapi import s2_memory as M
+    if not await M.put_kind(account, PREPARED_KIND, rows):
+        log.info("[venues] prepared page kept in this process only (no memory table)")
 
 
 def _API():
@@ -1062,6 +1093,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                 sent = "sent" in o and "not" not in o
         except Exception as e:
             log.warning("[venues] the prepared page was not sent to the phone: %s", type(e).__name__)
+        # Sasha 254 · ONE TRUTH: "It's in your bookings" is true only because it IS — get_status reads this record
+        await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"))
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
                 "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent,
                              **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},

@@ -4,6 +4,8 @@
   reservations     the account's reservations (venues, and anything else Pacioli recorded), via agapi.venues.venue_bookings
   the ledger       the outcomes ledger's still-open attempts for this account (agapi.s2_outcomes._OPEN)
   a read-back      a trip read back by hold_booking and not yet said yes to (agapi.v0._HELD)
+  prepared pages   Sasha 254 · a venue's own page prefilled for them, their tap pending (agapi.venues.prepared_pages) — said as
+                   prepared and not booked, never "nothing"
 
     status_of(account, trip_id=None, sweep=True) → get_status's dict (unchanged keys) + {"state", "line", "refs", "ledger_open"}
 
@@ -24,7 +26,8 @@ WORDS = {"nothing": "Nothing is booked yet.",
          "requested": "Requested — not confirmed yet",
          "booked": "Booked",
          "partly_booked": "Partly booked",
-         "failed": "Not booked"}
+         "failed": "Not booked",
+         "prepared": "Prepared, not booked — their page is filled in, waiting for you to book it there"}
 ON_IT = ("booked", "partly_booked", "awaiting_payment")   # a Trip banner shows; the Book button goes
 
 
@@ -55,6 +58,10 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
         state, line = "held", WORDS["held"]
     else:
         state, line = "nothing", WORDS["nothing"]
+    prepared = list(st.get("prepared") or [])   # Sasha 254 · ONE TRUTH: a page prepared for them is never "nothing"
+    if prepared:
+        said = f"{WORDS['prepared']}: " + "; ".join(prepared) + "."
+        state, line = ("prepared", said) if state == "nothing" else (state, f"{line} {said}")
     return {"state": state, "line": " ".join(line.split())}
 
 
@@ -83,6 +90,12 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
               "failed": [r["status_line"] for r in rows if r["state"] == "failed"],
               "cancelled": [r["status_line"] for r in rows if r["state"] == "cancelled"] + vc,
               "awaiting_payment": sum(1 for r in rows if r["state"] == "pending_payment")}
+    # Sasha 254 · ONE TRUTH: the pages hold_venue prepared (its "It's in your bookings"), unless that booking is already on the record
+    on_record = {(VN._base(b.get("venue") or ""), str(b.get("date") or "")) for b in vb}
+    prep = [f"{x['venue']} — {x.get('date') or ''} {x.get('time') or ''}".strip() for x in await VN.prepared_pages(account)
+            if (VN._base(x.get("venue") or ""), str(x.get("date") or "")) not in on_record]
+    if prep:
+        st["prepared"] = prep
     open_n = len(OC._OPEN.get(account) or ())
     d = decide(st, held=account in API._HELD, ledger_open=open_n)
     refs = [r["booking_reference"] for r in rows if r["state"] == "booked" and r.get("booking_reference")] + \

@@ -9,6 +9,7 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
   faults()     → a transcript's breaches: a channel named, or a second question for the same detail
   SHOWS / SAYS → Sasha 251 · which tools put something on screen; FAILED / failed_line() → what she says when one failed and
                  nothing was drawn; claims_shown() / honest_faults() → a claim of what isn't there (sasha.turn acts on it)
+  TOLD / told_line() / told_prefix() → Sasha 254 · the booking rules' refusals and stops, said in the rules' words (sasha.turn)
 """
 from __future__ import annotations
 
@@ -183,5 +184,51 @@ def check(lines: Sequence[str]) -> List[str]:
     return faults(("assistant", x) for x in lines)
 
 
+# Sasha 254 · THE RULES' WORDS ARE HEARD (found live on /s2, Hammam Al Ándalus: hold_venue's rules said "This account is in test
+# mode, so I won't contact a real venue." and she paraphrased it away). The booking rules' refusals and automatic stops are TOLD to
+# the person: when a booking tool's result carries one of these say_keys (or any refusal), the reply must contain the rules'
+# sentence — sasha.turn puts it in front, once, whatever the model wrote. agapi/booking_rules/booking_rules.py PHRASES is the list.
+TOLD = frozenset({"not_live", "no_real_sends", "no_channel", "calls_cap", "too_soon", "stopped", "platform", "prepared_link_captcha"})
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _plain(t: str) -> str:
+    return " ".join(re.sub(r"[^a-z ]", " ", (t or "").lower().replace("’", "'").replace("'", "")).split())
+
+
+def told_line(result) -> str:
+    """The rules' sentence a booking tool's result must have said to the person ("" when it carries none to tell)."""
+    rules = result.get("rules") if isinstance(result, dict) else None
+    if not isinstance(rules, dict) or not rules.get("say"):
+        return ""
+    if rules.get("say_key") not in TOLD and not rules.get("refusals"):
+        return ""
+    line = " ".join(str(rules["say"]).split())
+    return "" if channel_words(line) else line   # never a channel name, even in the rules' own words
+
+
+def is_told(sentence: str, lines: Iterable[str]) -> bool:
+    """One sentence she wrote IS one of the rules' told sentences (said as the rules say it — never dropped as "internal")."""
+    p = _plain(sentence)
+    return bool(p) and any(p == _plain(s) for line in lines for s in _SENT_SPLIT.split(line or ""))
+
+
+def told_prefix(text: str, lines: Iterable[str]) -> str:
+    """What goes in front of her reply: for each told line whose FIRST sentence she didn't say, its sentences she didn't say —
+    once (a sentence already in the reply, or already put in front, is never said twice). "" when nothing is missing."""
+    have = _plain(text)
+    out: List[str] = []
+    for line in dict.fromkeys(x for x in lines if x):
+        sents = [s.strip() for s in _SENT_SPLIT.split(line) if s.strip()]
+        if not sents or _plain(sents[0]) in have:
+            continue
+        for s in sents:
+            if _plain(s) and _plain(s) not in have:
+                out.append(s)
+                have += " " + _plain(s)
+    return " ".join(out)
+
+
 __all__ = ["ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
-           "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults"]
+           "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
+           "TOLD", "told_line", "told_prefix", "is_told"]

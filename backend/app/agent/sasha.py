@@ -708,6 +708,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     # cards, a form or a total after they all failed is never said. Off on /next with parity off (byte-identical: SASHA_S1_PARITY=off)
     honest = surface == "s2" or s1_parity()
     tstate.update(showing=[], drawn=False, unshown_dropped=[])
+    told: List[str] = []   # Sasha 254 · the booking rules' refusals / stops this turn's tools returned — heard in the rules' words
 
     def system_now() -> list:
         # Sasha 205 · PROMPT CACHING: her persona is the same every call (cached); the rest is per turn
@@ -757,7 +758,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 break
             if _norm(x) and _norm(x) in said_norms:   # Sasha 215 · never a sentence twice in a turn ("It's quoted." after each flight)
                 continue
-            if _INTERNAL.search(names_masked(x, tstate["allowed"])):   # Sasha 217 · a place's own name is never "internal"
+            if _INTERNAL.search(names_masked(x, tstate["allowed"])) and not _V.is_told(x, told):   # Sasha 217 · a place's own name
+                # is never "internal" · Sasha 254 · nor the booking rules' own sentence ("This account is in test mode, …": found live,
+                # dropped as a test disclaimer, so the person never heard why nothing would reach the venue)
                 internal_log.append(x[:80])
                 continue
             if _claims(x) and booked_now is None:
@@ -857,6 +860,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             r = await run(ctx, u.name, args)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
+                if honest and _V.told_line(r["result"]):   # Sasha 254 · off on /next with parity off (byte-identical)
+                    told.append(_V.told_line(r["result"]))
             line = outage(r)
             if u.name in _V.SHOWS:   # Sasha 251 · what this showing tool did (an outage line is already her honest line)
                 tstate["showing"].append({"tool": u.name, "ok": bool(r.get("ok")), "message": (r.get("error") or {}).get("message"),
@@ -950,6 +955,12 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if line:
                 said.append(line)
             text = new
+    pre = _V.told_prefix(text, told) if told else ""
+    if pre:   # Sasha 254 · THE RULES' WORDS ARE HEARD: a refusal or stop she paraphrased away goes in front, once, as the rules say it
+        text = f"{pre} {text}".strip()
+        said.insert(0, pre)
+        guard_log.append(f"rules' words put in front: {pre[:80]}")
+        yield {"type": "replace", "text": text, "speak": True, "say": SP.speakable(pre)}
     if len(text) > TRIM_CHARS:   # Sasha 205 · the safety trim: a very long reply ends at a sentence
         cut = text[:TRIM_CHARS]
         text = cut[: max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! ")) + 1] or cut

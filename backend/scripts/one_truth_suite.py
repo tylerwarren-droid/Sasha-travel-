@@ -100,6 +100,14 @@ T = {   # invariant → (what it holds, the test classes that hold it)
              "tests.test_s254_access.TheCache", "tests.test_s254_access.WarmAtEntry", "tests.test_s254_access.TheRulesAccess",
              "tests.test_s254_access.PlatformCheckIsAFixture", "tests.test_s254_access.NoEnvListDecidesAccess",
              "tests.test_s249_identity.OneFounderDecision", "tests.test_s253_gate_never_live.PersonMode"]),
+    # Sasha 254 · found on production (cee7889): the booking rules' refusal ("This account is in test mode, …") paraphrased away —
+    # and dropped as a "test" disclaimer. A told say_key's sentence is in her reply, once, on every surface S2 runs (S1 off untouched)
+    "T30": ("the booking rules' refusals and stops are heard in the rules' words, once",
+            ["tests.test_s254_said_and_status.TheRulesWordsAreHeard"]),
+    # Sasha 254 · found on production: hold_venue drew a prepared page ("It's in your bookings") and get_status said "no booking or
+    # request … nothing was set up". The prepared page is on the record get_status reads: prepared, waiting for them, not booked
+    "T31": ("a prepared page is on the one status: prepared, not booked — never \"nothing\"",
+            ["tests.test_s254_said_and_status.OneTruthPreparedPage"]),
 }
 
 _RUNNER = """

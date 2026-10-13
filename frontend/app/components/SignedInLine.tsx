@@ -4,7 +4,8 @@
  * S-62 step 6 · the chat says WHO is booking, and asks a stranger to sign in — repo-only, inside our ChatBooking, so the
  * CTO's SashaChat.tsx needs no change. Every line comes from /api/auth/whoami; nothing is assumed.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { usePathname } from 'next/navigation'
 import { ensureGuest } from '@/lib/guest-start'
 import { actingOf, badgeFor, whoKey, changed, PER_PERSON_LOCAL, WHO_KEY } from '@/lib/acting-rule.mjs'
 
@@ -78,10 +79,29 @@ export function WhoIsBooking() {
   )
 }
 
+const S2_SHELL = /^\/(s2|next)(\/|$)/
+
+/** Sasha 257 · the S2 shell's identity: one quiet line in its header — the same whoami fact as WhoBadge, never floating. */
+export function WhoLine({ style }: { style?: CSSProperties }) {
+  const who = useWho()
+  if (who === null || who === 'unknown') return null
+  const acting = actingOf(who)
+  const guest = acting !== 'user' && acting !== 'founder'
+  return (
+    <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...style }}>
+      {badgeFor(who)}{guest && <> · <a href="/sign-in" style={{ textDecoration: 'underline', color: 'inherit' }}>Sign in</a></>}
+    </div>
+  )
+}
+
 /** Sasha 158 · on EVERY page: who this browser is — "Signed in as Tyler" (the founder's session), "Signed in as <email>",
  *  or "Guest" with the 10-second sign-in. From /api/auth/whoami; nothing assumed, nothing shown while it is unknown. */
 export function WhoBadge() {
   const who = useWho()
+  const path = usePathname() || ''
+  // Sasha 257 · Tyler (row 860): on the S2 shell (/s2, and /next with it) the floating pill sat over the chat and the cards —
+  // there the SAME fact (whoami) is said quietly in the header (WhoLine), never over content
+  if (S2_SHELL.test(path)) return null
   if (who === null || who === 'unknown') return null
   // Sasha 241 · always the account ACTING (/api/auth/whoami, lib/acting-rule.mjs) — a real sign-in is never shown as Tyler.
   // Sasha 249 · from whoami's `acting` alone: no second decision here from `who` or the email's suffix

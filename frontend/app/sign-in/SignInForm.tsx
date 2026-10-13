@@ -19,22 +19,24 @@ function CodeEntry({ to, next }: { to: string; next: string }) {
   const [code, setCode] = useState('')
   const [why, setWhy] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [already, setAlready] = useState(false)   // Sasha 257 · the link was used first: they're in — said, not an error
   async function verify(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true); setWhy(null)
     try {
       const r = await fetch('/auth/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to, code, next }) })
       const j = await r.json().catch(() => ({}))
-      if (j?.ok) { window.location.href = j.next || next; return }
+      if (j?.ok) { if (j.already) setWhy(null); setAlready(!!j.already); setTimeout(() => { window.location.href = j.next || next }, j.already ? 900 : 0); return }   // Sasha 257 · "You're already signed in", then on
       setWhy(j?.why || `it didn\u2019t work (HTTP ${r.status})`)
     } catch (err) { setWhy((err as Error).message) }
     setBusy(false)
   }
   return (
     <form onSubmit={verify}>
+      {already && <p role="status" style={{ color: '#1c6b3a', fontWeight: 600 }}>You&rsquo;re already signed in — taking you to Sasha.</p>}
       <p>We&rsquo;ve emailed <strong>{to}</strong> a sign-in link. Open it on this device — or, if the email shows a 6-digit code, type it here (that works in the Home Screen app too).</p>
       <label htmlFor="code">The 6-digit code</label>
-      <input id="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]{6,7}" maxLength={7} required value={code}
+      <input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={14} required value={code}
         onChange={(e) => setCode(e.target.value)} className="si-field" placeholder="123456" style={{ ...FIELD, fontSize: 20, letterSpacing: 4 }} />
       <style>{FIELD_CSS}</style>
       <button type="submit" disabled={busy} style={BUTTON}>{busy ? 'Signing in…' : 'Sign in'}</button>

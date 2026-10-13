@@ -675,7 +675,7 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
       micLog('error', { name: err?.name, message: String(err?.message || '').slice(0, 120) })
-      if (err.name === 'NotAllowedError') reportMicError('Mic permission denied')
+      if (err.name === 'NotAllowedError') reportMicError('Mic blocked — allow it for this site in your browser settings, or type')
       else if (err.name === 'NotFoundError') reportMicError('No microphone found')
       else if (err.name === 'NotReadableError') reportMicError('Mic is in use by another app')
       else if (err.name === 'OverconstrainedError') reportMicError('Selected mic is unavailable')
@@ -828,7 +828,8 @@ export default function VoiceButton({ onTranscript, muted = false, disabled, aut
       </button>
       {micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
       {asleep && <p className="text-xs text-white/50 text-center">Asleep — not listening</p>}
-      {!asleep && muted && <p className="text-xs text-red-400/80 text-center">Not listening</p>}
+      {/* Sasha 257 · Tyler (row 860): the red "Not…" was this — the mic resting while she answers, said as an error. Said plainly now */}
+      {!asleep && muted && <p className="text-xs text-white/50 text-center">Mic paused while Sasha answers</p>}
       {!asleep && notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
       {!asleep && !muted && isConnected && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
       {!asleep && !muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}

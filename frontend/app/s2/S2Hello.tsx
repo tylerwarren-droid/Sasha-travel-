@@ -62,15 +62,30 @@ async function startFace(video: HTMLVideoElement): Promise<Face> {
   }
 }
 
+/** Sasha 257 · Tyler (row 860): her face's bubble was an EMPTY dark circle on his phone. The face comes late there (10.6 s
+ *  measured), its session was ended 0.9 s later and the bubble took a "still" of a canvas no frame had been drawn to yet (a blank
+ *  300×150 canvas is still a canvas) — a dark rectangle. A still is taken only from a frame actually drawn, and the last real
+ *  one is kept in this browser (FACE_KEY), so her face is in the bubble on arrival — never an empty circle. */
+const FACE_KEY = 's2_face'
+const keptFace = (): string | null => { try { return localStorage.getItem(FACE_KEY) } catch { return null } }
+const drawn = (c: HTMLCanvasElement | null) => !!c && c.dataset.drawn === '1'
+async function firstFrame(c: HTMLCanvasElement | null, ms = 6000): Promise<boolean> {   // a late face: wait for its first frame
+  const t0 = performance.now()
+  while (!drawn(c) && performance.now() - t0 < ms) await new Promise(r => setTimeout(r, 120))
+  return drawn(c)
+}
+
 function still(keyed: HTMLCanvasElement | null): string | null {   // her face as it last was, on the page's own dark (keyed)
   try {
-    if (!keyed || !keyed.width) return null
+    if (!keyed || !keyed.width || !drawn(keyed)) return null   // Sasha 257 · never a blank canvas
     const c = document.createElement('canvas'); c.width = 160; c.height = Math.round((160 * keyed.height) / keyed.width)
     const x = c.getContext('2d')
     if (!x) return null
     x.fillStyle = '#1b1b26'; x.fillRect(0, 0, c.width, c.height)
     x.drawImage(keyed, 0, 0, c.width, c.height)
-    return c.toDataURL('image/jpeg', 0.85)
+    const url = c.toDataURL('image/jpeg', 0.85)
+    try { localStorage.setItem(FACE_KEY, url) } catch { /* private mode / full */ }
+    return url
   } catch { return null }
 }
 
@@ -91,6 +106,7 @@ function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void 
           else if (g > 80 && g > r * 1.1 && g > b * 1.1) d[i + 3] = Math.floor(d[i + 3] * 0.5)
         }
         ctx.putImageData(f, 0, 0)
+        canvas.dataset.drawn = '1'   // Sasha 257 · a real frame is on the canvas
       }
     } catch { /* a bad frame: keep going */ }
   }
@@ -115,6 +131,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const tapForRef = useRef<'face' | 'voice'>('voice')
   useEffect(() => { tapForRef.current = tapFor }, [tapFor])
   const [img, setImg] = useState<string | null>(null)
+  useEffect(() => { const k = keptFace(); if (k) setImg(i => i || k) }, [])   // Sasha 257 · her face from the last visit, on arrival
   const [talking, setTalking] = useState(false)
   const video = useRef<HTMLVideoElement | null>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
@@ -182,7 +199,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     v.play().catch(() => {})
     if (now === 'voice') setPhase('faceLate')
     else if (now === 'tap' && tapForRef.current === 'voice') setTapFor('face')
-    else if (now === 'bubble' || now === 'off') setTimeout(() => { face.current = null; setImg(still(canvas.current) || img); keyOff(); f.stop() }, 900)
+    else if (now === 'bubble' || now === 'off') void firstFrame(canvas.current).then(() => { face.current = null; setImg(i => still(canvas.current) || i); keyOff(); f.stop() })   // Sasha 257 · its first frame, then the still
   }
 
   // the opening: once per visit (the session), as soon as the page is signed in and the name is known (or ~0.9 s has passed)

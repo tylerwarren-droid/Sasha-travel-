@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import VoiceButton from '@/app/components/VoiceButton'
+import { WhoLine } from '@/app/components/SignedInLine'   // Sasha 257 · who is signed in, quietly in the header
 import { PayHere } from '@/app/components/PayHere'
 import S2Hello from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
@@ -49,7 +50,7 @@ type Card =
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
-type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[] }
+type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[]; hold?: string }   // Sasha 257 · hold: the holding line, until her words come
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
 /** Sasha 249 · ONE STATUS: a `booked` event's card line — the server's status (agapi/s2_status.py), shown only when it says booked */
@@ -64,6 +65,8 @@ function firstSentences(t: string, n: number): string {
 }
 
 const GREETING = 'Hey there — what can I do for you?'
+/** Sasha 257 · a reply stream silent this long is stopped and said (her longest tool turns stream within it) — never "busy" for ever */
+const STALL_MS = 75000
 
 /** The cards the person sees — as the backend's own shown_cards (agapi/venues.py): the ranking's default order, its `show` count. */
 function shownCards(preset: Ev): Extract<Card, { k: 'venues' }>['cards'] {
@@ -354,6 +357,7 @@ export default function S2App() {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const queued = useRef<string[]>([])   // Sasha 257 · messages sent while she was answering: sent next, in order
   const session = useRef('')
   useEffect(() => { session.current = `s2-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}` }, [])
   const speaker = useSpeaker()
@@ -454,7 +458,10 @@ export default function S2App() {
 
   const send = useCallback(async (text: string, pick?: { place_id: string }) => {
     const t = text.trim()
-    if (!t || busy) return
+    if (!t) return
+    // Sasha 257 · Jon (row 861): "she can't hear me or just doesn't respond — tried 5 times". One turn reached her; the rest were
+    // DROPPED here while a reply was still open (busy). A message sent while she's answering is kept and sent next — never lost.
+    if (busy) { queued.current = [...queued.current, t]; setInput(''); return }
     if (dormant) setDormant(false)   // Sasha 231 · a message wakes her, with no re-introduction
     if (asleepRef.current) sleepEvent('typed')   // Sasha 246 item 2 · a message wakes her
     setBusy(true)
@@ -462,14 +469,21 @@ export default function S2App() {
     setMsgs(ms => [...ms, { role: 'user', text: t, cards: [] }, { role: 'sasha', text: '', cards: [] }])
     const patch = (f: (m: Msg) => Msg) => setMsgs(ms => { const c = ms.slice(); c[c.length - 1] = f(c[c.length - 1]); return c })
     let reply = ''
+    // Sasha 257 · a reply stream that goes quiet (a phone's network, a connection held open) never leaves the page "busy" — the
+    // mic stays off and every message is refused while it is. STALL_MS of silence → it's stopped and said; `done` ends it.
+    const abort = new AbortController()
+    let stall: ReturnType<typeof setTimeout> | undefined
+    const arm = () => { if (stall) clearTimeout(stall); stall = setTimeout(() => abort.abort(), STALL_MS) }
     try {
-      const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
+      arm()
+      const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
         body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, ...(pick ? { pick } : {}) }) })
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const rd = r.body?.getReader()
       const dec = new TextDecoder()
-      let buf = ''
-      while (rd) {
+      let buf = '', finished = false
+      while (rd && !finished) {
+        arm()
         const { done, value } = await rd.read()
         if (done) break
         buf += dec.decode(value, { stream: true })
@@ -481,11 +495,12 @@ export default function S2App() {
           if (ev.type === 'render' || ev.type === 'state') ev = untagDeep(ev)
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
+          else if (ev.type === 'hold') { patch(m => ({ ...m, hold: ev.text })); speaker.say(ev.say || ev.text) }   // Sasha 257 · the holding line (row 863)
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
           // Sasha 249 · ONE STATUS: the "Booked" card was made here by a regex on her reply (/^✅ Booked/) — deleted. It comes only
           // from the `booked` event, its line from the server's one status (agapi/s2_status.py — get_status's own)
-          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })) }
+          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(() => {}) }
           else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line }] })) }
           else if (ev.type === 'render') {
             const add = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
@@ -517,10 +532,17 @@ export default function S2App() {
     } catch {
       patch(m => ({ ...m, text: m.text || 'I lost the connection there — say it once more?' }))
     } finally {
+      if (stall) clearTimeout(stall)
       histRef.current = [...histRef.current, { role: 'user', content: t }, { role: 'assistant', content: reply }]
       setBusy(false)
     }
   }, [busy, speaker, dormant, sleepEvent])
+  useEffect(() => {   // Sasha 257 · what they said while she was answering goes next, in order (never dropped)
+    if (busy || !queued.current.length) return
+    const [nxt, ...rest] = queued.current
+    queued.current = rest
+    void send(nxt)
+  }, [busy, send])
 
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
@@ -537,8 +559,12 @@ export default function S2App() {
 
   return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflowX: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', paddingTop: 'max(56px, calc(env(safe-area-inset-top) + 44px))' }}>{/* room for the site's sign-in badge above */}
-        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px', paddingTop: 'max(18px, calc(env(safe-area-inset-top) + 10px))' }}>
+        {/* Sasha 257 · Tyler (row 860): who is signed in, said quietly here (whoami) — the floating pill over the chat is gone */}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
+          <WhoLine style={{ maxWidth: 150 }} />
+        </div>
         <nav style={{ display: 'flex', gap: 6 }}>
           {(['sasha', 'trip', 'activity', 'keep'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === t ? C.gold : C.line}`, background: 'transparent', color: tab === t ? C.gold : C.dim, fontWeight: 600 }}>
@@ -575,7 +601,7 @@ export default function S2App() {
                 {m.text || m.role === 'user' ? (
                   <div style={{ maxWidth: '88%', padding: '10px 14px', borderRadius: 18, background: m.role === 'user' ? 'linear-gradient(135deg,#6d4aff,#9b4dff)' : C.card, border: m.role === 'user' ? 'none' : `1px solid ${C.line}`, lineHeight: 1.45 }}>
                     {m.text}</div>
-                ) : <div style={{ color: C.dim, padding: '8px 4px' }}>…</div>}
+                ) : <div style={{ color: C.dim, padding: '8px 4px' }}>{m.hold || '…'}</div>}
                 {/* Sasha 230 · a pick sends the card's name QUOTED: a listing like "Comida Hindu - Restaurante India, NAMASTE INDIA(…)" + ", please." read as TWO places — she asked which, the yes didn't answer it, the loop */}
                 {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} />)}</div> : null}
               </div>))}
@@ -588,7 +614,6 @@ export default function S2App() {
             ) : (
             <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her voice on' : 'Mute her voice'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>
               {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>)}
-            <button onClick={() => { typeBox.current?.focus() }} style={{ background: 'none', border: 0, color: C.dim, padding: 4 }}>⌨︎ Type instead</button>
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
@@ -598,8 +623,8 @@ export default function S2App() {
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
               <input ref={typeBox} value={input} onChange={e => { if (asleepRef.current) sleepEvent('typed'); setInput(e.target.value) }} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />
-              <button type="submit" disabled={busy || !input.trim()} aria-label="Send"
-                style={{ padding: '0 16px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700, opacity: busy || !input.trim() ? 0.5 : 1 }}>➤</button>
+              <button type="submit" disabled={!input.trim()} aria-label="Send"
+                style={{ padding: '0 16px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700, opacity: !input.trim() ? 0.5 : 1 }}>➤</button>{/* Sasha 257 · sendable while she answers: it goes next */}
             </form>
           </footer>
           <style>{`.s2-mic button{width:56px;height:56px;border-radius:50%}`}</style>

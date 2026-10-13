@@ -684,6 +684,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           }
           else if (ev.type === 'state') { if (Array.isArray(ev.highlight) && ev.highlight.length) setHighlight(ev.highlight) }   // Sasha 213 · the card(s) she named
           else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.say || ev.text) }   // Sasha 210 · only what she hasn't said
+          else if (ev.type === 'hold') { if (!reply) show(ev.text); onSashaResponse?.(ev.say || ev.text) }   // Sasha 257 · the holding line: her words replace it
           else if (ev.type === 'done') {
             reply = ev.text || reply; show(reply); window.dispatchEvent(new Event('sasha-plan-refresh'))
             const body = { session: chatSessionIdRef.current, first_sound_ms: firstSound === null ? null : Math.round(firstSound),

@@ -113,6 +113,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # uses the approval AgAPI holds, or is held again — never a refusal of a clear yes
     "T32": ("a claim's yes is never refused for a stale read-back",
             ["tests.test_s255_claim_yes"]),
+    # Sasha 256 · found on production: a test person asking for "Sasha Test Venue" got Google's "Sacha Restaurant". What a test person
+    # can book is decided in the ONE venue search, by the person's mode (agapi/test_venues); a live person never sees or holds it
+    "T33": ("the test venue in one place: found by a test person, never by a live one",
+            ["tests.test_s256_test_venue"]),
 }
 
 _RUNNER = """

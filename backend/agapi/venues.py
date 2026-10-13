@@ -217,6 +217,8 @@ def _routes_of(rd: dict) -> List[str]:
 
 
 async def read_booking_route(ctx, a: dict) -> dict:
+    from agapi import test_venues as TV
+    a = await TV.vet(ctx, a)   # Sasha 256 · the test venue: a test person's card, never a live person's
     rd = await _read(ctx, a)
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · the picked card is what's on screen
     if one_path(ctx):   # Sasha 251 · how it books = the ONE channel hold_venue will use (never a second reading of the same place)
@@ -525,6 +527,8 @@ async def hold_venue(ctx, a: dict) -> dict:
     """Prepare the booking → what the booking rules decided (agapi.booking_decide → booking_rules.decide): the ONE question, the
     read-back the yes binds to, their page, or the rules' refusal — said in the rules' words with the take-over. Nothing is sent."""
     from agapi.v0 import stale
+    from agapi import test_venues as TV
+    a = await TV.vet(ctx, a)   # Sasha 256 · the test venue: held for a test person only — a live person's hold naming it is refused
     GW = _API()
     held = _HELD.get(ctx.account)
     # Sasha 217 · THE SAME BOOKING held again (she re-holds on the yes turn): the read-back they already heard, as it is. A new hold

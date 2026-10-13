@@ -362,6 +362,13 @@ ITEM = {"id": "v-1", "kind": "identifier", "provider": "club.kanoe.ai", "label":
 
 
 class G14Loyalty(Base):
+    def setUp(self):   # Sasha 256 · Kanoe's test venue is held by a TEST person only (agapi/test_venues)
+        super().setUp()
+        from agapi import test_venues as TV
+        p = mock.patch.object(TV, "mode_of", mock.AsyncMock(return_value="test"))
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_a_matching_number_goes_into_the_form_by_its_keep_id_never_its_value(self):
         LY.find_for.return_value = ITEM
         self.hold({"form": {}}, venue="Sasha Test Venue", day=LATER, time="21:00", route="form")   # Sasha 254 · "Handle it"

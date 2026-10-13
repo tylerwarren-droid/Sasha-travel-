@@ -457,7 +457,9 @@ _LAST_FIND: Dict[str, tuple] = {}   # account → (the search, when, its result)
 async def search_venues(ctx: Ctx, a: dict) -> dict:
     key = ((a.get("what") or "").strip().lower(), (a.get("where") or "").strip().lower(), a.get("open_at"))
     last = _LAST_FIND.get(ctx.account)
-    if last and last[0][:2] == key[:2] and time.time() - last[1] < 1200:   # Sasha 212 · the same search again: the cards stand
+    if last and last[0][:2] == key[:2] and time.time() - last[1] < 1200 \
+            and not any(c.get("test") for c in (last[2].get("preset") or {}).get("cards") or []):   # Sasha 256 · a test card: asked again (the mode decides)
+        # Sasha 212 · the same search again: the cards stand
         from agapi import venue_truth as VT, venues as VN
         cards = (last[2].get("preset") or {}).get("cards") or []
         sited = [c for c in cards if c.get("website")]   # only a card with a site can learn more from the venue engine
@@ -485,6 +487,10 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
     if picked:   # Sasha 217 · a place already on their cards is PICKED, never searched for again (it brought other places)
         raise ToolError("already_on_screen", f"{picked.get('name')} is on their screen — that's their pick: call read_booking_route "
                                              f"with place_id {picked.get('place_id')} (never search for it again)")
+    from agapi import test_venues as TV
+    tv = await TV.search(ctx, a)   # Sasha 256 · a TEST person who names Kanoe's test venue: its card, no Places call
+    if tv is not None:
+        return tv
     body = {k: v for k, v in {"what": a["what"], "where": a["where"], "country": a.get("country"), "open_at": a.get("open_at"),
                               "near": a.get("near")}.items() if v}
     status, r = await GW.api(ctx.account, "POST", "/api/booking/venues/find", body)

@@ -529,6 +529,13 @@ class R13R14(Base):
 class AccessTest(Base):
     access = {"mode": "test", "calls": "on", "real_venue_sends": "on"}
 
+    def setUp(self):   # Sasha 256 · Kanoe's test venue is held by a TEST person only (agapi/test_venues)
+        super().setUp()
+        from agapi import test_venues as TV
+        p = mock.patch.object(TV, "mode_of", mock.AsyncMock(return_value="test"))
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_a_test_person_never_reaches_a_real_venue(self):
         out = self.hold(ALL4, hours=20)
         self.expect(out, "prepared_link", "not_live")

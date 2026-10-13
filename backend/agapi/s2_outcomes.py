@@ -47,7 +47,7 @@ def via() -> str:
     """Sasha 249 · the outcomes family's AgAPI, from the one route table (agapi_route). SASHA_OUTCOMES_VIA is that family's legacy
     switch there — read only when SASHA_AGAPI_ROUTE doesn't name "outcomes" — so production (SASHA_OUTCOMES_VIA=live) stays live."""
     from agapi import agapi_route as AR
-    return AR.route("outcomes")
+    return AR.current("outcomes")   # Sasha 256 · the call in progress, else the family's route — agapi_route decides
 
 
 async def _agapi(op: str, body: dict) -> Dict[str, Any]:

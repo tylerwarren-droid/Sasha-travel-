@@ -42,19 +42,13 @@ def mode() -> str:
 FAMILY = "s2_reads"   # Sasha 249 · agapi_route's family for these reads (live unless the table names it: see agapi_route)
 
 
-def _url() -> str:
-    """Sasha 249 · the family's URL, from the one route (it was always live; it still is unless "s2_reads=sandbox" is set)."""
-    from agapi import agapi_route as AR
-    return AR.endpoint(AR.route(FAMILY))[0]
-
-
 async def _agapi(op: str, body: dict) -> Dict[str, Any]:
     """One AgAPI live call as this guest. → the envelope (ok/result/error); a transport failure is an envelope too."""
     import httpx
     from agapi import agapi_route as AR
     url, key = await AR.client_for(FAMILY)   # Sasha 249 · ONE ROUTE
     if not key:
-        return {"ok": False, "error": {"code": "not_configured", "message": f"{AR.key_name(AR.route(FAMILY))} isn't set"}}
+        return {"ok": False, "error": {"code": "not_configured", "message": f"{AR.key_name(await AR.target_for(FAMILY))} isn't set"}}
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json"}
     tok = GUEST_TOKEN.get()
     if tok:

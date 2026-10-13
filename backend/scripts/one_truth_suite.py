@@ -117,6 +117,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # can book is decided in the ONE venue search, by the person's mode (agapi/test_venues); a live person never sees or holds it
     "T33": ("the test venue in one place: found by a test person, never by a live one",
             ["tests.test_s256_test_venue"]),
+    # Sasha 256 · ONE ROUTE for every family, money included: s2_fine_print / s2_subscriptions picked their own AgAPI (a test person's
+    # cards, entry and activities went to live). Only agapi_route decides; named exceptions: the access record (live), an open case
+    "T34": ("live vs the sandbox for every family is decided only in agapi_route, by the person",
+            ["tests.test_s256_one_route"]),
 }
 
 _RUNNER = """

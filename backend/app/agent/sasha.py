@@ -829,6 +829,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         return [{"type": "text", "delta": text + " "}, {"type": "say", "text": SP.speakable(text)}]
 
     last_tools: set = set()
+    agapi_out = False   # Sasha 261 · an AgAPI outage's line was said this turn
     for step in range(MAX_STEPS):
         # Sasha 205 · the fast model talks and summarises (incl. a proposal, a total, a booking); the big one only weighs
         # search results (flights, stays, venues) to choose among them
@@ -936,7 +937,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                     tstate["drawn"] = True   # Sasha 251 · something reached their screen this turn
                     yield {**ev, "turn": turn_key}
             results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r, u.name), default=str)[:12000]})
+            agapi_out = agapi_out or (r.get("error") or {}).get("code") == "agapi_unreachable"
         msgs.append({"role": "user", "content": results})
+        if agapi_out:   # Sasha 261 · production (o261): after the line she offered a retry, an alternative, then said it twice —
+            break       # an AgAPI outage's line, said by code, is the turn's answer about it: the model doesn't carry on
     text = " ".join(said).strip()
     figures: Dict[str, Any] = {}   # Sasha 249 · get_total's trip_figures (read only — the guard never re-prices the trip)
     allowed |= await _basket_amounts(ctx, figures)

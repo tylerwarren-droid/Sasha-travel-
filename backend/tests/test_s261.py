@@ -148,6 +148,9 @@ class SheSaysItPlainly(unittest.TestCase):
         src = inspect.getsource(S.turn)
         self.assertIn("with _AH.watching() as met:", src)
         self.assertIn("agapi_outage(r, met, u.name) if honest else r", src)
+        # production (o261): she carried on after the line — a retry offer, an alternative, the line again. The line ends the turn.
+        self.assertIn('agapi_out = agapi_out or (r.get("error") or {}).get("code") == "agapi_unreachable"', src)
+        self.assertIn("if agapi_out:", src)
 
 
 if __name__ == "__main__":

@@ -63,8 +63,17 @@ class Base(unittest.TestCase):
         self.wire = Wire()
         self.call = mock.patch.object(PA, "CALL", self.wire)
         self.call.start()
+        from agapi import agapi_route as AR
+        from booking_signer import ops
+        AR._MODE.clear()
+
+        async def admin(method, path, body=None):   # the guest marker (no row): a suite guest carries kanoe_test
+            return 200, {"app_metadata": {"kanoe_test": True} if path.endswith(SCRATCH) else {}}
+        self.admin = mock.patch.object(ops, "ADMIN", admin)
+        self.admin.start()
 
     def tearDown(self):
+        self.admin.stop()
         self.call.stop()
         for p in reversed(self.patches):
             p.stop()

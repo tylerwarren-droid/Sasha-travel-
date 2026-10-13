@@ -229,6 +229,10 @@ async def read_booking_route(ctx, a: dict) -> dict:
             "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
 
 
+#: Sasha 256 · the one line over a venue read-back card (its details are on the card, never recited)
+READ_BACK_ASK = "Here's what I'll send to {venue} — it's all on the card. Shall I send it?"
+
+
 def chosen_route(said: Optional[str]) -> Optional[str]:
     """Sasha 256 · found live (test venue, /s2): "Prefilled form" was sent as route "form" (the word "form" is in it) and became Sasha
     sending it. Their own words naming exactly ONE of the rules' options (booking_decide.CHOICES) pick its route; anything else → None."""
@@ -1016,6 +1020,12 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
                 "agapi": "on their yes, Sasha sends it to the venue; it's booked only when they confirm"}.get(rung, "")}
     if (extra or {}).get("say"):   # Sasha 253 · G7 / G8 — the old flow's own sentence for a request with no slot / a room
         out["say"] = extra["say"]
+    elif one_path(ctx) and getattr(ctx, "surface", "") in ("s2", "s1"):
+        # Sasha 256 · demo path item 10 (short confirmations): found live — after "Handle it" she recited the whole read-back in five
+        # sentences. On a screen the read-back is its CARD (sasha.render: hold_venue's awaiting_yes → read_back); she says one line.
+        # WhatsApp and voice have no card: they keep the read-back in words.
+        out["ask"] = READ_BACK_ASK.format(venue=out["venue"])
+        out["how"] = "Say `ask` word for word — every detail is on the card on their screen; never read the details out."
     _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged
     # Sasha 236 · held again in the turn they said yes to it (found live on /s2: she re-held and asked again, turn after turn):
     # the read-back is the one they heard in an EARLIER turn, and this turn's words are an explicit yes → book it now

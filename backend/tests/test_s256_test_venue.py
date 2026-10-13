@@ -123,6 +123,32 @@ class TheirWordsPickTheOption(Base):
         self.assertNotIn("form", seen)
 
 
+class ShortConfirmations(Base):
+    """Demo path item 10 (≤ 2 sentences + the card): found live — after "Handle it" she recited the read-back in five sentences. On a
+    screen the venue read-back is its card and she says one line (venues.READ_BACK_ASK); WhatsApp keeps the words (no card there)."""
+
+    def handle_it(self, surface):
+        with mock.patch.object(VN, "_read", reader({"link": {"value": "https://x.test/api/booking/test-venue/plain"}, "form": {}})):
+            return run(VN.hold_venue(ctx("Handle it", surface), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid",
+                                                                  "country": "ES", "what": "dinner", "party": 2, "day": LATER, "time": "20:00",
+                                                                  "route": "form"}))
+
+    def test_on_a_screen_one_line_over_the_card(self):
+        from app.agent import sasha as S
+        out = self.handle_it("s2")
+        self.assertEqual(out["status"], "awaiting_yes", out)
+        self.assertEqual(out["ask"], VN.READ_BACK_ASK.format(venue=out["venue"]))
+        self.assertLessEqual(len([x for x in out["ask"].replace("?", ".").split(".") if x.strip()]), 2)
+        r = S.render("hold_venue", out, {})
+        self.assertEqual((r or {}).get("kind"), "read_back")
+        self.assertTrue(r["read_back"])
+
+    def test_whatsapp_keeps_the_read_back_in_words(self):
+        out = self.handle_it("wa")
+        self.assertEqual(out["status"], "awaiting_yes", out)
+        self.assertNotIn("ask", out)
+
+
 class EverySurfaceSearchesHere(unittest.TestCase):
     def test_the_one_search_asks_the_test_venues_first(self):
         import inspect

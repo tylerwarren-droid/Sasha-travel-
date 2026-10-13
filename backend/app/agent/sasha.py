@@ -211,6 +211,9 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
     # Sasha 250 · the prefilled form now comes from hold_venue too (249: the form IS the go-ahead, no second yes) — found live: she
     # said "Done — it's on your screen" and the card was never drawn, because only book_venue's result rendered it
+    if tool == "hold_venue" and res.get("status") == "awaiting_yes" and res.get("read_back") and res.get("ask"):
+        # Sasha 256 · demo path item 10: on a screen the venue read-back is a CARD (she says one line over it, venues.READ_BACK_ASK)
+        return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]]}
     if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
         return {"type": "render", "kind": "prepared", **res["prepared"]}
     # Sasha 254 · hold_venue too: the booking rules' take-over link (their page) when they hand it over or won't contact the venue

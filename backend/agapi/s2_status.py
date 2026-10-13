@@ -107,16 +107,21 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
         st["prepared"] = prep
     open_n = len(OC._OPEN.get(account) or ())
     d = decide(st, held=account in API._HELD, ledger_open=open_n)
+    # Sasha 258 · the TRIP's own state (its basket rows only): the Trip tab's banner reads it — a table booked elsewhere on the
+    # account never makes an unbooked trip say "Trip total" (found by the scoreboard once in-app bookings really confirmed)
+    trip_state = decide({"booked": st.get("booked") or [], "failed": st.get("failed") or [],
+                         "awaiting_payment": st.get("awaiting_payment") or 0})["state"] if p else d["state"]
     refs = [r["booking_reference"] for r in rows if r["state"] == "booked" and r.get("booking_reference")] + \
            [b["reference"] for b in vb if b.get("status") in ("confirmed", "guest_booked") and b.get("reference")]
     from agapi import booking_decide as BD   # Sasha 254 · R12 — an automatic stop is said here too, never only logged
     stops = BD.stops_of(account)
-    return {**st, **d, "refs": list(dict.fromkeys(refs)), "ledger_open": open_n, **({"stopped": stops} if stops else {})}
+    return {**st, **d, "trip_state": trip_state, "refs": list(dict.fromkeys(refs)), "ledger_open": open_n, **({"stopped": stops} if stops else {})}
 
 
 def public(st: Dict[str, Any]) -> Dict[str, Any]:
     """What a page may show (the Trip banner, the /s2 card): the state, its line and the references — nothing else."""
-    return {"state": st.get("state"), "line": st.get("line"), "refs": list(st.get("refs") or [])}
+    return {"state": st.get("state"), "line": st.get("line"), "refs": list(st.get("refs") or []),
+            "trip_state": st.get("trip_state") or st.get("state")}   # Sasha 258 · the trip's own (the Trip tab's banner)
 
 
 __all__ = ["status_of", "decide", "public", "WORDS", "HELD", "ON_IT"]

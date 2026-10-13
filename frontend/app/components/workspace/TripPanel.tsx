@@ -55,7 +55,7 @@ const shortStatus = (b: ServerBooking): string => {
 }
 type ServerPlan = RichItinerary & { days: ServerDay[]; start?: string; trip_id?: string; trip_total?: TripTotal; trip_status?: TripStatus }
 // Sasha 249 · ONE STATUS: what get_status says (agapi/s2_status.py) — the Trip banner's only source, never a client prop
-type TripStatus = { state: string; line: string; refs: string[] }
+type TripStatus = { state: string; line: string; refs: string[]; trip_state?: string }   // Sasha 258 · trip_state: the trip's own
 const ON_IT = ['booked', 'partly_booked', 'awaiting_payment']
 // Sasha 242 · ONE TOTAL: the basket's figure in euros, the same one Sasha says in the chat
 // Sasha 249 · it is the server's trip_figures: + the trip's party (TRAVELLERS) and the lines priced as estimates
@@ -244,7 +244,7 @@ export default function TripPanel({
   // Sasha 249 · ONE STATUS (EU 245 §1.12): the banner said "✓ Paid … · not booked yet" from a client bookingRef prop. It now says
   // the server's status line for THIS trip — the same words as get_status in the chat, the /s2 card and the WhatsApp line
   const ts = server?.trip_status ?? null   // the server's plan and its status are for the same trip (/api/booking/plan)
-  const isBooked = Boolean(ts && ON_IT.includes(ts.state))
+  const isBooked = Boolean(ts && ON_IT.includes(ts.trip_state ?? ts.state))   // Sasha 258 · THIS trip's own state (a table booked elsewhere never makes it "Trip total")
   const doneWord = ts?.state === 'awaiting_payment' ? 'Waiting for payment' : ts?.state === 'partly_booked' ? 'Partly booked' : 'Booked'
   if (!richItinerary) {
     return (

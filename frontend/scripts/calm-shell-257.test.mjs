@@ -50,3 +50,7 @@ test('the holding line keeps the "…" beneath it: she is still working until he
   const app = read('app/s2/S2App.tsx')
   assert.match(app, /m\.hold \? <>\{m\.hold\}<div>…<\/div><\/> : '…'/)
 })
+
+test('Sasha 258 · the Trip tab is "booked" by THIS trip\'s own state, never a table booked elsewhere', () => {
+  assert.match(read('app/components/workspace/TripPanel.tsx'), /ON_IT\.includes\(ts\.trip_state \?\? ts\.state\)/)
+})

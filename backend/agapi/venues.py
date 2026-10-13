@@ -575,10 +575,17 @@ async def hold_venue(ctx, a: dict) -> dict:
     # Sasha 217 · THE SAME BOOKING held again (she re-holds on the yes turn): the read-back they already heard, as it is. A new hold
     # made a new form with a new sha256, so the yes was "read back first" again — and the booking looped, never sent.
     if held and held.get("out") and held["at"] < ctx.started and not stale(held["at"]) \
-            and (not a.get("route") or a.get("route") == held.get("rung")) \
+            and (not a.get("route") or a.get("route") == held.get("rung") or held.get("rung") == "agapi") \
             and str(held.get("when") or "")[:16] == _slot_key(ctx, a) and int(held.get("party") or 0) == int(a.get("party") or 0) \
             and ((a.get("place_id") and a.get("place_id") == held.get("place_id")) or _base(a.get("name") or "") == _base(held.get("venue") or "")):
         card = card_of(ctx.account, a.get("place_id") or held.get("place_id"), a.get("name"))
+        # Sasha 258 · found by the scoreboard (item 15, Taverna Correo): on "Yes, send it." she re-held instead of booking; an AgAPI
+        # hold's rung is "agapi" whatever channel word she passes ("email"), so it never matched — a NEW read-back, asked again.
+        # Now it's the same booking; and in the turn of their yes it says so: book it now
+        from agapi.v0 import yes_to_book
+        if yes_to_book(ctx.user_said or ""):
+            return _with_card(card, {**held["out"], "status": "yes_heard",
+                                     "how": "They already heard this read-back and said yes this turn: call book_venue now. Don't ask again."})
         return _with_card(card, {**held["out"], "same_read_back": "they've heard this — on their yes, call book_venue (never hold again)"})
     # Sasha 226 · a NEW hold supersedes the old one at once: if this one ends in a question (choose_route…) or an error, a yes must
     # never fall through to the earlier venue's read-back (found live: "D-Sunset" read back, the yes booked the held "El Mirador")

@@ -164,3 +164,16 @@ class WhatsAppUnchanged(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FoundByTheScoreboard(unittest.TestCase):
+    def test_the_trip_banner_reads_the_trips_own_state(self):   # item 3: a table booked elsewhere never makes a trip "Trip total"
+        from agapi import s2_status as ST
+        self.assertEqual(ST.public({"state": "booked", "line": "Booked: a table", "refs": [], "trip_state": "nothing"})["trip_state"], "nothing")
+        self.assertEqual(ST.public({"state": "booked", "line": "x", "refs": []})["trip_state"], "booked")
+
+    def test_an_agapi_hold_is_the_same_booking_whatever_channel_word(self):   # item 15: re-held on the yes → the same read-back
+        import inspect
+        src = inspect.getsource(VN.hold_venue)
+        self.assertIn('held.get("rung") == "agapi"', src)
+        self.assertIn('"status": "yes_heard"', src)

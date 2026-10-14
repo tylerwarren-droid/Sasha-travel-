@@ -370,6 +370,7 @@ class LadderRoutes:
         raise NotImplementedError
 
     def setUp(self):
+        from tests.act_machinery import open_act_check; open_act_check(self)   # Sasha 265 · the placing machinery (CR 99)
         self.env = mock.patch.dict(os.environ, ENV)
         self.env.start()
         self.calls, self.ladder = self.make_stores()

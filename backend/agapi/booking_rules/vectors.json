@@ -1,5 +1,5 @@
 {
- "version": "booking-rules/1 · 2026-10-12",
+ "version": "booking-rules/2 · 2026-10-14",
  "vectors": [
   {
    "rule": "R1",
@@ -999,7 +999,7 @@
   },
   {
    "rule": "R4",
-   "name": "no form, 20 h away, calls on → call",
+   "name": "no form, 20 h away, calls on → the call is asked as the ONE question (booking-rules/2)",
    "fn": "decide",
    "input": {
     "venue": {
@@ -1014,7 +1014,8 @@
        "kind": "phone",
        "value": "+34910000001"
       }
-     ]
+     ],
+     "name": "Restaurante Ejemplo"
     },
     "when": {
      "now": "2026-10-12T10:00:00Z",
@@ -1032,8 +1033,12 @@
     }
    },
    "expect": {
-    "action": "call",
-    "say": "calling"
+    "action": "ask_call",
+    "say": "ask_call_now",
+    "say_text": "Restaurante Ejemplo, Tue 13 Oct 06:00 — shall I call them now?",
+    "ask_once": [
+     "call_ok"
+    ]
    }
   },
   {
@@ -1383,7 +1388,7 @@
     }
    },
    "expect": {
-    "action": "call"
+    "action": "ask_call"
    }
   },
   {
@@ -2021,6 +2026,428 @@
    },
    "expect": {
     "action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "booking-rules/2: soon, their page + a phone → the ONE question is page or call (exact words)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-14T10:40:00Z",
+     "booking_at": "2026-10-14T19:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    },
+    "booking": {
+     "venue": "Griego Greek-o Rico",
+     "party": 2,
+     "day": "today",
+     "time": "21:00"
+    }
+   },
+   "expect": {
+    "action": "ask_one_question",
+    "say": "ask_page_or_call",
+    "say_text": "2 people at Griego Greek-o Rico, today 21:00 — fill in their page now, or shall I call them?",
+    "ask_once": [
+     "their_page_or_call"
+    ]
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "booking-rules/2: page or call — answered 'call' → the call, one line",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ],
+     "opens_at": "13:00",
+     "open_now": false
+    },
+    "when": {
+     "now": "2026-10-14T10:40:00Z",
+     "booking_at": "2026-10-14T19:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "call"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    },
+    "booking": {
+     "venue": "Griego Greek-o Rico",
+     "party": 2,
+     "day": "today",
+     "time": "21:00"
+    }
+   },
+   "expect": {
+    "action": "call",
+    "say": "on_it",
+    "say_text": "On it — I'll call them when they open at 13:00 and let you know.",
+    "ask_once": []
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "booking-rules/2: page or call — answered 'link' → their page, no second question",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-14T10:40:00Z",
+     "booking_at": "2026-10-14T19:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "link"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    },
+    "booking": {
+     "venue": "Griego Greek-o Rico",
+     "party": 2,
+     "day": "today",
+     "time": "21:00"
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "ask_once": []
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "booking-rules/2: page + phone but calls off → the old question (no call offered)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-14T10:40:00Z",
+     "booking_at": "2026-10-14T19:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    },
+    "booking": {
+     "venue": "Griego Greek-o Rico",
+     "party": 2,
+     "day": "today",
+     "time": "21:00"
+    }
+   },
+   "expect": {
+    "say": "ask_book"
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "booking-rules/2: page + phone, 3 days away → the old question (a call only when it's soon)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://venue.example/reservas"
+      },
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-12T10:00:00Z",
+     "booking_at": "2026-10-15T10:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    },
+    "booking": {
+     "venue": "Griego Greek-o Rico",
+     "party": 2,
+     "day": "today",
+     "time": "21:00"
+    }
+   },
+   "expect": {
+    "say": "ask_book"
+   }
+  },
+  {
+   "rule": "R4",
+   "name": "booking-rules/2: urgent, no page, closed now → 'I'll call them when they open at 13:00 — OK?'",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ],
+     "opens_at": "13:00",
+     "open_now": false
+    },
+    "when": {
+     "now": "2026-10-14T10:40:00Z",
+     "booking_at": "2026-10-14T19:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {},
+    "booking": {
+     "venue": "Griego Greek-o Rico",
+     "party": 2,
+     "day": "today",
+     "time": "21:00"
+    }
+   },
+   "expect": {
+    "action": "ask_call",
+    "say": "ask_call_when_open",
+    "say_text": "I'll call them when they open at 13:00 — OK?",
+    "ask_once": [
+     "call_ok"
+    ]
+   }
+  },
+  {
+   "rule": "R4",
+   "name": "booking-rules/2: urgent, no page — answered OK → 'On it — …'",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "phone",
+       "value": "+34910000001"
+      }
+     ],
+     "opens_at": "13:00",
+     "open_now": false
+    },
+    "when": {
+     "now": "2026-10-14T10:40:00Z",
+     "booking_at": "2026-10-14T19:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "call"
+    },
+    "state": {},
+    "booking": {
+     "venue": "Griego Greek-o Rico",
+     "party": 2,
+     "day": "today",
+     "time": "21:00"
+    }
+   },
+   "expect": {
+    "action": "call",
+    "say": "on_it",
+    "say_text": "On it — I'll call them when they open at 13:00 and let you know."
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2: the last call unanswered, a page → 'No one picked up again — I'd fill in their page instead.'",
+   "fn": "no_answer",
+   "input": {
+    "page_link": "https://agapi.kanoe.ai/prepared/x",
+    "phone": "+34910000001"
+   },
+   "expect": {
+    "action": "prepared_link",
+    "say": "no_answer",
+    "say_text": "No one picked up again — I'd fill in their page instead.",
+    "takeover.link": "https://agapi.kanoe.ai/prepared/x"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2: the last call unanswered, no page → their number, never silent",
+   "fn": "no_answer",
+   "input": {
+    "page_link": null,
+    "phone": "+34910000001"
+   },
+   "expect": {
+    "say": "no_answer_no_page",
+    "say_text": "No one picked up again — here's their number so you can reach them yourself.",
+    "channel.value": "+34910000001"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2: the act's check — a 4th call today is refused",
+   "fn": "call_allowed",
+   "input": {
+    "access": {
+     "mode": "live",
+     "calls": "on",
+     "real_venue_sends": "on"
+    },
+    "state": {
+     "calls_today_person": 3
+    },
+    "now": "2026-10-14T12:00:00Z"
+   },
+   "expect": {
+    "allowed": false,
+    "reason": "calls_cap"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2: the act's check — 29 min after the last call to that venue is refused",
+   "fn": "call_allowed",
+   "input": {
+    "access": {
+     "mode": "live",
+     "calls": "on",
+     "real_venue_sends": "on"
+    },
+    "state": {
+     "calls_today_person": 1,
+     "last_call_to_venue_at": "2026-10-14T11:31:00Z"
+    },
+    "now": "2026-10-14T12:00:00Z"
+   },
+   "expect": {
+    "allowed": false,
+    "reason": "too_soon"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2: the act's check — 30 min later, under the cap → allowed",
+   "fn": "call_allowed",
+   "input": {
+    "access": {
+     "mode": "live",
+     "calls": "on",
+     "real_venue_sends": "on"
+    },
+    "state": {
+     "calls_today_person": 2,
+     "last_call_to_venue_at": "2026-10-14T11:30:00Z"
+    },
+    "now": "2026-10-14T12:00:00Z"
+   },
+   "expect": {
+    "allowed": true
+   }
+  },
+  {
+   "rule": "R2",
+   "name": "booking-rules/2: after the answer, one short line",
+   "fn": "on_it",
+   "input": {
+    "next": "I'll call them at 13:10 and let you know."
+   },
+   "expect": {
+    "text": "On it — I'll call them at 13:10 and let you know."
    }
   }
  ]

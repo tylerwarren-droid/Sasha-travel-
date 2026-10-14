@@ -241,7 +241,7 @@ def chosen_route(said: Optional[str]) -> Optional[str]:
     import re as _re
     from agapi import booking_decide as BD
     t = " " + _re.sub(r"[^a-z]+", " ", str(said or "").lower()) + " "
-    named = {o["route"] for o in BD.CHOICES if f" {o['title'].lower()} " in t}
+    named = {o["route"] for o in BD.CHOICES + BD.CALL_CHOICES if f" {o['title'].lower()} " in t}   # Sasha 265 · + the call card's two
     if " prefilled " in t or " pre filled " in t:
         named.add("page")
     if _re.search(r" handle (it|this|that) ", t):
@@ -627,12 +627,42 @@ async def rules_for(ctx, a: dict, rd: dict, res: dict, at: str, eng: Optional[di
         # Sasha 253 · G7 — no slot: a form or a platform books a SLOT, so for this booking only the request channels exist
         chans = [c for c in chans if c["kind"] not in ("form", "platform")]
     phone = str(((rd.get("rungs") or {}).get("phone") or {}).get("value") or "") or None
+    test = BD.is_test_venue(rd, card)
+    if test and (card or {}).get("phone") and not any(c["kind"] == "phone" for c in chans):
+        chans = chans + [{"kind": "phone", "value": card["phone"]}]   # Sasha 265 · a Kanoe test venue's own (sandbox) number
+        phone = phone or card["phone"]
     when = at or (f"{str(a.get('day'))[:10]}T12:00" if _open_slot(ctx, a) and a.get("day") else None)
+    country = rd.get("country") or a.get("country")
+    path = one_path(ctx)
     d = await BD.decide_for(ctx.account, channels=chans, vtype=BD.venue_type((res.get("what") or {}).get("category"), _nights(ctx, a)),
-                            test=BD.is_test_venue(rd, card), local_at=when, country=rd.get("country") or a.get("country"),
+                            test=test, local_at=when, country=country,
                             preference=route, venue_key=f"read:{rd.get('read_id')}", number=phone if phone and phone.startswith("+") else None,
-                            link=BD.page_of(chans, card), now=now)
-    return {**d, "channels": chans}
+                            link=BD.page_of(chans, card), now=now,
+                            # Sasha 265 · item 4 (booking-rules/2): the ONE question's words, local, and when they open
+                            booking=BD.booking_words(_API().plain_venue(rd["venue"]), (res.get("how_many") or {}).get("count"), at or None,
+                                                     country, now) if path else None,
+                            opening=opening_of(rd, card, now, country) if path else None, sandbox_calls=path)
+    if not path:   # Sasha 265 · old S1 (parity off): booking-rules/1's answers, byte-identical
+        d = BD.as_v1(d)
+    return {**d, "channels": chans, **({"phone": phone} if phone else {})}
+
+
+def opening_of(rd: dict, card: Optional[dict], now: Optional[datetime], country: Optional[str]) -> Optional[dict]:
+    """Sasha 265 · item 4 · when the venue can be called: {opens_at "HH:MM" (their next opening, local), open_now} from the hours the read
+    holds (their site first, then Google: booking_signer.hours), or a Kanoe test venue's own week. None: no hours known (then "now")."""
+    try:
+        from booking_signer import hours as H, venue_read as V
+        tz = (V.COUNTRIES.get(str(country or "").upper()) or (None, None, None, "Europe/Madrid"))[3]
+        read = rd
+        if (card or {}).get("week"):
+            read = {"facts": [{"kind": "hours", "source_kind": "site", "source_label": "their page", "evidence": {"week": card["week"]}}]}
+        st = H.status(read, now or datetime.now(timezone.utc), tz)
+        if not st.get("known"):
+            return None
+        return {"open_now": bool(st.get("open_now")), **({"opens_at": str(st["opens_at"])[11:16]} if st.get("opens_at") else {})}
+    except Exception as e:
+        log.info("[venues] no opening hours read: %s", type(e).__name__)
+        return None
 
 
 def _rules(d: dict) -> dict:
@@ -663,6 +693,9 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
     nights, open_slot = _nights(ctx, a), _open_slot(ctx, a)
     venue = GW.plain_venue(rd["venue"])
     kinds = {c["kind"] for c in d.get("channels") or []}
+    if one_path(ctx) and (key == "ask_page_or_call" or action == "ask_call" or (action == "call" and key == "on_it")):
+        # Sasha 265 · item 4 (CR 99, booking-rules/2): a call is an ACT — the ONE question is its read-back, on a card
+        return await _call_question(ctx, a, rd, res, at, now, d, card)
     if action == "ask_one_question":   # R2 · the ONE question, word for word (voice.ASK_BOOK is this phrase)
         return _said({"status": "choose_route", "venue": rd["venue"], "ask": d["say_text"],
                       "options": [dict(o) for o in BD.CHOICES],
@@ -726,6 +759,103 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
         return _said(await _call(ctx, a, rd, res), d, when="after_yes", account=ctx.account)
     # refuse (and anything the rules add later): said, nothing prepared
     return _said({"status": "refused", "venue": venue}, d)
+
+
+async def _call_question(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, card: Optional[dict]) -> dict:
+    """Sasha 265 · item 4 (CR 99 §4b) · THE ONE QUESTION IS THE CARD. venue.prepare_booking with the venue's call {phone, opens_at,
+    open_now}, then venue.submit_booking route "call" → the call's read-back (read_back_id + its sha). The card: ask_page_or_call → TWO
+    buttons ("Fill in their page": their prepared page, nothing sent, no approval · "Call them": the tap IS the approval); ask_call → ONE
+    "OK". Answered already in words ("call them" — on_it) with this card on screen: that answer is the approval (the held read-back)."""
+    from agapi import booking_decide as BD, venue_submit as VS
+    from booking_signer import guest_receipt as GR
+    GW = _API()
+    venue = GW.plain_venue(rd["venue"])
+    held = _HELD.get(ctx.account) or _PREV.get(ctx.account)   # hold_venue set the card aside (_PREV) before deciding again
+    if d["say"] == "on_it" and held and held.get("rung") == "agapi_call" and held["at"] < ctx.started \
+            and _base(held.get("venue") or "") == _base(rd["venue"]):   # their words answered the card: the call act, now
+        _PREV.pop(ctx.account, None)
+        return await _finish(ctx, held, {"how": "words", "said": (ctx.user_said or "")[:200]})
+    phone = own_number(rd, card)
+    if not phone:   # a Google listing's number is dialled by Sasha only, never stored or handed on (Sasha 64): the act can't carry it
+        return await _no_call(ctx, a, rd, res, at, now, d, card, venue, "they have no number of their own on their site")
+    v = (d.get("ctx") or {}).get("venue") or {}
+    call = {"phone": phone, **({"opens_at": v["opens_at"]} if v.get("opens_at") else {}), "open_now": bool(v.get("open_now"))}
+    place = {"name": (card or {}).get("name") or venue, "website": (card or {}).get("website") or a.get("website"),
+             "place_id": rd.get("place_id") or (card or {}).get("place_id"), "city": a.get("city"), "category": (res.get("what") or {}).get("category")}
+    person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
+    p = await VS.prepare(ctx.account, place, person, at[:10], at[11:16], int(res["how_many"]["count"]), call=call)
+    if not p.get("ok") and p["error"]["code"] == "not_configured":   # no venues key on this server: no act — so no call (never the old path)
+        return await _no_call(ctx, a, rd, res, at, now, d, card, venue, "calls go through the booking service, which isn't on here")
+    if not p.get("ok"):
+        raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {p['error']['message']}. " + d["takeover"]["say"])
+    rb = await VS.read_back(ctx.account, p["prepared_id"], route="call")
+    if not rb.get("ok"):
+        if rb["error"]["code"] == "not_allowed":
+            link = next((x for x in (rb["error"].get("details", {}).get("link"), p.get("link"), d["takeover"].get("link"))
+                         if str(x or "").startswith("https://")), None)
+            return _said({"status": "not_contacted", "venue": venue, "booked": False, "not_allowed": True, "say": rb["error"]["message"],
+                          **_link_out(link)}, d)
+        raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {rb['error']['message']}. " + d["takeover"]["say"])
+    choices = [dict(o) for o in (BD.CALL_CHOICES if d["say"] == "ask_page_or_call" else BD.OK_CHOICES)]
+    ask = d["say_text"] if d["say"] != "on_it" else BR_ask_call(d)
+    link = p.get("link") if str(p.get("link") or "").startswith("https://") else d["takeover"].get("link")
+    out = _hold(ctx, "agapi_call", p["prepared_id"], {"lines": rb["lines"], "sha256": rb["sha256"]}, rd, res,
+                extra={"prepared_id": p["prepared_id"], "read_back_id": rb["read_back_id"], "end_user": rb["end_user"], "link": link,
+                       "call": call, "lines": rb["lines"], "name": res["who"]["name"],
+                       "booking": {k: v for k, v in a.items() if k not in _NOT_BOOKING}})
+    out.update(ask=ask, choices=choices, read_back_id=rb["read_back_id"],
+               how="Say `ask` word for word — it IS the card's question; their tap on the card is the approval. Never ask a second "
+                   "yes, never read the card out.")
+    if _HELD.get(ctx.account):
+        _HELD[ctx.account]["out"] = {**_HELD[ctx.account].get("out", {}), "ask": ask, "choices": choices, "read_back_id": rb["read_back_id"]}
+    return _said(out, d, when="after_yes", account=ctx.account)
+
+
+def own_number(rd: dict, card: Optional[dict] = None) -> Optional[str]:
+    """Sasha 265 · item 4 · the number the call ACT may carry (AgAPI keeps it, and Bland dials it): the venue's OWN published number, read
+    on their own site — or a Kanoe test venue's sandbox number. Never a Google listing's (Sasha 64: dialled, never stored or handed on)."""
+    if BD_is_test(rd, card) and str((card or {}).get("phone") or "").startswith("+"):
+        return card["phone"]
+    v = str((((rd.get("rungs") or {}).get("phone") or {}).get("value")) or "")
+    facts = [f for f in rd.get("facts") or [] if f.get("kind") == "phone" and str(f.get("value") or "").startswith("+")]
+    site = next((f["value"] for f in facts if f.get("source_kind") == "site"), None)
+    if site:
+        return site
+    return v if v.startswith("+") and not facts else None
+
+
+def BD_is_test(rd: dict, card: Optional[dict]) -> bool:   # noqa: N802
+    from agapi import booking_decide as BD
+    return BD.is_test_venue(rd, card)
+
+
+async def _no_call(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, card: Optional[dict], venue: str, why: str) -> dict:
+    """Sasha 265 · item 4 · a call the act can't make (why): their page when they have one (the card's other answer) — else said plainly,
+    with the take-over. Never Sasha's own call (no act, never dialled)."""
+    from agapi import booking_decide as BD
+    if d["say"] == "ask_page_or_call" or BD.page_of(d.get("channels") or [], card):
+        eng = await engine_channel(card) or read_channel(rd, card)
+        return await _prepared_now(ctx, a, rd, res, at, now, eng, card, BD.redecide(d, "page"))
+    raise _err("no_route", f"{venue} books by phone, and I can't call them from here — {why}. " + d["takeover"]["say"])
+
+
+def BR_ask_call(d: dict) -> str:   # noqa: N802 · their words asked for the call with no card yet: the call's own question (the OK card)
+    from agapi.booking_rules import booking_rules as BR
+    v = (d.get("ctx") or {}).get("venue") or {}
+    head = BR.head(d.get("ctx") or {})
+    return (BR.PHRASES["ask_call_when_open"].format(opens_at=v["opens_at"]) if v.get("opens_at") and not v.get("open_now")
+            else BR.PHRASES["ask_call_now"].format(head=head))
+
+
+async def answer_card(ctx, read_back_id: str, choice: str) -> dict:
+    """Sasha 265 · item 4 · THE TAP: the card's button, straight from the page (no model between). "call" → the tap IS the approval
+    (approvals.in_app_tap on THIS read-back) → the act → "On it — …". "page" → their prepared page (nothing sent, no approval)."""
+    held = _HELD.get(ctx.account)
+    if not held or held.get("rung") != "agapi_call" or held.get("read_back_id") != read_back_id:
+        return {"status": "nothing_waiting", "booked": False, "in_app": True}
+    if choice == "page":
+        return await hold_venue(ctx, {**(held.get("booking") or {}), "route": "page"})
+    return await _finish(ctx, held, {"how": "tap", "said": "tap: " + ("Call them" if choice == "call" else "OK")})
 
 
 # the booking rules' action → what the outcomes ledger records for an AgAPI send (CR 87's rung + channel)
@@ -1150,6 +1280,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
     where = await WB.trip_day_words(ctx.account, held["when"][:10], venue)
     if rung == "agapi":   # Sasha 254 · item 3 — the AgAPI send, on their yes (venue.submit_booking)
         return await _agapi_send(ctx, held, how, venue, where)
+    if rung == "agapi_call":   # Sasha 265 · item 4 — the call act, on their tap (the approval); dialled only from the act
+        return await _agapi_call(ctx, held, how, venue, where)
     if rung == "form":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/send", {"read_back_sha256": held["sha"], "approval": how}, timeout=120)
         if status != 200:
@@ -1295,6 +1427,40 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
         return {"status": "not_allowed", "venue": venue, "when": held["summary"], "booked": False,
                 "say": f"{BR.PHRASES['no_real_sends']} {BR.PHRASES['takeover']}", **({"open": link, "page_url": link} if link else {})}
     raise _err("not_sent", r.get("say") or f"{venue} didn't take it — nothing is booked")
+
+
+async def _agapi_call(ctx, held: dict, how: dict, venue: str, where) -> dict:
+    """Sasha 265 · item 4 · their answer → approvals.in_app_tap on the call's read-back (the tap; on WhatsApp the signed reply) → the act
+    (status calling, act_id, call_plan) → Sasha dials ONLY what call_plan says (agapi.venue_calls). Said: ONLY the act's own `say`
+    ("On it — I'll call them when they open at 13:00 and let you know.")."""
+    from agapi import venue_calls as VC, venue_submit as VS
+    r = await VS.submit(ctx.account, held, how.get("said") or "")
+    if not r.get("ok"):
+        code = r["error"]["code"]
+        if code in VS.TAP_REFUSALS:
+            return await _tap_refused(ctx, held, code, r["error"], venue)
+        raise _err("not_sent", r["error"]["message"])
+    st = r.get("status")
+    if st == "waiting_for_their_tap":   # their WhatsApp number isn't verified yet: AgAPI's one-tap link (it verifies it) — said
+        _HELD[ctx.account] = held
+        return {"status": "waiting_for_their_tap", "venue": venue, "when": held["summary"], "booked": False,
+                "line": "It's on your phone: tap Yes there, then I'll call them."}
+    if st == "not_allowed":
+        link = held.get("link")
+        return {"status": "not_allowed", "venue": venue, "when": held["summary"], "booked": False, "say": r.get("say") or "",
+                **({"open": link, "page_url": link} if link else {})}
+    if st != "calling":
+        raise _err("not_sent", r.get("say") or f"{venue} couldn't be called — nothing is booked")
+    _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}
+    dialled = await VC.dial(ctx.account, r, {**held, "timezone": _tz_of(held)})
+    return {"status": "calling", "venue": venue, "when": held["summary"], "booked": False, "act_id": r.get("act_id"),
+            "line": r.get("say") or "", "dial": dialled.get("status"), **({"in_app": True} if VS.TAP.get() is not None else {}),
+            "how": "Say `line` word for word — nothing else."}
+
+
+def _tz_of(held: dict) -> str:
+    from booking_signer import venue_read as V
+    return (V.COUNTRIES.get(str(held.get("country") or "").upper()) or (None, None, None, "Europe/Madrid"))[3]
 
 
 _SENT: Dict[str, dict] = {}   # Sasha 258 · account → the last booking sent on their in-app yes (venue, at) — a repeated yes

@@ -58,6 +58,8 @@ def read_back_line(tool: str, r: dict) -> str:
     res = (r or {}).get("result") if (r or {}).get("ok") else None
     if tool not in ("hold_venue", "book_venue") or not isinstance(res, dict) or res.get("status") != "awaiting_yes":
         return ""
+    if res.get("choices") and res.get("ask") and res.get("read_back"):   # Sasha 265 · item 4: the ONE question that IS the call's card
+        return res["ask"]
     return res["ask"] if res.get("read_back") and res.get("ask") and res["ask"] == READ_BACK_ASK.format(venue=res.get("venue")) else ""
 
 
@@ -80,6 +82,8 @@ def yes_line(tool: str, r: dict) -> str:
         return NOTHING_WAITING
     if res.get("status") == "confirmed" and res.get("line"):
         return f"{res['line']} {CALENDAR_ASK}"
+    if res.get("status") == "calling" and res.get("line"):   # Sasha 265 · item 4: the call act's own "On it — …", and only that
+        return res["line"]
     return ""
 
 # the channels she never names (EU 246 §2 rule 1), and the booking platforms the code knows by name
@@ -312,7 +316,7 @@ def holding_line(account: str = "") -> str:
 #: after the holding line, while the turn still works: a line every PROGRESS_S, from the step ACTUALLY running (the tool that started
 #: and hasn't returned), varied, never a claim (nothing found, booked, sent, done). The same lines on every surface: the stream's
 #: "hold" event (/s2, /next with parity — shown and spoken) and a message on WhatsApp.
-PROGRESS_S = 6.0
+PROGRESS_S = 5.0   # Sasha 265 · item 5 (row 935, Tyler: "about every 5 s"; was 6.0)
 _STEP = {
     "stays": ("Looking at hotels now.", "Still going through the hotels.", "Comparing a few places to stay."),
     "flights": ("Checking flights.", "Still checking the flights.", "Looking at the flight times."),
@@ -321,7 +325,7 @@ _STEP = {
     "route": ("Checking how they take bookings.", "Still checking how they take bookings.", "Looking at their booking page."),
     "booking": ("Setting up the booking.", "Still setting up the booking.", "Working on the booking."),
     "up": ("Bringing that up.", "Still pulling that up.", "Getting that up for you."),
-    None: ("Still on it.", "Bear with me — still working.", "Still working on it."),
+    None: ("Still on it.", "Bear with me — still working.", "Still working on it.", "Nearly there…"),   # 265: Tyler's "Nearly there…" ("Almost done…" is a claim)
 }
 _STEP_OF = {"search_stays": "stays", "swap_stay": "stays", "search_flights": "flights", "choose_offer": "flights", "check_offer": "flights",
             "propose_trip": "trip", "prepare_trip": "trip", "search_venues": "places", "suggest_activities": "places",
@@ -329,6 +333,23 @@ _STEP_OF = {"search_stays": "stays", "swap_stay": "stays", "search_flights": "fl
             "cancel_venue": "booking", "change_booking": "booking", "cancel_booking": "booking", "get_trip": "up", "get_status": "up",
             "get_total": "up", "my_plans": "up", "get_activity": "up", "what_i_can_do": "up", "keep_list": "up"}
 _STEP_N: dict = {}
+
+
+# ── Sasha 265 · item 5 — THE FIRST LINE, AT ONCE (row 935, Tyler 14 Oct 16:54: a destination on /next, "she just sits and looks at me
+# for about 20 seconds") ─ a request for WORK (a trip, a place, dates, a booking, a search) gets this line the instant it arrives — before
+# anything else of the turn, under 1 s on the page, spoken when her voice is on — then a progress line about every PROGRESS_S. A turn
+# that isn't work (a yes, a thanks, a question of fact) keeps the holding line at HOLD_AFTER_S, only if it's slow. Every surface reads it:
+# the stream's first event (/s2, /next — her face's caption and voice too) and WhatsApp's first message.
+FIRST_LINE = "Great — let me pull something together, it might take a few seconds."
+_MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+_WORK = re.compile(r"\b(?:trip|travel\w*|holiday|vacation|getaway|honeymoon|itinerary|plan|planning|going|go\s+to|fly|flying|flights?|"
+                   r"hotels?|book|booking|reserve|reservation|find|search|look\s+for|restaurants?|table|tour|visit\w*)\b"
+                   r"|\b" + _MONTH + r"\s+\d{1,2}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?" + _MONTH + r"\b", re.I)
+
+
+def first_line(message: str) -> Optional[str]:
+    """FIRST_LINE when the message asks for work (a trip, a destination with dates, a booking, a search), else None."""
+    return FIRST_LINE if _WORK.search(message or "") else None
 
 
 def progress_line(tool: Optional[str], account: str = "") -> str:

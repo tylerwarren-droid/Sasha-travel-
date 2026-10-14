@@ -215,7 +215,9 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     # said "Done — it's on your screen" and the card was never drawn, because only book_venue's result rendered it
     if tool in ("hold_venue", "book_venue") and res.get("status") == "awaiting_yes" and res.get("read_back") and res.get("ask"):   # 258: + a stale card's new read-back
         # Sasha 256 · demo path item 10: on a screen the venue read-back is a CARD (she says one line over it, venues.READ_BACK_ASK)
-        return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]]}
+        return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]],
+                # Sasha 265 · item 4: the call's card IS the ONE question — its words and its buttons (the tap is the approval)
+                **({"ask": res["ask"], "choices": res["choices"], "read_back_id": res.get("read_back_id")} if res.get("choices") else {})}
     if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
         return {"type": "render", "kind": "prepared", **res["prepared"]}
     # Sasha 254 · hold_venue too: the booking rules' take-over link (their page) when they hand it over or won't contact the venue
@@ -1265,11 +1267,13 @@ KEEPALIVE_S = 15.0
 _SPOKEN = ("text", "replace", "done", "error", "say")
 
 
-async def with_holding(events, account: str, after_s: Optional[float] = None):
+async def with_holding(events, account: str, after_s: Optional[float] = None, first: Optional[str] = None):
     """Sasha 257 · THE HOLDING LINE (row 863): her turn's events as they come; if none of her words has come within
     voice.HOLD_AFTER_S, ONE short line first ({"type": "hold", "text", "say"} — shown and, with her voice on, spoken), then the real
     answer. Never for a fast reply, never a claim, never twice in a turn. Sasha 264 · item 1: then, while a tool runs (or before her
-    words), a progress line from that step every voice.PROGRESS_S — never silence longer than that."""
+    words), a progress line from that step every voice.PROGRESS_S — never silence longer than that. Sasha 265 · item 5: `first`
+    (voice.first_line — a request for work) is said AT ONCE, before anything else of the turn; then the progress lines carry the
+    silence, and the quiver's own "filler" lines are not said on top of them."""
     import asyncio
     q: asyncio.Queue = asyncio.Queue()
     end = object()
@@ -1288,6 +1292,9 @@ async def with_holding(events, account: str, after_s: Optional[float] = None):
     wait = _V.HOLD_AFTER_S if after_s is None else after_s
     steps = _V.Steps()   # Sasha 264 · item 1: the step running now (tool_start in, its tool result out)
     said_at = last_at = t0   # the last thing she said (her words, the holding line, a progress line) / the last event of any kind
+    if first:   # Sasha 265 · item 5: the first line, now — the stream's first event
+        started = True
+        yield {"type": "hold", "text": first, "say": first, "first": True}
     try:
         while True:
             now = loop.time()
@@ -1322,6 +1329,8 @@ async def with_holding(events, account: str, after_s: Optional[float] = None):
                 raise item
             last_at = loop.time()
             steps.see(item)
+            if first and isinstance(item, dict) and item.get("type") == "filler":
+                continue   # Sasha 265 · item 5: her first line and the progress lines hold the silence — no second acknowledgement
             if isinstance(item, dict) and item.get("type") in _SPOKEN:
                 started = words = True
                 said_at = last_at
@@ -1573,6 +1582,34 @@ def pick_hint(account: str, pid: str, message: str) -> str:
     return f"{message} [their tap on the card on their screen: {c.get('name')} · place_id {pid} — use this place_id]" if c else message
 
 
+async def card_tap(account: str, session: Optional[str], surface: str, tap: dict, message: str):
+    """Sasha 265 · item 4 (CR 99 §4b) · THE TAP ON THE CALL'S CARD IS THE APPROVAL — straight from the page, no model between: "Call them" /
+    "OK" → approvals.in_app_tap on that card's read-back (venues.answer_card) → the call act → ONLY its `say` ("On it — …"); "Fill in
+    their page" → their prepared page (nothing sent). Once per card and choice (claimed durably: a double tap never acts twice)."""
+    from agapi import venues as VN
+    from agapi import agapi_route as _AR
+    ctx = API.Ctx(account=account, mode=_AR.ctx_mode(), user_said=message, session=session, surface=surface)
+    rid = str(tap.get("read_back_id") or "")[:80]
+    choice = "page" if tap.get("choice") == "page" else "call"
+    ctx.idem = f"card_tap:{account}:{rid}:{choice}"
+    tool = "hold_venue" if choice == "page" else "book_venue"
+    try:
+        res = await VN.answer_card(ctx, rid, choice)
+        r = {"ok": True, "result": res}
+    except API.ToolError as e:
+        res, r = {"status": "refused", "say": e.message}, {"ok": False, "error": {"code": e.code, "message": e.message}}
+    ev = render(tool, res, {}) if r["ok"] else None
+    if ev:
+        yield ev
+    if res.get("status") == "nothing_waiting":
+        line = _V.NOTHING_WAITING
+    else:
+        line = (_V.yes_line(tool, r) or _V.page_line(tool, r) or str(res.get("line") or res.get("say") or "")).strip()
+    yield {"type": "text", "delta": line}
+    yield {"type": "say", "text": line}
+    yield {"type": "done", "text": line, "guard": [], "tools": [{"tool": tool, "ok": r["ok"], "status": res.get("status")}]}
+
+
 @router.post("/turn")
 async def agent_turn(request: Request):
     from app.services.chat_account import chat_account, signed_in
@@ -1671,12 +1708,34 @@ async def agent_turn(request: Request):
             return
         lap("ready")
         log.info("[agent] before the turn ms %s", pre)
-        yield f"data: {json.dumps({'type': 'timing', 'pre': pre})}\n\n"   # Sasha 257 · the pages ignore it; measurements read it
+        timing = f"data: {json.dumps({'type': 'timing', 'pre': pre})}\n\n"   # Sasha 257 · the pages ignore it; measurements read it
+        if not remembers:   # old S1 (parity off): exactly as before
+            yield timing
+            timing = ""
         seen: Dict[str, Any] = {}   # Sasha 231 · /s2: what this turn showed, for her memory across visits
         reply = ""
+        tap = body.get("tap") if remembers and isinstance(body.get("tap"), dict) else None
+        if tap:   # Sasha 265 · item 4: a tap on the call's card — the approval itself, never a model's turn
+            yield timing
+            async for ev in card_tap(account, session_id, surface, tap, message):
+                if ev.get("type") == "done":
+                    reply, seen["calls"] = str(ev.get("text") or ""), ev.get("tools") or []
+                yield f"data: {json.dumps(ev, default=str)}\n\n"
+            if reply:
+                try:   # awaited here, in the stream (never fire-and-forget)
+                    from agapi import s2_memory as MEM
+                    await MEM.remember(account, session_id, message, reply, seen)
+                except Exception as e:
+                    log.warning("[memory] tap not kept: %s: %s", type(e).__name__, e)
+            return
         try:
             turn_events = turn_with_quiver(account, message, body.get("history") or [], session_id, surface)
-            async for ev in (with_holding(turn_events, account) if remembers else turn_events):   # Sasha 257 · the holding line
+            # Sasha 265 · item 5: a request for work hears voice.first_line at once (the stream's first event, before the timing)
+            held = with_holding(turn_events, account, first=_V.first_line(message)) if remembers else turn_events
+            async for ev in held:   # Sasha 257 · the holding line
+                if timing and not ev.get("first"):   # Sasha 265 · item 5: the timing goes out after the first line (if one), never before
+                    yield timing
+                    timing = ""
                 if remembers:
                     if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
                         seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))
@@ -1722,6 +1781,22 @@ async def memory(request: Request, session: str = ""):
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}
+
+
+@router.delete("/memory")
+async def memory_clear(request: Request):
+    """Sasha 265 · item 3 · NEW CHAT (/s2 and /next): the conversation cleared in the conversation record (s2_memory.clear_conversation)
+    — her short-term memory of it with it. Bookings, trips and receipts stay: they live in the trip record. Signed-in accounts only."""
+    from app.services.chat_account import chat_account, signed_in
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    from agapi import s2_memory as MEM
+    try:
+        return {"ok": True, **(await MEM.clear_conversation(account))}
+    except Exception as e:
+        log.warning("[memory] clear failed: %s: %s", type(e).__name__, e)
+        return JSONResponse({"ok": False, "rule": "not_cleared"}, status_code=503)
 
 
 @router.get("/space")

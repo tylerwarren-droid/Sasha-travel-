@@ -18,6 +18,13 @@ export function conversationStarted(msgs) {
   return Array.isArray(msgs) && msgs.some(m => m && m.role === 'user')
 }
 
+/** Sasha 265 · item 2 (row 936): EVERY arrival plays the opening — a return included. Turns restored from last time (marked
+ *  `restored`) are the conversation they come back to, not a turn of this visit: only a turn taken NOW ends the opening.
+ *  @param {{ role: string, restored?: boolean }[]} msgs */
+export function arrivalStarted(msgs) {
+  return conversationStarted((Array.isArray(msgs) ? msgs : []).filter(m => m && !m.restored))
+}
+
 /** What the opening draws now: her big face, the line card, or nothing.
  *  @param {HelloPhase} phase  @param {'face' | 'voice'} tapFor  @param {boolean} started
  *  @returns {'face' | 'card' | null} */

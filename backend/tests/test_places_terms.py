@@ -39,6 +39,7 @@ class PlacesTerms(unittest.TestCase):
         return MemoryCallStore(), MemoryLadderStore()
 
     def setUp(self):
+        from tests.act_machinery import open_act_check; open_act_check(self)   # Sasha 265 · the placing machinery (CR 99)
         LadderRoutes.setUp(self)
         self.keys = mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "places-test"})
         self.keys.start()

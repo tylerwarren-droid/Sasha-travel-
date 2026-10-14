@@ -130,7 +130,7 @@ class NoSilenceOnWhatsApp(TG.Base):
             n = len(self.bodies())
             self.say("a table for two tonight near Sol")
             said = self.bodies()[n:]
-        self.assertIn(said[0], V.HOLDING)
+        self.assertEqual(said[0], V.FIRST_LINE)   # Sasha 265 · item 5: a request for work — the first line at once (was the holding line)
         self.assertGreaterEqual(len(said), 4, said)
         self.assertTrue(set(said[1:-1]) <= set(V._STEP["places"]), said)
         self.assertEqual(said[-1], "Here are three places near Sol.")

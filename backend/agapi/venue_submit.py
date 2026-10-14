@@ -31,6 +31,10 @@ import contextvars as _cv
 #: proxy session — set by the turn (sasha.agent_turn) from its own request, never stored, never logged. None: not in the app
 #: (WhatsApp, a background job) — those keep their own path.
 TAP: _cv.ContextVar = _cv.ContextVar("sasha_in_app_session", default=None)
+#: Sasha 265 · item 4 (CR 99 §4d): this turn's WhatsApp message, when it arrived through the signed webhook (Twilio's X-Twilio-Signature,
+#: checked in inbound_phone before anything reads it) — {"wa_id": digits, "message_id": its MessageSid}. Set by guest_whatsapp for that
+#: message only; None everywhere else. Their reply to a read-back on WhatsApp is then approvals.in_app_tap, session kind "whatsapp".
+WA: _cv.ContextVar = _cv.ContextVar("sasha_whatsapp_tap", default=None)
 TAP_REFUSALS = ("approval_void", "approval_expired", "approval_untrusted_origin", "approval_consumed")
 TIMEOUT_S = 75.0
 _USERS: Dict[str, str] = {}             # target|account → AgAPI end_user
@@ -83,11 +87,13 @@ def _err(r: dict) -> dict:
             "details": e.get("details") or {}}
 
 
-async def prepare(account: str, place: dict, person: dict, date: str, time_: str, party: int, notes: Optional[str] = None) -> Dict[str, Any]:
-    """venue.prepare_booking → {ok, prepared_id, link, zero_touch_allowed, say, …} or {ok: False, error}. Nothing is submitted."""
+async def prepare(account: str, place: dict, person: dict, date: str, time_: str, party: int, notes: Optional[str] = None,
+                  call: Optional[dict] = None) -> Dict[str, Any]:
+    """venue.prepare_booking → {ok, prepared_id, link, zero_touch_allowed, say, …} or {ok: False, error}. Nothing is submitted.
+    Sasha 265 · item 4 (CR 99): + call {phone E.164, opens_at "HH:MM" local, open_now} — the venue can be called (routes page, call)."""
     body = {"place": {k: v for k, v in place.items() if v and k in ("name", "website", "place_id", "city", "category")},
             "person": {k: v for k, v in person.items() if v}, "date": date, "time": time_, "party": int(party),
-            **({"notes": notes[:500]} if notes else {})}
+            **({"notes": notes[:500]} if notes else {}), **({"call": call} if call else {})}
     r = await _call(account, "venue.prepare_booking", body)
     if not r.get("ok"):
         return {"ok": False, "error": _err(r)}
@@ -99,12 +105,13 @@ async def prepare(account: str, place: dict, person: dict, date: str, time_: str
     return {"ok": True, **res}
 
 
-async def read_back(account: str, prepared_id: str) -> Dict[str, Any]:
-    """CR 90 · the read-back first: submit_booking with no approval → approval_required + read_back_id + its lines."""
+async def read_back(account: str, prepared_id: str, route: Optional[str] = None) -> Dict[str, Any]:
+    """CR 90 · the read-back first: submit_booking with no approval → approval_required + read_back_id + its lines.
+    Sasha 265 · item 4: route "call" → the CALL's read-back (CR 99: "<head>." · "I'll call them <when> and let you know." · its terms)."""
     uid = await end_user(account)
     if not uid:
         return {"ok": False, "error": {"code": "no_end_user", "message": "the venue booking service doesn't know this person yet"}}
-    r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": prepared_id})
+    r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": prepared_id, **({"route": route} if route else {})})
     e = r.get("error") or {}
     if e.get("code") != "approval_required":
         res = r.get("result") or {}
@@ -122,8 +129,8 @@ async def read_back(account: str, prepared_id: str) -> Dict[str, Any]:
     rid = d.get("read_back_id")
     if not rid or not lines:
         return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
-    if TAP.get() is None and await target(account) == "live":   # not in the app (WhatsApp): AgAPI's one-tap link to their phone
-        await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
+    if TAP.get() is None and WA.get() is None and await target(account) == "live":   # not in the app, not a signed WhatsApp reply:
+        await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})          # AgAPI's one-tap link
     # Sasha 258 · the card binds to AgAPI's OWN hash of these lines (CR 97: approval_required carries read_back_sha256)
     sha = d.get("read_back_sha256") or hashlib.sha256("\n".join(str(x) for x in lines).encode()).hexdigest()
     return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "sha256": sha}
@@ -132,8 +139,14 @@ async def read_back(account: str, prepared_id: str) -> Dict[str, Any]:
 async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|waiting_for_their_tap, …}"""
     rid, pid, uid = held["read_back_id"], held["prepared_id"], held.get("end_user") or await end_user(account)
-    if TAP.get() is not None:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
-        r = await in_app_tap(account, rid, held.get("sha") or held.get("sha256") or "")
+    if TAP.get() is not None or WA.get() is not None:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
+        # Sasha 265 · item 4 (CR 99 §4d): on WhatsApp, their reply (signed webhook) is the same in_app_tap, session kind "whatsapp"
+        r = await (in_app_tap(account, rid, held.get("sha") or held.get("sha256") or "") if TAP.get() is not None
+                   else whatsapp_tap(account, rid, held.get("sha") or held.get("sha256") or ""))
+        if not r.get("ok") and TAP.get() is None and r["error"]["code"] == "approval_untrusted_origin" and await target(account) == "live":
+            # their WhatsApp number isn't a VERIFIED destination of theirs yet: AgAPI's one-tap link (which verifies it) — said, not hidden
+            await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
+            return {"ok": True, "status": "waiting_for_their_tap"}
         if not r.get("ok"):
             if r["error"]["code"] in ("approval_void", "approval_expired"):   # a stale / timed-out card: a fresh read-back to show
                 fresh = await read_back(account, pid)
@@ -145,6 +158,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
             await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
                                       "party": held.get("party"), "state": res.get("status"), "say": res.get("say"),
                                       **({"country": held["country"]} if held.get("country") else {}),   # Sasha 259 · its calendar zone
+                                      **({"route": "call"} if res.get("route") == "call" else {}),      # Sasha 265 · a phone booking
                                       **({"reference": res["reference"]} if res.get("reference") else {})})
         return {"ok": True, **res}
     if await target(account) == "sandbox":
@@ -203,10 +217,11 @@ async def acts_of(account: str) -> List[dict]:
 STATE = {"confirmed": "confirmed", "booked": "confirmed", "declined": "declined", "refused": "declined", "failed": "failed",
          "not_allowed": "failed", "cancelled": "cancelled",
          "proposed": "proposed",   # Sasha 256 · CR 94: another time offered — NOTHING is booked; the person decides
-         "sent": "requested", "replied": "requested"}
+         "sent": "requested", "replied": "requested",
+         "calling": "calling", "no_answer": "no_answer"}   # Sasha 265 · item 4 (CR 99): a call act — being called / no one picked up
 #: Sasha 256 · an act in one of these states has its answer: venue.booking_status isn't asked again (a booking confirmed on the
 #: venue's own form has no sent act there — AgAPI answers not_found, every time it's asked)
-FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", "cancelled")
+FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", "cancelled", "no_answer")
 
 
 def _words(st: Optional[dict]) -> Optional[str]:
@@ -231,14 +246,16 @@ async def bookings(account: str) -> List[dict]:
                 a["answered"] = True   # confirmed on their own form: nothing more to ask
                 changed = True
             continue
-        if st.get("state") != a.get("state") or _words(st) != a.get("words"):
-            a.update(state=st.get("state"), words=_words(st), say_now=st.get("say"))
+        if st.get("state") != a.get("state") or _words(st) != a.get("words") or st.get("next_call") != a.get("next_call"):
+            a.update(state=st.get("state"), words=_words(st), say_now=st.get("say"),
+                     **({"next_call": st["next_call"]} if st.get("next_call") else {}),   # Sasha 265 · a call act: when the next call may be
+                     **({"next_step": st["next_step"]} if st.get("next_step") else {}))
             changed = True
     if changed:
         # Sasha 259 · MERGED into the store as it is NOW, never the copy read before the awaits above: a booking or a cancellation
         # remembered meanwhile (another request — the Trip tab's reload beside a turn) is kept (found on S2 item 15, 13 Oct 15:46 UTC)
         upd = {a["act_id"]: a for a in acts}
-        acts = [{**c, **{k: upd[c["act_id"]][k] for k in ("state", "words", "say_now", "answered") if k in upd[c["act_id"]]}}
+        acts = [{**c, **{k: upd[c["act_id"]][k] for k in ("state", "words", "say_now", "answered", "next_call", "next_step") if k in upd[c["act_id"]]}}
                 if c.get("act_id") in upd else c for c in (_ACTS.get(account) or acts)]
         _ACTS[account] = acts
         try:
@@ -258,7 +275,10 @@ async def bookings(account: str) -> List[dict]:
                     "party": a.get("party"), "status": state, "type": "venue", **({"country": a["country"]} if a.get("country") else {}),
                     **({"reference": a["reference"]} if a.get("reference") else {}),
                     **({"venue_said": {"untrusted_text": a["words"]}} if a.get("words") else {}),
-                    **({"how": a["say_now"]} if a.get("say_now") and state == "proposed" else {}),
+                    **({"how": a["say_now"]} if a.get("say_now") and state in ("proposed", "calling", "no_answer") else {}),
+                    **({"next_call": a["next_call"]} if a.get("next_call") and state == "calling" else {}),   # Sasha 265 · item 4 (e)
+                    **({"next_step": a["next_step"]} if a.get("next_step") and state == "no_answer" else {}),
+                    **({"route": "call"} if a.get("route") == "call" else {}),
                     **({"cancel": "asked — waiting for the venue"} if pend else {})})
     return out
 
@@ -342,6 +362,65 @@ async def in_app_tap(account: str, read_back_id: str, read_back_sha256: str) -> 
     return {"ok": True, "result": (r.get("result") or {}).get("result") or {}, "approval_id": (r.get("result") or {}).get("approval_id")}
 
 
+def whatsapp_session(read_back_id: str, read_back_sha256: str, wa: Optional[dict] = None, t: Optional[int] = None,
+                     nonce: Optional[str] = None) -> Optional[dict]:
+    """Sasha 265 · item 4 (CR 99 §4d) · the WhatsApp tap's session for approvals.in_app_tap: signed with SASHA_AGAPI_TAP_SECRET over
+    "t.nonce.whatsapp.<wa_id digits>.<message_id>.<read_back_id>.<read_back_sha256>" (AgAPI's in_app.whatsapp_signature, byte for
+    byte), t = now, a fresh nonce, the reply's own message id. None: no signed WhatsApp message in this turn, or no secret here."""
+    import hmac as _hmac
+    import os
+    import re
+    w = wa if wa is not None else WA.get()
+    secret = os.getenv("SASHA_AGAPI_TAP_SECRET", "")
+    if not w or not secret:
+        return None
+    wa_id, mid = re.sub(r"\D", "", str(w.get("wa_id") or "")), str(w.get("message_id") or "")
+    if not wa_id or not mid:
+        return None
+    t = int(t if t is not None else time.time())
+    nonce = nonce or secrets.token_hex(16)
+    sig = _hmac.new(secret.encode(), f"{t}.{nonce}.whatsapp.{wa_id}.{mid}.{read_back_id}.{read_back_sha256}".encode(), hashlib.sha256).hexdigest()
+    return {"kind": "whatsapp", "t": t, "nonce": nonce, "wa_id": wa_id, "message_id": mid, "signature": sig}
+
+
+async def whatsapp_tap(account: str, read_back_id: str, read_back_sha256: str) -> Dict[str, Any]:
+    """Sasha 265 · item 4 · their WhatsApp reply to the read-back IS the approval: approvals.in_app_tap, session kind "whatsapp"."""
+    sess = whatsapp_session(read_back_id, read_back_sha256)
+    if not sess:
+        return {"ok": False, "error": {"code": "approval_untrusted_origin", "message": "no signed WhatsApp reply to confirm it's them"}}
+    # their WhatsApp number, as a destination of THEIR end user (CR 99: the tap counts only from a VERIFIED one — AgAPI's first approval
+    # link verifies it; registering again changes nothing once it is)
+    reg = await _call(account, "users.register", {"external_ref": f"sasha:{account}",
+                                                  "destinations": [{"channel": "whatsapp", "value": "+" + sess["wa_id"]}]})
+    if not reg.get("ok"):
+        log.info("[venue_submit] WhatsApp destination not registered: %s", (reg.get("error") or {}).get("code"))
+    r = await _call(account, "approvals.in_app_tap", {"read_back_id": read_back_id, "read_back_sha256": read_back_sha256, "session": sess})
+    if not r.get("ok"):
+        e = _err(r)
+        log.info("[venue_submit] WhatsApp yes refused: %s", e["code"])   # the code only — never the session
+        return {"ok": False, "error": e}
+    return {"ok": True, "result": (r.get("result") or {}).get("result") or {}, "approval_id": (r.get("result") or {}).get("approval_id")}
+
+
+async def call_attempt(account: str, act_id: str, outcome: str, venue_words: Optional[str] = None,
+                       answered_by: Optional[str] = None) -> Dict[str, Any]:
+    """Sasha 265 · item 4 (CR 99 §4c) · after EVERY call placed for a call act: venue.call_attempt {act_id, outcome ∈ confirmed | proposed |
+    declined | no_answer, venue_words (their words — data), answered_by ∈ human | machine | none}. → {ok, result: {status recorded |
+    refused, state, say, next_call?, next_step?}} — the act's own record decides R10 (a refused attempt means the dialler broke it)."""
+    body = {"act_id": act_id, "outcome": outcome, **({"venue_words": venue_words[:600]} if venue_words else {}),
+            **({"answered_by": answered_by} if answered_by else {})}
+    r = await _call(account, "venue.call_attempt", body)
+    if not r.get("ok"):
+        return {"ok": False, "error": _err(r)}
+    res = r.get("result") or {}
+    for a in await acts_of(account):   # the act as get_status shows it, at once
+        if a.get("act_id") == act_id and res.get("state"):
+            await _remember(account, {**a, "state": res["state"], "say": res.get("say"),
+                                      **({"next_call": res["next_call"]} if res.get("next_call") else {}),
+                                      **({"next_step": res["next_step"]} if res.get("next_step") else {})})
+    return {"ok": True, "result": res}
+
+
 async def _approval(account: str, rid: str, said: str):
     """The approval for a read-back: sandbox — their own words, as AgAPI's rules judge them; live — their tap. → the approval id, or
     the answer to give instead (not a yes / still waiting for their tap)."""
@@ -359,4 +438,4 @@ async def _approval(account: str, rid: str, said: str):
 
 
 __all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL",
-           "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS"]
+           "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt"]

@@ -392,5 +392,31 @@ async def recall(account: str, session: Optional[str]) -> dict:
                         {"kind": "question", "asked": p.get("asked")} if p.get("kind") == "question" else None)}
 
 
+# ── Sasha 265 · item 3 · NEW CHAT: the conversation is cleared in its ONE place — this record — for /s2, /next and WhatsApp alike.
+# Its lines, its summary, what she was looking at / waiting on, the cards on screen, the handover and the openers go; the read-backs
+# she showed in it are forgotten (a "yes" in the new chat can never land on them). Bookings, trips and receipts are not here (the trip
+# record, the acts, the ledger) — nor are her name for them, or the kinds that track an act (venue_acts, prepared, outcomes_open …).
+CONVERSATION = ("recent", "summary", "thing", "pending", "screen", "decided", "session", "session_lines")
+CONVERSATION_KINDS = ("handover", "screen", "openers")
+
+
+async def clear_conversation(account: str) -> dict:
+    m = (await _load(account)) or {}
+    gone = [k for k in CONVERSATION if m.get(k)]
+    for k in CONVERSATION:
+        m.pop(k, None)
+    kept = {n: v for n, v in (m.get("kinds") or {}).items() if n not in CONVERSATION_KINDS}
+    gone += [f"kinds.{n}" for n in (m.get("kinds") or {}) if n in CONVERSATION_KINDS]
+    m["kinds"] = kept
+    m["cleared_at"] = NOW().isoformat()
+    await _save(account, m)
+    from agapi import venues as VN, yes_gate as YG
+    for store in (YG._RB, YG._APV):
+        for key in [k for k in store if k[0] == account]:
+            store.pop(key, None)
+    VN._SHOWN.pop(account, None)
+    return {"cleared": gone, "kept": sorted(kept)}
+
+
 __all__ = ["remember", "closing", "recall", "fold", "line_for", "masked", "opening", "first_name", "set_name", "OPEN", "ASK_NAME",
-           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "verified_history"]
+           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "verified_history", "clear_conversation"]

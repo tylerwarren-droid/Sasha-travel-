@@ -171,6 +171,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # the mic never shows working while deaf
     "T46": ("S2 freeze bugs: progress lines, honest form and page, the one charge, brief replies, a mic that says when it's deaf",
             ["tests.test_s264"]),
+    "T47": ("S2 freeze bugs + CR 99: a mic that opens its socket, her face on every arrival, New chat in one place, the call as an act "
+            "(the card is the question, the tap the approval, dialled only from call_plan), the first line at once",
+            ["tests.test_s265"]),
 }
 
 _RUNNER = """

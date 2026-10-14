@@ -26,6 +26,7 @@ class Receipt(unittest.TestCase):
     tearDown = TPT.PlacesTerms.tearDown
 
     def setUp(self):
+        from tests.act_machinery import open_act_check; open_act_check(self)   # Sasha 265 · the placing machinery (CR 99)
         TPT.PlacesTerms.setUp(self)
         self.web.listing = {**TPT.listing(), "displayName": {"text": BOTAVARA}}
 

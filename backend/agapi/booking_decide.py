@@ -39,6 +39,11 @@ PREFERENCE = {"page": "link", "link": "link", "myself": "myself", "form": "handl
 
 # the ONE question's two answers (R2: PHRASES["ask_book"]) as hold routes: a prefilled form (their page) / she handles it (the form)
 CHOICES = ({"title": "Prefilled form", "route": "page"}, {"title": "Handle it", "route": "form"})
+# Sasha 265 · item 4 (CR 99, booking-rules/2): the ONE question that IS the call's read-back, as the card's buttons. ask_page_or_call:
+# "Fill in their page" (their prepared page — nothing sent, no approval) or "Call them" (the tap on the call read-back = the approval);
+# ask_call (no page): one "OK" (the tap)
+CALL_CHOICES = ({"title": "Fill in their page", "route": "page"}, {"title": "Call them", "route": "call"})
+OK_CHOICES = ({"title": "OK", "route": "call"},)
 
 
 # ── the venue ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -213,25 +218,66 @@ async def state_of(account: Optional[str], venue_key: Optional[str] = None, numb
 
 
 def ctx_for(*, channels: List[dict], vtype: str, test: bool, booking_at_utc: Optional[str], now: Optional[datetime] = None,
-            access: Optional[dict] = None, preference: Optional[str] = None, state: Optional[dict] = None) -> Dict[str, Any]:
+            access: Optional[dict] = None, preference: Optional[str] = None, state: Optional[dict] = None,
+            booking: Optional[dict] = None, opening: Optional[dict] = None) -> Dict[str, Any]:
+    """Sasha 265 · item 4 (booking-rules/2): + booking {venue, party, day, time} — the read-back's own words, LOCAL ("today", "21:00")
+    — and the venue's opening {opens_at "HH:MM", open_now}, when they are known (the call's "when they open at 13:00")."""
     now = now or datetime.now(timezone.utc)
-    return {"venue": {"type": vtype, "test": bool(test), "channels": channels},
-            "when": {"booking_at": booking_at_utc, "now": _iso(now)},
-            "person": {"access": access or {"mode": "test", "calls": "off", "real_venue_sends": "off"},
-                       "preference": PREFERENCE.get(str(preference or ""), "none")},
-            "state": dict(state or {})}
+    v: Dict[str, Any] = {"type": vtype, "test": bool(test), "channels": channels}
+    if opening and opening.get("opens_at"):
+        v["opens_at"] = opening["opens_at"]
+    if opening and opening.get("open_now") is not None:
+        v["open_now"] = bool(opening["open_now"])
+    out = {"venue": v,
+           "when": {"booking_at": booking_at_utc, "now": _iso(now)},
+           "person": {"access": access or {"mode": "test", "calls": "off", "real_venue_sends": "off"},
+                      "preference": PREFERENCE.get(str(preference or ""), "none")},
+           "state": dict(state or {})}
+    if booking:
+        out["booking"] = {k: x for k, x in booking.items() if x not in (None, "")}
+    return out
+
+
+def booking_words(venue: Optional[str], party: Any, local_at: Optional[str], country: Optional[str],
+                  now: Optional[datetime] = None) -> Dict[str, Any]:
+    """booking-rules/2's ctx.booking: the venue, the party, the day in plain local words ("today", "tomorrow", "Thu 15 Oct") and the
+    time ("21:00") — the venue's own clock, never UTC."""
+    day = time_ = None
+    try:
+        from zoneinfo import ZoneInfo
+        from booking_signer import venue_read as V
+        tz = ZoneInfo((V.COUNTRIES.get(str(country or "").upper()) or (None, None, None, "Europe/Madrid"))[3])
+        at = datetime.fromisoformat(str(local_at)[:16])
+        today = (now or datetime.now(timezone.utc)).astimezone(tz).date()
+        gap = (at.date() - today).days
+        day = "today" if gap == 0 else "tomorrow" if gap == 1 else at.strftime("%a %d %b")
+        time_ = at.strftime("%H:%M")
+    except Exception:
+        pass
+    try:
+        party = int(party) if party is not None else None
+    except (TypeError, ValueError):
+        party = None
+    return {"venue": venue, "party": party, "day": day, "time": time_}
 
 
 async def decide_for(account: Optional[str], *, channels: List[dict], vtype: str, test: bool, local_at: Optional[str],
                      country: Optional[str], preference: Optional[str] = None, venue_key: Optional[str] = None,
                      number: Optional[str] = None, link: Optional[str] = None, now: Optional[datetime] = None,
-                     extra_state: Optional[dict] = None) -> Dict[str, Any]:
+                     extra_state: Optional[dict] = None, booking: Optional[dict] = None, opening: Optional[dict] = None,
+                     sandbox_calls: bool = False) -> Dict[str, Any]:
     """The Decision for one booking — booking_rules.decide, nothing added. The ctx goes with it (`ctx`), for the record."""
     now = now or datetime.now(timezone.utc)
     st = await state_of(account, venue_key, number, now)
     st.update(prepared_link=link, **(extra_state or {}))
+    access = await access_of(account)
+    if sandbox_calls and test and access.get("mode") != "live":
+        # Sasha 265 · item 4 · AgAPI's own sandbox rule (CR 99, venue_submit._call_access): a TEST person with Kanoe's own TEST venue may be
+        # called — the act's call_plan says simulate, and nothing is ever dialled. Never a real venue, never a live person; the one
+        # path only (sandbox_calls: venues.rules_for), never old S1.
+        access = {**access, "calls": "on"}
     ctx = ctx_for(channels=channels, vtype=vtype, test=test, booking_at_utc=utc_of(local_at, country), now=now,
-                  access=await access_of(account), preference=preference, state=st)
+                  access=access, preference=preference, state=st, booking=booking, opening=opening)
     d = BR.decide(ctx)
     log.info("[booking_decide] %s → %s (%s)", vtype, d["action"], d["say"])
     return {**d, "ctx": ctx}
@@ -312,13 +358,24 @@ _ROUTE = {"fill_form_zero_touch": "form", "ask_one_question": "form", "hand_over
           "request_email": "email", "call": "call", "call_and_email": "call_email"}
 
 
+def as_v1(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Sasha 265 · item 4 · OLD S1 BYTE-IDENTICAL: booking-rules/2 made the call the ONE question (ask_call) and offered "or shall I call
+    them?" (ask_page_or_call). The old flows (old S1, the old WhatsApp flow, the web card) keep booking-rules/1's answer exactly: the
+    call on their yes ("calling"), and the ONE question's two answers (ask_book). booking-rules/2 is for the one path only."""
+    if d.get("action") == "ask_call" or (d.get("action") == "call" and d.get("say") == "on_it"):
+        return {**d, "action": "call", "say": "calling", "say_text": BR.PHRASES["calling"], "rung": "phone"}
+    if d.get("say") == "ask_page_or_call":
+        return {**d, "say": "ask_book", "say_text": BR.PHRASES["ask_book"], "ask_once": ["prefilled_form_or_handle_it"]}
+    return d
+
+
 def _legacy_rd(rd: dict, at: Optional[str], prefer: Optional[str], account: Optional[str], now) -> Dict[str, Any]:
     chans = channels_of(None, rd)
     nights = None
-    return BR.decide(ctx_for(channels=chans, vtype=venue_type((rd.get("what") or {}).get("category") if isinstance(rd.get("what"), dict) else rd.get("type"), nights),
+    return as_v1(BR.decide(ctx_for(channels=chans, vtype=venue_type((rd.get("what") or {}).get("category") if isinstance(rd.get("what"), dict) else rd.get("type"), nights),
                              test=is_test_venue(rd), booking_at_utc=utc_of(at, rd.get("country")), now=now,
                              access=access_cached(account), preference={"one_tap": "page", "call_email": "call"}.get(prefer or "", prefer),
-                             state={"server_cap": SERVER_CALLS_PER_DAY, "prepared_link": page_of(chans)}))
+                             state={"server_cap": SERVER_CALLS_PER_DAY, "prepared_link": page_of(chans)})))
 
 
 def legacy_decision(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None, account: Optional[str] = None) -> LegacyDecision:
@@ -340,4 +397,4 @@ def legacy_ladder(rd: dict, reservation: dict, now, account: Optional[str] = Non
 
 __all__ = ["decide_for", "ctx_for", "channels_of", "access_of", "access_cached", "state_of", "say", "out_of", "tell_stopped", "stops_of",
            "venue_type", "is_test_venue", "utc_of", "page_of", "legacy_decision", "legacy_ladder", "SERVER_CALLS_PER_DAY", "CHOICES",
-           "PREFERENCE", "CALL_STOPS"]
+           "PREFERENCE", "CALL_STOPS", "CALL_CHOICES", "OK_CHOICES", "booking_words", "as_v1"]

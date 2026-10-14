@@ -66,7 +66,7 @@ class OnS2AndNext(unittest.TestCase):
     def test_the_stream_uses_it_on_the_s2_shell(self):
         import inspect
         src = inspect.getsource(S)
-        self.assertIn("with_holding(turn_events, account) if remembers else turn_events", src)
+        self.assertIn("with_holding(turn_events, account, first=_V.first_line(message)) if remembers else turn_events", src)   # Sasha 265 · + the first line
 
 
 class OnWhatsApp(TG.Base):
@@ -84,7 +84,8 @@ class OnWhatsApp(TG.Base):
     def test_a_slow_answer_gets_the_holding_line_first(self):
         with self.brain(0.3), mock.patch.object(V, "HOLD_AFTER_S", 0.05):
             n = len(self.bodies())
-            self.say("a table for two tonight near Sol")
+            # Sasha 265 · item 5: a request for WORK now hears voice.FIRST_LINE at once (test_s265); the holding line stays for the rest
+            self.say("what's the weather like near Sol today?")
             said = self.bodies()[n:]
         self.assertIn(said[0], V.HOLDING)
         self.assertEqual(said[1], "Here are three places near Sol.")

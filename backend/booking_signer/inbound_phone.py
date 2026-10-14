@@ -239,11 +239,18 @@ async def sms(request: Request):
         # 123456" → linking; anyone else → one fixed sentence. None (every other number, or a venue): the code below,
         # byte for byte — a venue is never answered.
         from . import guest_whatsapp as GW
+        from agapi import venue_submit as VS
+        # Sasha 265 · item 4 (CR 99 §4d): THIS message passed the webhook's signature check (Twilio's X-Twilio-Signature, above — the
+        # provider Sasha's WhatsApp actually arrives through): its sender and message id may sign the person's yes to a read-back
+        # (approvals.in_app_tap, session kind "whatsapp"). Set for this message's handling only.
+        wa_tok = VS.WA.set({"wa_id": sender, "message_id": sid})
         try:
             inner = await GW.dispatch(p, lambda n: STORE.call_for_number(n, NOW() - MATCH_WINDOW))
         except StorageUnavailable as e:
             log.error("[inbound_phone] a guest's WhatsApp %s was not handled: %s", sid, e.detail)
             return _twiml()   # a guest number: never filed as a venue's message
+        finally:
+            VS.WA.reset(wa_tok)
         if inner is not None:
             return _twiml(inner)
     now = NOW()

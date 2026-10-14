@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { conversationStarted, openingShown, openingEnds, OPENING } from '../lib/greeting-rule.mjs'
+import { conversationStarted, arrivalStarted, openingShown, openingEnds, OPENING } from '../lib/greeting-rule.mjs'
 
 test('arrival: an empty conversation has not started', () => {
   assert.equal(conversationStarted([]), false)
@@ -17,8 +17,11 @@ test('their first turn starts it: a sent message, a chip, a spoken transcript, a
   assert.equal(conversationStarted([{ role: 'user', text: 'A table tonight' }, { role: 'sasha', text: '' }]), true)
 })
 
-test('a restored conversation with their turns has already started', () => {
-  assert.equal(conversationStarted([{ role: 'user', text: 'dinner' }, { role: 'sasha', text: 'Here are three' }, { role: 'sasha', text: 'Hey Tyler, what can I help you with?' }]), true)
+test('a restored conversation with their turns has already started (as a conversation) — but NOT this arrival (Sasha 265, row 936)', () => {
+  const back = [{ role: 'user', text: 'dinner', restored: true }, { role: 'sasha', text: 'Here are three', restored: true }, { role: 'sasha', text: 'Hey Tyler, what can I help you with?', restored: true }]
+  assert.equal(conversationStarted(back), true)
+  assert.equal(arrivalStarted(back), false)   // the return plays the opening: full size, the hello, then the circle
+  assert.equal(arrivalStarted([...back, { role: 'user', text: 'and a spa' }]), true)   // a turn taken NOW ends it
 })
 
 test('on arrival the card ("Hey <name>…" + "Tap to hear Sasha") and her face are shown', () => {
@@ -52,5 +55,16 @@ test('/s2 wires it: S2Hello draws from openingShown and S2App passes started fro
   assert.match(hello, /openingShown\(phase, tapFor, started\)/)
   assert.match(hello, /shown === 'card'/)
   assert.doesNotMatch(hello, /phase === 'voice' \|\| \(phase === 'tap' && tapFor === 'voice'\) \?/)
-  assert.match(app, /started=\{conversationStarted\(msgs\)\}/)
+  assert.match(app, /started=\{arrivalStarted\(msgs\)\}/)   // Sasha 265 · item 2 (was conversationStarted: a return skipped her)
+  assert.match(app, /restored: true/)
+})
+
+test('Sasha 265 · item 2 (row 936): ONE arrival sequence — no per-tab skip, her face full size from the first instant, the circle found when its slot appears', () => {
+  const hello = readFileSync(new URL('../app/s2/S2Hello.tsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(hello, /getItem\('s2_hello'\)/)                 // a return no longer skips the opening
+  assert.doesNotMatch(hello, /opacity: phase === 'starting' \? 0/)      // never invisible while her live face starts
+  assert.match(hello, /const big = shown === 'face' \|\| shown === 'card'/)   // her voice alone still shows her face
+  assert.match(hello, /prefers-reduced-motion: reduce/)                  // the one thing that skips the motion
+  assert.match(hello, /new MutationObserver\(look\)/)                   // the circle's slot is watched, not looked up once in render
+  assert.doesNotMatch(hello, /const slot = typeof document/)
 })

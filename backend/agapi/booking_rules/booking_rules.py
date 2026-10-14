@@ -14,13 +14,21 @@ ctx (all optional except venue and when):
   when:   {booking_at: ISO, now: ISO}
   person: {access: {mode: test|live, calls: on|off, real_venue_sends: on|off}, preference: none|link|myself|handle|call|email|whatsapp}
   state:  {calls_today_person, server_calls_today, server_cap, last_call_to_venue_at, request_sent_at, venue_replied, prepared_link}
+  booking: {venue, party, day, time} — the read-back's own words for the ONE question (booking-rules/2); missing parts come from venue.name and
+           when.booking_at. venue.opens_at "HH:MM" (+ venue.open_now) says when a call can be made.
+
+booking-rules/2 (CR 99, Tyler 14 Oct, row 928): the ONE question IS the read-back and its answer IS the approval, for every route — calls too.
+  · a page of their own AND a phone, within the threshold, calls allowed → "<party> at <venue>, <day> <time> — fill in their page now, or
+    shall I call them?" (answered: preference "link" → their page; "call" → the call)
+  · no page, within the threshold, a phone → "I'll call them when they open at <time> — OK?" (open now: "… — shall I call them now?")
+  · after the answer: "On it — <next step>." · the last unanswered call: "No one picked up again — I'd fill in their page instead."
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-VERSION = "booking-rules/1 · 2026-10-12"
+VERSION = "booking-rules/2 · 2026-10-14"
 
 # ── the constants, as data (never env vars) ──────────────────────────────────────────────────────────────────────────────
 URGENT_HOURS = 48                           # R3/R4 · more than this → request and wait; within it → call or their own page
@@ -62,6 +70,13 @@ PHRASES = {
     "no_channel": "I couldn't find a way to book them online or by message. You can take it over — here's what I found.",
     "takeover": "You can take it over at any point.",                                                   # R11 · on EVERY answer
     "stopped": "I stopped {what} ({why}). Nothing else was cancelled — you can take it over at any point.",   # R12
+    # booking-rules/2 · the ONE question is the read-back (R2/R4); its answer is the approval
+    "ask_page_or_call": "{head} — fill in their page now, or shall I call them?",
+    "ask_call_when_open": "I'll call them when they open at {opens_at} — OK?",
+    "ask_call_now": "{head} — shall I call them now?",
+    "on_it": "On it — {next}.",
+    "no_answer": "No one picked up again — I'd fill in their page instead.",
+    "no_answer_no_page": "No one picked up again — here's their {how} so you can reach them yourself.",
 }
 
 # ── calls (R7–R9): the fixed preamble and rules, as data ──────────────────────────────────────────────────────────────
@@ -73,7 +88,7 @@ CALL_RULES = ("Say you are an AI from Kanoe Technologies at the start; if asked,
 CALL_PAYLOAD = {"voicemail": {"action": "hangup"}, "record": False, "max_minutes": MAX_CALL_MINUTES}                    # R9
 _MONEY_OR_TIME = ("deposit", "depósito", "fianza", "señal", "prepay", "pago por adelantado", "card", "tarjeta", "fee", "cargo", "suplemento",
                   "another time", "different time", "otra hora", "a las", "only at", "solo a las", "would", "could you do")
-_RUNG = {"fill_form_zero_touch": "zero_touch", "prepared_link": "human_tap", "ask_one_question": "human_tap", "hand_over_platform_link": "human_tap",
+_RUNG = {"fill_form_zero_touch": "zero_touch", "prepared_link": "human_tap", "ask_one_question": "human_tap", "ask_call": "phone", "hand_over_platform_link": "human_tap",
          "request_whatsapp": "request_reply", "request_email": "request_reply", "wait": "request_reply", "call": "phone", "call_and_email": "phone",
          "refuse": None}
 
@@ -104,6 +119,46 @@ def call_answer(said: str) -> Dict[str, Any]:
     return {"end_call": False, "outcome": None, "amount_agreed": None}
 
 
+def head(ctx: Dict[str, Any]) -> str:
+    """The read-back's first words: "<party> at <venue>, <day> <time>" (booking-rules/2) — the caller's words first, else derived."""
+    b, venue, when = ctx.get("booking") or {}, ctx.get("venue") or {}, ctx.get("when") or {}
+    at = _ts(when.get("booking_at"))
+    party = b.get("party")
+    if isinstance(party, int) or (isinstance(party, str) and party.isdigit()):
+        party = f"{int(party)} {'person' if int(party) == 1 else 'people'}"
+    day = b.get("day") or (at.strftime("%a %d %b") if at else "")
+    time_ = b.get("time") or (at.strftime("%H:%M") if at else "")
+    who = " at ".join(x for x in (party, b.get("venue") or venue.get("name")) if x) or "This booking"
+    when_ = " ".join(x for x in (day, time_) if x)
+    return f"{who}, {when_}" if when_ else who
+
+
+def call_when(ctx: Dict[str, Any]) -> str:
+    """When the call can be made: "when they open at 13:00", or "now"."""
+    v = ctx.get("venue") or {}
+    return f"when they open at {v['opens_at']}" if v.get("opens_at") and not v.get("open_now") else "now"
+
+
+def on_it(next_step: str) -> str:
+    """booking-rules/2 · after the person's answer: ONE short line, then it's done ("On it — I'll call them at 13:00 and let you know.")."""
+    return PHRASES["on_it"].format(next=next_step.rstrip("."))
+
+
+def call_allowed(access: dict, state: dict, now_iso: Optional[str]) -> Dict[str, Any]:
+    """R10 · may a call be made now? (the act enforces it: venue.call_attempt) → {allowed, reason}."""
+    ok, why = _call_allowed(access, state, _ts(now_iso))
+    return {"allowed": ok, "reason": why}
+
+
+def no_answer(page_link: Optional[str], phone: Optional[str] = None, email: Optional[str] = None) -> Dict[str, Any]:
+    """booking-rules/2 · the last call went unanswered: said, never silent — their page prefilled, else their number or email."""
+    if page_link:
+        return _decision("prepared_link", "no_answer", None, page_link, follow_ups=[{"action": "tell_person", "reason": "no one picked up"}])
+    how = "number" if phone else "email" if email else "details"
+    return _decision("prepared_link", "no_answer_no_page", {"kind": "phone", "value": phone} if phone else {"kind": "email", "value": email} if email else None,
+                     None, fmt={"how": how}, follow_ups=[{"action": "tell_person", "reason": "no one picked up"}])
+
+
 def stopped(what: str, why: str, prepared_link: Optional[str] = None) -> Dict[str, Any]:
     """R12 · an automatic stop or cancel ALWAYS becomes a message to the person (never only a log line)."""
     return _decision("refuse", "stopped", None, prepared_link, fmt={"what": what, "why": why},
@@ -122,6 +177,7 @@ def _decision(action: str, say: str, channel: Optional[dict], link: Optional[str
 
 def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
     venue, when, person, state = ctx.get("venue") or {}, ctx.get("when") or {}, ctx.get("person") or {}, ctx.get("state") or {}
+    hd = head(ctx)
     access = person.get("access") or {"mode": "test", "calls": "off", "real_venue_sends": "off"}   # no record → fail closed
     pref = (person.get("preference") or "none").lower()
     link = state.get("prepared_link")
@@ -156,8 +212,15 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
             return _decision("prepared_link", "prepared_link", form, link)
         if not sends_ok:
             return _decision("prepared_link", "no_real_sends", form, link, refusals=[{"rule": "access", "reason": "real-venue sends are off"}])
+        phone_ = own["phone"]
+        urgent = hours is not None and hours <= (HOTEL_ARRIVAL_CALL_HOURS if hotel else URGENT_HOURS)
+        call_ok_, _ = _call_allowed(access, state, now) if phone_ else (False, None)
+        if pref == "call" and phone_ and call_ok_:   # booking-rules/2 · they answered "call": the call, said in one line
+            return _decision("call", "on_it", phone_, link, fmt={"next": f"I'll call them {call_when(ctx)} and let you know"})
         if pref == "handle":
             return _decision("fill_form_zero_touch", "sent", form, link)
+        if phone_ and call_ok_ and urgent:   # booking-rules/2 · soon, a page and a phone: the ONE question is the read-back
+            return _decision("ask_one_question", "ask_page_or_call", form, link, fmt={"head": hd}, ask_once=["their_page_or_call"])
         return _decision("ask_one_question", "ask_book", form, link, ask_once=["prefilled_form_or_handle_it"])   # R2 · the ONE question
 
     msg = own["whatsapp"] or own["email"]
@@ -187,7 +250,11 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
     if phone and call_ok:
         if hotel and own["email"]:
             return _decision("call_and_email", "call_and_email", phone, link)
-        return _decision("call", "calling", phone, link)
+        if pref == "call":   # booking-rules/2 · they said OK: the call, said in one line
+            return _decision("call", "on_it", phone, link, fmt={"next": f"I'll call them {call_when(ctx)} and let you know"})
+        cw = call_when(ctx)   # booking-rules/2 · the call is asked as the ONE question (the read-back); their OK is the approval
+        return _decision("ask_call", "ask_call_now" if cw == "now" else "ask_call_when_open", phone, link,
+                         fmt={"head": hd, "opens_at": venue.get("opens_at") or ""}, ask_once=["call_ok"])
     if phone and not call_ok:
         return _decision("prepared_link", why_not, phone, link, refusals=[{"rule": "R10", "reason": why_not}])
     return _decision("request_whatsapp" if msg is own["whatsapp"] else "request_email", "request_wait", msg, link,
@@ -208,6 +275,6 @@ def _call_allowed(access: dict, state: dict, now: Optional[datetime]) -> tuple:
     return True, None
 
 
-__all__ = ["decide", "stopped", "call_opening", "call_answer", "is_platform", "PHRASES", "PLATFORM_HOSTS", "CALL_PAYLOAD", "CALL_RULES",
+__all__ = ["decide", "stopped", "call_opening", "call_answer", "is_platform", "head", "call_when", "on_it", "call_allowed", "no_answer", "PHRASES", "PLATFORM_HOSTS", "CALL_PAYLOAD", "CALL_RULES",
            "CALL_DISCLOSURE", "VERSION", "URGENT_HOURS", "HOTEL_ARRIVAL_CALL_HOURS", "HOTEL_NO_REPLY_HOURS", "CALLS_PER_PERSON_PER_DAY",
            "MIN_MINUTES_BETWEEN_CALLS_SAME_VENUE", "MAX_CALL_MINUTES", "CHANNEL_ORDER"]

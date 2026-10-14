@@ -948,11 +948,14 @@ async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: 
     # Sasha 257 · THE HOLDING LINE (row 863): her answer not ready within voice.HOLD_AFTER_S → ONE short line goes first (never a
     # claim, never for a fast reply); the answer follows when it's ready. Awaited — never fire-and-forget. Sasha 264 · then, while
     # it still works, a line every voice.PROGRESS_S from the step actually running — never silence longer than that.
-    done, _ = await asyncio.wait({task}, timeout=V.HOLD_AFTER_S)
+    # Sasha 265 · item 5 (row 935): a request for work hears voice.first_line AT ONCE (the same words as /s2 and /next), then a
+    # progress line every voice.PROGRESS_S; anything else keeps the holding line after voice.HOLD_AFTER_S, only if it's slow
+    at_once = V.first_line(body) if body else None
+    done, _ = await asyncio.wait({task}, timeout=0 if at_once else V.HOLD_AFTER_S)
     first = True
     while not done and body:
         hold = Out()
-        hold.text(V.holding_line(ch.get("account_id") or "") if first else V.progress_line(steps.now, ch.get("account_id") or ""))
+        hold.text((at_once or V.holding_line(ch.get("account_id") or "")) if first else V.progress_line(steps.now, ch.get("account_id") or ""))
         first = False
         try:
             await deliver(ch, frm, hold, now)

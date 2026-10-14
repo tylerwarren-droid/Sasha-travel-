@@ -26,13 +26,14 @@ import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
-import { conversationStarted } from '@/lib/greeting-rule.mjs'
+import { arrivalStarted } from '@/lib/greeting-rule.mjs'
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
-  | { k: 'read_back'; lines: string[]; what?: string; live?: boolean; status?: string; total?: number; act?: string }
+  | { k: 'read_back'; lines: string[]; what?: string; live?: boolean; status?: string; total?: number; act?: string
+      ask?: string; choices?: { title: string; route: string }[]; read_back_id?: string }   // Sasha 265 · item 4: the call's card IS the question
   | { k: 'calendar'; title?: string; links: Record<string, string> }
   | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
   | { k: 'booked'; line: string }
@@ -50,7 +51,8 @@ type Card =
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
-type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[]; hold?: string }   // Sasha 257 · hold: the holding line, until her words come
+const NOT_CLEARED = 'I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'   // Sasha 265 · item 3
+type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[]; hold?: string; restored?: boolean }   // Sasha 257 · hold: the holding line, until her words come
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
 type Ev = Record<string, any>
 /** Sasha 249 · ONE STATUS: a `booked` event's card line — the server's status (agapi/s2_status.py), shown only when it says booked */
@@ -266,7 +268,26 @@ function After({ k }: { k: string }) {
 
 
 
-function CardView({ c, choose, pick, send }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void }) {
+/** Sasha 265 · item 4 (CR 99): THE ONE QUESTION IS THE CARD — "Fill in their page" / "Call them" (or one "OK"). The tap goes to the server
+ *  with the card's read_back_id: there it IS the approval (approvals.in_app_tap), no model between. One tap: the buttons go. */
+function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (title: string, readBackId: string, route: string) => void }) {
+  const [tapped, setTapped] = useState<string | null>(null)
+  return (
+    <Box k="Your booking · one tap" h={untag(c.ask || '')}>
+      {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+        {(c.choices || []).map(o => (
+          <button key={o.route} type="button" disabled={!!tapped} data-card-choice={o.route}
+            onClick={() => { setTapped(o.route); tap(o.title, c.read_back_id || '', o.route) }}
+            style={{ padding: '10px 18px', borderRadius: 999, border: o.route === 'call' ? 0 : `1px solid ${C.gold}`, background: o.route === 'call' ? C.gold : 'transparent',
+              color: o.route === 'call' ? '#111' : C.gold, fontWeight: 700, opacity: tapped && tapped !== o.route ? 0.4 : 1 }}>{o.title}</button>))}
+      </div>
+    </Box>)
+}
+
+function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void
+  tap: (title: string, readBackId: string, route: string) => void }) {
+  if (c.k === 'read_back' && c.choices && c.choices.length && c.read_back_id) return <CallCard c={c} tap={tap} />
   if (c.k === 'counter_card') return <CounterCard card={c.card} />
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
@@ -425,9 +446,9 @@ export default function S2App() {
       const marked = recent.map(m => !!m.cards).lastIndexOf(true)
       const from = Math.max(0, Math.min(recent.length - 8, marked >= 0 ? marked - 1 : recent.length))
       const cards = j.screen?.cards
-      const shown: Msg[] = recent.slice(from).map(m => ({ role: m.role === 'user' ? 'user' as const : 'sasha' as const, text: untag(m.content),
+      const shown: Msg[] = recent.slice(from).map(m => ({ role: m.role === 'user' ? 'user' as const : 'sasha' as const, text: untag(m.content), restored: true,
         cards: m.cards && Array.isArray(cards) && cards.length ? [{ k: 'venues' as const, cards: untagDeep(cards) }] : [] }))
-      setMsgs(ms => (ms.length ? ms : [...shown, { role: 'sasha', text: line, cards: [] }]))
+      setMsgs(ms => (ms.length ? ms : [...shown, { role: 'sasha', text: line, cards: [], restored: true }]))
     }).catch(() => setBackLine(null))
     return () => { live = false; clearTimeout(t) }
   }, [signedIn])
@@ -462,7 +483,7 @@ export default function S2App() {
     return () => es.close()
   }, [signedIn, speaker])
 
-  const send = useCallback(async (text: string, pick?: { place_id: string }) => {
+  const send = useCallback(async (text: string, pick?: { place_id: string }, tap?: { read_back_id: string; choice: string }) => {
     const t = text.trim()
     if (!t) return
     // Sasha 257 · Jon (row 861): "she can't hear me or just doesn't respond — tried 5 times". One turn reached her; the rest were
@@ -483,7 +504,7 @@ export default function S2App() {
     try {
       arm()
       const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
-        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, ...(pick ? { pick } : {}) }) })
+        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, ...(pick ? { pick } : {}), ...(tap ? { tap } : {}) }) })   // Sasha 265 · the card's tap
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const rd = r.body?.getReader()
       const dec = new TextDecoder()
@@ -511,7 +532,8 @@ export default function S2App() {
           else if (ev.type === 'render') {
             const add = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
-            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act })
+            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
+              ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
             else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
             else if (ev.kind === 'wa_open' && typeof ev.open === 'string' && ev.open.startsWith('https://wa.me/')) add({ k: 'wa_open', to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') })   // Sasha 230
@@ -550,9 +572,32 @@ export default function S2App() {
     void send(nxt)
   }, [busy, send])
 
+  // Sasha 265 · item 3 · NEW CHAT: the conversation goes from the screen AND from her short-term memory, in its one place (the
+  // conversation record, DELETE /api/s2-memory → s2_memory.clear_conversation — the same clear as /next). Bookings, trips and
+  // receipts stay (the trip record). Only once the record says it's cleared is the screen cleared; if not, she says so.
+  const [clearing, setClearing] = useState(false)
+  const newChat = useCallback(async () => {
+    if (busy || clearing) return
+    setClearing(true)
+    speaker.interrupt()
+    try {
+      const r = await fetch('/api/s2-memory', { method: 'DELETE', cache: 'no-store' })
+      const j = await r.json().catch(() => null)
+      if (!r.ok || !j?.ok) throw new Error('not cleared')
+      histRef.current = []
+      queued.current = []
+      session.current = `s2-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
+      setInput('')
+      setMsgs([])
+    } catch {
+      setMsgs(ms => [...ms, { role: 'sasha', text: NOT_CLEARED, cards: [] }])
+    } finally {
+      setClearing(false)
+    }
+  }, [busy, clearing, speaker])
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
-    started={conversationStarted(msgs)} />   // the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
+    started={arrivalStarted(msgs)} />   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>
@@ -607,7 +652,7 @@ export default function S2App() {
                     {m.text}</div>
                 ) : <div aria-busy="true" data-sasha-working style={{ color: C.dim, padding: '8px 4px' }}>{m.hold || '…'}</div>}{/* Sasha 259 · ONE working mark: the holding line, else "…" (aria-busy says she's working) */}
                 {/* Sasha 230 · a pick sends the card's name QUOTED: a listing like "Comida Hindu - Restaurante India, NAMASTE INDIA(…)" + ", please." read as TWO places — she asked which, the yes didn't answer it, the loop */}
-                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} tap={(title, rid, route) => { speaker.unlock(); send(title, undefined, { read_back_id: rid, choice: route }) }} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>
@@ -620,6 +665,8 @@ export default function S2App() {
             ) : (
             <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her voice on' : 'Mute her voice'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>
               {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>)}
+            <button onClick={() => { void newChat() }} disabled={busy || clearing} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
+              style={{ background: 'none', border: 0, color: busy || clearing ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
             <span style={{ flex: 1 }} />
             <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40 }} />{/* her face (S2Hello draws it here) */}
           </div>

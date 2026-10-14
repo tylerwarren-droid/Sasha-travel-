@@ -13,7 +13,9 @@ except ImportError:   # run from the vendored directory itself
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FNS = {"decide": lambda i: BR.decide(i), "call_opening": lambda i: {"text": BR.call_opening(i["rest"])},
-       "call_answer": lambda i: BR.call_answer(i["said"]), "call_payload": lambda i: BR.CALL_PAYLOAD, "stopped": lambda i: BR.stopped(i["what"], i["why"])}
+       "call_answer": lambda i: BR.call_answer(i["said"]), "call_payload": lambda i: BR.CALL_PAYLOAD, "stopped": lambda i: BR.stopped(i["what"], i["why"]),
+       "no_answer": lambda i: BR.no_answer(i.get("page_link"), i.get("phone"), i.get("email")),            # booking-rules/2
+       "call_allowed": lambda i: BR.call_allowed(i["access"], i["state"], i["now"]), "on_it": lambda i: {"text": BR.on_it(i["next"])}}
 
 
 def get(d, path):
@@ -31,7 +33,7 @@ class Vectors(unittest.TestCase):
             out = FNS[v["fn"]](v["input"])
             rules.add(v["rule"])
             with self.subTest(rule=v["rule"], name=v["name"]):
-                if v["fn"] == "decide":
+                if v["fn"] in ("decide", "no_answer"):
                     self.assertTrue(out["takeover"]["say"], "R11: every decision carries the takeover")
                 for k, want in v["expect"].items():
                     if k == "startswith":

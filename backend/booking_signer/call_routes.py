@@ -91,6 +91,20 @@ async def too_soon(account: str, call: Mapping[str, Any], now: datetime) -> Opti
     return None
 
 
+#: Sasha 265 · item 4 (CR 99 §4c): a BOOKING call is placed only from its AgAPI act (agapi.venue_calls — the act's call_plan, its
+#: approval, its attempts). booking_calls keeps the act_id in its brief; a booking call without one is never placed (the second path,
+#: retired). Late / change / cancel calls are not booking acts and keep their own path.
+NO_ACT = "a booking call is placed only from its approved act (CR 99) — this one has none, so nothing was dialled"
+#: ON in production, always (no env var reads it). The older tests of the placing machinery itself (claim, Bland, the sweeper, receipts —
+#: which an act's call goes through too) open it in their own setUp; test_s265 pins that it is on.
+ACT_REQUIRED = True
+
+
+def _no_act(call: Mapping[str, Any]) -> bool:
+    from agapi import venue_calls as VC
+    return ACT_REQUIRED and (call.get("brief") or {}).get("purpose", "book") == "book" and not VC.act_of(dict(call))
+
+
 def _refuse(status: int, rule: str, message: str) -> JSONResponse:
     return JSONResponse({"ok": False, "rule": rule, "message": message}, status_code=status)
 
@@ -168,6 +182,8 @@ def confirm_brief(call: dict) -> Optional[dict]:
 
 async def confirm_unclear(call: dict) -> str:
     """Place the ONE confirmation call. Returns "placed" or why not, in words (logged; the tests read it)."""
+    if _no_act(call):   # Sasha 265 · item 4: a confirmation call is a booking call — no act, never placed
+        return "not placed: " + NO_ACT
     if not C.calls_enabled() or not C.bland_key():
         return "not placed: phone calls are off"
     brief = confirm_brief(call)
@@ -223,6 +239,8 @@ async def retry_confirmation(conf: dict) -> str:
         return "not scheduled: not a confirmation or cancelling call"
     if len(await CALL_STORE.confirmations(original, field)) >= 2:
         return "not scheduled: it was already tried twice"
+    if field == "confirms_call_id" and _no_act(conf):   # Sasha 265 · item 4
+        return "not scheduled: " + NO_ACT
     if not C.calls_enabled() or not C.bland_key():
         return "not scheduled: phone calls are off"
     account, now = str(conf["account_id"]), NOW()
@@ -265,6 +283,13 @@ def money_or_time_asked(reading) -> Optional[str]:
 
 async def _follow_up(call: dict, reading) -> None:
     """Sasha 74 · rules 2–3 — awaited here, never fire-and-forget; its failure is logged and never undoes the reading."""
+    from agapi import venue_calls as VC
+    if VC.act_of(call):   # Sasha 265 · item 4 (CR 99): an act's call — venue.call_attempt and its answer, the act's record decides the rest
+        try:
+            log.info("[booking_calls] act call %s: %s", call.get("call_id"), await VC.after_call(call, reading))
+        except Exception as e:
+            log.error("[booking_calls] act call %s: the attempt was not reported: %s: %s", call.get("call_id"), type(e).__name__, e)
+        return
     if (call.get("brief") or {}).get("purpose") in ("late", "change"):   # Sasha 226 · said on their page; no answer → the email
         from . import venue_notice as VNT
         try:
@@ -778,6 +803,8 @@ async def place(call_id: str, request: Request):
     brief = call["brief"]
     if C._sha256hex(C._canonical(brief)) != call["brief_sha256"]:
         return _refuse(409, "brief_changed", "the stored brief no longer matches what was read back; nothing was dialled")
+    if _no_act(call):   # Sasha 265 · item 4: Sasha's own booking call (no act) — retired; the act's call is placed by agapi.venue_calls
+        return _refuse(409, "no_act", NO_ACT)
     # S-54 · checked again at the dial, before the claim: a venue can withdraw between the read-back and the yes
     refused = await ladder_routes._optin_refusal(brief.get("venue_ids"), "phone")
     if refused:
@@ -898,6 +925,9 @@ async def place_due() -> int:
     placed_n = 0
     for call in await CALL_STORE.due(now):
         cid = str(call["call_id"])
+        if _no_act(call):   # Sasha 265 · item 4: a scheduled booking call with no act is never placed — stopped, and the person told
+            await _stop_scheduled(call, NO_ACT, "it wasn't approved through the booking itself")
+            continue
         from .limits import calls_on
         if C.calls_enabled() is False or not C.bland_key() or not calls_on(str(call.get("account_id") or "")):
             await _stop_scheduled(call, "calls were switched off when it was due, so nothing was dialled", "calls are off")

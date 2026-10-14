@@ -72,6 +72,8 @@ const FACE_KEY = 's2_face'
  *  browser (the face comes late there, or the opening is skipped once he's talking). Her face or nothing: a real still of her own
  *  stream ships with the page (public/sasha-face.jpg) and is the bubble's face until a fresher one is kept. */
 export const FACE_STILL = '/sasha-face.jpg'
+/** Sasha 265 · item 2: the one thing that skips the arrival's motion (row 936) — then the circle at once, her face still shown. */
+const reducedMotion = (): boolean => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false } }
 const keptFace = (): string | null => { try { return localStorage.getItem(FACE_KEY) } catch { return null } }
 const drawn = (c: HTMLCanvasElement | null) => !!c && c.dataset.drawn === '1'
 async function firstFrame(c: HTMLCanvasElement | null, ms = 6000): Promise<boolean> {   // a late face: wait for its first frame
@@ -157,8 +159,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
 
   useEffect(() => {
     if (signedIn === false) { early.current?.p.then(f => f.stop()).catch(() => {}); early.current = null; return }
-    if (early.current || !video.current) return
-    try { if (sessionStorage.getItem('s2_hello') === '1') return } catch { /* private mode */ }
+    if (early.current || !video.current || reducedMotion()) return   // Sasha 265 · item 2: every arrival (row 936) — no per-tab skip
     early.current = { p: startFace(video.current), t0: performance.now() }
     early.current.p.catch(() => {})
   }, [signedIn])
@@ -212,9 +213,10 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     if (signedIn !== true || phase !== 'off') return
     let settled = false, timer: ReturnType<typeof setTimeout> | undefined
     const go = setTimeout(() => {   // out of the effect's own pass (no state set while it runs)
-    let greeted = false
-    try { greeted = sessionStorage.getItem('s2_hello') === '1' } catch { /* private mode */ }
-    if (greeted || startedRef.current) { setPhase('bubble'); return }   // Sasha 251 · already talking: no opening over it
+    // Sasha 265 · item 2 (row 936, Tyler: "when he logs back in he never sees her"): a return skipped this — sessionStorage
+    // 's2_hello' sent every later arrival straight to the bubble. ONE arrival sequence now, every arrival: her face full size, the
+    // hello (a return: "welcome back"), then the circle. Only reduced motion skips the motion — the circle at once, her face in it.
+    if (reducedMotion() || startedRef.current) { setPhase('bubble'); return }   // Sasha 251 · already talking (this visit): no opening over it
     setPhase('starting')
     const v = video.current as HTMLVideoElement
     const t0 = early.current?.t0 ?? performance.now()
@@ -310,30 +312,44 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     // eslint-disable-next-line react-hooks/exhaustive-deps -- on the change only
   }, [started])
 
+  // Sasha 265 · item 2 (her face "sometimes shows, sometimes not"): the circle was drawn into #s2-face-slot looked up DURING render —
+  // a slot mounted after that render (the sign-in check, a tab switch back to Sasha, her rest) was never looked up again, so the
+  // circle stayed undrawn until some unrelated re-render. The slot is watched; the circle is drawn the moment it exists.
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    const look = () => setSlot(s => { const now = document.getElementById('s2-face-slot'); return now === s ? s : now })
+    look()
+    const mo = new MutationObserver(look)
+    mo.observe(document.body, { childList: true, subtree: true })
+    return () => mo.disconnect()
+  }, [])
   const shown = openingShown(phase, tapFor, started)   // Sasha 251 · the one place that says what the opening draws
-  const big = shown === 'face'
+  // Sasha 265 · item 2: her face is FULL SIZE for the whole opening — a real still of her (FACE_STILL / the last kept frame) from
+  // the first instant, the live face over it once drawn; her voice alone (no live face) shows her still with the line, not a text card
+  const big = shown === 'face' || shown === 'card'
+  const [live, setLive] = useState(false)   // the live face has drawn a frame: her still steps back (the keyed frame is see-through)
+  useEffect(() => { if (!big) return; const t = setInterval(() => setLive(drawn(canvas.current)), 150); return () => clearInterval(t) }, [big])
   return (
     <>
-      <div onClick={phase === 'faceAgain' ? collapse : undefined} style={{
+      <div data-sasha-face={big ? 'full' : undefined} onClick={phase === 'faceAgain' ? collapse : undefined} style={{
         position: 'fixed', zIndex: 40, transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
-        ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: phase === 'starting' ? 0 : 1 }
+        ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: 1 }
           : { right: 16, bottom: BUBBLE_BOTTOM, width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
+        {big && !live && <div aria-hidden data-sasha-still style={{ position: 'absolute', inset: 0, background: `center 18% / cover no-repeat url(${img || FACE_STILL})` }} />}
         <video ref={video} playsInline autoPlay muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, pointerEvents: 'none' }} />
         <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 18%', display: 'block' }} />
-        {big && phase === 'tap' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
+        {shown === 'card' ? (   /* her voice alone: her line under her face, in the same frame (Sasha 265 · item 2) */
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 16px', background: 'linear-gradient(transparent, rgba(10,10,16,.92) 30%)', color: '#fff', fontSize: 16, lineHeight: 1.45 }}>
+            {line}
+            {phase === 'tap' && <div><button onClick={tapToHear} style={{ marginTop: 10, padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700 }}>Tap to hear Sasha</button></div>}
+          </div>) : big && phase === 'tap' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
       </div>
-      {shown === 'card' ? (
-        <div style={{ position: 'fixed', zIndex: 40, left: 16, right: 16, top: 'calc(env(safe-area-inset-top) + 110px)', maxWidth: 520, margin: '0 auto', padding: 18, borderRadius: 20, background: '#16161f', border: '1px solid rgba(255,255,255,.12)', color: '#fff', fontSize: 17, lineHeight: 1.45 }}>
-          {line}
-          {phase === 'tap' && <div><button onClick={tapToHear} style={{ marginTop: 12, padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700 }}>Tap to hear Sasha</button></div>}
-        </div>) : null}
       {phase === 'bubble' && (() => {
         // Sasha 259 · Tyler (row 884): the bubble sat over the send button. It lives IN the shell's voice row now (#s2-face-slot),
-        // an ordinary inline control — never floating on content or another control. No slot (another page): not drawn.
-        const slot = typeof document !== 'undefined' ? document.getElementById('s2-face-slot') : null
+        // an ordinary inline control — never floating on content or another control. No slot (another tab): not drawn.
         if (!slot) return null
         return createPortal(
-          <button onClick={asleep ? () => onWake?.() : faceBack} aria-label={asleep ? 'Sasha is asleep — tap her face to wake her' : 'Sasha — tap to see her'} style={{
+          <button data-sasha-face="circle" onClick={asleep ? () => onWake?.() : faceBack} aria-label={asleep ? 'Sasha is asleep — tap her face to wake her' : 'Sasha — tap to see her'} style={{
             width: 40, height: 40, borderRadius: '50%', padding: 0, opacity: asleep ? 0.3 : dormant ? 0.45 : 1, flex: 'none',
             filter: asleep ? 'grayscale(.85) brightness(.7)' : 'none',
             border: `2px solid ${talking ? GOLD : 'rgba(255,255,255,.35)'}`, boxShadow: talking ? `0 0 0 4px rgba(232,185,49,.25)` : 'none',

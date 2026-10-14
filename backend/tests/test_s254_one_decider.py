@@ -80,7 +80,41 @@ def reader(rungs, venue="Casa Gate", country="ES", facts=None):
     return rd
 
 
-ALL4 = {"form": {}, "whatsapp": {"value": "+34600000001"}, "email": {"value": "reservas@casagate.es"}, "phone": {"fact_index": 0}}
+# Sasha 265 · item 4: the phone is the venue's OWN published number (a call act may carry it; a Google listing's never is — Sasha 64)
+ALL4 = {"form": {}, "whatsapp": {"value": "+34600000001"}, "email": {"value": "reservas@casagate.es"}, "phone": {"fact_index": 0, "value": "+34910000000"}}
+
+
+def fake_act(test: unittest.TestCase, answer: dict = None):
+    """Sasha 265 · item 4 (CR 99): AgAPI's call act, faked — venue.prepare_booking with call, the call's read-back, and the tap's result
+    (status calling + call_plan, simulate: nothing dialled), or `submit` when a test gives another answer."""
+    from agapi import venue_submit as VS
+    lines = ["2 people at Casa Gate.", "I'll call them now and let you know.", "Sasha calls Casa Gate from Kanoe's number …"]
+    test.vs_calls = []
+
+    real_prepare, real_read_back, real_submit = VS.prepare, VS.read_back, VS.submit   # only the CALL act is faked; the rest is real
+
+    async def prepare(account, place, person, date_, time_, party, notes=None, call=None):
+        test.vs_calls.append(("prepare", call))
+        if not call:
+            return await real_prepare(account, place, person, date_, time_, party, notes=notes)
+        return {"ok": True, "prepared_id": "vpr_" + "a" * 32, "link": "https://agapi.test/p/x", "routes": ["page", "call"]}
+
+    async def read_back(account, pid, route=None):
+        test.vs_calls.append(("read_back", route))
+        if route != "call":
+            return await real_read_back(account, pid)
+        return {"ok": True, "end_user": "usr_1", "read_back_id": "rbk_1", "lines": lines, "sha256": "f" * 64}
+
+    async def submit(account, held, said):
+        if held.get("rung") != "agapi_call":
+            return await real_submit(account, held, said)
+        test.vs_calls.append(("submit", held.get("read_back_id")))
+        return dict(answer or {"ok": True, "status": "calling", "route": "call", "act_id": "act_1",
+                               "call_plan": {"phone": "+34910000000", "when": "now", "simulate": True, "next_call": {"allowed": True}},
+                               "say": BR.on_it("I'll call them now and let you know")})
+    for p in (mock.patch.object(VS, "prepare", prepare), mock.patch.object(VS, "read_back", read_back), mock.patch.object(VS, "submit", submit)):
+        p.start()
+        test.addCleanup(p.stop)
 
 
 class Base(unittest.TestCase):
@@ -117,6 +151,7 @@ class Base(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         live_access(self, self.access)
+        fake_act(self)   # Sasha 265 · item 4: a call is an AgAPI act
         self.addCleanup(VN._HELD.pop, ACCT, None)
 
     def ctx(self, said="", later=False):
@@ -211,13 +246,16 @@ class R3R4FortyEightHours(Base):
         self.assertNotIn("/api/booking/calls", self.api.paths())
 
     def test_20_hours_calls_on_is_a_call_on_the_yes(self):
+        # Sasha 265 · item 4 (booking-rules/2, CR 99): the call is the ONE question — its read-back on a card with one "OK" — and the yes
+        # (the tap) is its approval: the act, then ONLY "On it — …". Sasha's own /api/booking/calls is never used (no act, no call).
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "call", "calling")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "call"))
+        self.expect(out, "ask_call", "ask_call_now")
+        self.assertEqual((out["status"], out["route"], out["choices"]), ("awaiting_yes", "agapi_call", list(BD.OK_CHOICES)))
+        self.assertEqual(out["ask"], BR.PHRASES["ask_call_now"].format(head=out["ask"].split(" — ")[0]))
         got = self.yes()
-        self.assertEqual(got["status"], "placed")
-        self.assertEqual(got["line"], f"{BR.PHRASES['calling']} {BR.PHRASES['takeover']}")
-        self.assertNotIn("scheduled_for", self.api.bodies("/api/booking/calls/k-1/place")[0])
+        self.assertEqual(got["status"], "calling")
+        self.assertEqual(got["line"], "On it — I'll call them now and let you know.")
+        self.assertNotIn("/api/booking/calls", self.api.paths())
 
 
 class R4CallsOff(Base):
@@ -416,7 +454,7 @@ class R10Limits(Base):
     def test_2_other_peoples_calls_dont_count(self):
         self.dialled(2, account="00000000-0000-4000-8000-0000000000aa")
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "call", "calling")
+        self.expect(out, "ask_call", "ask_call_now")   # Sasha 265 · booking-rules/2: the call, asked as the ONE question
 
     def test_the_server_net_still_holds(self):
         self.dialled(BD.SERVER_CALLS_PER_DAY, account="00000000-0000-4000-8000-0000000000aa")
@@ -430,15 +468,16 @@ class R10Limits(Base):
 
     def test_31_minutes_later_a_call_again(self):
         self.dialled(1, minutes_ago=31, venue_key="read:r-1")
-        self.expect(self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20), "call", "calling")
+        self.expect(self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20), "ask_call", "ask_call_now")   # Sasha 265
 
     def test_refused_at_the_dial_the_stop_is_said_in_the_turn(self):
+        # Sasha 265 · item 4: R10 is the ACT's (CR 99): a call it won't open (today's calls made) is said in the turn, nothing dialled
         self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.api.place = (429, {"ok": False, "rule": "too_soon", "message": "this venue was called less than 30 minutes ago"})
+        fake_act(self, answer={"ok": True, "status": "not_allowed", "route": "call", "say": BR.PHRASES["calls_cap"]})
         got = self.yes()
-        self.assertEqual(got["status"], "stopped")
-        self.assertEqual(got["say"], BR.stopped("the call to Casa Gate", "I called them less than 30 minutes ago")["say_text"])
-        self.assertTrue(BD.stops_of(ACCT))                                         # get_status says it too
+        self.assertEqual(got["status"], "not_allowed")
+        self.assertEqual(got["say"], BR.PHRASES["calls_cap"])
+        self.assertNotIn("/api/booking/calls", self.api.paths())
 
 
 class R10CallRoutes(unittest.TestCase):
@@ -469,7 +508,8 @@ class R10CallRoutes(unittest.TestCase):
         store = CS.MemoryCallStore()
         now = datetime.now(timezone.utc)
         store.calls["s"] = {"call_id": "s", "account_id": ACCT, "status": "awaiting_approval", "venue_key": "read:r-1", "dialled_number": "+349",
-                            "brief": {"venue_name": "Casa Gate"}, "approval": {"scheduled_for": (now - timedelta(minutes=1)).isoformat()}}
+                            "brief": {"venue_name": "Casa Gate", "act_id": "act_s"},   # Sasha 265 · an act's call (no act: never placed)
+                            "approval": {"scheduled_for": (now - timedelta(minutes=1)).isoformat()}}
         told = []
 
         async def tell(account, what, why, link=None, push=True):
@@ -585,7 +625,10 @@ class EverySurface(Base):
                     mock.patch.object(BD, "decide_for", wraps=BD.decide_for) as spy:
                 out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
             self.assertEqual(spy.call_count, 1, (surface, parity))
-            self.expect(out, "call", "calling")
+            if parity == "off":   # old S1: booking-rules/1's answer, byte-identical (booking_decide.as_v1)
+                self.expect(out, "call", "calling")
+            else:                 # Sasha 265 · the one path: booking-rules/2 — the call IS the ONE question (its card)
+                self.expect(out, "ask_call", "ask_call_now")
 
     def test_the_old_flow_and_the_web_card_ask_the_same_rules(self):
         rd = {"venue": "Casa Gate", "country": "ES", "rungs": {"email": {"value": "x@casagate.es"}, "phone": {"value": "+34910000000"}}}

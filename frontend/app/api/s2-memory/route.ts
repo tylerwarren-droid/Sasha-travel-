@@ -17,3 +17,15 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }
 }
+
+/** Sasha 265 · item 3 · New chat on /s2: the same one clear as /next (backend DELETE /api/agent/memory). */
+export async function DELETE(): Promise<Response> {
+  const who = await agentHeaders()
+  if (!who) return NextResponse.json({ ok: false, rule: 'sign_in_required' }, { status: 401 })
+  try {
+    const r = await fetch(`${API_URL}/api/agent/memory`, { method: 'DELETE', headers: { ...who, 'x-sasha-surface': 's2' }, cache: 'no-store' })
+    return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+  } catch (e) {
+    return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
+  }
+}

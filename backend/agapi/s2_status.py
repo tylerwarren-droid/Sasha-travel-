@@ -33,12 +33,28 @@ WORDS = {"nothing": "Nothing is booked yet.",
          "declined": "Not booked — the venue said no",
          # Sasha 259 · S2 item 12: the trip's CHOSEN items (its flights picked, not paid) are on the one status too — the Trip tab says
          # "not booked yet" for them, so the chat's "what's coming up" says the same, beside the booked tables
-         "chosen": "Chosen, not booked yet"}
+         "chosen": "Chosen, not booked yet",
+         # Sasha 265 · item 4 (CR 99 §4e): a call act — being called (and when the next call may be), or no one picked up (its next step)
+         "calling": "Not booked yet — I'm calling them",
+         "no_answer": "Not booked — no one picked up"}
 ON_IT = ("booked", "partly_booked", "awaiting_payment")   # a Trip banner shows; the Book button goes
 
 
 def _venue_line(b: dict) -> str:
     return f"{b['venue']} — {b.get('date') or ''} {b.get('time') or ''}".strip(" —") + (f" · ref {b['reference']}" if b.get("reference") else "")
+
+
+def _call_line(b: dict) -> str:
+    """Sasha 265 · item 4 · a call act's row: venue — day time, and its next call (allowed at, calls left) or its next step."""
+    nc, step = b.get("next_call") or {}, b.get("next_step") or {}
+    extra = ""
+    if b.get("status") == "calling" and nc:
+        at = str(nc.get("allowed_at") or "")[11:16]
+        extra = (f" · next call {'from ' + at + ' UTC' if at and not nc.get('allowed') else 'now'}"
+                 f", {nc.get('calls_left_today')} left today") if nc.get("calls_left_today") is not None else ""
+    if b.get("status") == "no_answer" and step:
+        extra = f" · their page: {step['page']}" if step.get("page") else f" · their number: {step['phone']}" if step.get("phone") else ""
+    return _venue_line(b) + extra
 
 
 def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict[str, str]:
@@ -48,7 +64,10 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
     venues = [b for b in st.get("venues") or [] if b.get("status") != "cancelled"]
     conf = [_venue_line(b) for b in venues if b.get("status") in ("confirmed", "guest_booked")
             and not (b.get("reference") and f"ref {b['reference']}" in refs_seen)]   # a basket row already listed is not said twice
-    asked = [_venue_line(b) for b in venues if b.get("status") not in ("confirmed", "guest_booked", "declined", "failed", "proposed")]
+    asked = [_venue_line(b) for b in venues if b.get("status") not in ("confirmed", "guest_booked", "declined", "failed", "proposed",
+                                                                       "calling", "no_answer")]
+    calling = [_call_line(b) for b in venues if b.get("status") == "calling"]       # Sasha 265 · item 4 (e)
+    no_answer = [_call_line(b) for b in venues if b.get("status") == "no_answer"]
     proposed = [_venue_line(b) for b in venues if b.get("status") == "proposed"]   # Sasha 256 · the venue's own answer
     declined = [_venue_line(b) for b in venues if b.get("status") == "declined"]
     done, failed = booked + conf, list(st.get("failed") or [])
@@ -67,7 +86,7 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
     else:
         state, line = "nothing", WORDS["nothing"]
     chosen = [str(x).replace(" · chosen", "") for x in st.get("chosen") or []]
-    for key, rows in (("proposed", proposed), ("declined", declined), ("chosen", chosen)):   # Sasha 256/259 · said beside the rest, never as "booked"
+    for key, rows in (("calling", calling), ("no_answer", no_answer), ("proposed", proposed), ("declined", declined), ("chosen", chosen)):   # Sasha 256/259 · said beside the rest, never as "booked"
         if rows:
             said = f"{WORDS[key]}: " + "; ".join(rows) + "."
             state, line = (key, said) if state == "nothing" else (state, f"{line} {said}")

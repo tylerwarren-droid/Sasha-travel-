@@ -206,6 +206,8 @@ const KEYTERMS = ['Chamberí', 'Malasaña', 'Chueca', 'Lavapiés', 'La Latina', 
 // Sasha 264 · item 7: what the mic says when it isn't reaching her (never "Listening" while deaf)
 const DEAF_TAP = 'Sasha can’t hear you — tap the mic to talk'
 const DEAF_AFTER_MS = 4000
+const PREROLL_MS = 600        // Sasha 265 · item 1: kept while she speaks, sent only if the person talks over her (barge-in)
+const RESUME_WAIT_MS = 1000   // Sasha 265 · item 1: how long the audio may take to start before the socket opens anyway (and the screen says tap)
 
 export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake }: VoiceButtonProps) {
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
@@ -342,6 +344,14 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     micLog('connect')
     if (!dgReconnectAttemptsRef.current) reportMicError(null)   // Sasha 215 · a reconnect keeps the error on screen until it opens
     setIsConnecting(true)
+    // Sasha 265 · item 1 (Tyler's iPhone 14:21Z, his Mac Chrome 14:46Z: a key minted, NO socket ever reached Deepgram): the audio was
+    // made AFTER the mic permission and the key, and its resume() was waited on for good — a phone (or Chrome with no tap yet)
+    // never resumes audio outside a tap, so the socket was never opened and 264's "can't hear you" line, after that await, never ran.
+    // Made and resumed HERE, before the first await — inside the tap when a tap started it — and never waited on (RESUME_WAIT_MS).
+    const ctx = new AudioContext()
+    audioCtxRef.current = ctx
+    const resumed = ctx.resume().catch(() => {})
+    const dropCtx = () => { if (audioCtxRef.current === ctx) audioCtxRef.current = null; ctx.close().catch(() => {}) }
     try {
       // Mint the ephemeral STT key in parallel with mic acquisition — no added latency.
       const keyPromise = getDeepgramKey()
@@ -419,15 +429,12 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       if (asleepRef.current) {   // Sasha 246 · fell asleep while the mic was opening: close it, listen again only when she wakes
         if (streamRef.current === stream) streamRef.current = null
         stream.getTracks().forEach(t => t.stop())
-        connectingRef.current = false; setIsConnecting(false); resumeRef.current = true
+        connectingRef.current = false; setIsConnecting(false); resumeRef.current = true; dropCtx()
         return
       }
-      if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); return }
+      if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); dropCtx(); return }
 
-      // AudioContext — resume() immediately for Safari (requires in-gesture call stack)
-      const ctx = new AudioContext()
-      audioCtxRef.current = ctx
-      await ctx.resume()
+      await Promise.race([resumed, new Promise(r => setTimeout(r, RESUME_WAIT_MS))])   // Sasha 265 · item 1: looked at, never waited for
       micLog('audiocontext', { state: ctx.state, sampleRate: ctx.sampleRate })
       // Sasha 264 · item 7: a phone only lets the mic's audio run from a tap — started without one (autoStart), it stays suspended and
       // no frame ever comes. Never "Listening" then: the screen says to tap, and the tap (toggleListening) turns it on.
@@ -496,6 +503,24 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         const downsample = makeDownsampler(ctx.sampleRate)   // per connection: its carry never crosses sockets
         workletNodeRef.current = node
 
+        const send = (float32: Float32Array) => {
+          if (ws.readyState !== WebSocket.OPEN) return
+          // Convert float32 to int16 PCM before sending — Sasha 215 (d): at 16 kHz (a third of the upload at 48 kHz)
+          const pcm = downsample(float32)
+          if (!pcm.length) return
+          const int16 = new Int16Array(pcm.length)
+          for (let i = 0; i < pcm.length; i++) {
+            const s = Math.max(-1, Math.min(1, pcm[i]))
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+          }
+          ws.send(int16.buffer)
+        }
+        // Sasha 265 · item 1 (the browser proof: "Book a table for two tonight" came back "A table for two tonight"): talking over
+        // her, the frames that tripped barge-in were dropped with the rest — the first word lost every time. The last PREROLL_MS
+        // while closed are kept and sent on a barge-in ONLY (never when she simply stops: that audio is her own voice).
+        const preroll: Float32Array[] = []
+        let prerollLen = 0
+        const prerollMax = Math.round(ctx.sampleRate * PREROLL_MS / 1000)
         node.port.onmessage = (e) => {
           const float32 = e.data as Float32Array
           lastFrameRef.current = Date.now()   // Sasha 264 · item 7: the mic is delivering
@@ -505,9 +530,11 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
           // frame loop only honoured the speak-gate — so a build whose classify was slow/failed
           // left the mic genuinely streaming under a "Not listening" label. Enforce it here so
           // the mic is truly deaf whenever muted, independent of the speak-gate's timing.
-          if (mutedRef.current) { if (!droppedMutedRef.current) { droppedMutedRef.current = true; micLog('dropping', { why: 'muted while a turn runs' }) } return }
+          if (mutedRef.current) { preroll.length = 0; prerollLen = 0; if (!droppedMutedRef.current) { droppedMutedRef.current = true; micLog('dropping', { why: 'muted while a turn runs' }) } return }
           if (droppedMutedRef.current) { droppedMutedRef.current = false; micLog('listening', { after: 'muted' }) }
           if (micGatedRef.current) {
+            preroll.push(float32); prerollLen += float32.length
+            while (prerollLen - preroll[0].length >= prerollMax) prerollLen -= preroll.shift()!.length
             // Gate ON = avatar is speaking. DROP every frame so the avatar's audio
             // bleeding into the mic is never streamed to Deepgram. This is the core
             // echo fix — Deepgram simply never hears the avatar.
@@ -523,6 +550,9 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
                   micLog('barge_in', { rms: Number(rms.toFixed(3)) })
                   onInterruptRef.current?.()
                   micGatedRef.current = false  // open mic; gate setter fires async
+                  micLog('preroll', { ms: Math.round(prerollLen / ctx.sampleRate * 1000) })
+                  for (const f of preroll.splice(0)) send(f)   // Sasha 265 · item 1: the words that interrupted her, from their start
+                  prerollLen = 0
                 }
               } else {
                 loudFramesRef.current = 0  // must be SUSTAINED — reset on any quiet frame
@@ -531,16 +561,8 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
             return  // gated: never send avatar bleed to Deepgram
           }
           loudFramesRef.current = 0
-          if (ws.readyState !== WebSocket.OPEN) return
-          // Convert float32 to int16 PCM before sending — Sasha 215 (d): at 16 kHz (a third of the upload at 48 kHz)
-          const pcm = downsample(float32)
-          if (!pcm.length) return
-          const int16 = new Int16Array(pcm.length)
-          for (let i = 0; i < pcm.length; i++) {
-            const s = Math.max(-1, Math.min(1, pcm[i]))
-            int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-          }
-          ws.send(int16.buffer)
+          if (preroll.length) { preroll.length = 0; prerollLen = 0 }   // opened by her stopping: what was kept is her voice — dropped
+          send(float32)
         }
 
         source.connect(node)
@@ -687,6 +709,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     } catch (err: any) {
       connectingRef.current = false
       setIsConnecting(false)
+      dropCtx()
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
       micLog('error', { name: err?.name, message: String(err?.message || '').slice(0, 120) })

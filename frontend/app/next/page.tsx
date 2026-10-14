@@ -934,10 +934,22 @@ export default function NextPage() {
     if (opener) pendingOpenerRef.current = opener
     handleStart()
   }, [verifying, booked, itemBooked, handleStart, unlockAudio, sleepEvent])
-  const newChat = useCallback(() => {
+  // Sasha 265 · item 3: New chat cleared the screen only — her memory (s2_memory, shared with /s2 and WhatsApp) still held the old
+  // conversation and the next visit opened "Welcome back — we were looking at …". Now it clears the ONE conversation record first
+  // (DELETE /api/sasha-agent/memory → the same clear as /s2), then the screen; a new chat key = a new chat session id.
+  const [chatKey, setChatKey] = useState(0)
+  // Sasha 265 · item 5 (row 935): what she's working on, under her face on the standby stage too (no call: no voice, but never a blank stare)
+  const [workingLine, setWorkingLine] = useState<string | null>(null)
+  const [chatNote, setChatNote] = useState<string | null>(null)
+  const newChat = useCallback(async () => {
     // Mindtrip's "New chat": a clean slate. Ending the live session first releases the
     // avatar; handleStart already resets messages/plan/tabs.
+    setChatNote(null)
+    const r = await fetch('/api/sasha-agent/memory', { method: 'DELETE', cache: 'no-store' }).catch(() => null)
+    const j = r && r.ok ? await r.json().catch(() => null) : null
+    if (!j?.ok) { setChatNote('I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'); return }
     if (started) handleEndSession()
+    setChatKey(k => k + 1)
     setTimeout(() => handleStart(), 60)
   }, [started, handleEndSession, handleStart])
   const NAV: { id: WorkspaceTab; label: string; Ic: React.ComponentType<{ size?: number; strokeWidth?: number }> }[] = [
@@ -975,7 +987,8 @@ export default function NextPage() {
             </button>
           ))}
         </nav>
-        <button className="mt-newchat" onClick={newChat}><Plus size={14} strokeWidth={2.2} /> New chat</button>
+        <button className="mt-newchat" onClick={() => { void newChat() }}><Plus size={14} strokeWidth={2.2} /> New chat</button>
+        {chatNote ? <p role="status" style={{ fontSize: 12, color: '#f5c26b', margin: '6px 2px 0', lineHeight: 1.35 }}>{chatNote}</p> : null}
         {/* Sasha 195 · the other pages, back beside Sasha */}
         <nav aria-label="More" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', margin: '12px 4px 0', fontSize: 12.5 }}>
           {[['Deck', '/deck'], ['Demo', '/demo']].map(([t, h]) => (
@@ -1044,6 +1057,7 @@ export default function NextPage() {
         </div>
         {stageLive ? (
           <SashaChat
+            key={chatKey}
             agent
             phone={isPhone}
             onTurnBusy={setThinking}
@@ -1068,6 +1082,7 @@ export default function NextPage() {
             isRespondingRef={isRespondingRef}
             readyToListen={voiceReady}
             onThinking={handleInterim}
+            onWorking={setWorkingLine}
             onItinerary={handleItinerary}
             language={language}
             registerSend={registerSend}
@@ -1165,6 +1180,10 @@ export default function NextPage() {
                   changes.) */}
               <img className="mt-standby mt-standby-photo" src="/api/heygen/preview" alt="Sasha" style={asleep ? { opacity: 0.3, filter: 'grayscale(.85) brightness(.7)' } : undefined} onError={e => { e.currentTarget.style.display = 'none' }} />
               <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,.55) 0%, transparent 22%, transparent 58%, rgba(0,0,0,.85) 100%)' }} />
+              {workingLine ? (
+                <div role="status" data-sasha-working-face className="absolute left-0 right-0" style={{ top: 64, zIndex: 3, display: 'flex', justifyContent: 'center', padding: '0 16px', pointerEvents: 'none' }}>
+                  <span style={{ padding: '9px 16px', borderRadius: 999, background: 'rgba(10,10,16,.72)', border: '1px solid rgba(255,255,255,.18)', color: '#fff', fontSize: 15, lineHeight: 1.35, textAlign: 'center', maxWidth: 440 }}>{workingLine}</span>
+                </div>) : null}
               <div className="mt-ov-top absolute top-0 left-0 right-0 flex items-center" style={{ padding: '14px 16px', zIndex: 3 }}>
                 <span className="mt-standbypill"><span className="mt-standbydot" /> {uiPreview ? 'Preview' : 'Standby'}</span>
               </div>

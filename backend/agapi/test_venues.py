@@ -30,10 +30,17 @@ log = logging.getLogger("agapi.test_venues")
 TEST_LINE = "Kanoe test venue — not a real restaurant"
 #: the words that name each test venue (case- and accent-insensitive, as whole words)
 _NAMES = {"kanoe-test-venue": re.compile(r"\b(?:(?:sasha|kanoe)\s+)?test\s+venue\b"),
-          "kanoe-taverna-correo": re.compile(r"\btaverna\s+correo\b")}
+          "kanoe-taverna-correo": re.compile(r"\btaverna\s+correo\b"),
+          "kanoe-taverna-sandbox": re.compile(r"\btaverna\s+sandbox\b")}
 #: Sasha 256 item 3 · CR 94's sandbox email test venue: it books by EMAIL only (captured, never sent) and answers by itself ~20 s
 #: after the request — 21:00 for up to 8 confirms, more than 8 people or a Monday declines, a time it doesn't offer gets the nearest
 TAVERNA_CORREO = "https://agapi-sandbox-production.up.railway.app/fixtures/taverna-correo"
+#: Sasha 265 · item 4 · CR 99's sandbox CALL test venue: AgAPI's own fixture (its booking page; "lunch 13:00–15:00, dinner 20:00–22:30,
+#: closed Mondays"), with the AgAPI sandbox's FICTIONAL number (+1 500 555 0193 — a test range; nothing is dialled for a test person:
+#: the act's call_plan says simulate). Its page AND a phone, soon → the ONE question "fill in their page now, or shall I call them?"
+TAVERNA_SANDBOX = "https://agapi-sandbox-production.up.railway.app/fixtures/taverna"
+SANDBOX_PHONE = "+15005550193"
+_WEEK = {d: [("13:00", "15:00"), ("20:00", "22:30")] for d in range(1, 7)}   # Tuesday–Sunday (0 = Monday: closed)
 
 
 def _venues() -> List[dict]:
@@ -47,14 +54,19 @@ def _venues() -> List[dict]:
              "website": TAVERNA_CORREO, "city": "Madrid", "country": "ES",
              "address": f"{TEST_LINE} (books by email), Madrid, Spain", "type": TEST_LINE, "type_source": "site", "google_type": None,
              "phone": None, "status": None, "listing_url": "", "rating": None, "rating_count": None, "price_level": None,
-             "distance_m": None, "books": {"how": "email", "words": "By email"}}]
+             "distance_m": None, "books": {"how": "email", "words": "By email"}},
+            {"place_id": "kanoe-taverna-sandbox", "name": "Taverna Sandbox", "test": True, "kind": "restaurant",
+             "website": TAVERNA_SANDBOX, "city": "Madrid", "country": "ES",
+             "address": f"{TEST_LINE} (its page, or a call), Madrid, Spain", "type": TEST_LINE, "type_source": "site", "google_type": None,
+             "phone": SANDBOX_PHONE, "week": {str(k): v for k, v in _WEEK.items()}, "status": None, "listing_url": "", "rating": None,
+             "rating_count": None, "price_level": None, "distance_m": None, "books": {"how": "site", "words": "Its own page, or by phone"}}]
 
 
 def TEST_VENUES() -> List[dict]:   # noqa: N802 · a function: test_venue_url reads the server's public base when called
     return [dict(v) for v in _venues()]
 
 
-TEST_IDS = ("kanoe-test-venue", "kanoe-taverna-correo")
+TEST_IDS = ("kanoe-test-venue", "kanoe-taverna-correo", "kanoe-taverna-sandbox")
 
 
 def _plain(text: Optional[str]) -> str:

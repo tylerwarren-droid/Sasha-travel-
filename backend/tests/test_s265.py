@@ -299,7 +299,9 @@ class StatusSaysCalling(unittest.TestCase):
                          {"venue": "Bar Uno", "date": "2026-10-15", "time": "20:00", "status": "no_answer",
                           "next_step": {"kind": "their_page", "page": "https://baruno.es"}}]}
         line = SS.decide(st)["line"]
-        self.assertIn("Not booked yet — I'm calling them: Casa Gate — 2026-10-15 21:00 · next call from 12:30 UTC, 2 left today.", line)
+        self.assertIn("Not booked yet — I'm calling them: Casa Gate — 2026-10-15 21:00 · the next call from 12:30 UTC.", line)
+        allowed = SS.decide({"venues": [{**st["venues"][0], "next_call": {"allowed": True, "allowed_at": "x", "calls_left_today": 3}}]})["line"]
+        self.assertEqual(allowed, "Not booked yet — I'm calling them: Casa Gate — 2026-10-15 21:00.")   # never "now" or a count to retry on
         self.assertIn("Not booked — no one picked up: Bar Uno — 2026-10-15 20:00 · their page: https://baruno.es.", line)
         self.assertNotIn("Booked", line.replace("Not booked", ""))
 

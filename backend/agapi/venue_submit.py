@@ -275,7 +275,8 @@ async def bookings(account: str) -> List[dict]:
                     "party": a.get("party"), "status": state, "type": "venue", **({"country": a["country"]} if a.get("country") else {}),
                     **({"reference": a["reference"]} if a.get("reference") else {}),
                     **({"venue_said": {"untrusted_text": a["words"]}} if a.get("words") else {}),
-                    **({"how": a["say_now"]} if a.get("say_now") and state in ("proposed", "calling", "no_answer") else {}),
+                    **({"how": a["say_now"]} if a.get("say_now") and state in ("proposed", "no_answer") else {}),   # 265: never a "no answer
+                    # yet" for a call not yet made (she said "they haven't picked up so far, I can try again now")
                     **({"next_call": a["next_call"]} if a.get("next_call") and state == "calling" else {}),   # Sasha 265 · item 4 (e)
                     **({"next_step": a["next_step"]} if a.get("next_step") and state == "no_answer" else {}),
                     **({"route": "call"} if a.get("route") == "call" else {}),

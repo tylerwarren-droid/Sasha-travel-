@@ -48,10 +48,10 @@ def _call_line(b: dict) -> str:
     """Sasha 265 · item 4 · a call act's row: venue — day time, and its next call (allowed at, calls left) or its next step."""
     nc, step = b.get("next_call") or {}, b.get("next_step") or {}
     extra = ""
-    if b.get("status") == "calling" and nc:
-        at = str(nc.get("allowed_at") or "")[11:16]
-        extra = (f" · next call {'from ' + at + ' UTC' if at and not nc.get('allowed') else 'now'}"
-                 f", {nc.get('calls_left_today')} left today") if nc.get("calls_left_today") is not None else ""
+    if b.get("status") == "calling" and nc and not nc.get("allowed") and nc.get("allowed_at"):
+        # only a real wait is said (R10's 30 minutes): never "now" or a count — found live, she turned "next call now, 3 left today"
+        # into "they haven't picked up so far, I can try again now" before any call was made
+        extra = f" · the next call from {str(nc['allowed_at'])[11:16]} UTC"
     if b.get("status") == "no_answer" and step:
         extra = f" · their page: {step['page']}" if step.get("page") else f" · their number: {step['phone']}" if step.get("phone") else ""
     return _venue_line(b) + extra

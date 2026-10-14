@@ -30,6 +30,12 @@ const TIER: Record<Item['tier'], string> = {
   yes: 'Used only after your yes',
   read_back: 'Shown only to you, here',
 }
+// Sasha 267 · row 944 (Tyler's phone): what a SAVED item says on its row — plainly saved, and when it's used
+const SAVED: Record<Item['tier'], string> = {
+  free: 'Saved, used for you freely',
+  yes: 'Saved, ready to use after your yes',
+  read_back: 'Saved, shown only to you, here',
+}
 const DATE_FIELDS = new Set(['expires_on'])
 const SECRET_FIELDS = new Set(['number', 'code', 'password', 'reference', 'activation_code', 'iccid'])
 const label = (f: string) => f.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
@@ -41,8 +47,13 @@ async function call(path: string, init?: RequestInit): Promise<{ ok: boolean; st
   return { ok: r.ok && j.ok !== false, status: r.status, j }
 }
 
-function AddItem({ types, onSaved }: { types: Types; onSaved: (msg: string) => void }) {
-  const [kind, setKind] = useState('passport')
+/** Sasha 267 · row 944 (Tyler, 19:01): his passport WAS saved, yet this form opened under it with "Passport" preselected, empty fields
+ *  and Expires showing today (an empty date input on an iPhone shows today) — so he thought he had to type it again. The page never asks
+ *  for what it already holds: the form starts closed, never preselects a type he already has, and no date is ever filled in for him. */
+function AddItem({ types, have, onSaved }: { types: Types; have: string[]; onSaved: (msg: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const firstNew = Object.keys(types).find(k => !have.includes(k)) ?? ''
+  const [kind, setKind] = useState(firstNew)
   const [vals, setVals] = useState<Record<string, string>>({})
   const [state, setState] = useState<{ phase: 'idle' } | { phase: 'saving' } | { phase: 'refused'; why: string }>({ phase: 'idle' })
   const fields = types[kind]?.fields ?? []
@@ -51,15 +62,22 @@ function AddItem({ types, onSaved }: { types: Types; onSaved: (msg: string) => v
     const value = Object.fromEntries(Object.entries(vals).filter(([k, v]) => fields.includes(k) && v.trim() !== ''))
     const r = await call('/api/sasha-agent/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: kind, value }) })
     setVals({})                                   // the value leaves this page's memory as soon as it's sent
-    if (r.ok) { setState({ phase: 'idle' }); onSaved(r.j.created ? `Saved: ${r.j.masked}` : `Already in your Keep: ${r.j.masked}`) }
+    if (r.ok) { setState({ phase: 'idle' }); setOpen(false); onSaved(r.j.created ? `Saved: ${r.j.masked}` : `Already in your Keep: ${r.j.masked}`) }
     else setState({ phase: 'refused', why: String(r.j.message ?? 'Not saved.') })
   }
+  if (!open) return (
+    <section className="mx-3 mt-4">
+      <button type="button" data-keep-add onClick={() => { setOpen(true); setKind(firstNew); setVals({}); setState({ phase: 'idle' }) }}
+        className="w-full rounded-2xl border border-dashed border-neutral-300 p-3 text-left font-semibold dark:border-neutral-700">＋ Add something</button>
+    </section>)
   return (
     <section className="mx-3 mt-4 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800">
-      <h2 className="text-lg font-semibold">Add to your Keep</h2>
+      <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Add to your Keep</h2>
+        <button type="button" className="text-sm opacity-70" onClick={() => { setOpen(false); setVals({}) }}>Close</button></div>
       <select className="mt-2 w-full rounded-lg border border-neutral-300 bg-transparent p-3 dark:border-neutral-700" value={kind}
         onChange={e => { setKind(e.target.value); setVals({}); setState({ phase: 'idle' }) }}>
-        {Object.entries(types).map(([k, t]) => <option key={k} value={k}>{t.name} — {TIER[t.tier].toLowerCase()}</option>)}
+        {!kind && <option value="">Choose what to add</option>}
+        {Object.entries(types).map(([k, t]) => <option key={k} value={k}>{t.name}{have.includes(k) ? ' — another one' : ''} — {TIER[t.tier].toLowerCase()}</option>)}
       </select>
       {fields.map(f => (
         <label key={f} className="mt-2 block text-sm">
@@ -67,7 +85,9 @@ function AddItem({ types, onSaved }: { types: Types; onSaved: (msg: string) => v
           <input className="mt-1 w-full rounded-lg border border-neutral-300 bg-transparent p-3 text-base dark:border-neutral-700"
             // Sasha 242 (EU's walk) · never type=password: Chrome filled a saved password into the passport number. Text, no
             // autofill, still masked on screen (CSS), and the password managers told to stay out
-            type={DATE_FIELDS.has(f) ? 'date' : 'text'} autoComplete="off" spellCheck={false} name={`keep-${kind}-${f}`}
+            // Sasha 267 · row 944: a date is TEXT with its format shown — an empty date input on an iPhone displays today, as if filled
+            type="text" inputMode={DATE_FIELDS.has(f) ? 'numeric' : undefined} placeholder={DATE_FIELDS.has(f) ? 'YYYY-MM-DD' : undefined}
+            autoComplete="off" spellCheck={false} name={`keep-${kind}-${f}`}
             data-lpignore="true" data-1p-ignore="true" data-form-type="other"
             style={SECRET_FIELDS.has(f) ? ({ WebkitTextSecurity: 'disc' } as CSSProperties) : undefined}
             value={vals[f] ?? ''} onChange={e => setVals(v => ({ ...v, [f]: e.target.value }))} />
@@ -75,7 +95,7 @@ function AddItem({ types, onSaved }: { types: Types; onSaved: (msg: string) => v
       ))}
       <GatedButton label={state.phase === 'saving' ? 'Saving…' : 'Save to my Keep'} className="mt-3 w-full rounded-lg bg-emerald-700 p-3 font-semibold text-white"
         onClick={() => { save().catch((e: Error) => setState({ phase: 'refused', why: e.message })) }}
-        needs={[state.phase === 'saving' && 'saving…']} />
+        needs={[state.phase === 'saving' && 'saving…', !kind && 'choose what to add']} />
       {state.phase === 'refused' && <p className="mt-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{state.why}</p>}
       <p className="mt-2 text-xs opacity-60">Never kept: card numbers (Sasha pays with Apple Pay), one-time or 2FA codes, passwords.</p>
     </section>
@@ -98,7 +118,7 @@ function Row({ it, onChange }: { it: Item; onChange: (msg: string) => void }) {
   return (
     <li className="border-b border-neutral-200 py-3 dark:border-neutral-800">
       <p className="text-lg font-semibold leading-tight">{it.masked}</p>
-      <p className="text-xs opacity-60">{TIER[it.tier]}{it.last_used_at ? ` · last used ${new Date(it.last_used_at).toLocaleDateString()}` : ''}</p>
+      <p className="text-xs opacity-60">{SAVED[it.tier]}{it.last_used_at ? ` · last used ${new Date(it.last_used_at).toLocaleDateString()}` : ''}</p>
       {(it.uses ?? []).length > 0 && (
         <ul className="mt-1 text-xs opacity-80" aria-label={`What ${it.masked} was used for`}>
           {(it.uses ?? []).map((u, i) => <li key={i}>{u.what}{u.for ? ` — ${u.for}` : ''}{u.at ? ` · ${when(u.at)}` : ''}</li>)}
@@ -161,7 +181,7 @@ export function KeepScreen({ leadClassName }: { leadClassName?: string } = {}) {
       ) : (
         <p className="px-4 py-4 opacity-70">Your Keep is empty. Add your passport, ID or loyalty numbers below — Sasha will use them only where they’re needed.</p>
       )}
-      <AddItem types={load.types} onSaved={changed} />
+      <AddItem key={load.items.map(i => i.type).join(',')} types={load.types} have={load.items.map(i => i.type)} onSaved={changed} />
       {load.items.length > 0 && (
         <section className="mx-3 mt-6 rounded-2xl border border-red-200 p-4 dark:border-red-900">
           <h2 className="font-semibold text-red-700 dark:text-red-300">Delete everything</h2>

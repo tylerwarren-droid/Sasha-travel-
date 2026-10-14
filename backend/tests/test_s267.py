@@ -58,6 +58,21 @@ class OneAudioSession(unittest.TestCase):
         self.assertIn("'first_transcript'", _src(self, "lib/mic-log.ts"))
 
 
+class TheKeepNeverAsksForWhatItHolds(unittest.TestCase):
+    """Row 944 (Tyler, 19:01): his passport WAS saved, yet the add form opened with Passport preselected and Expires showing today."""
+
+    def test_gate_closed_never_preselects_a_held_type_never_today(self):
+        k = _src(self, "app/keep/KeepScreen.tsx")
+        self.assertIn("const [open, setOpen] = useState(false)", k)                        # starts closed
+        self.assertIn("＋ Add something", k)
+        self.assertIn("Object.keys(types).find(k => !have.includes(k))", k)                # never a type he already has
+        self.assertNotIn("useState('passport')", k)
+        self.assertNotIn("'date' : 'text'", k)                                              # no date input (an iPhone shows today)
+        self.assertIn("placeholder={DATE_FIELDS.has(f) ? 'YYYY-MM-DD' : undefined}", k)
+        self.assertIn("yes: 'Saved, ready to use after your yes'", k)
+        self.assertIn("{SAVED[it.tier]}", k)
+
+
 class TheLogCarriesTheSession(unittest.TestCase):
     def test_the_session_state_and_who_set_it_are_kept(self):
         app = FastAPI()

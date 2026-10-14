@@ -55,8 +55,8 @@ test('/s2 wires it: S2Hello draws from openingShown and S2App passes started fro
   assert.match(hello, /openingShown\(phase, tapFor, started\)/)
   assert.match(hello, /shown === 'card'/)
   assert.doesNotMatch(hello, /phase === 'voice' \|\| \(phase === 'tap' && tapFor === 'voice'\) \?/)
-  assert.match(app, /started=\{arrivalStarted\(msgs\) \|\| tab !== 'sasha'\}/)   // Sasha 265 · item 2 (was conversationStarted: a return skipped her) · 267: another tab too
-  assert.match(app, /restored: true/)
+  assert.match(app, /started=\{tab !== 'sasha'\} ctlRef=\{helloCtl\}/)   // Sasha 268: small talk keeps her full size; his first REQUEST ends it (bye)   // Sasha 265 · item 2 (was conversationStarted: a return skipped her) · 267: another tab too
+  assert.match(app, /restored: true/)   // restored turns still marked (arrivalStarted stays the rule's answer for a conversation)
 })
 
 test('Sasha 265 · item 2 (row 936): ONE arrival sequence — no per-tab skip, her face full size from the first instant, the circle found when its slot appears', () => {

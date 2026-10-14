@@ -178,6 +178,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             ["tests.test_s266"]),
     "T49": ("one audio session (play-and-record) for her face, her voice and his mic — iOS never refuses the mic for a play-only page",
             ["tests.test_s267"]),
+    "T50": ("her arrival in one framing (half-body still = live), off to work on his first request by code; she tries first — never "
+            "\"I can't\" before a tool tried; one labelled pause that lets go of her face",
+            ["tests.test_s268"]),
 }
 
 _RUNNER = """

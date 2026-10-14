@@ -6,7 +6,7 @@ import { sleepStep, mayListen, maySpeak, buttonLabel, HERE, AWAKE, ASLEEP } from
 test('one tap: asleep — her speech stops, the mic goes off, her face dims; no "I\'m here"', () => {
   const r = sleepStep(AWAKE, 'tap_pause')
   assert.equal(r.state, ASLEEP)
-  assert.deepEqual(r.effects, { stopAudio: true, micOff: true, dim: true, sayHere: false, speakHere: false })
+  assert.deepEqual(r.effects, { stopAudio: true, micOff: true, dim: true, sayHere: false, speakHere: false, releaseFace: true })   // 268: her live face let go
 })
 
 test('tap again: awake, says "I\'m here" (spoken when her voice is on)', () => {
@@ -38,7 +38,7 @@ test('awake: a face tap, the mic or typing changes nothing here (add, never remo
   for (const ev of ['tap_face', 'press_mic', 'typed']) {
     const r = sleepStep(AWAKE, ev)
     assert.equal(r.state, AWAKE, ev)
-    assert.deepEqual(r.effects, { stopAudio: false, micOff: false, dim: false, sayHere: false, speakHere: false }, ev)
+    assert.deepEqual(r.effects, { stopAudio: false, micOff: false, dim: false, sayHere: false, speakHere: false, releaseFace: false }, ev)
   }
 })
 
@@ -58,5 +58,5 @@ test('asleep: never listening, never speaking; the button says what a tap will d
   assert.equal(mayListen(AWAKE), true)
   assert.equal(maySpeak(false), true)
   assert.equal(buttonLabel(false), 'Pause Sasha')
-  assert.equal(buttonLabel(true), 'Wake Sasha')
+  assert.equal(buttonLabel(true), 'Wake')   // Sasha 268 · item 8: Tyler's words, always shown
 })

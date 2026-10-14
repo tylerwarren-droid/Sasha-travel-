@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { openingShown, openingEnds } from '@/lib/greeting-rule.mjs'
+import { openingShown, openingEnds, OPENING } from '@/lib/greeting-rule.mjs'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · her face shares the page's one audio session
 
 export type Talker = {
@@ -66,37 +66,19 @@ async function startFace(video: HTMLVideoElement): Promise<Face> {
   }
 }
 
-/** Sasha 257 · Tyler (row 860): her face's bubble was an EMPTY dark circle on his phone. The face comes late there (10.6 s
- *  measured), its session was ended 0.9 s later and the bubble took a "still" of a canvas no frame had been drawn to yet (a blank
- *  300×150 canvas is still a canvas) — a dark rectangle. A still is taken only from a frame actually drawn, and the last real
- *  one is kept in this browser (FACE_KEY), so her face is in the bubble on arrival — never an empty circle. */
-const FACE_KEY = 's2_face'
-/** Sasha 259 · Tyler (row 883): on his phone the bubble was a plain purple "S" — no frame of her face had ever been kept in that
- *  browser (the face comes late there, or the opening is skipped once he's talking). Her face or nothing: a real still of her own
- *  stream ships with the page (public/sasha-face.jpg) and is the bubble's face until a fresher one is kept. */
-export const FACE_STILL = '/sasha-face.jpg'
+/** Sasha 268 · rows 952/953 (Tyler): ONE FRAMING — her half-body view (head, shoulders, upper body), exactly as her live video draws it.
+ *  The still is a frame of that live video (1280×720, keyed, transparent — public/sasha-half.webp), drawn in the SAME box with the same
+ *  crop and position as the live canvas (cover · center 18%), so when the live video takes over nothing moves. It replaces the tight
+ *  face close-up (/sasha-face.jpg, 320×320) and the small kept snapshots (s2_face, 160 px) — neither is shown anywhere any more. */
+export const FACE_STILL = '/sasha-half.webp'
+export const FRAMING = 'center 18% / cover no-repeat'
 /** Sasha 265 · item 2: the one thing that skips the arrival's motion (row 936) — then the circle at once, her face still shown. */
 const reducedMotion = (): boolean => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false } }
-const keptFace = (): string | null => { try { return localStorage.getItem(FACE_KEY) } catch { return null } }
 const drawn = (c: HTMLCanvasElement | null) => !!c && c.dataset.drawn === '1'
 async function firstFrame(c: HTMLCanvasElement | null, ms = 6000): Promise<boolean> {   // a late face: wait for its first frame
   const t0 = performance.now()
   while (!drawn(c) && performance.now() - t0 < ms) await new Promise(r => setTimeout(r, 120))
   return drawn(c)
-}
-
-function still(keyed: HTMLCanvasElement | null): string | null {   // her face as it last was, on the page's own dark (keyed)
-  try {
-    if (!keyed || !keyed.width || !drawn(keyed)) return null   // Sasha 257 · never a blank canvas
-    const c = document.createElement('canvas'); c.width = 160; c.height = Math.round((160 * keyed.height) / keyed.width)
-    const x = c.getContext('2d')
-    if (!x) return null
-    x.fillStyle = '#1b1b26'; x.fillRect(0, 0, c.width, c.height)
-    x.drawImage(keyed, 0, 0, c.width, c.height)
-    const url = c.toDataURL('image/jpeg', 0.85)
-    try { localStorage.setItem(FACE_KEY, url) } catch { /* private mode / full */ }
-    return url
-  } catch { return null }
 }
 
 /** The avatar streams on a green screen: each decoded frame drawn to the canvas with the green knocked out (as /next does). */
@@ -134,9 +116,12 @@ const FACE_IDLE_S = 120
 
 const BUBBLE_BOTTOM = 'calc(env(safe-area-inset-bottom) + 128px)'
 
-export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
+/** Sasha 268 · what the page asks of her arrival: is she full size, and — on his first real request — say this, then go to the circle. */
+export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void> }
+
+export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false, ctlRef }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
   asleep?: boolean; onWake?: () => void
-  started?: boolean }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her · Sasha 251 · started: the conversation has begun — the opening ends
+  started?: boolean; ctlRef?: { current: HelloCtl | null } }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her · Sasha 251 · started: the conversation has begun — the opening ends
   type Phase = 'off' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
@@ -144,8 +129,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   useEffect(() => { phaseRef.current = phase }, [phase])
   const tapForRef = useRef<'face' | 'voice'>('voice')
   useEffect(() => { tapForRef.current = tapFor }, [tapFor])
-  const [img, setImg] = useState<string | null>(FACE_STILL)   // Sasha 259 · her face, always — never the "S"
-  useEffect(() => { const k = keptFace(); if (k) setImg(i => i || k) }, [])   // Sasha 257 · her face from the last visit, on arrival
+  const img = FACE_STILL   // Sasha 268 · the ONE still (her half-body frame) — never a kept snapshot or a close-up
   const [talking, setTalking] = useState(false)
   const video = useRef<HTMLVideoElement | null>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
@@ -179,7 +163,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     if (idleLive.current) clearTimeout(idleLive.current)
     const f = face.current
     face.current = null
-    if (f) { setImg(still(canvas.current) || img); keyOff(); await f.stop() }   // the session ENDS after the hello
+    if (f) { keyOff(); await f.stop() }   // the session ENDS after the hello (her last frame stays on the canvas)
     try { sessionStorage.setItem('s2_hello', '1'); localStorage.setItem('s2_met', '1') } catch { /* private mode */ }
     setPhase('bubble')
   }
@@ -205,7 +189,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
       const g = face.current
       if (!g || phaseRef.current !== 'face') return
       face.current = null
-      setImg(still(canvas.current) || img)
+      keyOff()   // her last live frame stays on the canvas — the same framing
       void g.stop()
     }, FACE_IDLE_S * 1000)
   }
@@ -226,7 +210,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     v.play().catch(() => {})
     if (now === 'voice') setPhase('faceLate')
     else if (now === 'tap' && tapForRef.current === 'voice') setTapFor('face')
-    else if (now === 'bubble' || now === 'off') void firstFrame(canvas.current).then(() => { face.current = null; setImg(i => still(canvas.current) || i); keyOff(); f.stop() })   // Sasha 257 · its first frame, then the still
+    else if (now === 'bubble' || now === 'off') void firstFrame(canvas.current).then(() => { face.current = null; keyOff(); f.stop() })   // Sasha 257 · its first frame; 268: no snapshot
   }
 
   // the opening: once per visit (the session), as soon as the page is signed in and the name is known (or ~0.9 s has passed)
@@ -289,7 +273,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     talker.setRoute(null)
     const f = face.current
     face.current = null
-    if (f) { setImg(still(canvas.current) || img); keyOff(); await f.stop() }
+    if (f) { keyOff(); await f.stop() }
     setPhase('bubble')
   }
   const faceBack = async () => {
@@ -301,11 +285,34 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
       keyOn()
       f.video.muted = false
       f.video.play().catch(() => {})
-      const arm = () => { if (idle.current) clearTimeout(idle.current); idle.current = setTimeout(collapse, 90000) }
+      // Sasha 268 · item 6: no timer sends her back to the circle — only his next request does (bye); after FACE_IDLE_S quiet her live
+      // face is let go (it bills by the minute) and her last frame stays, full size
+      const arm = () => { if (idle.current) clearTimeout(idle.current); idle.current = setTimeout(() => { if (face.current === f) { face.current = null; talker.setRoute(null); keyOff(); void f.stop() } }, FACE_IDLE_S * 1000) }
       talker.setRoute(async t => { arm(); const secs = await f.say(t); await new Promise(r => setTimeout(r, secs * 1000 + 300)) })
       arm()
     } catch { setPhase('bubble') }
   }
+
+  // Sasha 268 · item 4 (rows 951–953): ONE trigger — his first REAL request (the page decides: voice.py's rule, a card's tap, or the
+  // first tool the turn starts). Greetings and small talk keep her full size. On it she says voice.py's line (her live face says it,
+  // lip-synced, when it is up; else her voice), then goes to the corner circle. Tapping the circle brings her back (faceAgain); his
+  // next request does the same again.
+  const byeing = useRef(false)
+  const isBig = () => OPENING.includes(phaseRef.current) || phaseRef.current === 'faceAgain'
+  const bye = async (lineToSay: string, speak: boolean) => {
+    const p = phaseRef.current
+    if (!isBig() || byeing.current) return
+    byeing.current = true
+    try {
+      if (speak && lineToSay && !asleepRef.current) {
+        const f = face.current
+        if (f) { const secs = await f.say(lineToSay); await new Promise(r => setTimeout(r, secs * 1000 + 300)) }
+        else await talker.sayNow(lineToSay)
+      }
+    } catch { /* said or not, she goes to work */ } finally { byeing.current = false }
+    if (p === 'faceAgain') await collapse(); else await handoff()
+  }
+  useEffect(() => { if (ctlRef) ctlRef.current = { big: isBig, bye } })
 
   // Sasha 246 item 2 · fall asleep: her face, if it is up (the hello or "her face back"), stops NOW — mid-word — and becomes the
   // dimmed bubble; no hello is said later in this visit. Waking is the parent's (the bubble's tap → onWake).
@@ -349,14 +356,17 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   // the first instant, the live face over it once drawn; her voice alone (no live face) shows her still with the line, not a text card
   const big = shown === 'face' || shown === 'card'
   const [live, setLive] = useState(false)   // the live face has drawn a frame: her still steps back (the keyed frame is see-through)
-  useEffect(() => { if (!big) return; const t = setInterval(() => setLive(drawn(canvas.current)), 150); return () => clearInterval(t) }, [big])
+  useEffect(() => { if (!big) return; const t = setInterval(() => setLive(drawn(canvas.current)), 50); return () => clearInterval(t) }, [big])   // 268: within 50 ms
   return (
     <>
       <div data-sasha-face={big ? 'full' : undefined} onClick={phase === 'faceAgain' ? collapse : undefined} style={{
-        position: 'fixed', zIndex: 40, pointerEvents: phase === 'faceAgain' ? 'auto' : 'none',   // Sasha 267 · never swallows a tap meant for the page transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
+        // Sasha 267 · never swallows a tap meant for the page. Sasha 268: this comment sat mid-line and silenced the frame's own
+        // transition, clipping and background (since f1427dd) — each on its own line now
+        position: 'fixed', zIndex: 40, pointerEvents: phase === 'faceAgain' ? 'auto' : 'none',
+        transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
         ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: 1 }
           : { right: 16, bottom: BUBBLE_BOTTOM, width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
-        {big && !live && <div aria-hidden data-sasha-still style={{ position: 'absolute', inset: 0, background: `center 18% / cover no-repeat url(${img || FACE_STILL})` }} />}
+        {big && !live && <div aria-hidden data-sasha-still style={{ position: 'absolute', inset: 0, background: `${FRAMING} url(${img})` }} />}
         <video ref={video} playsInline autoPlay muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, pointerEvents: 'none' }} />
         <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 18%', display: 'block' }} />
         {shown === 'card' ? (   /* her voice alone: her line under her face, in the same frame (Sasha 265 · item 2) */
@@ -374,7 +384,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
             width: 40, height: 40, borderRadius: '50%', padding: 0, opacity: asleep ? 0.3 : dormant ? 0.45 : 1, flex: 'none',
             filter: asleep ? 'grayscale(.85) brightness(.7)' : 'none',
             border: `2px solid ${talking ? GOLD : 'rgba(255,255,255,.35)'}`, boxShadow: talking ? `0 0 0 4px rgba(232,185,49,.25)` : 'none',
-            background: `center / cover no-repeat url(${img || FACE_STILL})`, transition: 'box-shadow .3s, border-color .3s, opacity 1.2s, filter 1.2s' }} />, slot)
+            background: `${FRAMING} url(${img})`, transition: 'box-shadow .3s, border-color .3s, opacity 1.2s, filter 1.2s' }} />, slot)
       })()}
     </>
   )

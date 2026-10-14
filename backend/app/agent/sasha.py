@@ -697,6 +697,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
         tools = [{**t, "description": S2.S2_BOOK} if t["name"] == "book" else t for t in tools]   # Sasha 236 · /s2's own words (S1's untouched)
+        tools = [{**t, "description": S2.S2_SEARCH} if t["name"] == "search_venues" else t for t in tools]   # Sasha 268 · any business
         from agapi import via_agapi as VIA   # CR 71 · SASHA_S2_VIA_AGAPI (0 · shadow · reads · 1), read here and nowhere else
         run = VIA.runner(API.call)
         from agapi import s2_subscriptions as SUBS   # CR 72 · the subscription radar: /s2's own three tools, run here
@@ -1791,7 +1792,8 @@ async def first_line_rule():
     """Sasha 265 · item 5 (row 935: "under 1 s") · voice.first_line, as the page reads it ONCE: its words and the rule for a request for
     work — so the page says it the instant one is sent (the network alone took 0.8–1.4 s); the stream's own first line (`first`) is then
     the same words, not said twice. Public: words and a pattern, nothing of anyone's."""
-    return {"line": _V.FIRST_LINE, "work": _V._WORK.pattern, "flags": "i"}
+    return {"line": _V.FIRST_LINE, "work": _V._WORK.pattern, "flags": "i", "camera_off": _V.CAMERA_OFF,   # 268: her arrival's line
+            "trip": _V._TRIP.pattern, "try": _V.TRY_FIRST}   # 268 item 7: any other request for a service → "Let me see what I can do."
 
 
 @router.delete("/memory")

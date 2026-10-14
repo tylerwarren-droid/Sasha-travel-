@@ -6,11 +6,10 @@ import { readFileSync } from 'node:fs'
 const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 const hello = read('app/s2/S2Hello.tsx'), app = read('app/s2/S2App.tsx'), who = read('app/components/SignedInLine.tsx'), mic = read('app/components/VoiceButton.tsx')
 
-test('her face: a still only from a frame actually drawn; the last real one kept; a late face waits for its first frame', () => {
-  assert.match(hello, /!keyed \|\| !keyed\.width \|\| !drawn\(keyed\)/)           // never a blank canvas (the empty dark circle)
+test('her face: live only from a frame actually drawn; ONE half-body still (268, never a kept snapshot); a late face waits for its first frame', () => {
   assert.match(hello, /canvas\.dataset\.drawn = '1'/)                               // set only where a frame is drawn
-  assert.match(hello, /localStorage\.setItem\(FACE_KEY, url\)/)                     // kept for the next arrival
-  assert.match(hello, /const k = keptFace\(\); if \(k\) setImg/)                    // her face on arrival
+  assert.match(hello, /const img = FACE_STILL/)                                      // 268: the one still, never a snapshot
+  assert.doesNotMatch(hello.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''), /FACE_KEY|keptFace|sasha-face\.jpg/)                   // the kept close-up is retired
   assert.match(hello, /firstFrame\(canvas\.current\)\.then/)                        // a late face (10.6 s on a phone) waits for its frame
   assert.doesNotMatch(hello, /setTimeout\(\(\) => \{ face\.current = null; setImg\(still/)   // the old 0.9 s still is gone
 })
@@ -53,9 +52,9 @@ test('Sasha 259 · ONE working mark: the holding line, else "…" — and aria-b
   assert.match(app, /<div aria-busy="true" data-sasha-working[^>]*>\{m\.hold \|\| '…'\}<\/div>/)
 })
 
-test('Sasha 259 · a calm phone screen: her face is a real still, in the voice row with the moon; no text under the mic', () => {
+test('Sasha 259 · a calm phone screen: her face is a real still (268: half-body), in the voice row with the moon; no text under the mic', () => {
   const app = read('app/s2/S2App.tsx'), hello = read('app/s2/S2Hello.tsx'), mic = read('app/components/VoiceButton.tsx')
-  assert.match(hello, /useState<string \| null>\(FACE_STILL\)/)                         // never the "S"
+  assert.match(hello, /export const FACE_STILL = '\/sasha-half\.webp'/)               // never the "S"; 268: her half-body still
   assert.doesNotMatch(hello, /\{img \? '' : 'S'\}/)
   assert.match(hello, /document\.getElementById\('s2-face-slot'\)/)
   assert.match(app, /<span id="s2-face-slot"/)

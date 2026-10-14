@@ -649,11 +649,12 @@ export default function NextPage() {
       interruptFnRef.current?.()        // her face stops mid-word (LiveAvatar interrupt)
       setCaption('')
     }
+    if (r.effects.releaseFace) handleEndSession()   // Sasha 268 · item 8: her live face let go (the LiveAvatar session ends — cost — and the mic with it)
     if (nowAsleep) return
     if (r.effects.sayHere) setChatMessages(prev => [...prev, { role: 'assistant', content: HERE, sleepLine: true }])   // never sent to her as history
     if (r.effects.sayHere) { setHereFlash(true); setTimeout(() => setHereFlash(false), 3500) }   // seen in standby too (found live: no chat to show it in)
     if (r.effects.speakHere && !isRespondingRef.current) speakNow(HERE)   // spoken when she's on a call (her voice); text-only: shown
-  }, [speakNow])
+  }, [speakNow, handleEndSession])
 
   const handleSashaFinished = useCallback(() => {
     // A real answer was queued behind an interim line — voice it now instead of releasing, so
@@ -1648,6 +1649,7 @@ export default function NextPage() {
         .mt-sleepveil{position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0;cursor:pointer;color:rgba(255,255,255,.75)}
         .mt-sleepveil span{font-size:13px;padding:8px 14px;border-radius:999px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px)}
         .mt-avatar[data-mode="pip"] .mt-sleepveil span{display:none}
+        .mt-avatar[data-mode="pip"] .mt-sleep span{display:none}
         .mt-avatar[data-mode="pip"] .mt-ov-top{padding:8px 10px!important}
         .mt-avatar[data-mode="pip"] .mt-ov-top .la-icon{width:24px;height:24px}
         .mt-pipfoot{position:absolute;left:0;right:0;bottom:0;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:3;font-size:11px;color:#fff;background:linear-gradient(to top,rgba(0,0,0,.8),transparent)}

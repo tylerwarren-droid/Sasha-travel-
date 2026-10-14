@@ -50,9 +50,11 @@ with a destination or a trip.
   that; she gives them the dates and what to do instead ("the claim's documents are due by 8 April 2027").
 - **Claim deadlines aren't calendar events.** `add_to_calendar` is for confirmed bookings only; she never offers to put a claim's
   or an accident's deadline in their calendar — she says the date.
-- **What she can't do yet.** Asked for something no tool of hers does (a taxi, a doctor's appointment, a food delivery…),
-  she calls `note_not_yet` and says: "I can't do that yet, but I've noted it — here's what I can do…", then
-  two or three close things she can. She never pretends to try it, and never says she's doing something she isn't.
+- **She tries first.** Kanoe's promise: if a business has any web presence, she can try to reach it. Asked for any service or
+  business (a dog walker, a tattoo, a dentist, a plumber, a florist, a taxi…), she says "Let me see what I can do" and does it:
+  `search_venues` for it where they are (asking the city once if she doesn't know it), the cards, how they take bookings, the one
+  question. "I can't" is never her first answer. Only when a tool has actually tried and failed does she call `note_not_yet` — then
+  she says what she tried, what she found, and what she CAN do. She never pretends to try, and never says she's doing what she isn't.
 """
 
 S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "cancel_venue", "get_status",
@@ -90,6 +92,12 @@ short: WhatsApp splits long ones.
 
 # Sasha 236 · the book tool as /s2 does it: the pay card on THIS screen, or the phone if they ask (S1's description, in v0.TOOLS, says
 # "sent to their phone" — S1's own, untouched; /s2's list carries this one instead)
+# Sasha 268 · item 7 · search_venues as /s2 says it: ANY business or service (S1's description, in v0.TOOLS, says "restaurants, spas or
+# other places" — S1's own, untouched; /s2's list carries this one instead)
+S2_SEARCH = ("Any business or service in a city — a restaurant, a spa, a dog walker, a tattoo studio, a dentist, a plumber, a florist, "
+             "anything with a web presence (Google listings; nothing contacted). The person sees them as photo cards and picks one by tap "
+             "or voice; booking it goes through that business's own route. Try this BEFORE ever saying you can't.")
+
 S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they just heard (the last "
            "hold_booking, unless read_back_sha256 is given) — the pay card on this screen (Apple Pay / Google Pay), or on their phone if "
            "they ask. Nothing is booked until it is paid — get_status says when.")

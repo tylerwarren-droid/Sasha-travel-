@@ -52,9 +52,10 @@ class Honest(unittest.TestCase):
         from app.agent import s2 as S2
         self.assertIn("She never says she'll remind them", S2.S2_WHO)
 
-    def test_s2_persona_says_not_yet_and_never_pretends(self):
+    def test_s2_persona_tries_first_and_never_pretends(self):   # Sasha 268 · item 7: was "I can't do that yet, but I've noted it" first
         from app.agent import s2 as S2
-        self.assertIn("I can't do that yet, but I've noted it", S2.S2_WHO)
+        self.assertNotIn("I can't do that yet, but I've noted it", S2.S2_WHO)
+        self.assertIn('she says "Let me see what I can do" and does it', S2.S2_WHO)
         self.assertIn("never pretends", S2.S2_WHO)
 
 
@@ -64,7 +65,8 @@ class NotYet(unittest.TestCase):
 
     def test_masked_and_kept(self):
         with mock.patch.object(HOME, "RUN", None), mock.patch("booking_signer.plan_store._run", lambda: None):
-            out = run(HOME.note_not_yet(API.Ctx(account=ACCOUNT, surface="s2"),
+            tried = API.Ctx(account=ACCOUNT, surface="s2", calls=[{"tool": "search_venues", "ok": False}])   # 268: only after a try
+            out = run(HOME.note_not_yet(tried,
                                         {"asked": "cancel my Netflix, card 4111 1111 1111 1111, email me at ana@x.com or +34 600 123 456"}))
         self.assertTrue(out["noted"])
         row = HOME._MEM[-1]

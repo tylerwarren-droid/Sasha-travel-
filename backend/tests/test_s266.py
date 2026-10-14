@@ -85,7 +85,7 @@ class SheStaysThroughTheFirstExchange(unittest.TestCase):
         idle = hello[hello.index("idleLive.current = setTimeout("):hello.index("}, FACE_IDLE_S * 1000)")]
         self.assertNotIn("setPhase", idle)                                                 # the live face let go — never the arrival
         self.assertIn("if (!openingEnds(phaseRef.current, started)) return", hello)      # his first reply: then the circle
-        self.assertIn("started={arrivalStarted(msgs) || tab !== 'sasha'}", _tsx(self, "app/s2/S2App.tsx"))   # 267: another tab too
+        self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", _tsx(self, "app/s2/S2App.tsx"))   # 268: small talk keeps her; his first request (bye) ends it
 
 
 if __name__ == "__main__":

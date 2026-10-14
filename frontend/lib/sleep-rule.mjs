@@ -11,7 +11,7 @@ export const HERE = "I'm here"
 
 /** @typedef {'awake' | 'asleep'} SleepState */
 /** @typedef {'tap_pause' | 'tap_face' | 'press_mic' | 'typed'} SleepEvent */
-/** @typedef {{ stopAudio: boolean, micOff: boolean, dim: boolean, sayHere: boolean, speakHere: boolean }} SleepEffects */
+/** @typedef {{ stopAudio: boolean, micOff: boolean, dim: boolean, sayHere: boolean, speakHere: boolean, releaseFace: boolean }} SleepEffects */
 
 const WAKERS = new Set(['tap_pause', 'tap_face', 'press_mic', 'typed'])
 
@@ -22,12 +22,12 @@ const WAKERS = new Set(['tap_pause', 'tap_face', 'press_mic', 'typed'])
  * @returns {{ state: SleepState, effects: SleepEffects }}
  */
 export function sleepStep(state, event) {
-  const none = { stopAudio: false, micOff: false, dim: false, sayHere: false, speakHere: false }
+  const none = { stopAudio: false, micOff: false, dim: false, sayHere: false, speakHere: false, releaseFace: false }
   if (state === ASLEEP && WAKERS.has(event)) {
     return { state: AWAKE, effects: { ...none, sayHere: true, speakHere: event === 'tap_pause' || event === 'tap_face' } }
   }
   if (state !== ASLEEP && event === 'tap_pause') {
-    return { state: ASLEEP, effects: { ...none, stopAudio: true, micOff: true, dim: true } }
+    return { state: ASLEEP, effects: { ...none, stopAudio: true, micOff: true, dim: true, releaseFace: true } }   // Sasha 268 · item 8: her live face let go (cost)
   }
   // awake + a face tap / mic press / typing: nothing here — that action does what it always did
   return { state: state === ASLEEP ? ASLEEP : AWAKE, effects: { ...none, micOff: state === ASLEEP, dim: state === ASLEEP } }
@@ -38,7 +38,7 @@ export const mayListen = (s) => s !== ASLEEP && s !== true
 /** Asleep: nothing is said aloud. @param {SleepState | boolean} s */
 export const maySpeak = (s) => s !== ASLEEP && s !== true
 
-/** The button's words. @param {boolean} asleep */
-export const buttonLabel = (asleep) => (asleep ? 'Wake Sasha' : 'Pause Sasha')
-/** Under her face while asleep. */
-export const ASLEEP_LINE = 'Asleep — not listening. Tap to wake her.'
+/** The button's words — always shown beside its icon (Sasha 268 · item 8, row 954: "The moon icon isn't understood"). @param {boolean} asleep */
+export const buttonLabel = (asleep) => (asleep ? 'Wake' : 'Pause Sasha')
+/** While paused, said plainly on the page (/s2 under the controls, /next on her stage). */
+export const ASLEEP_LINE = 'Sasha is paused — not listening, not talking. Tap Wake to bring her back.'

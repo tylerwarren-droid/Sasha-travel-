@@ -6,22 +6,30 @@
  */
 import { apiUrl } from '@/lib/api'
 
-let rule: { line: string; re: RegExp } | null = null
+let rule: { line: string; re: RegExp; cameraOff: string; trip: RegExp | null; tryLine: string } | null = null
 let loading: Promise<void> | null = null
 
 export function loadFirstLine(): Promise<void> {
   if (rule || loading) return loading || Promise.resolve()
   loading = fetch(apiUrl('/api/agent/first-line'), { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
-    .then((j: { line?: string; work?: string; flags?: string } | null) => {
-      if (j?.line && j?.work) rule = { line: j.line, re: new RegExp(j.work, j.flags || 'i') }
+    .then((j: { line?: string; work?: string; flags?: string; camera_off?: string; trip?: string; try?: string } | null) => {
+      if (j?.line && j?.work) rule = { line: j.line, re: new RegExp(j.work, j.flags || 'i'), cameraOff: j.camera_off || '',
+                                       trip: j.trip ? new RegExp(j.trip, j.flags || 'i') : null, tryLine: j.try || '' }
     })
     .catch(() => { /* not read: the stream's own first line still comes (~1 s) */ })
     .finally(() => { loading = null })
   return loading
 }
 
-/** The first line for this message, when it is a request for work (and the rule has been read); else null. */
+/** Sasha 268 · her arrival's line on his first real request (voice.CAMERA_OFF), or '' when it hasn't been read. */
+export function cameraOffLine(): string {
+  return rule?.cameraOff || ''
+}
+
+/** The first line for this message, when it is a request for work (and the rule has been read); else null. Sasha 268 · item 7: a
+ *  trip, a table or dates → voice.FIRST_LINE; any other request for a service → voice.TRY_FIRST ("Let me see what I can do."). */
 export function firstLineFor(text: string): string | null {
-  return rule && rule.re.test(text || '') ? rule.line : null
+  if (!rule || !rule.re.test(text || '')) return null
+  return !rule.tryLine || !rule.trip || rule.trip.test(text || '') ? rule.line : rule.tryLine
 }

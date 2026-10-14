@@ -3,8 +3,8 @@
     GET /api/agent/me           → {"name": their first name, or null}   (for "Hi {name}, I'm Sasha")
     what_i_can_do (tool)        → the capability card, grouped Book · Plan · Money · Messages · Your documents — only what /s2
                                   really does today (each line maps to a tool in S2_TOOLS; a test holds that)
-    note_not_yet (tool)         → anything she can't do: logged, MASKED (digits, emails, phone numbers removed), for the founder;
-                                  she says "I can't do that yet, but I've noted it — here's what I can do…", never a pretend attempt
+    note_not_yet (tool)         → what she TRIED and couldn't do (268: refused unless a tool tried this turn): logged, MASKED (digits,
+                                  emails, phone numbers removed), for the founder; she says what she tried, found and CAN do
     GET /api/agent/not-yet      → the founder's list (founder only)
 
 The log: s2_not_yet (sql/038_not_yet.sql) once applied; until then this process's memory and Railway's log ([s2-not-yet]).
@@ -30,7 +30,7 @@ log = logging.getLogger("agapi.s2_home")
 CAPABILITIES: List[Dict] = [
     {"group": "Book", "say": "book tables, spas and trips", "chip": ("Book dinner", "search_venues"),
      "more_chips": [("A table for two tonight", "search_venues"), ("A spa on Saturday", "search_venues")],
-     "items": [("A table at a restaurant", "search_venues"), ("A spa, salon or other place", "search_venues"),
+     "items": [("A table at a restaurant", "search_venues"), ("Any place or service — a spa, a dog walker, a plumber…", "search_venues"),
                ("Flights and hotels for a trip", "book")]},
     {"group": "Plan", "say": "plan a trip day by day", "chip": ("Plan a weekend", "propose_trip"),
      "items": [("A weekend or a longer trip, day by day", "propose_trip"),
@@ -170,10 +170,19 @@ async def remember_name(ctx, a: dict) -> dict:
             if n else "That didn't look like a name — ask again, briefly."}
 
 
+# Sasha 268 · item 7 (rows 954/955): "I can't" only AFTER the engine actually tried. A call with no attempt this turn is refused —
+# nothing noted — and she is told to try first. The tools that count as a try: anything that reached for the business.
+TRIED = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "send_email", "send_whatsapp", "suggest_activities")
+
+
 async def note_not_yet(ctx, a: dict) -> dict:
+    tried = [c["tool"] for c in (getattr(ctx, "calls", None) or []) if c.get("tool") in TRIED]
+    if not tried:
+        return {"noted": False, "how": "Not yet — you haven't tried. Say \"Let me see what I can do\" and try it: search_venues for it "
+                                      "where they are (ask the city once if you don't know it), then the cards and how they take bookings."}
     await note(ctx.account, str(a.get("asked") or ""))
-    return {"noted": True, "say": "Say: \"I can't do that yet, but I've noted it — here's what I can do…\" and name two or three "
-                                  "things from what_i_can_do that are closest to what they wanted. Never pretend to try it."}
+    return {"noted": True, "tried": tried, "say": "Say what you tried and what you found, then two or three things from what_i_can_do "
+                                                  "closest to what they wanted. Never pretend it worked."}
 
 
 def tools() -> List[dict]:
@@ -182,8 +191,9 @@ def tools() -> List[dict]:
         _t("what_i_can_do", "Pacioli", what_i_can_do, "What Sasha can do on this screen, grouped (Book · Plan · Money · Messages · Your "
            "documents) — for 'what can you do?'. Shows a card; say its SAY line, briefly.", {}, [],
            {"type": "object", "properties": {"groups": {"type": "array"}}}, []),
-        _t("note_not_yet", "Pacioli", note_not_yet, "Anything they ask that you can't do (no tool does it): note it for the founder — "
-           "pass what they asked in a few words — then say you can't do it YET and what you can do instead. Never pretend to try.",
+        _t("note_not_yet", "Pacioli", note_not_yet, "Only AFTER you actually tried (search_venues or "
+           "the business's own route) and it failed: note it for the founder — what they asked, in a few words — then say what you "
+           "tried, what you found and what you CAN do. Never your first answer.",
            {"asked": {"type": "string", "maxLength": 300}}, ["asked"], {"type": "object", "properties": {"noted": {"type": "boolean"}}}, []),
         _t("remember_name", "Pacioli", remember_name, "When they tell you what to call them (their first name — e.g. after you asked "
            "\"What should I call you?\"), save it; you'll greet them by it from then on.",

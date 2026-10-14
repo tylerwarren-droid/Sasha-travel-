@@ -22,6 +22,7 @@ import re
 from contextvars import ContextVar
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+TRY_FIRST = "Let me see what I can do."   # Sasha 268 · item 7: her first answer to any request for a service (first_line, RULES)
 ASK_BOOK = "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?"
 CHOICES = ({"title": "Prefilled form", "route": "page"}, {"title": "Handle it", "route": None})
 DONE_FORM = "Done — it's on your screen, tap to confirm."
@@ -117,6 +118,10 @@ RULES = f"""
 - When a tool fails (its result says ok: false), say plainly that it didn't work and what you'll do next. Never describe results,
   cards, a form, a booking, a message sent or a total that the tool didn't return — nothing is on their screen unless a tool put it
   there this turn.
+- Try first. Asked for any service or business (a dog walker, a tattoo, a dentist, a plumber, a florist — anything with a web
+  presence), her first answer is "{TRY_FIRST}" and then she does it: search for it, show the cards, find how they take bookings, ask
+  the one question. "I can't" is never her first answer; she says it only after a tool actually tried and failed — and then with what
+  she found and what she CAN do.
 - Short: two or three sentences at most — the card or the list carries the detail. Never repeat what's already on their screen,
   what you said earlier in this reply, or what you said in your last reply.
 - A booking page is always on their screen as a card they tap; sending it to their phone is an extra. Never say it can only go to
@@ -341,16 +346,27 @@ _STEP_N: dict = {}
 # that isn't work (a yes, a thanks, a question of fact) keeps the holding line at HOLD_AFTER_S, only if it's slow. Every surface reads it:
 # the stream's first event (/s2, /next — her face's caption and voice too) and WhatsApp's first message.
 FIRST_LINE = "Great — let me pull something together, it might take a few seconds."
+# Sasha 268 · item 4 (rows 951–953, Tyler's words): her line on his FIRST REAL REQUEST while she is full size — then the corner circle and
+# the work. Said by code, never the model's; spoken when her voice is on (her live face says it when it is up).
+CAMERA_OFF = "OK — I'm going to switch off my camera and get to work. I'm still here; tap me any time to bring me back."
 FIRST_GAP_EARLY_S = 1.0   # after the first line, the first progress line comes this much sooner (the page said it ~1 s earlier)
 _MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
-_WORK = re.compile(r"\b(?:trip|travel\w*|holiday|vacation|getaway|honeymoon|itinerary|plan|planning|going|go\s+to|fly|flying|flights?|"
-                   r"hotels?|book|booking|reserve|reservation|find|search|look\s+for|restaurants?|table|tour|visit\w*)\b"
+# Sasha 268 · item 7 (rows 954/955, Tyler 21:00: "Can you find a dog walker and schedule one?" → "I can't do that yet, but I've noted
+# it" — then, pushed, she found one and offered to call: "this is perfect"). Kanoe's promise: if a business has any web presence, she can
+# try to reach it. Her first answer to ANY request for a service is TRY_FIRST, then she does it (search → cards → how they take
+# bookings → the one question). "I can't" is never a first answer — only after a tool actually tried and failed (RULES, below).
+_TRIP = re.compile(r"\b(?:trip|travel\w*|holiday|vacation|getaway|honeymoon|itinerary|plan|planning|going|go\s+to|fly|flying|flights?|"
+                   r"hotels?|restaurants?|table|tour|visit\w*)\b"
                    r"|\b" + _MONTH + r"\s+\d{1,2}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?" + _MONTH + r"\b", re.I)
+_ASK = re.compile(r"\b(?:book|booking|reserve|reservation|find|search|look\s+for|get\s+me|schedule|appointment|arrange|hire|order|"
+                  r"send|fix|repair|deliver\w*|someone\s+to|i\s+need|i\s+want\s+(?:a|an|to|some)|i'?d\s+like\s+(?:a|an|to|some))\b", re.I)
+_WORK = re.compile(_TRIP.pattern + "|" + _ASK.pattern, re.I)   # any request for work: the page's rule (GET /api/agent/first-line)
 
 
 def first_line(message: str) -> Optional[str]:
-    """FIRST_LINE when the message asks for work (a trip, a destination with dates, a booking, a search), else None."""
-    return FIRST_LINE if _WORK.search(message or "") else None
+    """FIRST_LINE for a trip, a table or dates; TRY_FIRST for any other request for a service (268); else None (not work)."""
+    m = message or ""
+    return FIRST_LINE if _TRIP.search(m) else TRY_FIRST if _ASK.search(m) else None
 
 
 def progress_line(tool: Optional[str], account: str = "") -> str:

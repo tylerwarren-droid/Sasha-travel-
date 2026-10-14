@@ -81,7 +81,7 @@ class EveryArrivalShowsHer(unittest.TestCase):
         self.assertIn("prefers-reduced-motion: reduce", hello)
         self.assertIn("new MutationObserver(look)", hello)                     # the circle's slot, watched
         app = _tsx(self, "app/s2/S2App.tsx")
-        self.assertIn("started={arrivalStarted(msgs) || tab !== 'sasha'}", app)   # 267: another tab too
+        self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", app)   # 268: small talk keeps her; his first request (bye) ends it
 
 
 # ── 3 · NEW CHAT ────────────────────────────────────────────────────────────────────────────────────────────────────────────────

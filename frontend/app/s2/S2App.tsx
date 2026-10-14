@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import VoiceButton from '@/app/components/VoiceButton'
 import { WhoLine } from '@/app/components/SignedInLine'   // Sasha 257 · who is signed in, quietly in the header
 import { PayHere } from '@/app/components/PayHere'
-import S2Hello from './S2Hello'
+import S2Hello, { type HelloCtl } from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
 import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
@@ -25,9 +25,8 @@ import { TRIP_BOARD_CSS } from './tripBoardCss'
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
-import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
-import { arrivalStarted } from '@/lib/greeting-rule.mjs'
-import { loadFirstLine, firstLineFor } from '@/lib/first-line'
+import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
+import { loadFirstLine, firstLineFor, cameraOffLine } from '@/lib/first-line'
 import { BLOCKED, stepsFor } from '@/lib/mic-state'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
@@ -499,8 +498,16 @@ export default function S2App() {
     setMsgs(ms => [...ms, { role: 'user', text: t, cards: [] }, { role: 'sasha', text: '', cards: [] }])
     const patch = (f: (m: Msg) => Msg) => setMsgs(ms => { const c = ms.slice(); c[c.length - 1] = f(c[c.length - 1]); return c })
     // Sasha 265 · item 5: a request for work hears voice.first_line the instant it's sent (the network took 0.8–1.4 s)
-    const said1 = pick || tap ? null : firstLineFor(t)
-    if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }
+    // Sasha 268 · item 4: his FIRST REAL REQUEST while she is full size (voice.py's work rule, or a card's pick or tap — each starts
+    // work; small talk never) → her line by code (voice.CAMERA_OFF), said by her (bye), then the corner circle and the work
+    const isRequest = !!(pick || tap || firstLineFor(t))
+    const leaving = isRequest && !!helloCtl.current?.big()
+    const said1 = leaving ? (cameraOffLine() || null) : pick || tap ? null : firstLineFor(t)
+    if (leaving) {
+      if (said1) patch(m => ({ ...m, hold: said1 }))
+      byeUntil.current = Date.now() + 9000   // her line first: the stream's lines are shown, not spoken over it
+      void helloCtl.current?.bye(said1 || '', !muted)
+    } else if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }
     let reply = ''
     // Sasha 257 · a reply stream that goes quiet (a phone's network, a connection held open) never leaves the page "busy" — the
     // mic stays off and every message is refused while it is. STALL_MS of silence → it's stopped and said; `done` ends it.
@@ -528,7 +535,9 @@ export default function S2App() {
           if (ev.type === 'render' || ev.type === 'state') ev = untagDeep(ev)
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
-          else if (ev.type === 'hold') { if (ev.first && said1) continue; patch(m => ({ ...m, hold: ev.text })); speaker.say(ev.say || ev.text) }   // 265 · never twice   // Sasha 257 · the holding line (row 863)
+          else if (ev.type === 'tool_start' && helloCtl.current?.big()) {   // Sasha 268 · a request the rule missed: the first tool it starts
+            const l = cameraOffLine(); if (l) patch(m => ({ ...m, hold: l })); byeUntil.current = Date.now() + 9000; void helloCtl.current.bye(l, !muted) }
+          else if (ev.type === 'hold') { if (ev.first && said1) continue; patch(m => ({ ...m, hold: ev.text })); if (Date.now() > byeUntil.current) speaker.say(ev.say || ev.text) }   // 265 · never twice   // Sasha 257 · the holding line (row 863)
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
           // Sasha 249 · ONE STATUS: the "Booked" card was made here by a regex on her reply (/^✅ Booked/) — deleted. It comes only
@@ -570,7 +579,7 @@ export default function S2App() {
       histRef.current = [...histRef.current, { role: 'user', content: t }, { role: 'assistant', content: reply }]
       setBusy(false)
     }
-  }, [busy, speaker, dormant, sleepEvent])
+  }, [busy, speaker, dormant, sleepEvent, muted])
   useEffect(() => {   // Sasha 257 · what they said while she was answering goes next, in order (never dropped)
     if (busy || !queued.current.length) return
     const [nxt, ...rest] = queued.current
@@ -584,6 +593,8 @@ export default function S2App() {
   useEffect(() => { void loadFirstLine() }, [])
   useEffect(() => { holdPlayAndRecord('the page') }, [])   // Sasha 267 · before her face or voice starts, before any mic request   // Sasha 265 · item 5: voice.first_line's words and rule, read once
   const [clearing, setClearing] = useState(false)
+  const helloCtl = useRef<HelloCtl | null>(null)   // Sasha 268 · her arrival: big? and bye (the line, then the circle)
+  const byeUntil = useRef(0)
   // Sasha 266 · row 943 (a): the mic's own words when it isn't hearing (blocked, can't hear you) — on the page, never only a tooltip
   const [micNote, setMicNote] = useState<string | null>(null)
   const newChat = useCallback(async () => {
@@ -607,7 +618,7 @@ export default function S2App() {
   }, [busy, clearing, speaker])
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
-    started={arrivalStarted(msgs) || tab !== 'sasha'} />   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
+    started={tab !== 'sasha'} ctlRef={helloCtl} />   // Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>
@@ -666,6 +677,8 @@ export default function S2App() {
               </div>))}
             <div ref={end} />
           </section>
+          {asleep ? (   /* Sasha 268 · item 8: paused, said plainly — the mic off, her voice stopped, her live face let go (S2Hello) */
+            <div role="status" data-sasha-paused style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: `1px solid ${C.gold}`, background: 'rgba(232,185,49,.08)', fontSize: 14, lineHeight: 1.4, fontWeight: 600 }}>{ASLEEP_LINE}</div>) : null}
           {micNote ? (   /* Sasha 266 · the mic is "on" only when it hears; otherwise this, plainly, with how to allow it */
             <div role="status" data-mic-stuck style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(240,120,120,.45)', background: 'rgba(240,120,120,.08)', fontSize: 14, lineHeight: 1.4 }}>
               <div style={{ fontWeight: 700 }}>{micNote}</div>

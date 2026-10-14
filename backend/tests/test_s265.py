@@ -81,7 +81,7 @@ class EveryArrivalShowsHer(unittest.TestCase):
         self.assertIn("prefers-reduced-motion: reduce", hello)
         self.assertIn("new MutationObserver(look)", hello)                     # the circle's slot, watched
         app = _tsx(self, "app/s2/S2App.tsx")
-        self.assertIn("started={arrivalStarted(msgs)}", app)
+        self.assertIn("started={arrivalStarted(msgs) || tab !== 'sasha'}", app)   # 267: another tab too
 
 
 # ── 3 · NEW CHAT ────────────────────────────────────────────────────────────────────────────────────────────────────────────────

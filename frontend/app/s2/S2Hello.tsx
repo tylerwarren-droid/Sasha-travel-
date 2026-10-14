@@ -353,7 +353,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   return (
     <>
       <div data-sasha-face={big ? 'full' : undefined} onClick={phase === 'faceAgain' ? collapse : undefined} style={{
-        position: 'fixed', zIndex: 40, transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
+        position: 'fixed', zIndex: 40, pointerEvents: phase === 'faceAgain' ? 'auto' : 'none',   // Sasha 267 · never swallows a tap meant for the page transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
         ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: 1 }
           : { right: 16, bottom: BUBBLE_BOTTOM, width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
         {big && !live && <div aria-hidden data-sasha-still style={{ position: 'absolute', inset: 0, background: `center 18% / cover no-repeat url(${img || FACE_STILL})` }} />}
@@ -362,8 +362,8 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
         {shown === 'card' ? (   /* her voice alone: her line under her face, in the same frame (Sasha 265 · item 2) */
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 16px', background: 'linear-gradient(transparent, rgba(10,10,16,.92) 30%)', color: '#fff', fontSize: 16, lineHeight: 1.45 }}>
             {line}
-            {phase === 'tap' && <div><button onClick={tapToHear} style={{ marginTop: 10, padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700 }}>Tap to hear Sasha</button></div>}
-          </div>) : big && phase === 'tap' && <button onClick={tapToHear} style={{ position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
+            {phase === 'tap' && <div><button onClick={tapToHear} style={{ pointerEvents: 'auto', marginTop: 10, padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700 }}>Tap to hear Sasha</button></div>}
+          </div>) : big && phase === 'tap' && <button onClick={tapToHear} style={{ pointerEvents: 'auto', position: 'absolute', left: '50%', bottom: 18, transform: 'translateX(-50%)', padding: '12px 20px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 700, fontSize: 16 }}>Tap to hear Sasha</button>}
       </div>
       {phase === 'bubble' && (() => {
         // Sasha 259 · Tyler (row 884): the bubble sat over the send button. It lives IN the shell's voice row now (#s2-face-slot),

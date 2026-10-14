@@ -73,6 +73,14 @@ class TheKeepNeverAsksForWhatItHolds(unittest.TestCase):
         self.assertIn("{SAVED[it.tier]}", k)
 
 
+class HerFrameNeverSwallowsATap(unittest.TestCase):
+    def test_found_by_the_keep_proof(self):
+        hello = _src(self, "app/s2/S2Hello.tsx")
+        self.assertIn("pointerEvents: phase === 'faceAgain' ? 'auto' : 'none'", hello)   # her full-size frame: taps pass to the page
+        self.assertEqual(hello.count("onClick={tapToHear} style={{ pointerEvents: 'auto'"), 2)   # except her own tap button
+        self.assertIn("started={arrivalStarted(msgs) || tab !== 'sasha'}", _src(self, "app/s2/S2App.tsx"))   # another tab: the circle
+
+
 class TheLogCarriesTheSession(unittest.TestCase):
     def test_the_session_state_and_who_set_it_are_kept(self):
         app = FastAPI()

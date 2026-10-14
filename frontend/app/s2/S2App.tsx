@@ -607,7 +607,7 @@ export default function S2App() {
   }, [busy, clearing, speaker])
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
-    started={arrivalStarted(msgs)} />   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
+    started={arrivalStarted(msgs) || tab !== 'sasha'} />   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>

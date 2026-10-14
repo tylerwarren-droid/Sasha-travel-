@@ -341,6 +341,7 @@ _STEP_N: dict = {}
 # that isn't work (a yes, a thanks, a question of fact) keeps the holding line at HOLD_AFTER_S, only if it's slow. Every surface reads it:
 # the stream's first event (/s2, /next — her face's caption and voice too) and WhatsApp's first message.
 FIRST_LINE = "Great — let me pull something together, it might take a few seconds."
+FIRST_GAP_EARLY_S = 1.0   # after the first line, the first progress line comes this much sooner (the page said it ~1 s earlier)
 _MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
 _WORK = re.compile(r"\b(?:trip|travel\w*|holiday|vacation|getaway|honeymoon|itinerary|plan|planning|going|go\s+to|fly|flying|flights?|"
                    r"hotels?|book|booking|reserve|reservation|find|search|look\s+for|restaurants?|table|tour|visit\w*)\b"

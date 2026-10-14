@@ -1294,6 +1294,9 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
     said_at = last_at = t0   # the last thing she said (her words, the holding line, a progress line) / the last event of any kind
     if first:   # Sasha 265 · item 5: the first line, now — the stream's first event
         started = True
+        # the page said it up to ~1 s before this event arrived (lib/first-line.ts): the first progress line comes 1 s sooner, so
+        # the quiet after the page's own line stays within PROGRESS_S (measured live: 0.8 s → 7.1 s on /next at phone size)
+        said_at = last_at = t0 - _V.FIRST_GAP_EARLY_S
         yield {"type": "hold", "text": first, "say": first, "first": True}
     try:
         while True:

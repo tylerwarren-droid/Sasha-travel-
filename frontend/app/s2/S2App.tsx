@@ -367,6 +367,10 @@ export default function S2App() {
   const [muted, setMuted] = useState(false)
   const [voiceBlocked, setVoiceBlocked] = useState(false)   // Sasha 232 · the phone refused to play her — the toggle says so
   useEffect(() => speaker.onBlocked(setVoiceBlocked), [speaker])
+  // Sasha 264 · item 7: the mic's gate has an owner here — her own voice closes it and her silence opens it (it had none: an
+  // auto-started mic stayed gated, deaf, while it showed connected)
+  const micGate = useRef<((v: boolean) => void) | null>(null)
+  useEffect(() => speaker.onSpeaking(b => micGate.current?.(b)), [speaker])
   useEffect(() => {   // Sasha 230 · the voice toggle is remembered (this browser): read once, applied to her voice
     let m = false
     try { m = localStorage.getItem('s2_muted') === '1' } catch { /* private mode: voice on */ }
@@ -621,7 +625,7 @@ export default function S2App() {
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
-              {dormant ? null : <VoiceButton quiet onTranscript={send} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
+              {dormant ? null : <VoiceButton quiet onTranscript={send} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
             </div>
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>

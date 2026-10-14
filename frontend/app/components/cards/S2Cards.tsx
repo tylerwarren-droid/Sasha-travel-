@@ -264,7 +264,7 @@ export function PreparedCard({ ev }: { ev: Ev }) {
     navigator.clipboard?.writeText(value).then(() => { setCopied(label); setTimeout(() => setCopied(null), 1500) }).catch(() => {})
   }
   return (
-    <Box k="Ready to book" h={untag(String(ev.venue || 'Their booking page'))} tone={C.gold}>
+    <Box k={ev.filled === false ? 'Not filled in — copy your details' : 'Ready to book'} h={untag(String(ev.venue || 'Their booking page'))} tone={C.gold}>{/* Sasha 264 · item 2: never an empty page called prefilled */}
       {(ev.fields || []).map((f: Ev) => (
         <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '6px 0', borderTop: `1px solid ${C.line}` }}>
           <span><span style={{ color: C.dim, fontSize: 12.5 }}>{f.label}</span><br /><span style={{ fontSize: 15 }}>{untag(String(f.value))}</span></span>

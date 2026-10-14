@@ -359,7 +359,11 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         out.text(over)
         return over
     text, renders, seen = "", [], {}
+    from app.agent import voice as V
+    steps = V.STEPS.get()   # Sasha 264 · item 1: _brain_turn's progress lines speak for the step running now
     async for ev in AG.turn_with_quiver(account, message, history, "wa:" + key, surface="wa"):
+        if steps is not None:
+            steps.see(ev)
         t = ev.get("type")
         if t == "text":
             text += str(ev.get("delta") or "")

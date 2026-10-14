@@ -203,6 +203,10 @@ function preferredAudioDeviceId(list: MediaDeviceInfo[], stored: string): string
 const KEYTERMS = ['Chamberí', 'Malasaña', 'Chueca', 'Lavapiés', 'La Latina', 'Salamanca', 'Retiro', 'Chamartín', 'Argüelles', 'Moncloa', 'Huertas']
   .map((k) => `&keyterm=${encodeURIComponent(k)}`).join('')
 
+// Sasha 264 · item 7: what the mic says when it isn't reaching her (never "Listening" while deaf)
+const DEAF_TAP = 'Sasha can’t hear you — tap the mic to talk'
+const DEAF_AFTER_MS = 4000
+
 export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake }: VoiceButtonProps) {
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
@@ -224,11 +228,15 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   const connectedRef = useRef(false)
   const transcriptRef = useRef('')
   // Start gated — worklet runs immediately but audio is suppressed until first AVATAR_SPEAK_ENDED
-  const micGatedRef = useRef(true)
+  // Sasha 264 · item 7 (Tyler's phone, /s2, 14 Oct): closed at the start ONLY when someone owns the gate (onSetGate: the call, /s2's
+  // speaker) and will open it when she stops — /s2 had no owner, so an auto-started mic dropped every frame while it showed connected
+  const micGatedRef = useRef(!!onSetGate)
   const gateOpenedAtRef = useRef(0)  // when the mic last opened — bounds the echo window
   // Sasha 192 · THE WATCHDOG: listening never dies silently (live 7 Oct: 3 minutes deaf after Sasha's question)
   const heardAtRef = useRef(0)        // when speech started with no transcript yet
   const lastAliveRef = useRef(0)      // last transcript, or (re)connection
+  const lastFrameRef = useRef(0)      // Sasha 264 · item 7: the last audio frame the mic delivered (0: none yet)
+  const deafRef = useRef(false)       // Sasha 264 · item 7: the mic isn't reaching her, and the screen says so
   const gatedSinceRef = useRef(0)     // when the mic was last closed for Sasha speaking
   const connectingRef = useRef(false)  // Sasha 197 · a connect is in flight (permission, key, socket) — never start a second
   const hadConnectedRef = useRef(false) // Sasha 197 · the watchdog only REconnects a connection that was up
@@ -421,6 +429,9 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       audioCtxRef.current = ctx
       await ctx.resume()
       micLog('audiocontext', { state: ctx.state, sampleRate: ctx.sampleRate })
+      // Sasha 264 · item 7: a phone only lets the mic's audio run from a tap — started without one (autoStart), it stays suspended and
+      // no frame ever comes. Never "Listening" then: the screen says to tap, and the tap (toggleListening) turns it on.
+      if (ctx.state !== 'running') { deafRef.current = true; reportMicError(DEAF_TAP); micLog('deaf', { why: 'audio suspended until a tap' }) }
       ctx.onstatechange = () => micLog('audiocontext', { state: ctx.state })   // iOS suspends it when the page loses audio focus
       console.log('[DG] AudioContext sampleRate:', ctx.sampleRate)
 
@@ -487,6 +498,8 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
 
         node.port.onmessage = (e) => {
           const float32 = e.data as Float32Array
+          lastFrameRef.current = Date.now()   // Sasha 264 · item 7: the mic is delivering
+          if (deafRef.current) { deafRef.current = false; reportMicError(null); micLog('hearing', { after: 'deaf' }) }
           // HARD mute (itinerary build / any in-flight turn): drop every frame at the source,
           // before Deepgram and before barge-in. `muted` is documented as a hard mute, but the
           // frame loop only honoured the speak-gate — so a build whose classify was slow/failed
@@ -708,6 +721,11 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       // Sasha 197 · the decision is lib/voice-watchdog.mjs (held by scripts/check-voice-watchdog.mjs at build).
       // 192 connected whenever "not connected and no socket" — true for the whole of a first connect (mic permission,
       // key, socket), so after the greeting it kept starting new connects over the one about to open: the mic never came on.
+      // Sasha 264 · item 7: connected, open and not paused, yet no frame from the mic for DEAF_AFTER_MS → it isn't reaching her: said
+      if (connectedRef.current && !mutedRef.current && !asleepRef.current && !deafRef.current && streamRef.current &&
+          now - Math.max(lastFrameRef.current, lastAliveRef.current) > DEAF_AFTER_MS) {
+        deafRef.current = true; reportMicError(DEAF_TAP); micLog('deaf', { why: 'no audio from the mic', ms: now - lastFrameRef.current })
+      }
       const act = watchdogAction({
         now, manualStop: manualStopRef.current, ready: readyToListenRef.current, muted: mutedRef.current,
         connected: connectedRef.current, connecting: connectingRef.current, hadConnected: hadConnectedRef.current,
@@ -735,6 +753,12 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     if (asleepRef.current) {   // Sasha 246 · pressing the mic wakes her — and she listens
       asleepRef.current = false; resumeRef.current = false
       onWakeRef.current?.()
+    }
+    if (connectedRef.current && deafRef.current) {   // Sasha 264 · item 7: the tap a phone needs — the same mic turned on, not off
+      audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(() => {})
+      micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); lastFrameRef.current = Date.now()
+      deafRef.current = false; reportMicError(null)
+      return
     }
     if (connectedRef.current) { stopAll(); return }
     // Sasha 171 · a CLICK on the mic is the guest asking to talk: the gate opens now. It started closed "until the avatar

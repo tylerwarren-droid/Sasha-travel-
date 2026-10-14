@@ -12,10 +12,14 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
                  nothing was drawn; claims_shown() / honest_faults() → a claim of what isn't there (sasha.turn acts on it)
   TOLD / told_line() / told_prefix() → Sasha 254 · the booking rules' refusals and stops, said in the rules' words (sasha.turn)
   OUTAGE / outage_line() → Sasha 261 · an AgAPI outage (its budget spent, rate-limited, not answering), one plain line (sasha.turn)
+  PROGRESS_S / progress_line() / Steps → Sasha 264 · no silence: a line from the step running, every PROGRESS_S (stream + WhatsApp)
+  BRIEF_MAX / brief()  → Sasha 264 · short, never twice: her own sentences capped, never last reply's or a card's (sasha.turn)
+  NOT_FILLED / PAGE_HERE / phone_line() / platform_line() / page_line() → Sasha 264 · a form or a platform's page, said as it is
 """
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 ASK_BOOK = "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?"
@@ -109,6 +113,10 @@ RULES = f"""
 - When a tool fails (its result says ok: false), say plainly that it didn't work and what you'll do next. Never describe results,
   cards, a form, a booking, a message sent or a total that the tool didn't return — nothing is on their screen unless a tool put it
   there this turn.
+- Short: two or three sentences at most — the card or the list carries the detail. Never repeat what's already on their screen,
+  what you said earlier in this reply, or what you said in your last reply.
+- A booking page is always on their screen as a card they tap; sending it to their phone is an extra. Never say it can only go to
+  their phone.
 """
 
 # Sasha 251 · HONEST RESULTS (found live on /s2: search_venues failed and she said "Have a look whenever you like and tap one if it
@@ -300,6 +308,149 @@ def holding_line(account: str = "") -> str:
     return HOLDING[n % len(HOLDING)]
 
 
+# ── Sasha 264 · item 1 — NO SILENCE (Tyler's beta, 14 Oct: one line at 3 s, then 20–44 s of nothing while tools ran) ───────────
+#: after the holding line, while the turn still works: a line every PROGRESS_S, from the step ACTUALLY running (the tool that started
+#: and hasn't returned), varied, never a claim (nothing found, booked, sent, done). The same lines on every surface: the stream's
+#: "hold" event (/s2, /next with parity — shown and spoken) and a message on WhatsApp.
+PROGRESS_S = 6.0
+_STEP = {
+    "stays": ("Looking at hotels now.", "Still going through the hotels.", "Comparing a few places to stay."),
+    "flights": ("Checking flights.", "Still checking the flights.", "Looking at the flight times."),
+    "trip": ("Putting the trip together.", "Still building the trip.", "Working out the days and the flights."),
+    "places": ("Looking at places now.", "Still looking through the places.", "Checking a few more places."),
+    "route": ("Checking how they take bookings.", "Still checking how they take bookings.", "Looking at their booking page."),
+    "booking": ("Setting up the booking.", "Still setting up the booking.", "Working on the booking."),
+    "up": ("Bringing that up.", "Still pulling that up.", "Getting that up for you."),
+    None: ("Still on it.", "Bear with me — still working.", "Still working on it."),
+}
+_STEP_OF = {"search_stays": "stays", "swap_stay": "stays", "search_flights": "flights", "choose_offer": "flights", "check_offer": "flights",
+            "propose_trip": "trip", "prepare_trip": "trip", "search_venues": "places", "suggest_activities": "places",
+            "read_booking_route": "route", "hold_venue": "booking", "book_venue": "booking", "hold_booking": "booking", "book": "booking",
+            "cancel_venue": "booking", "change_booking": "booking", "cancel_booking": "booking", "get_trip": "up", "get_status": "up",
+            "get_total": "up", "my_plans": "up", "get_activity": "up", "what_i_can_do": "up", "keep_list": "up"}
+_STEP_N: dict = {}
+
+
+def progress_line(tool: Optional[str], account: str = "") -> str:
+    """The next progress line for the step running now (`tool`: the tool running, None while she's still thinking) — rotating per
+    person, so the same step never sounds the same twice in a row."""
+    lines = _STEP[_STEP_OF.get(tool or "")] if tool else _STEP[None]
+    n = _STEP_N.get(account or "", 0)
+    _STEP_N[account or ""] = n + 1
+    return lines[n % len(lines)]
+
+
+class Steps:
+    """Sasha 264 · the tools running now, in the order they started: a turn's {"type": "tool_start", "name"} puts one in, its
+    {"type": "tool", "name"} takes it out. `now` is the step a progress line speaks for."""
+
+    def __init__(self):
+        self.running: List[str] = []
+
+    def see(self, ev) -> None:
+        if not isinstance(ev, dict):
+            return
+        if ev.get("type") == "tool_start" and ev.get("name"):
+            self.running.append(ev["name"])
+        elif ev.get("type") == "tool" and ev.get("name") in self.running:
+            self.running.remove(ev["name"])
+
+    @property
+    def now(self) -> Optional[str]:
+        return self.running[0] if self.running else None
+
+
+#: WhatsApp's turn runs in its own task: the Steps it reports into (set by guest_whatsapp._brain_turn, read by wa_agent.agent_turn)
+STEPS: "ContextVar[Optional[Steps]]" = ContextVar("sasha_steps", default=None)
+
+
+# ── Sasha 264 · item 5 — SHORT, NEVER TWICE (Tyler's beta: she repeats herself and says too much) ──────────────────────────────
+#: her own words in a turn: at most BRIEF_MAX sentences (the card or the list carries the detail); a sentence she has said this turn,
+#: or in her last reply, or that a card on screen already says, is never said again. Held in code (sasha.turn: brief()), and told.
+BRIEF_MAX = 3   # told in RULES too ("Short: two or three sentences at most …")
+
+
+def _sent_key(s: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", (s or "").lower().replace("’", "'").replace("'", "")).split())
+
+
+def brief(sentences: Sequence[str], said: Iterable[str], seen: Iterable[str], count: int, asked: bool) -> Tuple[List[str], int, bool]:
+    """Sasha 264 · item 5, in code: which of these sentences of hers may be said. `said`: what she has said this turn and in her last
+    reply; `seen`: what is on their screen (a card's lines); `count`: her sentences so far this turn; `asked`: a question said already.
+    Over BRIEF_MAX, only her first question still goes (she never loses the question she's asking). → (kept, count, asked)."""
+    have = {_sent_key(x) for line in said for x in _SENT_SPLIT.split(line or "") if _sent_key(x)}
+    have |= {_sent_key(x) for x in seen if _sent_key(x)}
+    out: List[str] = []
+    for s in sentences:
+        k = _sent_key(s)
+        if not k or k in have:
+            continue
+        q = s.rstrip().endswith("?")
+        if count >= BRIEF_MAX and not (q and not asked):
+            continue
+        out.append(s)
+        have.add(k)
+        count += 1
+        asked = asked or q
+    return out, count, asked
+
+
+# ── Sasha 264 · items 2 and 3 — WHAT REACHED THEM, SAID AS IT IS ────────────────────────────────────────────────────────────────
+#: item 2: AgAPI's venue.prepare_booking gave no filled page (Tyler's spa: the venue's own page opened, every field empty, and she said
+#: "Done — it's on your screen, tap to confirm"). Never an empty page called prefilled: their page + the details to copy, said so.
+NOT_FILLED = "I couldn't fill in their form, so their page is on your screen with your details to copy in. It's not booked until you confirm there."
+CAPTCHA_TOO = " Their page asks you to prove you're human, which only you can do."
+
+
+def not_filled_line(captcha: bool = False) -> str:
+    return NOT_FILLED + (CAPTCHA_TOO if captcha else "")
+
+
+#: item 3: a booking page is ALWAYS on their screen (a card they tap); their phone is an extra — and when that send fails, she says so.
+PAGE_HERE = "Their page is on your screen — tap it to book there."
+PHONE_FAILED = "I couldn't send it to your phone{why}."
+_PHONE_WHY = {"outside the 24-hour window": " — you haven't messaged me there in the last day, so I'm not allowed to write first",
+              "no whatsapp linked": " — there's no phone linked to your account", "opted out": " — you've asked me not to message you there",
+              "whatsapp for guests is off": " — messages to phones are switched off right now"}
+
+
+def phone_line(sent: bool, out: str) -> str:
+    """What she says about their phone after a page went (or didn't) — "" when it arrived. `out`: the send's own result."""
+    if sent:
+        return ""
+    o = (out or "").lower()
+    if "already sent" in o:
+        return ""
+    why = next((v for k, v in _PHONE_WHY.items() if k in o), "")
+    return PHONE_FAILED.format(why=why)
+
+
+def page_line(tool: str, r: dict) -> str:
+    """Sasha 264 · the line an in-app booking page ends on (book_venue → a platform's page, or a prepared form): the page is on their
+    screen, the phone's outcome said, an unfilled form said as unfilled. Else "" (WhatsApp, and old S1: as they were)."""
+    res = (r or {}).get("result") if (r or {}).get("ok") else None
+    if tool not in ("book_venue", "hold_venue") or not isinstance(res, dict) or not res.get("in_app"):
+        return ""
+    if res.get("status") not in ("page_on_phone", "page_link"):
+        return ""
+    prep = res.get("prepared")
+    if isinstance(prep, dict):   # their form: filled → "Done — it's on your screen" stays as it was; NOT filled → said so
+        return NOT_FILLED if prep.get("filled") is False else ""
+    if not res.get("page_url"):
+        return ""
+    return f"{res.get('page_says') or PAGE_HERE} {res.get('phone_line') or ''}".strip()   # a platform's page: its line, the phone's outcome
+
+
+def platform_line(venue: str, party: int, when: str, filled: bool, gmail: bool) -> str:
+    """Sasha 264 · item 8 (row 929): a platform's page in the app — ONE line over ONE button ("Open their booking page"). Never "shall
+    I send" (she never sends on a platform), never an internal address, never the platform's name (her voice's first rule), and "filled
+    in" only when the link really carries the slot."""
+    who = f"{party} {'person' if party == 1 else 'people'}"
+    slot = f"it's filled in for {who}, {when}" if filled else f"pick {when} for {who} there"
+    then = "I'll pick up their confirmation from your email." if gmail else "forward me the confirmation when it arrives."
+    return f"{venue} books on their own booking page — {slot}. Tap to book there; {then}"
+
+
 # ── Sasha 258 · THE IN-APP YES (CR 97): her words when AgAPI refuses a tap — one plain line each, never a dead end ─────────────────
 TAP_SAYS = {
     "approval_void": "Something in it changed, so here's the card again. Shall I send it?",      # + the new read-back card
@@ -327,6 +478,7 @@ def outage_line(kind: str, tool: str) -> str:
     return OUTAGE.get(kind, OUTAGE["slow"]).format(what=what, service=service)
 
 
-__all__ = ["TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
+__all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
+           "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

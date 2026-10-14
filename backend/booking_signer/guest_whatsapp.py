@@ -938,18 +938,27 @@ async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: 
     import asyncio
     from . import wa_agent as WA
     from app.agent import voice as V
-    task = asyncio.ensure_future(WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
-                                               voice_in=bool(heard)))   # Sasha 238 · a voice note in → a voice note back
+    steps = V.Steps()   # Sasha 264 · item 1: the step her turn is on (wa_agent.agent_turn reports its tools into it)
+    tok = V.STEPS.set(steps)
+    try:
+        task = asyncio.ensure_future(WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
+                                                   voice_in=bool(heard)))   # Sasha 238 · a voice note in → a voice note back
+    finally:
+        V.STEPS.reset(tok)
     # Sasha 257 · THE HOLDING LINE (row 863): her answer not ready within voice.HOLD_AFTER_S → ONE short line goes first (never a
-    # claim, never for a fast reply); the answer follows when it's ready. Awaited — never fire-and-forget.
+    # claim, never for a fast reply); the answer follows when it's ready. Awaited — never fire-and-forget. Sasha 264 · then, while
+    # it still works, a line every voice.PROGRESS_S from the step actually running — never silence longer than that.
     done, _ = await asyncio.wait({task}, timeout=V.HOLD_AFTER_S)
-    if not done and body:
+    first = True
+    while not done and body:
         hold = Out()
-        hold.text(V.holding_line(ch.get("account_id") or ""))
+        hold.text(V.holding_line(ch.get("account_id") or "") if first else V.progress_line(steps.now, ch.get("account_id") or ""))
+        first = False
         try:
             await deliver(ch, frm, hold, now)
         except Exception as e:
             log.warning("[guest_whatsapp] holding line not sent: %s", type(e).__name__)
+        done, _ = await asyncio.wait({task}, timeout=V.PROGRESS_S)
     await task
     await _brain_tail(ch, out)
     await _save_keeping_their_question(key, st, loaded)

@@ -690,7 +690,17 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
         return await _prepared_now(ctx, a, rd, res, at, now, eng, card, d)
     if action == "hand_over_platform_link":   # R14 · their page, handed over — never booked on a platform
         if {"link", "own_page"} & set(rungs) and not open_slot:
-            return _said(await _page(ctx, a, rd, res, at), d)
+            got = await _page(ctx, a, rd, res, at)
+            from agapi import venue_submit as VS
+            if one_path(ctx) and VS.TAP.get() is not None and got.get("status") == "awaiting_yes" and ctx.account in _HELD:
+                # Sasha 264 · item 8 (row 929, Ichikani Madrid): on a platform SHE never sends — so no "Shall I send this?", no read-back
+                # card, no forwarding address: their page at once, ONE line + ONE button (the hand-over card), said by code
+                out = _said(await _finish(ctx, _HELD[ctx.account]), d)
+                line = out.get("page_says") or ""
+                out["rules"] = {**out["rules"], "say": line}   # the rules' words for it ARE this line (never a second, longer one)
+                out["say"] = f"{line} Say exactly that."
+                return out
+            return _said(got, d)
         url = d["takeover"].get("link") or next((c.get("url") for c in d.get("channels") or [] if c["kind"] == "platform" and c.get("url")), None)
         return _said({"status": "page_link", "venue": venue, "booked": False, **_link_out(url)}, d)
     if action == "request_email":
@@ -788,6 +798,11 @@ async def _prepared_now(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: Op
             out = await _finish(ctx, _HELD[ctx.account])
             out.pop("say", None)   # the rules' words for it (prepared_link / its CAPTCHA / the refusal), never a second line
             out = _said(out, d)
+            if (out.get("prepared") or {}).get("filled") is False:   # Sasha 264 · item 2: "filled in for you" only when it IS — the
+                from app.agent import voice as V                      # rules' words for it too (a CAPTCHA's reason kept)
+                line = V.not_filled_line(d.get("say") == "prepared_link_captcha")
+                out["rules"] = {**out["rules"], "say": line}
+                out["say"] = f"{line} {d['takeover']['say']}"
             out["how"] = "Say `say` exactly — never that it's booked."
             return out
     link = d["takeover"].get("link")
@@ -1180,11 +1195,19 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             log.warning("[venues] the prepared page was not sent to the phone: %s", type(e).__name__)
         # Sasha 254 · ONE TRUTH: "It's in your bookings" is true only because it IS — get_status reads this record
         await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"))
+        from app.agent import voice as V
+        from agapi import venue_submit as VS
+        # Sasha 264 · item 2 (Tyler's spa, 14 Oct): AgAPI gave no filled page — their own page opened EMPTY and she said "Done — it's
+        # on your screen". No prepared link = not filled: said so, plainly, with the details to copy (never an empty page called done)
+        filled = bool(prep)
+        if not filled:
+            log.info("[venues] %s: venue.prepare_booking gave no filled page — their own page and the details to copy", venue)
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
-                "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent,
+                "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": filled,
                              **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},
+                **({"in_app": True} if VS.TAP.get() is not None else {}),
                 # Sasha 249 · her words for it are her voice's, never the engine's (which may name the booking platform)
-                "say": __import__("app.agent.voice", fromlist=["x"]).done_form(getattr(ctx, "surface", "s2")) + " Say exactly that — never that it's booked."}
+                "say": (V.done_form(getattr(ctx, "surface", "s2")) if filled else V.NOT_FILLED) + " Say exactly that — never that it's booked."}
     if rung == "handover":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/handover", {}, timeout=120)
         if status != 200:
@@ -1202,7 +1225,24 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                                                              held["party"], bool(held.get("slot_filled")), url)   # Sasha 253 · G8 — the stay
         out = await GW.tap_platform(ctx.account, text, url, held["id"], venue, held["when"])
         sent = "sent" in out and "not" not in out
+        if not sent:   # Sasha 264 · item 3: the reason was dropped — Tyler's tattoo link "never arrived" and nothing said why
+            log.warning("[venues] %s's page not sent to the phone: %s", venue, out)
+        from app.agent import voice as V
+        from agapi import venue_submit as VS
+        in_app = VS.TAP.get() is not None   # Sasha 264 · item 3: in the app the page is ALWAYS the card; the phone is an extra, its
+        says = ""                            # failure said. Item 8: the one line, and the confirmation picked up from their Gmail
+        if in_app:
+            from booking_signer import mailbox as MB
+            try:
+                gmail = bool(MB.STORE is not None and await MB.STORE.get_link(ctx.account))
+            except Exception as e:   # their Gmail link unreadable: the page still goes; she asks for the confirmation instead
+                log.warning("[venues] Gmail link not read: %s", type(e).__name__)
+                gmail = False
+            if gmail and not sent:   # tap_platform starts the Gmail watch only when the phone got it — in the app, always
+                GW._spawn(MB.watch_after_link(ctx.account, held["id"]))
+            says = V.platform_line(venue, int(held["party"]), held["summary"], bool(held.get("slot_filled")), gmail)
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
+                **({"in_app": True, "phone_line": V.phone_line(sent, out), "page_says": says} if in_app else {}),
                 "platform": held.get("platform"), **({} if sent else {"open": url}), **({"page_url": url} if url else {}),
                 # Sasha 236 · found live on /s2: "their page is on your phone" when it wasn't sent there
                 **({} if sent else {"say": "Their page is on this screen — Tap to finish opens it. Never say it's on their phone."})}

@@ -166,6 +166,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # yes sends only the latest unanswered card (read_back_id + sha, in_app_tap); no card → "There's nothing waiting to send."
     "T45": ("item 10: \"Yes, send it\" sends exactly the card on screen; a prefilled form or no card → nothing sent",
             ["tests.test_s263"]),
+    # Sasha 264 · Tyler's beta (14 Oct) + rows 928/929: no silence over voice.PROGRESS_S; an empty form never called filled; a platform
+    # page always the card (one line, one button, its phone failure said); the payment is the trip's one figure; short, never twice;
+    # the mic never shows working while deaf
+    "T46": ("S2 freeze bugs: progress lines, honest form and page, the one charge, brief replies, a mic that says when it's deaf",
+            ["tests.test_s264"]),
 }
 
 _RUNNER = """

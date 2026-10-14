@@ -730,6 +730,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     # cards, a form or a total after they all failed is never said. Off on /next with parity off (byte-identical: SASHA_S1_PARITY=off)
     honest = surface == "s2" or s1_parity()
     tstate.update(showing=[], drawn=False, unshown_dropped=[])
+    # Sasha 264 · item 5: her words this turn (count, a question asked), her last reply, and the lines a card on screen says
+    tstate.update(brief_n=0, asked=False, seen=[])
+    last_reply = next((str(m.get("content") or "") for m in reversed(history or []) if m.get("role") == "assistant"), "")
     told: List[str] = []   # Sasha 254 · the booking rules' refusals / stops this turn's tools returned — heard in the rules' words
 
     def system_now() -> list:
@@ -791,6 +794,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if guard_check(x, allowed, bool(booked_now), figs):
                 held = True
                 break
+            if honest:   # Sasha 264 · item 5 (voice.brief): short, never what she said last time or what a card already says
+                kept_, tstate["brief_n"], tstate["asked"] = _V.brief([x], [last_reply], tstate["seen"], tstate["brief_n"], tstate["asked"])
+                if not kept_:
+                    internal_log.append(f"brief: {x[:60]}")
+                    continue
             out.append(x)
             said_norms.add(_norm(x))
         text = as_offer(" ".join(out))
@@ -886,6 +894,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             r = agapi_outage(r, met, u.name) if honest else r   # Sasha 261 · off on /next with parity off (byte-identical)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
+                if honest and isinstance(r["result"], dict):   # Sasha 264 · item 5: what this card says, she never says again
+                    tstate["seen"] += [str(l) for l in (r["result"].get("read_back") or []) if isinstance(l, str)]
                 if honest and _V.told_line(r["result"]):   # Sasha 254 · off on /next with parity off (byte-identical)
                     told.append(_V.told_line(r["result"]))
             line = outage(r)
@@ -901,7 +911,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 yield {"type": "say", "text": SP.speakable(line)}
             # Sasha 262 · S2 item 10: the read-back's ONE line, said by code; the turn ends on it (the model once added "I need a clear
             # yes first"). Sasha 263 · and the in-app yes's line (nothing waiting / booked + the calendar question), the same way
-            rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r)) if honest else ""
+            rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r) or _V.page_line(u.name, r)) if honest else ""   # 264: + a page
             if rb:
                 read_back_said = True
                 if rb not in said:
@@ -998,7 +1008,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if line:
                 said.append(line)
             text = new
-    pre = _V.told_prefix(text, told) if told else ""
+    pre = _V.told_prefix(f"{text} {last_reply}" if honest else text, told) if told else ""   # 264 · item 5: never twice running
     if pre:   # Sasha 254 · THE RULES' WORDS ARE HEARD: a refusal or stop she paraphrased away goes in front, once, as the rules say it
         text = f"{pre} {text}".strip()
         said.insert(0, pre)
@@ -1258,7 +1268,8 @@ _SPOKEN = ("text", "replace", "done", "error", "say")
 async def with_holding(events, account: str, after_s: Optional[float] = None):
     """Sasha 257 · THE HOLDING LINE (row 863): her turn's events as they come; if none of her words has come within
     voice.HOLD_AFTER_S, ONE short line first ({"type": "hold", "text", "say"} — shown and, with her voice on, spoken), then the real
-    answer. Never for a fast reply, never a claim, never twice in a turn."""
+    answer. Never for a fast reply, never a claim, never twice in a turn. Sasha 264 · item 1: then, while a tool runs (or before her
+    words), a progress line from that step every voice.PROGRESS_S — never silence longer than that."""
     import asyncio
     q: asyncio.Queue = asyncio.Queue()
     end = object()
@@ -1273,26 +1284,47 @@ async def with_holding(events, account: str, after_s: Optional[float] = None):
             await q.put(end)
     task = asyncio.create_task(pump())
     loop = asyncio.get_running_loop()
-    t0, started = loop.time(), False
+    t0, started, words = loop.time(), False, False
     wait = _V.HOLD_AFTER_S if after_s is None else after_s
+    steps = _V.Steps()   # Sasha 264 · item 1: the step running now (tool_start in, its tool result out)
+    said_at = last_at = t0   # the last thing she said (her words, the holding line, a progress line) / the last event of any kind
     try:
         while True:
+            now = loop.time()
+            if not started:
+                timeout = max(0.0, wait - (now - t0))
+            else:   # Sasha 264 · the next progress line is due PROGRESS_S after the last thing said (while a step runs, or before her
+                due = said_at + _V.PROGRESS_S if (steps.now or not words) else float("inf")   # words); the keepalive after any quiet
+                timeout = max(0.0, min(due, last_at + KEEPALIVE_S) - now)
             try:
-                item = await asyncio.wait_for(q.get(), KEEPALIVE_S if started else max(0.0, wait - (loop.time() - t0)))
+                item = await asyncio.wait_for(q.get(), timeout)
             except asyncio.TimeoutError:
-                if started:   # Sasha 259 · a long job (a Gmail scan, a plan): the stream says it's still working, so the page never
-                    yield {"type": "working"}   # calls a working turn a lost connection (found on Tyler's /s2, 13 Oct ~12:12 UTC)
+                now = loop.time()
+                if not started:
+                    started = True
+                    line = _V.holding_line(account)
+                    said_at = last_at = now
+                    yield {"type": "hold", "text": line, "say": line}
                     continue
-                started = True
-                line = _V.holding_line(account)
-                yield {"type": "hold", "text": line, "say": line}
+                # Sasha 264 · NO SILENCE: a tool still running, or her words not begun → a line from the step actually running
+                if now - said_at >= _V.PROGRESS_S - 0.01 and (steps.now or not words):
+                    line = _V.progress_line(steps.now, account)
+                    said_at = last_at = now
+                    yield {"type": "hold", "text": line, "say": line}
+                    continue
+                if now - last_at >= KEEPALIVE_S - 0.01:   # Sasha 259 · a long job (a Gmail scan, a plan): the stream says it's still
+                    last_at = now                          # working, so the page never calls a working turn a lost connection
+                    yield {"type": "working"}              # (found on Tyler's /s2, 13 Oct ~12:12 UTC)
                 continue
             if item is end:
                 break
             if isinstance(item, Exception):
                 raise item
+            last_at = loop.time()
+            steps.see(item)
             if isinstance(item, dict) and item.get("type") in _SPOKEN:
-                started = True
+                started = words = True
+                said_at = last_at
             yield item
     finally:
         if not task.done():

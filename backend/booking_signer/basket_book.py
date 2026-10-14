@@ -401,7 +401,9 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
     if sha != read_back_sha256:
         return {"why": "the yes was to different words — prepare it again"}
-    t = BK.total(cur["rows"])
+    t = await charge_of(account, cur)   # Sasha 264 · item 4: THE trip's figure (basket.trip_figures), never a sum of its own
+    if "why" in t:
+        return {"why": t["why"]}
     n_st, n_fl = sum(1 for r in cur["rows"] if r["kind"] == "stay"), sum(1 for r in cur["rows"] if r["kind"] == "flight")
     what = f"{n_st} hotel{'s' if n_st != 1 else ''} + {n_fl} flight{'s' if n_fl != 1 else ''}"
     # Sasha 220 · "here" is the embedded card once the page has Stripe's publishable key (SASHA_PAY_EMBEDDED=1, set with it);
@@ -435,11 +437,24 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     return {"url": got["url"], "session_id": got["id"], "phone": phone, "eur": t["amount"], "where": "phone"}
 
 
+async def charge_of(account: str, cur: Dict[str, Any]) -> Dict[str, Any]:
+    """Sasha 264 · item 4 (Tyler's beta, 14 Oct: "lodging and flights were not combined" on the phone's payment): what a payment
+    charges is the trip's ONE figure — basket.trip_figures' to_pay_eur, the same function the chat and the Trip tab say. The rows the
+    yes binds to must add up to it in that same function; if they ever don't, nothing is charged and she says so."""
+    figs = await BK.trip_figures(account, cur["trip_id"])
+    own = BK.total(cur["rows"])
+    fig = figs.get("to_pay_eur")
+    if fig is None or abs(float(fig) - float(own["amount"])) > 0.005:
+        log.error("[basket_book] the payment (%.2f) isn't the trip's figure (%s) — refused", own["amount"], fig)
+        return {"why": "the total I'd charge isn't the trip's total, so I haven't made a payment — ask me to read it back again"}
+    return {**own, "amount": round(float(fig), 2), "breakdown": figs.get("breakdown")}
+
+
 async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]:
     """Sasha 220 · the same payment, moved here ↔ phone: the SAME rows, the SAME amount (refused if it would differ)."""
     from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT, plan_store as PS
     rows = [{**r, "state": "chosen"} for r in mv["rows"]]
-    amount = round(sum(float(r["price_amount"]) for r in rows if r.get("price_amount") is not None), 2)
+    amount = BK.total(rows)["amount"]   # Sasha 264 · item 4: the one figure's own sum, in euros (it added raw amounts, any currency)
     if mv.get("amount") is not None and abs(amount - float(mv["amount"])) > 0.01:
         log.error("[basket_book] a moved payment would change its amount (%.2f → %.2f) — refused", mv["amount"], amount)
         return {"why": "the payment's total would change if I moved it, so I haven't — ask me to read it back again"}

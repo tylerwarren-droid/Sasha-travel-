@@ -193,6 +193,7 @@ class Payment(unittest.TestCase):
         sha = hashlib.sha256("\n".join(BB.lines_of(cur["rows"], 1)).encode()).hexdigest()
         tap, expire, release = mock.AsyncMock(), mock.AsyncMock(return_value=True), mock.AsyncMock(return_value=1)
         with mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
+                mock.patch.object(BK, "trip_figures", mock.AsyncMock(return_value=BK.figures_of(cur["rows"], cur.get("trip_id")))), \
                 mock.patch.object(TD, "checkout", mock.AsyncMock(return_value={"id": "cs_test_1", "url": "https://checkout.stripe.test/x"})), \
                 mock.patch.object(TD, "expire", expire), mock.patch.object(BK, "release", release), \
                 mock.patch.object(BK, "hold", mock.AsyncMock()), mock.patch.object(PWT, "remember", mock.AsyncMock(return_value=None)), \

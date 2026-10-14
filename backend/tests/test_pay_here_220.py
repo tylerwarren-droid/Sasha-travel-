@@ -192,6 +192,7 @@ class OnePaymentPerBasket(unittest.TestCase):
         co, tap = mock.AsyncMock(return_value={"id": "cs_test_e", "url": None, "client_secret": "sec_e", "embedded": True}), mock.AsyncMock()
         with mock.patch.dict("os.environ", {"SASHA_PAY_EMBEDDED": "1"}), \
                 mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
+                mock.patch.object(BK, "trip_figures", mock.AsyncMock(return_value=BK.figures_of(cur["rows"], cur.get("trip_id")))), \
                 mock.patch.object(TD, "checkout", co), mock.patch.object(BK, "hold", mock.AsyncMock()), \
                 mock.patch.object(PWT, "remember", mock.AsyncMock(return_value="rec")), mock.patch.object(GW, "tap_to_pay", tap):
             got = run(BB.pay("acct", sha, "here"))
@@ -217,6 +218,7 @@ class NewReadBackSupersedes(unittest.TestCase):
         ex, cancel, resume = mock.AsyncMock(return_value=expire_ok), mock.AsyncMock(return_value=1), mock.AsyncMock(return_value={"where": "here", "session_id": "cs_test_old", "eur": 446.98})
         with mock.patch.dict("os.environ", {"SASHA_PAY_EMBEDDED": "1"}), \
                 mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=pend)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
+                mock.patch.object(BK, "trip_figures", mock.AsyncMock(return_value=BK.figures_of(cur["rows"], cur.get("trip_id")))), \
                 mock.patch.object(BB, "_resume", resume), mock.patch.object(TD, "session_state", mock.AsyncMock(return_value=old_state)), \
                 mock.patch.object(TD, "expire", ex), mock.patch.object(PWT, "settle", mock.AsyncMock(return_value=None)), \
                 mock.patch.object(BK, "cancel_held", cancel), mock.patch.object(TD, "checkout", co), mock.patch.object(BK, "hold", mock.AsyncMock()), \
@@ -290,6 +292,7 @@ class HereWithoutTheKey(unittest.TestCase):
         co = mock.AsyncMock(return_value={"id": "cs_test_h", "url": "https://checkout.stripe.test/h", "embedded": False})
         with mock.patch.dict("os.environ", {"SASHA_PAY_EMBEDDED": ""}), \
                 mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch.object(BB, "current", mock.AsyncMock(return_value=cur)), \
+                mock.patch.object(BK, "trip_figures", mock.AsyncMock(return_value=BK.figures_of(cur["rows"], cur.get("trip_id")))), \
                 mock.patch.object(TD, "checkout", co), mock.patch.object(BK, "hold", mock.AsyncMock()), \
                 mock.patch.object(PWT, "remember", mock.AsyncMock(return_value="rec")), mock.patch.object(GW, "tap_to_pay", mock.AsyncMock()) as tap:
             got = run(BB.pay("acct", sha, "here"))

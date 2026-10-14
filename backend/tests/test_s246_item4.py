@@ -163,7 +163,9 @@ class Rung2Agent(unittest.TestCase):
             self.assertEqual((d["action"], d["say"]), ("prepared_link", "prepared_link_captcha"))
             got = run(VN._execute(ctx, a, rd, res, "2026-10-20T17:00", NOW, d, eng, None))
         self.assertEqual(got["status"], "page_link")
-        self.assertTrue(got["say"].startswith(BR.PHRASES["prepared_link_captcha"]))
+        # Sasha 264 · item 2: venue.prepare_booking gave no filled page here (None) — said as not filled, the CAPTCHA's reason kept
+        from app.agent import voice as V
+        self.assertTrue(got["say"].startswith(V.not_filled_line(captcha=True)))
         self.assertEqual(calls, [])                                    # nothing reached the venue
         VN._HELD.pop(ctx.account, None)
 

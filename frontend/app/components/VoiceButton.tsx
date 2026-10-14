@@ -504,7 +504,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         connectedRef.current = true; lastAliveRef.current = Date.now()   // Sasha 192
         connectingRef.current = false; hadConnectedRef.current = true    // Sasha 197
         dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
-        reportMicError(null)                 // Sasha 215 · open again: the error goes
+        if (!deafRef.current) reportMicError(null)   // Sasha 215 · open again: the error goes — Sasha 266: never "can't hear you" while still deaf
 
         // KeepAlive runs for the lifetime of the session — not gated, always on
         keepAliveIntervalRef.current = setInterval(() => {

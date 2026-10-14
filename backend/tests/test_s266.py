@@ -37,6 +37,7 @@ class OnOnlyWhenItHears(unittest.TestCase):
         src = _tsx(self, "app/components/VoiceButton.tsx")
         opened = src[src.index("ws.onopen = async () => {"):src.index("keepAliveIntervalRef.current = setInterval")]
         self.assertNotIn("onConnectedChangeRef.current?.(true)", opened)                 # an open socket is not "on"
+        self.assertIn("if (!deafRef.current) reportMicError(null)", opened)              # nor does it clear "can't hear you"
         frame = src[src.index("node.port.onmessage = (e) => {"):src.index("if (deafRef.current) {")]
         self.assertIn("tr.readyState === 'live' && !tr.muted", frame)
         self.assertIn("onConnectedChangeRef.current?.(true)", frame)                    # ON = a live track's first frame

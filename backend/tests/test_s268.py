@@ -86,6 +86,8 @@ class OneFraming(unittest.TestCase):
         self.assertEqual(hello.count("background: `${FRAMING} url(${img})`"), 2)           # the full-size still and the circle
         self.assertIn("objectPosition: 'center 18%'", hello)                                 # the live canvas: the same framing
         self.assertIn("export const FRAMING = 'center 18% / cover no-repeat'", hello)
+        self.assertIn("transition: big ? 'none' : 'all .45s ease'", hello)                 # she appears full size at once: no grow-in
+        self.assertIn("(phase === 'off' && signedIn === null && soon && !started && !asleep && !reducedMotion())", hello)   # from first paint
 
 
 class LeavesOnHisFirstRequest(unittest.TestCase):

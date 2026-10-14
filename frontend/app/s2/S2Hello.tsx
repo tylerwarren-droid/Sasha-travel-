@@ -10,7 +10,7 @@
  *  · After the hello the session is ENDED (no live session left running); the bubble shows her face as it last was.
  *  · Tap the bubble: her face back (a new session) — while it's up, her replies are spoken by it; tap again (or 90 s quiet) → bubble.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { openingShown, openingEnds, OPENING } from '@/lib/greeting-rule.mjs'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · her face shares the page's one audio session
@@ -73,6 +73,10 @@ async function startFace(video: HTMLVideoElement): Promise<Face> {
 export const FACE_STILL = '/sasha-half.webp'
 export const FRAMING = 'center 18% / cover no-repeat'
 /** Sasha 265 · item 2: the one thing that skips the arrival's motion (row 936) — then the circle at once, her face still shown. */
+/** Sasha 268 · her frame from the first paint (the proof saw ~1.3 s of page without her while the sign-in check ran): a browser that
+ *  holds a sign-in shows her still at once; a signed-out answer takes it away (her opening is for the signed-in). */
+const signedInHere = (): boolean => { try { return /(?:^|; )sb-[^=]+-auth-token(?:\.0)?=/.test(document.cookie) } catch { return false } }
+const never = () => () => {}
 const reducedMotion = (): boolean => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false } }
 const drawn = (c: HTMLCanvasElement | null) => !!c && c.dataset.drawn === '1'
 async function firstFrame(c: HTMLCanvasElement | null, ms = 6000): Promise<boolean> {   // a late face: wait for its first frame
@@ -354,7 +358,8 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const shown = openingShown(phase, tapFor, started)   // Sasha 251 · the one place that says what the opening draws
   // Sasha 265 · item 2: her face is FULL SIZE for the whole opening — a real still of her (FACE_STILL / the last kept frame) from
   // the first instant, the live face over it once drawn; her voice alone (no live face) shows her still with the line, not a text card
-  const big = shown === 'face' || shown === 'card'
+  const soon = useSyncExternalStore(never, signedInHere, () => false)   // 268 · hydration-safe: false on the server, the cookie on the client
+  const big = shown === 'face' || shown === 'card' || (phase === 'off' && signedIn === null && soon && !started && !asleep && !reducedMotion())
   const [live, setLive] = useState(false)   // the live face has drawn a frame: her still steps back (the keyed frame is see-through)
   useEffect(() => { if (!big) return; const t = setInterval(() => setLive(drawn(canvas.current)), 50); return () => clearInterval(t) }, [big])   // 268: within 50 ms
   return (
@@ -363,7 +368,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
         // Sasha 267 · never swallows a tap meant for the page. Sasha 268: this comment sat mid-line and silenced the frame's own
         // transition, clipping and background (since f1427dd) — each on its own line now
         position: 'fixed', zIndex: 40, pointerEvents: phase === 'faceAgain' ? 'auto' : 'none',
-        transition: 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
+        transition: big ? 'none' : 'all .45s ease', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',   // Sasha 268 · she appears at full size at once (the proof saw a 0.45 s grow-in); only leaving animates
         ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: 1 }
           : { right: 16, bottom: BUBBLE_BOTTOM, width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
         {big && !live && <div aria-hidden data-sasha-still style={{ position: 'absolute', inset: 0, background: `${FRAMING} url(${img})` }} />}

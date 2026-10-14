@@ -71,6 +71,8 @@ class OnOnlyWhenItHears(unittest.TestCase):
         self.assertIn('"ev": "blocked"', line)
         self.assertIn('"perm": "denied"', line)
         self.assertNotIn("book a table", line)                                             # never a transcript
+
+    def test_the_page_reports_the_states_that_say_why(self):
         self.assertIn("'hearing'", _tsx(self, "lib/mic-log.ts").replace('"', "'"))
 
 

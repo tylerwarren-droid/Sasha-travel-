@@ -227,8 +227,7 @@ class ANotFilledFormIsSaidAsIt(unittest.TestCase):
         self.assertIn('out["rules"] = {**out["rules"], "say": line}', src)   # the rules' told words too: never "filled in for you"
 
     def test_the_card_names_it(self):
-        import pathlib
-        tsx = (pathlib.Path(__file__).resolve().parents[2] / "frontend/app/components/cards/S2Cards.tsx").read_text()
+        tsx = _tsx(self, "app/components/cards/S2Cards.tsx")
         self.assertIn("ev.filled === false ? 'Not filled in — copy your details' : 'Ready to book'", tsx)
 
 
@@ -300,26 +299,30 @@ class APlatformPageIsNeverStranded(unittest.TestCase):
 
 
 # ── 7 · VOICE NOT HEARD (row 929: his phone, /s2, "Voice on", the mic showing as working, she never heard him) ──────────────────
-def _tsx(rel):
+def _tsx(case, rel):
+    """A frontend file — skipped where the checkout is backend-only (Railway's deploy gate builds backend/ alone)."""
     import pathlib
-    return (pathlib.Path(__file__).resolve().parents[2] / "frontend" / rel).read_text()
+    f = pathlib.Path(__file__).resolve().parents[2] / "frontend" / rel
+    if not f.exists():
+        case.skipTest("frontend/ is not in this checkout (a backend-only build)")
+    return f.read_text()
 
 
 class TheMicIsNeverDeafWhileItShowsWorking(unittest.TestCase):
     def test_gate_the_gate_is_closed_only_when_someone_owns_it(self):
         """THE GATE: useRef(true) with no owner on /s2 — an auto-started mic dropped every frame (only a 45 s watchdog reopened it)."""
-        vb = _tsx("app/components/VoiceButton.tsx")
+        vb = _tsx(self, "app/components/VoiceButton.tsx")
         self.assertIn("const micGatedRef = useRef(!!onSetGate)", vb)
         self.assertNotIn("const micGatedRef = useRef(true)", vb)
 
     def test_gate_s2_owns_it_with_her_own_voice(self):
-        app = _tsx("app/s2/S2App.tsx")
+        app = _tsx(self, "app/s2/S2App.tsx")
         self.assertIn("onSetGate={g => { micGate.current = g; g(false) }}", app)
         self.assertIn("speaker.onSpeaking(b => micGate.current?.(b))", app)
 
     def test_gate_deaf_is_said_never_listening(self):
         """A phone's audio started without a tap stays suspended (no frame ever) — said, and the tap turns it on (not off)."""
-        vb = _tsx("app/components/VoiceButton.tsx")
+        vb = _tsx(self, "app/components/VoiceButton.tsx")
         self.assertIn("if (ctx.state !== 'running') { deafRef.current = true; reportMicError(DEAF_TAP)", vb)
         self.assertIn("now - Math.max(lastFrameRef.current, lastAliveRef.current) > DEAF_AFTER_MS", vb)
         self.assertIn("if (connectedRef.current && deafRef.current) {", vb)

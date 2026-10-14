@@ -58,6 +58,7 @@ const DG_LANG: Record<string, string> = {
 // scoped key (see getDeepgramKey) so a long-lived key never sits in the browser.
 import { keyOrFail, RECONNECTS_BEFORE_SAYING } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
 import { micLog } from '@/lib/mic-log'   // Sasha 213 · the mic's state machine, logged
+import { BLOCKED, micPermission, stepsFor } from '@/lib/mic-state'   // Sasha 266 · "on" only when it hears; blocked said, with its steps
 import { makeDownsampler, sendRate } from '@/lib/downsample.mjs'   // Sasha 215 (d) · the mic at 16 kHz
 
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
@@ -212,7 +213,12 @@ const RESUME_WAIT_MS = 1000   // Sasha 265 · item 1: how long the audio may tak
 export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake }: VoiceButtonProps) {
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
+  const [isConnected, setIsConnected] = useState(false)   // the socket is open — NOT "on" (Sasha 266: that is `hearing`)
+  // Sasha 266 · row 943 (a): the mic is "on" ONLY when it hears — a live, unmuted audio track delivering frames. The button's "on"
+  // look, its "Listening" words and onConnectedChange(true) all come from here, never from an open socket.
+  const [hearing, setHearing] = useState(false)
+  const hearingRef = useRef(false)
+  const connectT0 = useRef(0)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
   // Mic device selection. On a Mac, Continuity silently hands the *iPhone's* mic to the browser
@@ -328,6 +334,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     setIsConnected(false)
+    hearingRef.current = false; setHearing(false)
     onConnectedChangeRef.current?.(false)
     setIsSpeaking(false)
     setIsConnecting(false)
@@ -352,7 +359,18 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     audioCtxRef.current = ctx
     const resumed = ctx.resume().catch(() => {})
     const dropCtx = () => { if (audioCtxRef.current === ctx) audioCtxRef.current = null; ctx.close().catch(() => {}) }
+    connectT0.current = Date.now()
     try {
+      // Sasha 266 · row 943 (a): his iPhone minted 16 keys and never asked for the mic. The browser's own answer first — a site the
+      // browser blocks is said at once, with the steps to allow it (never a key, never a silent retry, never "on")
+      const perm = await micPermission()
+      micLog('permission_state', { perm })
+      if (perm === 'denied') {
+        connectingRef.current = false; setIsConnecting(false); dropCtx()
+        micLog('blocked', { perm, why: 'the browser blocks the microphone for this site' })
+        reportMicError(BLOCKED)
+        return
+      }
       // Mint the ephemeral STT key in parallel with mic acquisition — no added latency.
       const keyPromise = getDeepgramKey()
       const baseAudio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
@@ -482,8 +500,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         micLog('socket_open')
         clearTimeout(connectTimeoutRef.current)
         setIsConnecting(false)
-        setIsConnected(true)
-        onConnectedChangeRef.current?.(true)
+        setIsConnected(true)   // Sasha 266: open — "on" only once it hears (the first frame, below)
         connectedRef.current = true; lastAliveRef.current = Date.now()   // Sasha 192
         connectingRef.current = false; hadConnectedRef.current = true    // Sasha 197
         dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
@@ -524,6 +541,13 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         node.port.onmessage = (e) => {
           const float32 = e.data as Float32Array
           lastFrameRef.current = Date.now()   // Sasha 264 · item 7: the mic is delivering
+          if (!hearingRef.current) {   // Sasha 266 · row 943 (a): ON = a live, unmuted track delivering frames — from here, only
+            const tr = stream.getAudioTracks()[0]
+            if (tr && tr.readyState === 'live' && !tr.muted) {
+              hearingRef.current = true; setHearing(true); onConnectedChangeRef.current?.(true)
+              micLog('hearing', { ms: Date.now() - connectT0.current })
+            }
+          }
           if (deafRef.current) { deafRef.current = false; reportMicError(null); micLog('hearing', { after: 'deaf' }) }
           // HARD mute (itinerary build / any in-flight turn): drop every frame at the source,
           // before Deepgram and before barge-in. `muted` is documented as a hard mute, but the
@@ -689,6 +713,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
         connectedRef.current = false
         setIsConnected(false)
+        hearingRef.current = false; setHearing(false)   // Sasha 266
         onConnectedChangeRef.current?.(false)
         setIsSpeaking(false)
 
@@ -713,7 +738,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
       micLog('error', { name: err?.name, message: String(err?.message || '').slice(0, 120) })
-      if (err.name === 'NotAllowedError') reportMicError('Mic blocked — allow it for this site in your browser settings, or type')
+      if (err.name === 'NotAllowedError') { micLog('blocked', { name: err.name, why: 'the request was refused' }); reportMicError(BLOCKED) }   // Sasha 266 · + its steps on the page
       else if (err.name === 'NotFoundError') reportMicError('No microphone found')
       else if (err.name === 'NotReadableError') reportMicError('Mic is in use by another app')
       else if (err.name === 'OverconstrainedError') reportMicError('Selected mic is unavailable')
@@ -748,6 +773,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       if (connectedRef.current && !mutedRef.current && !asleepRef.current && !deafRef.current && streamRef.current &&
           now - Math.max(lastFrameRef.current, lastAliveRef.current) > DEAF_AFTER_MS) {
         deafRef.current = true; reportMicError(DEAF_TAP); micLog('deaf', { why: 'no audio from the mic', ms: now - lastFrameRef.current })
+        if (hearingRef.current) { hearingRef.current = false; setHearing(false); onConnectedChangeRef.current?.(false) }   // Sasha 266
       }
       const act = watchdogAction({
         now, manualStop: manualStopRef.current, ready: readyToListenRef.current, muted: mutedRef.current,
@@ -853,7 +879,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   }, [showMicPicker, selectedMicId, switchMic, audioDevices])
 
   const stateWords = micError || (asleep ? 'Asleep — not listening' : muted ? 'Mic paused while Sasha answers' : notCaught ? 'I didn’t catch that — say it again'
-    : isConnected ? (isSpeaking ? 'Speaking' : micGatedRef.current ? 'Sasha is speaking' : 'Listening') : 'Talk to Sasha')
+    : hearing ? (isSpeaking ? 'Speaking' : micGatedRef.current ? 'Sasha is speaking' : 'Listening') : isConnected || isConnecting ? 'Starting the microphone…' : 'Talk to Sasha')   // Sasha 266: "on" only when it hears
   return (
     <div className="flex flex-col items-center gap-1">
       <button
@@ -867,7 +893,8 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
           asleep        ? 'bg-white/10 opacity-60'
           : muted       ? 'bg-white/10 opacity-60'
           : isSpeaking  ? 'bg-green-500 animate-pulse scale-110'
-          : isConnected ? 'bg-red-500 animate-pulse'
+          : hearing     ? 'bg-red-500 animate-pulse'
+          : isConnected ? 'bg-yellow-500'
           : isConnecting ? 'bg-yellow-500'
           : 'bg-indigo-600 hover:bg-indigo-700'
         } disabled:opacity-40`}
@@ -875,15 +902,17 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         {asleep ? <MicOff className="w-4 h-4 text-white/50" />
           : muted ? <MicOff className="w-4 h-4 text-white/50" />
           : isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
-          : isConnected ? <MicOff className="w-4 h-4 text-white" />
+          : hearing ? <MicOff className="w-4 h-4 text-white" />
+          : isConnected ? <Loader2 className="w-4 h-4 text-white animate-spin" />
           : <Mic className="w-4 h-4 text-white" />}
       </button>
       {!quiet && micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
+      {!quiet && micError === BLOCKED && <p className="text-xs text-white/60 text-center max-w-[220px]">{stepsFor()}</p>}{/* Sasha 266 */}
       {!quiet && asleep && <p className="text-xs text-white/50 text-center">Asleep — not listening</p>}
       {/* Sasha 257 · Tyler (row 860): the red "Not…" was this — the mic resting while she answers, said as an error. Said plainly now */}
       {!quiet && !asleep && muted && <p className="text-xs text-white/50 text-center">Mic paused while Sasha answers</p>}
       {!quiet && !asleep && notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
-      {!quiet && !asleep && !muted && isConnected && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
+      {!quiet && !asleep && !muted && hearing && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
       {!quiet && !asleep && !muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
       {/* The mic picker is deliberately NOT rendered here. It is published upward via
           onMicDevices and drawn by the page as a pill beside the camera toggle, where the rest

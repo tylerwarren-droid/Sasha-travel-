@@ -125,6 +125,10 @@ function chroma(video: HTMLVideoElement, canvas: HTMLCanvasElement): () => void 
 }
 
 /** Sasha 231 · the bubble sits ABOVE the "Voice on · Type instead" row (it covered "Type instead" at 92 px). */
+/** Sasha 266 · row 943 (b): with no reply this long after her greeting, her LIVE face is let go (it bills by the minute) — her face
+ *  stays full size (its last frame); she still waits for his first reply. Not when she drops: that is his reply, never a timer. */
+const FACE_IDLE_S = 120
+
 const BUBBLE_BOTTOM = 'calc(env(safe-area-inset-bottom) + 128px)'
 
 export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
@@ -166,7 +170,10 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
 
   useEffect(() => talker.onSpeaking(setTalking), [talker])
 
+  const idleLive = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (idleLive.current) clearTimeout(idleLive.current) }, [])
   const handoff = async () => {
+    if (idleLive.current) clearTimeout(idleLive.current)
     const f = face.current
     face.current = null
     if (f) { setImg(still(canvas.current) || img); keyOff(); await f.stop() }   // the session ENDS after the hello
@@ -186,14 +193,25 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     const f = face.current
     if (!f) return handoff()
     const secs = await f.say(text.current)
-    setTimeout(handoff, backRef.current ? Math.max(1500, secs * 1000 + 500) : back.current ? Math.min(2000, Math.max(1000, secs * 1000 + 300)) : Math.max(2500, secs * 1000 + 900))   // back: ~1–2 s (with her memory: its line), then away
+    // Sasha 266 · row 943 (b): she STAYS full size through the opening exchange — her greeting AND his first reply (typed or spoken);
+    // his first turn of this visit (`started`) is what sends her to the circle, never a timer. Her live face is let go only to stop its
+    // billing after FACE_IDLE_S with no reply — her face (its last frame) stays, full size.
+    void secs
+    if (idleLive.current) clearTimeout(idleLive.current)
+    idleLive.current = setTimeout(() => {
+      const g = face.current
+      if (!g || phaseRef.current !== 'face') return
+      face.current = null
+      setImg(still(canvas.current) || img)
+      void g.stop()
+    }, FACE_IDLE_S * 1000)
   }
   const speakVoice = async () => {
     if (asleepRef.current || startedRef.current) return handoff()   // Sasha 246 · Sasha 251: they already started — no hello over them
     const r = await talker.sayNow(words())
     if (r === 'blocked' && startedRef.current) return handoff()   // Sasha 251 · they started talking meanwhile: no tap card over the chat
     if (r === 'blocked') { setTapFor(face.current ? 'face' : 'voice'); setPhase('tap'); return }   // Sasha 232 · her face, if it came, with the tap
-    handoff()
+    // Sasha 266 · row 943 (b): said — and she stays, full size (her face with her line), until his first reply
   }
 
   const lateFace = (f: Face, v: HTMLVideoElement) => {

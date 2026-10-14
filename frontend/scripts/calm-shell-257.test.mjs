@@ -34,7 +34,9 @@ test('a calm screen: identity quietly in the header (whoami), no floating pill o
 test('the mic says plainly what it is: paused while she answers (not a red "Not…"); a blocked mic says what to do', () => {
   assert.doesNotMatch(mic, />Not listening</)
   assert.match(mic, /Mic paused while Sasha answers/)
-  assert.match(mic, /Mic blocked — allow it for this site in your browser settings, or type/)
+  // Sasha 266 · row 943 (a): a blocked mic says what to do — the plain line (lib/mic-state BLOCKED) and the steps for that browser
+  assert.match(mic, /reportMicError\(BLOCKED\)/)
+  assert.match(mic, /micError === BLOCKED && <p[^>]*>\{stepsFor\(\)\}/)
 })
 
 test('the sign-in code: any spacing or prefix is the same six digits; a code after the link was used says "already signed in"', () => {

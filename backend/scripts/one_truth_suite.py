@@ -174,6 +174,8 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T47": ("S2 freeze bugs + CR 99: a mic that opens its socket, her face on every arrival, New chat in one place, the call as an act "
             "(the card is the question, the tap the approval, dialled only from call_plan), the first line at once",
             ["tests.test_s265"]),
+    "T48": ("the mic is on only when it hears (a blocked site said, with its steps); she stays full size through the first exchange",
+            ["tests.test_s266"]),
 }
 
 _RUNNER = """

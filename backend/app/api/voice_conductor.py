@@ -36,6 +36,32 @@ async def _deepgram_project() -> str:
     return _PROJECT["id"]
 
 
+# Sasha 266 · row 943 (a) · THE MIC REPORTS ITSELF: a page's mic state changes (lib/mic-state.report) — so a phone whose mic never hears
+# names why (the permission state, the error's name, the audio's state, the socket, the first frame). Allow-listed fields only: no audio,
+# no words, never a transcript; capped per hour. Read in Railway's log as "[mic] …".
+MIC_FIELDS = ("ev", "page", "ua", "t", "name", "message", "state", "status", "why", "perm", "after", "ms", "by", "frames")
+MIC_CAP_PER_HOUR = 3000
+_MIC_SEEN: list = []
+
+
+@router.post("/voice/mic-event")
+async def mic_event(request: Request):
+    import logging
+    import time as _t
+    now = _t.time()
+    del _MIC_SEEN[:len([x for x in _MIC_SEEN if now - x > 3600])]
+    if len(_MIC_SEEN) >= MIC_CAP_PER_HOUR:
+        return JSONResponse({"ok": False, "rule": "cap"}, status_code=429)
+    _MIC_SEEN.append(now)
+    try:
+        raw = json.loads((await request.body())[:4000] or b"{}")
+    except Exception:
+        return JSONResponse({"ok": False, "rule": "malformed"}, status_code=400)
+    ev = {k: str(raw[k])[:180] for k in MIC_FIELDS if isinstance(raw, dict) and raw.get(k) is not None}
+    logging.getLogger("sasha.mic").warning("[mic] %s", json.dumps(ev, ensure_ascii=False))
+    return {"ok": True}
+
+
 @router.post("/voice/deepgram-key")
 async def deepgram_ephemeral_key():
     """Mint a short-lived, scoped Deepgram key for browser STT.

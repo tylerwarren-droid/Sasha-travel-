@@ -27,7 +27,8 @@ import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
 import { arrivalStarted } from '@/lib/greeting-rule.mjs'
-import { loadFirstLine, firstLineFor } from '@/lib/first-line'   // Sasha 265 · item 5: the first line, at once
+import { loadFirstLine, firstLineFor } from '@/lib/first-line'
+import { BLOCKED, stepsFor } from '@/lib/mic-state'   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 
@@ -581,6 +582,8 @@ export default function S2App() {
   // receipts stay (the trip record). Only once the record says it's cleared is the screen cleared; if not, she says so.
   useEffect(() => { void loadFirstLine() }, [])   // Sasha 265 · item 5: voice.first_line's words and rule, read once
   const [clearing, setClearing] = useState(false)
+  // Sasha 266 · row 943 (a): the mic's own words when it isn't hearing (blocked, can't hear you) — on the page, never only a tooltip
+  const [micNote, setMicNote] = useState<string | null>(null)
   const newChat = useCallback(async () => {
     if (busy || clearing) return
     setClearing(true)
@@ -661,6 +664,11 @@ export default function S2App() {
               </div>))}
             <div ref={end} />
           </section>
+          {micNote ? (   /* Sasha 266 · the mic is "on" only when it hears; otherwise this, plainly, with how to allow it */
+            <div role="status" data-mic-stuck style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(240,120,120,.45)', background: 'rgba(240,120,120,.08)', fontSize: 14, lineHeight: 1.4 }}>
+              <div style={{ fontWeight: 700 }}>{micNote}</div>
+              {micNote === BLOCKED ? <div style={{ color: C.dim, marginTop: 4 }}>{stepsFor()}</div> : null}
+            </div>) : null}
           {/* Sasha 259 · Tyler (row 884): ONE row of ordinary controls — the moon, her voice, her face — nothing floating over send */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px 6px', fontSize: 13.5 }}>
             <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={36} />
@@ -677,7 +685,7 @@ export default function S2App() {
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
-              {dormant ? null : <VoiceButton quiet onTranscript={send} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
+              {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={send} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
             </div>
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>

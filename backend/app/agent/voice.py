@@ -16,7 +16,7 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 ASK_BOOK = "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?"
 CHOICES = ({"title": "Prefilled form", "route": "page"}, {"title": "Handle it", "route": None})
@@ -55,6 +55,28 @@ def read_back_line(tool: str, r: dict) -> str:
     if tool not in ("hold_venue", "book_venue") or not isinstance(res, dict) or res.get("status") != "awaiting_yes":
         return ""
     return res["ask"] if res.get("read_back") and res.get("ask") and res["ask"] == READ_BACK_ASK.format(venue=res.get("venue")) else ""
+
+
+# Sasha 263 · S2 item 10 (row 914): the in-app yes sends ONLY the card on their screen. No card waiting: this line, and nothing is sent.
+# Sent and confirmed: one sentence with its reference and the one question — two sentences, said by code; the turn ends on it.
+NOTHING_WAITING = "There's nothing waiting to send."
+CALENDAR_ASK = "Shall I put it in your calendar?"
+
+
+def booked_line(venue: str, when: str, ref: Optional[str]) -> str:
+    return f"✅ Booked: {venue}, {when}" + (f" — reference {ref}." if ref else ".")
+
+
+def yes_line(tool: str, r: dict) -> str:
+    """The line an in-app yes ends on (book_venue): nothing waiting, or booked + the calendar question. Else "" (WhatsApp: as it was)."""
+    res = (r or {}).get("result") if (r or {}).get("ok") else None
+    if tool != "book_venue" or not isinstance(res, dict) or not res.get("in_app"):
+        return ""
+    if res.get("status") == "nothing_waiting":
+        return NOTHING_WAITING
+    if res.get("status") == "confirmed" and res.get("line"):
+        return f"{res['line']} {CALENDAR_ASK}"
+    return ""
 
 # the channels she never names (EU 246 §2 rule 1), and the booking platforms the code knows by name
 CHANNEL_NAMES = ("WhatsApp", "Instagram", "Booksy", "SevenRooms", "CoverManager", "FareHarbor", "Restaurantic", "TheFork", "OpenTable",

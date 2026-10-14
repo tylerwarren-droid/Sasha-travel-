@@ -230,9 +230,9 @@ async def read_booking_route(ctx, a: dict) -> dict:
 
 
 from app.agent.voice import READ_BACK_ASK   # noqa: E402 · Sasha 262 · the one read-back line lives in her voice (app/agent/voice.py)
-#: Sasha 262 · S2 item 10 (row 911): the booking the ONE question was asked about (account → its hold args, when). On "Handle it" the
-#: model sometimes called book_venue (no yes yet → "I need a clear yes first") instead of hold_venue: that turn now reads it back too
-_ASKED_ROUTE: Dict[str, dict] = {}
+# Sasha 263 · row 914: 262's second memory of "which booking the one question was about" (_ASKED_ROUTE) is gone — it kept item 7's
+# 20:15 and the yes sent it in place of the 21:15 asked for. The one record is the read-back card (_HELD: AgAPI's read_back_id + sha).
+_NOT_BOOKING = ("approval", "idempotency_key", "route")
 
 
 def chosen_route(said: Optional[str]) -> Optional[str]:
@@ -325,6 +325,18 @@ def with_under(tool: dict) -> dict:
     sch["properties"] = {**sch["properties"], "under": UNDER, "open_slot": OPEN_SLOT, "nights": NIGHTS}
     sch["required"] = [k for k in sch["required"] if k not in ("day", "time")]
     return {**tool, "input_schema": sch}
+
+
+def with_booking(tool: dict, hold: dict) -> dict:
+    """Sasha 263 · book_venue's schema with the booking (hold_venue's fields, none required): on their answer to the one question
+    ("Handle it") it reads back THIS booking by the one path; on a yes they're ignored — the yes sends only the card on their
+    screen. /s2, /next under parity and WhatsApp's brain; old S1 (parity off): its schema, untouched."""
+    sch = dict(tool["input_schema"])
+    props = {k: v for k, v in hold["input_schema"]["properties"].items() if k != "route"}
+    sch["properties"] = {**props, **sch["properties"]}
+    return {**tool, "input_schema": sch, "description": tool["description"] + (
+        " On their answer to the one question (\"Handle it\"), pass the booking they just asked for exactly as for hold_venue: it "
+        "reads it back. On a yes, pass nothing but the approval: it sends only the card on their screen.")}
 
 
 def with_act(tool: dict) -> dict:
@@ -652,7 +664,6 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
     venue = GW.plain_venue(rd["venue"])
     kinds = {c["kind"] for c in d.get("channels") or []}
     if action == "ask_one_question":   # R2 · the ONE question, word for word (voice.ASK_BOOK is this phrase)
-        _ASKED_ROUTE[ctx.account] = {"a": {k: v for k, v in a.items() if k != "route"}, "at": datetime.now(timezone.utc)}   # Sasha 262
         return _said({"status": "choose_route", "venue": rd["venue"], "ask": d["say_text"],
                       "options": [dict(o) for o in BD.CHOICES],
                       "how": "Say `say` word for word, then hold_venue again with the route they chose (Prefilled form → page; "
@@ -1071,15 +1082,22 @@ async def book_venue(ctx, a: dict) -> dict:
     GW = _API()
     said = ((a.get("approval") or {}).get("said")) or ""
     if not yes_to_book(said):
-        q, picked = _ASKED_ROUTE.get(ctx.account), chosen_route(ctx.user_said)
-        if q and picked and not stale(q["at"]) and one_path(ctx):   # Sasha 262 · their answer to the one question ("Handle it"):
-            return await hold_venue(ctx, {**q["a"], "route": picked})   # the read-back, as hold_venue gives it — never "a clear yes first"
+        picked = chosen_route(ctx.user_said)
+        if picked and one_path(ctx):   # Sasha 262/263 · their answer to the one question ("Handle it"): the read-back card, by the
+            booking = {k: v for k, v in a.items() if k not in _NOT_BOOKING}   # ONE path — hold_venue with the booking she was given
+            if booking.get("name") and booking.get("party"):                  # (never a booking remembered from an earlier question)
+                return await hold_venue(ctx, {**booking, "route": picked})
+            raise _err("hold_first", f"they answered the one question: call hold_venue now with the booking they asked for and route "
+                                     f"{picked} — it reads it back; nothing is sent until their yes")
         raise _err("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book_venue")
     held = _HELD.get(ctx.account)
+    from agapi import venue_submit as VS
     if not held:
         sent = _SENT.get(ctx.account)
         if sent and not stale(sent["at"]):   # Sasha 258 · the same yes again: already sent — said, with its status; never sent twice
             return await _tap_refused(ctx, {"venue": sent["venue"]}, "approval_consumed", {}, sent["venue"])
+        if VS.TAP.get() is not None:   # Sasha 263 · in the app the yes sends ONLY the card on their screen: none waiting → said, nothing sent
+            return {"status": "nothing_waiting", "booked": False, "in_app": True}
         raise _err("nothing_held", "call hold_venue first — the yes is bound to its read-back")
     if held["at"] >= ctx.started:
         raise _err("read_back_first", "say what you'll do and ask them to go ahead; book once they say yes")
@@ -1224,8 +1242,10 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
     if st == "confirmed":
         ref = r.get("reference")
         # Sasha 258 · demo path item 10 (≤ 2 sentences): ONE sentence with its reference, said word for word — then at most one question
+        from app.agent import voice as V
         return {"status": "confirmed", "venue": venue, "when": held["summary"], "itinerary": where, **({"reference": ref} if ref else {}),
-                "line": f"✅ Booked: {venue}, {held['summary']}" + (f" — reference {ref}." if ref else "."),
+                "line": V.booked_line(venue, held["summary"], ref),
+                **({"in_app": True} if VS.TAP.get() is not None else {}),   # Sasha 263 · the in-app yes: said by code (voice.yes_line)
                 "how": "Say `line` word for word, then at most ONE short question (e.g. the calendar) — nothing else."}
     if st == "sent":
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "act_id": r.get("act_id"),

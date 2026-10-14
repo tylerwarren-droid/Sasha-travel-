@@ -162,6 +162,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     # on book_venue reads it back too (never "I need a clear yes first")
     "T44": ("item 10: one read-back line by code, the turn ends there; item 3: the one total said when she leaves it out",
             ["tests.test_s262"]),
+    # Sasha 263 · row 914 (S2 item 10): the yes sent item 7's older booking — 262's second memory (_ASKED_ROUTE) is gone; the in-app
+    # yes sends only the latest unanswered card (read_back_id + sha, in_app_tap); no card → "There's nothing waiting to send."
+    "T45": ("item 10: \"Yes, send it\" sends exactly the card on screen; a prefilled form or no card → nothing sent",
+            ["tests.test_s263"]),
 }
 
 _RUNNER = """

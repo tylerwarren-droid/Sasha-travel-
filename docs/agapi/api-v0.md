@@ -974,7 +974,7 @@ Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own 
 
 After the person's explicit yes in THIS turn, to what hold_venue read back in an earlier turn: the booking, by its route — their form (any human step goes to their phone as Tap to finish), the platform's page to their phone, the email, or the call. Its status says what's true: confirmed only on the venue's own confirmation.
 
-**Errors:** `no_explicit_yes`, `nothing_held`, `read_back_first`, `read_back_stale`, `not_sent`, `already_done`, `store_unreachable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+**Errors:** `no_explicit_yes`, `nothing_held`, `read_back_first`, `read_back_stale`, `not_sent`, `already_done`, `store_unreachable`, `hold_first`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
 **Input**
 

@@ -711,6 +711,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from agapi import venues as _VN
         tools = [_VN.with_under(t) if t["name"] == "hold_venue" else t for t in tools]
         tools = [_VN.with_act(t) if t["name"] == "cancel_venue" else t for t in tools]   # Sasha 256 · cancel exactly the booking they mean
+        hv = next((t for t in tools if t["name"] == "hold_venue"), None)   # Sasha 263 · "Handle it" names the booking it answers
+        tools = [_VN.with_booking(t, hv) if t["name"] == "book_venue" and hv else t for t in tools]
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken
@@ -897,8 +899,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 spoken_any = True
                 yield {"type": "text", "delta": line + " "}
                 yield {"type": "say", "text": SP.speakable(line)}
-            rb = _V.read_back_line(u.name, r) if honest else ""   # Sasha 262 · S2 item 10: the read-back's ONE line, said by code;
-            if rb:                                                 # the turn ends on it (the model once added "I need a clear yes first")
+            # Sasha 262 · S2 item 10: the read-back's ONE line, said by code; the turn ends on it (the model once added "I need a clear
+            # yes first"). Sasha 263 · and the in-app yes's line (nothing waiting / booked + the calendar question), the same way
+            rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r)) if honest else ""
+            if rb:
                 read_back_said = True
                 if rb not in said:
                     for e in await flush():

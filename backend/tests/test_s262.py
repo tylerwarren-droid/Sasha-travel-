@@ -40,7 +40,7 @@ class TheReadBackIsOneLineSaidByCode(unittest.TestCase):
     def test_the_turn_says_it_and_ends_on_it(self):
         from app.agent import sasha as S
         src = inspect.getsource(S.turn)
-        self.assertIn('rb = _V.read_back_line(u.name, r) if honest else ""', src)
+        self.assertIn('rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r)) if honest else ""', src)   # Sasha 263 · + the yes's line
         self.assertIn("if agapi_out or read_back_said:", src)
 
 
@@ -52,26 +52,32 @@ class HandleItNeverAsksForAClearYes(unittest.TestCase):
         return Ctx()
 
     def test_book_venue_on_their_answer_reads_it_back(self):
+        # Sasha 263 (row 914) · moved onto the card path: the booking is the one she was given (hold_venue's fields), never a
+        # booking remembered from an earlier question (262's _ASKED_ROUTE, deleted)
         from agapi import venues as VN
         hold = mock.AsyncMock(return_value=RB)
-        q = {"a": {"name": "Sasha Test Venue", "date": "2026-10-22", "time": "21:15", "party": 2}, "at": datetime.now(timezone.utc)}
-        with mock.patch.dict(VN._ASKED_ROUTE, {ACCT: q}, clear=True), mock.patch.object(VN, "hold_venue", hold), \
-                mock.patch.object(VN, "one_path", lambda ctx: True):
-            out = asyncio.run(VN.book_venue(self.ctx("Handle it"), {"approval": {"said": "Handle it"}}))
+        b = {"name": "Sasha Test Venue", "day": "2026-10-22", "time": "21:15", "party": 2}
+        with mock.patch.object(VN, "hold_venue", hold), mock.patch.object(VN, "one_path", lambda ctx: True):
+            out = asyncio.run(VN.book_venue(self.ctx("Handle it"), {**b, "approval": {"said": "Handle it"}}))
         self.assertEqual(out, RB)
         self.assertEqual(hold.call_args[0][1]["route"], "form")
         self.assertEqual(hold.call_args[0][1]["name"], "Sasha Test Venue")
 
     def test_without_the_question_it_is_still_no_yes(self):
         from agapi import venues as VN
-        with mock.patch.dict(VN._ASKED_ROUTE, {}, clear=True), mock.patch.object(VN, "one_path", lambda ctx: True):
-            with self.assertRaises(Exception) as cm:
+        with mock.patch.object(VN, "one_path", lambda ctx: True):
+            with self.assertRaises(Exception) as cm:   # Sasha 263 · no booking given: hold it first — never "a clear yes first"
                 asyncio.run(VN.book_venue(self.ctx("Handle it"), {"approval": {"said": "Handle it"}}))
-        self.assertIn("no_explicit_yes", str(getattr(cm.exception, "code", "")) + str(cm.exception))
+            self.assertEqual(getattr(cm.exception, "code", ""), "hold_first")
+            with self.assertRaises(Exception) as cm:   # words that answer nothing: still no yes
+                asyncio.run(VN.book_venue(self.ctx("hmm"), {"name": "X", "party": 2, "approval": {"said": "hmm"}}))
+            self.assertEqual(getattr(cm.exception, "code", ""), "no_explicit_yes")
 
     def test_the_question_remembers_its_booking(self):
+        # Sasha 263 · moved: the one question keeps NO second memory of its booking — the card (_HELD) is the one record
         from agapi import venues as VN
-        self.assertIn("_ASKED_ROUTE[ctx.account] =", inspect.getsource(VN._execute))
+        self.assertNotIn("_ASKED_ROUTE", inspect.getsource(VN._execute))
+        self.assertIn("hold_venue(ctx, {**booking, \"route\": picked})", inspect.getsource(VN.book_venue))
 
 
 class TheOneTotalIsSaid(unittest.TestCase):

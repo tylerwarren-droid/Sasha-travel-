@@ -581,11 +581,11 @@ export default function S2App() {
     }
   }, [busy, speaker, dormant, sleepEvent, muted])
   useEffect(() => {   // Sasha 257 · what they said while she was answering goes next, in order (never dropped)
-    if (busy || !queued.current.length) return
+    if (busy || asleep || !queued.current.length) return   // Sasha 268 · paused: it waits for Wake — a message typed BEFORE the pause never undoes it
     const [nxt, ...rest] = queued.current
     queued.current = rest
     void send(nxt)
-  }, [busy, send])
+  }, [busy, asleep, send])
 
   // Sasha 265 · item 3 · NEW CHAT: the conversation goes from the screen AND from her short-term memory, in its one place (the
   // conversation record, DELETE /api/s2-memory → s2_memory.clear_conversation — the same clear as /next). Bookings, trips and

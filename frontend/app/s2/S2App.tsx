@@ -27,6 +27,7 @@ import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
 import { arrivalStarted } from '@/lib/greeting-rule.mjs'
+import { loadFirstLine, firstLineFor } from '@/lib/first-line'   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 
@@ -495,6 +496,9 @@ export default function S2App() {
     setInput('')
     setMsgs(ms => [...ms, { role: 'user', text: t, cards: [] }, { role: 'sasha', text: '', cards: [] }])
     const patch = (f: (m: Msg) => Msg) => setMsgs(ms => { const c = ms.slice(); c[c.length - 1] = f(c[c.length - 1]); return c })
+    // Sasha 265 · item 5: a request for work hears voice.first_line the instant it's sent (the network took 0.8–1.4 s)
+    const said1 = pick || tap ? null : firstLineFor(t)
+    if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }
     let reply = ''
     // Sasha 257 · a reply stream that goes quiet (a phone's network, a connection held open) never leaves the page "busy" — the
     // mic stays off and every message is refused while it is. STALL_MS of silence → it's stopped and said; `done` ends it.
@@ -522,7 +526,7 @@ export default function S2App() {
           if (ev.type === 'render' || ev.type === 'state') ev = untagDeep(ev)
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
-          else if (ev.type === 'hold') { patch(m => ({ ...m, hold: ev.text })); speaker.say(ev.say || ev.text) }   // Sasha 257 · the holding line (row 863)
+          else if (ev.type === 'hold') { if (ev.first && said1) continue; patch(m => ({ ...m, hold: ev.text })); speaker.say(ev.say || ev.text) }   // 265 · never twice   // Sasha 257 · the holding line (row 863)
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
           // Sasha 249 · ONE STATUS: the "Booked" card was made here by a regex on her reply (/^✅ Booked/) — deleted. It comes only
@@ -575,6 +579,7 @@ export default function S2App() {
   // Sasha 265 · item 3 · NEW CHAT: the conversation goes from the screen AND from her short-term memory, in its one place (the
   // conversation record, DELETE /api/s2-memory → s2_memory.clear_conversation — the same clear as /next). Bookings, trips and
   // receipts stay (the trip record). Only once the record says it's cleared is the screen cleared; if not, she says so.
+  useEffect(() => { void loadFirstLine() }, [])   // Sasha 265 · item 5: voice.first_line's words and rule, read once
   const [clearing, setClearing] = useState(false)
   const newChat = useCallback(async () => {
     if (busy || clearing) return

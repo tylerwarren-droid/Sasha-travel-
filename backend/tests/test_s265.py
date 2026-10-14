@@ -339,6 +339,18 @@ class TheFirstLineAtOnce(unittest.TestCase):
         self.assertIn("at_once = V.first_line(body) if body else None", src)
         self.assertIn("timeout=0 if at_once else V.HOLD_AFTER_S", src)
 
+    def test_gate_the_page_says_it_at_once_from_the_one_rule(self):
+        got = run(S.first_line_rule())
+        self.assertEqual((got["line"], got["work"]), (V.FIRST_LINE, V._WORK.pattern))   # the words and the rule: voice.py's, read once
+        fl = _tsx(self, "lib/first-line.ts")
+        self.assertIn("apiUrl('/api/agent/first-line')", fl)
+        self.assertNotIn("let me pull something together", fl)                 # the words are never written on the page
+        self.assertIn("if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }", _tsx(self, "app/s2/S2App.tsx"))
+        self.assertIn("if (ev.first && said1) continue", _tsx(self, "app/s2/S2App.tsx"))
+        chat = _tsx(self, "app/components/SashaChat.tsx")
+        self.assertIn("if (said1) { show(said1); onWorking?.(said1); onSashaResponse?.(said1) }", chat)
+        self.assertIn("if (ev.first && said1) continue", chat)
+
     def test_gate_next_shows_it_under_her_face_without_a_call(self):
         self.assertIn("onWorking?.(ev.text)", _tsx(self, "app/components/SashaChat.tsx"))
         self.assertIn("data-sasha-working-face", _tsx(self, "app/next/page.tsx"))

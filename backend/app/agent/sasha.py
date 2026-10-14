@@ -1783,6 +1783,14 @@ async def memory(request: Request, session: str = ""):
         return {"ok": True, "line": None, "recent": [], "screen": None}
 
 
+@router.get("/first-line")
+async def first_line_rule():
+    """Sasha 265 · item 5 (row 935: "under 1 s") · voice.first_line, as the page reads it ONCE: its words and the rule for a request for
+    work — so the page says it the instant one is sent (the network alone took 0.8–1.4 s); the stream's own first line (`first`) is then
+    the same words, not said twice. Public: words and a pattern, nothing of anyone's."""
+    return {"line": _V.FIRST_LINE, "work": _V._WORK.pattern, "flags": "i"}
+
+
 @router.delete("/memory")
 async def memory_clear(request: Request):
     """Sasha 265 · item 3 · NEW CHAT (/s2 and /next): the conversation cleared in the conversation record (s2_memory.clear_conversation)

@@ -12,6 +12,7 @@ import { renderMarkdown } from '@/lib/markdown'
 import { placeReply, visible } from '@/lib/agent-bubble.mjs'   // Sasha 212 · never an empty bubble
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { PayHere } from './PayHere'   // Sasha 220 · pay here, in the conversation   // Sasha 218 · no visible TEST label on /next (display only)
+import { loadFirstLine, firstLineFor } from '@/lib/first-line'   // Sasha 265 · item 5: the first line, at once
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { MAX_PHOTOS, imagesOf, toJpeg, type Attachment } from '@/lib/photo-attach'
 import { SharedCard, SHARED_KINDS } from '@/app/components/cards/S2Cards'   // Sasha 241 · S1 PARITY
@@ -232,6 +233,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean; status?: string
     ask?: string; choices?: { title: string; route: string }[]; read_back_id?: string; tapped?: string } | null>(null)   // Sasha 265 · item 4: the call's card
   const tapRef = useRef<{ read_back_id: string; choice: string } | null>(null)   // Sasha 265 · item 4: the card's tap, sent with its turn
+  useEffect(() => { if (agent) void loadFirstLine() }, [agent])   // Sasha 265 · item 5: voice.first_line's words and rule, read once
   // Sasha 241 · S1 PARITY: the shared cards (components/cards/) — this turn's, drawn in the chat as on /s2
   const [shared, setShared] = useState<{ turn?: string; evs: Record<string, unknown>[] }>({ evs: [] })
   const [handoff, setHandoff] = useState<{ code: string; what: string; expires_at?: string; added?: string | null } | null>(null)   // Sasha 228 · "Add from your phone"
@@ -632,6 +634,10 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     }
     const live = () => turnSeqRef.current === turnId
     const t0 = performance.now(); let firstSound: number | null = null; let firstKind = ''; const tools: string[] = []
+    // Sasha 265 · item 5 (row 935): a request for work hears voice.first_line the instant it's sent — shown (under her face too, no
+    // call running) and, in a call, spoken; the stream's own first line is then not said twice
+    const said1 = tapRef.current ? null : firstLineFor(content)
+    if (said1) { show(said1); onWorking?.(said1); onSashaResponse?.(said1) }
     const heard = (kind: string) => { if (firstSound === null) { firstSound = performance.now() - t0; firstKind = kind } }
     try {
       const r = await fetch('/api/sasha-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
@@ -693,7 +699,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           }
           else if (ev.type === 'state') { if (Array.isArray(ev.highlight) && ev.highlight.length) setHighlight(ev.highlight) }   // Sasha 213 · the card(s) she named
           else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.say || ev.text) }   // Sasha 210 · only what she hasn't said
-          else if (ev.type === 'hold') { if (!reply) { show(ev.text); onWorking?.(ev.text) } onSashaResponse?.(ev.say || ev.text) }   // Sasha 257 · the holding line: her words replace it
+          else if (ev.type === 'hold') { if (ev.first && said1) continue; if (!reply) { show(ev.text); onWorking?.(ev.text) } onSashaResponse?.(ev.say || ev.text) }   // Sasha 257 · the holding line: her words replace it
           else if (ev.type === 'done') {
             reply = ev.text || reply; show(reply); window.dispatchEvent(new Event('sasha-plan-refresh'))
             const body = { session: chatSessionIdRef.current, first_sound_ms: firstSound === null ? null : Math.round(firstSound),

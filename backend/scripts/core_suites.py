@@ -90,8 +90,9 @@ async def restaurant(a: str) -> None:
     ok("REST rules: a platform (no own form, WhatsApp or email) → its page handed over, never booked", d["action"] == "hand_over_platform_link", d["action"])
     d = R([E, T], 72)
     ok("REST 48 h rule: more than 48 h away, no form → a request (email), never a call", d["action"] == "request_email", d["action"])
-    d = R([E, T], 30)
-    ok("REST 48 h rule: within 48 h → a call", d["action"] == "call", d["action"])
+    d = R([E, T], 30)   # Sasha 265 · booking-rules/2 (CR 99): within 48 h the call IS the ONE question; their OK makes it the call
+    ok("REST 48 h rule: within 48 h → a call, asked as the ONE question (booking-rules/2)", d["action"] == "ask_call"
+       and R([E, T], 30, pref="call")["action"] == "call", d["action"])
     d = R([E, T], 18, vtype="hotel")
     ok("REST hotel within 24 h → call and email at once", d["action"] == "call_and_email", d["action"])
     ok("REST every answer carries the take-over", all(R(c, h)["takeover"]["say"] == BR.PHRASES["takeover"] for c, h in (([F], 72), ([P], 72), ([T], 72), ([], 72))))

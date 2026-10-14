@@ -176,6 +176,8 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             ["tests.test_s265"]),
     "T48": ("the mic is on only when it hears (a blocked site said, with its steps); she stays full size through the first exchange",
             ["tests.test_s266"]),
+    "T49": ("one audio session (play-and-record) for her face, her voice and his mic — iOS never refuses the mic for a play-only page",
+            ["tests.test_s267"]),
 }
 
 _RUNNER = """

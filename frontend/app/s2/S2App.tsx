@@ -28,7 +28,8 @@ import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · 
 import { sleepStep, HERE, ASLEEP, AWAKE } from '@/lib/sleep-rule.mjs'
 import { arrivalStarted } from '@/lib/greeting-rule.mjs'
 import { loadFirstLine, firstLineFor } from '@/lib/first-line'
-import { BLOCKED, stepsFor } from '@/lib/mic-state'   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
+import { BLOCKED, stepsFor } from '@/lib/mic-state'
+import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 
@@ -151,7 +152,7 @@ function useSpeaker() {
     /** Call SYNCHRONOUSLY inside a tap / key / submit handler: primes the one element iOS will then let her speak through. */
     unlock: () => {
       on.current = true
-      try { (navigator as unknown as { audioSession?: { type: string } }).audioSession!.type = 'playback' } catch { /* not Safari 16.4+ */ }
+      holdPlayAndRecord('her voice')   // Sasha 267 · ONE audio session: "playback" here made iOS refuse the mic (lib/audio-session)
       if (primed.current || playing.current) return
       try { const a = audio(); a.src = SILENT; a.play().then(() => { primed.current = true }).catch(() => {}) } catch { /* no audio */ }
     },
@@ -580,7 +581,8 @@ export default function S2App() {
   // Sasha 265 · item 3 · NEW CHAT: the conversation goes from the screen AND from her short-term memory, in its one place (the
   // conversation record, DELETE /api/s2-memory → s2_memory.clear_conversation — the same clear as /next). Bookings, trips and
   // receipts stay (the trip record). Only once the record says it's cleared is the screen cleared; if not, she says so.
-  useEffect(() => { void loadFirstLine() }, [])   // Sasha 265 · item 5: voice.first_line's words and rule, read once
+  useEffect(() => { void loadFirstLine() }, [])
+  useEffect(() => { holdPlayAndRecord('the page') }, [])   // Sasha 267 · before her face or voice starts, before any mic request   // Sasha 265 · item 5: voice.first_line's words and rule, read once
   const [clearing, setClearing] = useState(false)
   // Sasha 266 · row 943 (a): the mic's own words when it isn't hearing (blocked, can't hear you) — on the page, never only a tooltip
   const [micNote, setMicNote] = useState<string | null>(null)

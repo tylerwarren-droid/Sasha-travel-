@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { openingShown, openingEnds } from '@/lib/greeting-rule.mjs'
+import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · her face shares the page's one audio session
 
 export type Talker = {
   unlock: () => void
@@ -39,6 +40,7 @@ async function pcm(text: string): Promise<string | null> {
 
 /** A LITE session on `video`; resolves once her face is on screen. */
 async function startFace(video: HTMLVideoElement): Promise<Face> {
+  holdPlayAndRecord('her face')
   const [tr, sdk] = await Promise.all([fetch('/api/s2-avatar/token', { cache: 'no-store' }), import('@heygen/liveavatar-web-sdk')])
   const { token } = await tr.json()
   if (!token) throw new Error('no token')
@@ -51,6 +53,7 @@ async function startFace(video: HTMLVideoElement): Promise<Face> {
   })
   const stop = async () => { try { await s.stop() } catch { /* already stopped */ } }
   try { await s.start(); await ready } catch (e) { await stop(); throw e }
+  holdPlayAndRecord('her face connected')   // Sasha 267 · re-asserted after the avatar connects (its media may have set its own)
   return {
     video,
     stop,

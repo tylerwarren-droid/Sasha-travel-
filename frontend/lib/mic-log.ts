@@ -11,7 +11,7 @@ export type MicEvent = { t: number; ev: string; [k: string]: unknown }
 // Sasha 266 · row 943 (a): the state changes that say WHY a mic doesn't hear go to the server too (lib/mic-state.report — no audio, no
 // words, never a transcript), so a phone that fails names its own failure
 const REPORTED = new Set(['connect', 'permission_state', 'permission', 'key', 'audiocontext', 'socket_open', 'socket_close', 'error', 'deaf',
-  'hearing', 'blocked'])
+  'hearing', 'blocked', 'first_transcript'])
 
 export function micLog(ev: string, data: Record<string, unknown> = {}): void {
   if (typeof window === 'undefined') return

@@ -59,6 +59,7 @@ const DG_LANG: Record<string, string> = {
 import { keyOrFail, RECONNECTS_BEFORE_SAYING } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
 import { micLog } from '@/lib/mic-log'   // Sasha 213 · the mic's state machine, logged
 import { BLOCKED, micPermission, stepsFor } from '@/lib/mic-state'   // Sasha 266 · "on" only when it hears; blocked said, with its steps
+import { holdPlayAndRecord, audioSessionType } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session
 import { makeDownsampler, sendRate } from '@/lib/downsample.mjs'   // Sasha 215 (d) · the mic at 16 kHz
 
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
@@ -207,6 +208,8 @@ const KEYTERMS = ['Chamberí', 'Malasaña', 'Chueca', 'Lavapiés', 'La Latina', 
 // Sasha 264 · item 7: what the mic says when it isn't reaching her (never "Listening" while deaf)
 const DEAF_TAP = 'Sasha can’t hear you — tap the mic to talk'
 const DEAF_AFTER_MS = 4000
+// Sasha 267 · iOS refused the mic because the page's audio was play-only (should no longer happen: lib/audio-session) — said plainly
+const AUDIO_MODE = 'I can’t hear you — your phone kept this page’s sound play-only. Reload this page, then tap the mic.'
 const PREROLL_MS = 600        // Sasha 265 · item 1: kept while she speaks, sent only if the person talks over her (barge-in)
 const RESUME_WAIT_MS = 1000   // Sasha 265 · item 1: how long the audio may take to start before the socket opens anyway (and the screen says tap)
 
@@ -219,6 +222,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   const [hearing, setHearing] = useState(false)
   const hearingRef = useRef(false)
   const connectT0 = useRef(0)
+  const firstHeardRef = useRef(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
   // Mic device selection. On a Mac, Continuity silently hands the *iPhone's* mic to the browser
@@ -355,6 +359,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     // made AFTER the mic permission and the key, and its resume() was waited on for good — a phone (or Chrome with no tap yet)
     // never resumes audio outside a tap, so the socket was never opened and 264's "can't hear you" line, after that await, never ran.
     // Made and resumed HERE, before the first await — inside the tap when a tap started it — and never waited on (RESUME_WAIT_MS).
+    holdPlayAndRecord('the mic')   // Sasha 267 · before any mic request: "playback" makes iOS refuse capture (InvalidStateError)
     const ctx = new AudioContext()
     audioCtxRef.current = ctx
     const resumed = ctx.resume().catch(() => {})
@@ -364,7 +369,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       // Sasha 266 · row 943 (a): his iPhone minted 16 keys and never asked for the mic. The browser's own answer first — a site the
       // browser blocks is said at once, with the steps to allow it (never a key, never a silent retry, never "on")
       const perm = await micPermission()
-      micLog('permission_state', { perm })
+      micLog('permission_state', { perm, state: audioSessionType() || 'none (not iOS Safari)' })
       if (perm === 'denied') {
         connectingRef.current = false; setIsConnecting(false); dropCtx()
         micLog('blocked', { perm, why: 'the browser blocks the microphone for this site' })
@@ -639,6 +644,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
             if (isEcho(final)) return
             heardAtRef.current = 0; lastAliveRef.current = Date.now(); setNotCaught(false)   // Sasha 192 · heard: the watchdog rests
             micLog('submitted', { text: final })
+            if (!firstHeardRef.current) { firstHeardRef.current = true; micLog('first_transcript', { ms: Date.now() - connectT0.current }) }   // Sasha 267 · reported (no words)
             onTranscriptRef.current?.(final)
           }
 
@@ -738,7 +744,8 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
       micLog('error', { name: err?.name, message: String(err?.message || '').slice(0, 120) })
-      if (err.name === 'NotAllowedError') { micLog('blocked', { name: err.name, why: 'the request was refused' }); reportMicError(BLOCKED) }   // Sasha 266 · + its steps on the page
+      if (err.name === 'InvalidStateError') reportMicError(AUDIO_MODE)   // Sasha 267 · iOS kept the page play-only: said, never "on"
+      else if (err.name === 'NotAllowedError') { micLog('blocked', { name: err.name, why: 'the request was refused' }); reportMicError(BLOCKED) }   // Sasha 266 · + its steps on the page
       else if (err.name === 'NotFoundError') reportMicError('No microphone found')
       else if (err.name === 'NotReadableError') reportMicError('Mic is in use by another app')
       else if (err.name === 'OverconstrainedError') reportMicError('Selected mic is unavailable')

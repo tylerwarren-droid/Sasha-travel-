@@ -25,6 +25,13 @@ from tests.test_s254_one_decider import ALL4, Base
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 FRONT = BACKEND.parent / "frontend"
 run = asyncio.run
+
+
+def _front(case, rel):
+    f = FRONT / rel
+    if not f.exists():
+        case.skipTest("frontend/ is not in this checkout (a backend-only build)")
+    return f.read_text()
 R6_SAY = "On it — I've emailed Hotel Gate, and I'll call them now too and let you know."
 PLAN = {"call_id": "vcp_r6", "reason": "R6", "phone": "+34910000000", "source": "venue", "when": "now", "simulate": True}
 
@@ -119,17 +126,17 @@ class HerArrivalsWords(unittest.TestCase):
         from app.agent import sasha as S
         got = run(S.first_line_rule())
         self.assertEqual((got["hello"], got["hello_back"], got["camera_off"]), (V.HELLO, V.HELLO_BACK, V.CAMERA_OFF))
-        fl = (FRONT / "lib" / "first-line.ts").read_text()
+        fl = _front(self, "lib/first-line.ts")
         self.assertIn("rule.helloBack.replace('{name}', first) : rule.hello}. ${rule.cameraOff}", fl)
-        hello = (FRONT / "app" / "s2" / "S2Hello.tsx").read_text()
+        hello = _front(self, "app/s2/S2Hello.tsx")
         self.assertIn("await arrivalLine(nameRef.current ?? null, back.current)", hello)
         self.assertNotIn("helloLine", hello)
 
 
 class OnScreenIsOneRule(unittest.TestCase):
     def test_presence_rule_is_tested_and_drawn_from(self):
-        self.assertIn("scripts/presence-rule.test.mjs", (FRONT / "package.json").read_text())
-        hello = (FRONT / "app" / "s2" / "S2Hello.tsx").read_text()
+        self.assertIn("scripts/presence-rule.test.mjs", _front(self, "package.json"))
+        hello = _front(self, "app/s2/S2Hello.tsx")
         self.assertIn("const p = presence({", hello)
         self.assertNotIn("createPortal", hello)                                             # C: never into a slot that may be gone
         self.assertIn("c.dataset.drawn = '0'", hello)                                       # C: a released live face shows her still

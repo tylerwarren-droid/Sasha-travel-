@@ -77,7 +77,7 @@ class EveryArrivalShowsHer(unittest.TestCase):
         hello = _tsx(self, "app/s2/S2Hello.tsx")
         self.assertNotIn("getItem('s2_hello')", hello)                         # a return skipped her
         self.assertNotIn("opacity: phase === 'starting' ? 0", hello)           # never invisible while her face starts
-        self.assertIn("const big = shown === 'face' || shown === 'card'", hello)
+        self.assertIn("const big = p.where === 'full'", hello)   # Sasha 271 · MOVED: presence() says it (its 'full' holds the card)
         self.assertIn("prefers-reduced-motion: reduce", hello)
         self.assertIn("new MutationObserver(look)", hello)                     # the circle's slot, watched
         app = _tsx(self, "app/s2/S2App.tsx")

@@ -241,8 +241,13 @@ class G8HotelOnTheLadder(Base):
         self.session = "wa:s254"
         # Sasha 254 · the booking rules: SynXis is a booking platform (R14) — its page handed over; with the hotel's OWN email too,
         # the email comes first (R1: own channels before a platform)
+        # Sasha 271 · MOVED (CR 102): that email is the venue engine's act now (venue.prepare_booking with the stay) — never Sasha's own
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        fake = use_fake_agapi(self)
         out = self.hold(self.HOTEL, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
-        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "email", "request_email"))
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "request_email"))
+        self.assertEqual(fake.body("venue.prepare_booking")["stay"], {"nights": 2})
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])
         VN._HELD.pop(ACCT, None)
         out = self.hold({"link": self.HOTEL["link"]}, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
         self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "page"))                  # no "email or book now?"
@@ -284,24 +289,30 @@ class G8HotelOnTheLadder(Base):
         self.assertNotIn(ACCT, API._HELD)                                                            # no TEST stay held
 
     def test_an_email_only_hotel_gets_the_email_route(self):
-        """hotel_test_s135 EmailOnlyVenue.test_an_email_only_hotel_gets_the_email_route, on the brain's path."""
+        """hotel_test_s135 EmailOnlyVenue.test_an_email_only_hotel_gets_the_email_route, on the brain's path.
+        Sasha 271 · MOVED (CR 102): the room request is the venue engine's act — venue.prepare_booking with stay {nights}, date the
+        check-in, party the guests; its read-back is the engine's (Sasha's own room email and its 24-hour plan line are not used)."""
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        fake = use_fake_agapi(self)
         out = self.hold({"email": {"fact_index": 1, "value": "res@artiem.es"}}, venue="ARTIEM Madrid", what="hotel", day=LATER, nights=2)
-        body = self.api.bodies("/api/booking/emails")[0]
-        self.assertEqual((body["nights"], body["date"], body["party"]), (2, LATER, 2))
-        self.assertEqual(out["route"], "email")
-        self.assertEqual(out["say"], GW.room_email_sentence("ARTIEM Madrid", 2, LATER, 2))
+        body = fake.body("venue.prepare_booking")
+        self.assertEqual((body["stay"], body["date"], body["party"]), ({"nights": 2}, LATER, 2))
+        self.assertEqual((out["route"], out["rules"]["action"]), ("agapi", "request_email"))
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])
 
     def test_a_hotel_is_requested_from_the_hotel_and_says_so(self):
-        """travel_s132 Hotels.test_a_hotel_is_requested_from_the_hotel_and_says_so: a request, said as one — never booked."""
+        """travel_s132 Hotels.test_a_hotel_is_requested_from_the_hotel_and_says_so: a request, said as one — never booked.
+        Sasha 271 · MOVED (CR 102): through the venue engine's act — sent on the yes, "requested" until the hotel replies."""
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        use_fake_agapi(self)
         out = self.hold({"email": {}}, venue="Anantara", country="VN", what="hotel", day=LATER, nights=2)
-        self.assertIn("asking for a room for 2 nights", out["what_happens"])
-        self.assertIn("It's a request — nothing is booked until they reply.", out["say"])
+        self.assertIn("it's booked only when they confirm", out["what_happens"])
         self.assertEqual(self.yes()["status"], "requested")
 
     def test_the_room_email(self):
-        """travel_s132 Hotels.test_the_room_email: the brain's email body is the room email's particulars (N nights)."""
-        self.hold({"email": {}}, venue="Anantara", country="VN", what="hotel", day=LATER, nights=2)
-        b = self.api.bodies("/api/booking/emails")[0]
+        """travel_s132 Hotels.test_the_room_email: the room email's particulars (N nights).
+        Sasha 271 · MOVED (CR 102): on the one path the room request is the venue engine's; this is old S1's room email, as it was."""
+        b = {"date": LATER, "time": "15:00", "party": 2, "name": "Alex Gate", "email": "alex@example.test", "nights": 2}
         p = E.EmailParticulars(on=date.fromisoformat(b["date"]), at=time.fromisoformat(b["time"]), party=b["party"], name=b["name"],
                                guest_email=b["email"], nights=b["nights"])
         m = E.compose("vi", "Anantara", "res@x.com", p, "id1")

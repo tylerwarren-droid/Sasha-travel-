@@ -83,18 +83,22 @@ class OneFraming(unittest.TestCase):
         self.assertTrue((FRONT / "public" / "sasha-half.webp").exists())
         for gone in ("sasha-face.jpg", "s2_face", "still(", "keptFace"):
             self.assertNotIn(gone, hello)                                                   # the close-up and kept snapshots: gone
-        self.assertEqual(hello.count("background: `${FRAMING} url(${img})`"), 2)           # the full-size still and the circle
+        self.assertEqual(hello.count("background: `${FRAMING} url(${img})`"), 1)           # Sasha 271 · MOVED: ONE element, ONE still (full and corner)
         self.assertIn("objectPosition: 'center 18%'", hello)                                 # the live canvas: the same framing
         self.assertIn("export const FRAMING = 'center 18% / cover no-repeat'", hello)
-        self.assertIn("transition: big ? 'none' : 'all .45s ease'", hello)                 # she appears full size at once: no grow-in
-        self.assertIn("(phase === 'off' && signedIn === null && soon && !started && !asleep && !reducedMotion())", hello)   # from first paint
+        self.assertIn("transition: big ? 'none' : 'left .45s ease, top .45s ease", hello)   # she appears full size at once: no grow-in
+        # Sasha 271 · MOVED: from first paint — presence()'s own clause (lib/presence-rule.mjs)
+        self.assertIn("(s.signedIn === true || (s.signedIn === null && !!s.soon))", _src(self, "lib/presence-rule.mjs"))
+        self.assertIn("presence({ phase, tapFor, started, signedIn, soon, asleep, dormant, reduced: reducedMotion() })", hello)
 
 
 class LeavesOnHisFirstRequest(unittest.TestCase):
     def test_gate_said_by_code_then_the_circle_and_back_on_a_tap(self):
         hello = _src(self, "app/s2/S2Hello.tsx")
         self.assertIn("export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void> }", hello)
-        self.assertIn("if (p === 'faceAgain') await collapse(); else await handoff()", hello)
+        # Sasha 271 · MOVED (row 1008): her arrival goes to the corner as its own lines end; bye is for a tap that brought her back
+        self.assertIn("if (phaseRef.current !== 'faceAgain' || byeing.current) return", hello)
+        self.assertIn("await collapse()\n  }", hello)
         app = _src(self, "app/s2/S2App.tsx")
         self.assertIn("const leaving = isRequest && !!helloCtl.current?.big()", app)
         self.assertIn("const said1 = leaving ? (cameraOffLine() || null)", app)

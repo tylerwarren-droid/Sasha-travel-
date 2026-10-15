@@ -52,8 +52,10 @@ test('her face back from the bubble is their own choice — not the opening', ()
 test('/s2 wires it: S2Hello draws from openingShown and S2App passes started from the messages', () => {
   const hello = readFileSync(new URL('../app/s2/S2Hello.tsx', import.meta.url), 'utf8')
   const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
-  assert.match(hello, /openingShown\(phase, tapFor, started\)/)
-  assert.match(hello, /shown === 'card'/)
+  // Sasha 271 · MOVED: S2Hello draws from presence() (lib/presence-rule.mjs), which asks openingShown(phase, tapFor, started)
+  assert.match(hello, /presence\(\{ phase, tapFor, started,/)
+  assert.match(readFileSync(new URL('../lib/presence-rule.mjs', import.meta.url), 'utf8'), /openingShown\(s\.phase, s\.tapFor \|\| 'voice', !!s\.started\)/)
+  assert.match(hello, /p\.card \?/)
   assert.doesNotMatch(hello, /phase === 'voice' \|\| \(phase === 'tap' && tapFor === 'voice'\) \?/)
   assert.match(app, /started=\{tab !== 'sasha'\} ctlRef=\{helloCtl\}/)   // Sasha 268: small talk keeps her full size; his first REQUEST ends it (bye)   // Sasha 265 · item 2 (was conversationStarted: a return skipped her) · 267: another tab too
   assert.match(app, /restored: true/)   // restored turns still marked (arrivalStarted stays the rule's answer for a conversation)
@@ -63,7 +65,7 @@ test('Sasha 265 · item 2 (row 936): ONE arrival sequence — no per-tab skip, h
   const hello = readFileSync(new URL('../app/s2/S2Hello.tsx', import.meta.url), 'utf8')
   assert.doesNotMatch(hello, /getItem\('s2_hello'\)/)                 // a return no longer skips the opening
   assert.doesNotMatch(hello, /opacity: phase === 'starting' \? 0/)      // never invisible while her live face starts
-  assert.match(hello, /const big = shown === 'face' \|\| shown === 'card'/)   // her voice alone still shows her face
+  assert.match(hello, /const big = p\.where === 'full'/)   // her voice alone still shows her face (Sasha 271 · MOVED: presence's 'full' holds the card)
   assert.match(hello, /prefers-reduced-motion: reduce/)                  // the one thing that skips the motion
   assert.match(hello, /new MutationObserver\(look\)/)                   // the circle's slot is watched, not looked up once in render
   assert.doesNotMatch(hello, /const slot = typeof document/)

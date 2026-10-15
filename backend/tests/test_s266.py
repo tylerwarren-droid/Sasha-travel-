@@ -80,10 +80,15 @@ class SheStaysThroughTheFirstExchange(unittest.TestCase):
     def test_gate_no_timer_sends_her_away(self):
         hello = _tsx(self, "app/s2/S2Hello.tsx")
         self.assertNotIn("setTimeout(handoff", hello)                                     # 265: ~1–2.5 s after her hello
+        # Sasha 271 · MOVED (row 1008, Tyler): her arrival no longer stays full size through the first exchange — "Hey there" and the
+        # camera-off line, then the corner AT ONCE (when said, never a timer); the live-face idle timer is only for a tap that
+        # brought her back, and it lets her live face go (her still stays) — it never moves her
         voice = hello[hello.index("const speakVoice = async () => {"):hello.index("const lateFace")]
-        self.assertNotIn("\n    handoff()", voice)                                         # said, and she stays
-        idle = hello[hello.index("idleLive.current = setTimeout("):hello.index("}, FACE_IDLE_S * 1000)")]
-        self.assertNotIn("setPhase", idle)                                                 # the live face let go — never the arrival
+        self.assertIn("await toCorner()", voice)
+        self.assertNotIn("idleLive", hello)
+        idle = hello[hello.index("idle.current = setTimeout("):hello.index("}, FACE_IDLE_S * 1000)")]
+        self.assertNotIn("setPhase", idle)                                                 # the live face let go — never a move
+        self.assertIn("letGo(f)", idle)
         self.assertIn("if (!openingEnds(phaseRef.current, started)) return", hello)      # his first reply: then the circle
         self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", _tsx(self, "app/s2/S2App.tsx"))   # 268: small talk keeps her; his first request (bye) ends it
 

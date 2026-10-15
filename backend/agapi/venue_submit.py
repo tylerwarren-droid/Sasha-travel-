@@ -88,13 +88,16 @@ def _err(r: dict) -> dict:
 
 
 async def prepare(account: str, place: dict, person: dict, date: str, time_: str, party: int, notes: Optional[str] = None,
-                  call: Optional[dict] = None, link: Optional[str] = None) -> Dict[str, Any]:
+                  call: Optional[dict] = None, link: Optional[str] = None, stay: Optional[dict] = None) -> Dict[str, Any]:
     """venue.prepare_booking → {ok, prepared_id, link, zero_touch_allowed, say, …} or {ok: False, error}. Nothing is submitted.
     Sasha 265 · item 4 (CR 99): + call {phone E.164, opens_at "HH:MM" local, open_now} — the venue can be called (routes page, call).
-    Sasha 270 · CR 101: + link {url} — the booking link the person handed over (the engine fills THAT form, its own read of it)."""
+    Sasha 270 · CR 101: + link {url} — the booking link the person handed over (the engine fills THAT form, its own read of it).
+    Sasha 271 · CR 102: + stay {nights, room?} — a hotel stay is a booking act like a table (date = check-in, party = guests); its
+    read-back, its calls (R5/R6) and its status are the engine's."""
     body = {"place": {k: v for k, v in place.items() if v and k in ("name", "website", "place_id", "city", "category")},
             "person": {k: v for k, v in person.items() if v}, "date": date, "time": time_, "party": int(party),
-            **({"notes": notes[:500]} if notes else {}), **({"call": call} if call else {}), **({"link": {"url": link[:500]}} if link else {})}
+            **({"notes": notes[:500]} if notes else {}), **({"call": call} if call else {}), **({"link": {"url": link[:500]}} if link else {}),
+            **({"stay": stay} if stay else {})}
     r = await _call(account, "venue.prepare_booking", body)
     if not r.get("ok"):
         return {"ok": False, "error": _err(r)}
@@ -192,17 +195,17 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
 
 
 def _follow_up_of(held: dict) -> dict:
-    """Sasha 269 · what an act keeps for the engine's follow-up call (R5/R6 — venue.call_again): when it was sent, the venue's OWN number
-    (read on their own site), or a listing number's place and hash only (re-read when the call is opened — never its digits)."""
-    import datetime as _dt
-    out: Dict[str, Any] = {"sent_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
+    """Sasha 269 · what an act keeps for the engine's follow-up call (R5 — venue.call_again): the venue's OWN number (read on their own
+    site), or a listing number's place and hash only (re-read when the call is opened — never its digits).
+    Sasha 271 · CR 102: WHEN that call is due is the engine's (booking_status.follow_up) — no sent time, no R6 flag, no venue type kept
+    here to work it out from."""
+    out: Dict[str, Any] = {}
     if held.get("venue_phone"):
         out["venue_phone"] = held["venue_phone"]
     elif held.get("listing_ref"):
         out["listing_ref"] = dict(held["listing_ref"])
-    for k in ("r6", "category"):
-        if held.get(k):
-            out[k] = held[k]
+    if held.get("stay"):
+        out["stay"] = dict(held["stay"])
     return out
 
 
@@ -246,7 +249,13 @@ STATE = {"confirmed": "confirmed", "booked": "confirmed", "declined": "declined"
 FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", "cancelled")   # Sasha 269 · booking-rules/2.1: a
 #: no-answer is NOT final (the person may still say "try once more", or fill in their form) — venue.booking_status is read again
 #: the venue.booking_status fields get_status shows as they are (Sasha 269 · CR 100 §C: never re-derived here)
-STATUS_KEYS = ("state", "words", "say_now", "answered", "next_call", "next_step", "ask", "choices", "calls")
+STATUS_KEYS = ("state", "words", "say_now", "answered", "next_call", "next_step", "ask", "choices", "calls",
+               "booking", "follow_up")   # Sasha 271 · CR 102: the act's own booking (a stay) and the call the rules attach (R5/R6)
+
+
+def stay_of(booking: dict) -> Dict[str, Any]:
+    """Sasha 271 · CR 102 · a stay's own fields as venue.booking_status gives them (booking {kind stay, …}) — shown, never re-derived."""
+    return {k: booking[k] for k in ("check_in", "check_out", "nights", "guests", "room", "arrival") if booking.get(k) is not None}
 
 
 def _words(st: Optional[dict]) -> Optional[str]:
@@ -271,8 +280,8 @@ async def bookings(account: str) -> List[dict]:
                 a["answered"] = True   # confirmed on their own form: nothing more to ask
                 changed = True
             continue
-        new = {"state": st.get("state"), "words": _words(st), "say_now": st.get("say"),
-               **{k: st[k] for k in ("next_call", "next_step", "ask", "choices", "calls") if st.get(k)}}   # Sasha 269 · as AgAPI says them
+        new = {"state": st.get("state"), "words": _words(st), "say_now": st.get("say"), "follow_up": st.get("follow_up"),
+               **{k: st[k] for k in ("next_call", "next_step", "ask", "choices", "calls", "booking") if st.get(k)}}   # Sasha 269 · as AgAPI says them
         if any(new.get(k) != a.get(k) for k in new):
             a.update(new)
             changed = True
@@ -307,6 +316,7 @@ async def bookings(account: str) -> List[dict]:
                     # Sasha 269 · CR 100 §C: after a no-answer, the ONE question and its choices, and the calls made — AgAPI's, unchanged
                     **({k: a[k] for k in ("ask", "choices") if a.get(k)} if state == "no_answer" else {}),
                     **({"calls": a["calls"]} if a.get("calls") else {}),
+                    **({"stay": stay_of(a["booking"])} if (a.get("booking") or {}).get("kind") == "stay" else {}),   # Sasha 271 · CR 102
                     **({"route": "call"} if a.get("route") == "call" else {}),
                     **({"cancel": "asked — waiting for the venue"} if pend else {})})
     return out
@@ -521,4 +531,4 @@ async def _approval(account: str, rid: str, said: str):
 
 __all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL",
            "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt",
-           "call_again", "link_whatsapp", "confirm_whatsapp", "whatsapp_link_signature"]
+           "call_again", "link_whatsapp", "confirm_whatsapp", "whatsapp_link_signature", "stay_of"]

@@ -514,38 +514,40 @@ def _daytime(now: datetime, tz: str) -> bool:
 
 
 async def no_reply_offers(now: datetime) -> List[dict]:
-    """Sasha 254 · R5 — the no-reply follow-up's TIMING is the booking rules' (booking_rules.decide with state.request_sent_at /
-    venue_replied for each open request), never a number of Sasha's.
-    Sasha 269 (CR 100) · the follow-up CALL is the act's: an AgAPI email / WhatsApp request act the venue hasn't answered → decide() says
-    call → venue_calls.again(act, "R5") → venue.call_again under the booking's ONE approval → Sasha dials ONLY its call_plan. Sasha's own
-    R5 call (auto_call_from_email, offer_no_reply_call — a booking_calls row no act opened) is DELETED. Once per act."""
+    """Sasha 254 · R5 — the no-reply follow-up. Sasha 269 (CR 100) · the follow-up CALL is the act's: venue_calls.again(act, "R5") →
+    venue.call_again under the booking's ONE approval → Sasha dials ONLY its call_plan. Once per act.
+    Sasha 271 (CR 102) · and WHEN it is due is the engine's too: venue.booking_status.follow_up {reason, due, due_at} for each open
+    request (a hotel stay's email the hotel hasn't answered) — Sasha calls venue.call_again only when follow_up.due is true. Sasha's own
+    clock for it (booking_rules.decide over the time it kept when it sent the request, with "no reply" assumed) is DELETED — and it keeps
+    no due_at of the engine's to wait on either (found by the gate: the engine's due_at moved and a kept one would have missed it)."""
     from . import guest_whatsapp as GW
-    from agapi import booking_decide as BD, venue_calls as VC, venue_submit as VS
+    from agapi import venue_calls as VC, venue_submit as VS
     if not no_reply_call_on() or GW.STORE is None:
         return []
     done: List[dict] = []
     for ch in await GW.STORE.all_channels():
         account = ch["account_id"]
         from agapi import person_access as PA
-        await PA.warm(account)   # Sasha 254 · the rules' access (calls) from the one record
+        await PA.warm(account)   # Sasha 254 · the person's access (calls) from the one record, fresh for the act's call
         for act in await VS.acts_of(account):
             if act.get("route") == "call" or act.get("cancels") or act.get("r5") or str(act.get("state") or "") not in ("sent", "requested"):
                 continue
-            if not (act.get("venue_phone") or act.get("listing_ref")) or not act.get("sent_at"):
-                continue   # no number to give the act: nothing to call
-            when = str(act.get("when") or "")
-            d = await BD.decide_for(account, channels=[{"kind": "email", "value": "read"}, {"kind": "phone", "value": "read"}],
-                                    vtype=BD.venue_type(act.get("category")), test=BD.is_test_venue({"venue": act.get("venue")}),
-                                    local_at=when[:16] or None, country=act.get("country"), venue_key=f"act:{act['act_id']}", now=now,
-                                    extra_state={"request_sent_at": act["sent_at"], "venue_replied": False})
-            refused_call = any(r.get("rule") == "R10" for r in d.get("refusals") or [])
-            if d["action"] not in ("call", "call_and_email") and not refused_call:
-                continue   # the rules: still a request, and wait (a refused call is asked of the act too: it says why, and it is told)
-            await VS._remember(account, {**act, "r5": now.isoformat()})   # once per act, whatever the act answers
-            got = await VC.again(account, act["act_id"], "R5")
+            if not (act.get("stay") or act.get("venue_phone") or act.get("listing_ref")):
+                continue   # the act was given no number: there's nothing it could call
+            st = await VS.status(account, act["act_id"])   # asked every sweep: when it's due is the engine's alone (never a kept due_at)
+            if st is None:
+                continue
+            fu = st.get("follow_up") or {}
+            state = st.get("state") or act.get("state")
+            if (state, fu or None) != (act.get("state"), act.get("follow_up")):
+                await VS._remember(account, {**act, "state": state, "follow_up": fu or None})   # kept only when it changed
+            if not fu.get("due"):
+                continue   # the venue answered, a call is already open, or the rules attach none (yet)
+            await VS._remember(account, {**act, "state": state, "follow_up": fu, "r5": now.isoformat()})
+            got = await VC.again(account, act["act_id"], str(fu.get("reason") or "R5"))
             if got.get("say"):
                 await VC.tell(account, got["say"])
-            done.append({"kind": "no_reply_call", "act": act["act_id"], "outcome": got.get("status"), "rules": d["action"]})
+            done.append({"kind": "no_reply_call", "act": act["act_id"], "outcome": got.get("status"), "follow_up": fu.get("reason")})
     return done
 
 

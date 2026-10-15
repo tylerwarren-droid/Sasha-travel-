@@ -384,9 +384,19 @@ _STEP_N: dict = {}
 # that isn't work (a yes, a thanks, a question of fact) keeps the holding line at HOLD_AFTER_S, only if it's slow. Every surface reads it:
 # the stream's first event (/s2, /next — her face's caption and voice too) and WhatsApp's first message.
 FIRST_LINE = "Great — let me pull something together, it might take a few seconds."
-# Sasha 268 · item 4 (rows 951–953, Tyler's words): her line on his FIRST REAL REQUEST while she is full size — then the corner circle and
-# the work. Said by code, never the model's; spoken when her voice is on (her live face says it when it is up).
-CAMERA_OFF = "OK — I'm going to switch off my camera and get to work. I'm still here; tap me any time to bring me back."
+# Sasha 271 · B (row 1008, Tyler's words) · HER ARRIVAL: half-body, "Hey there" (a return: "Hey <name>"), then at once CAMERA_OFF —
+# and she moves to the corner circle. Replaces Sasha 268's "full size until his first request". Said by code, never the model's; spoken
+# by her live face when it is up, else her voice. CAMERA_OFF is also what she says when a tap brought her back and his next request
+# sends her to the corner again.
+HELLO = "Hey there"
+HELLO_BACK = "Hey {name}"
+CAMERA_OFF = "I'm turning off my camera, but just speak to me naturally. You can always tap to get me back."
+
+
+def arrival_line(name: Optional[str] = None, back: bool = False) -> str:
+    """Her arrival, in one breath: "Hey there." / (a return) "Hey <first name>." — then CAMERA_OFF."""
+    first = str(name or "").strip().split(" ")[0][:40]
+    return f"{HELLO_BACK.format(name=first) if back and first else HELLO}. {CAMERA_OFF}"
 FIRST_GAP_EARLY_S = 1.0   # after the first line, the first progress line comes this much sooner (the page said it ~1 s earlier)
 _MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
 # Sasha 268 · item 7 (rows 954/955, Tyler 21:00: "Can you find a dog walker and schedule one?" → "I can't do that yet, but I've noted
@@ -563,6 +573,12 @@ WA_TRY_AGAIN = "Reply \"try once more\" and I'll call them again."       # on Wh
 FORM_HERE = "Their form: {page}"
 
 
+def act_line(say: Optional[str]) -> str:
+    """Sasha 271 · CR 102 · a booking act's own words when its call opens with it (R6: "On it — I've emailed Hotel Sandbox, and I'll call
+    them now too and let you know.") — said as the act says them, never re-worded; SENT when it gave none."""
+    return str(say or "").strip() or SENT
+
+
 def no_answer_words(res: dict, channel: str = "page") -> str:
     """AgAPI's no-answer, said: its `say`, then (the first time) its `ask`, and their page — never a line of her own about a call."""
     said = str(res.get("say") or "").strip()
@@ -579,7 +595,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

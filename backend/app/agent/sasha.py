@@ -1813,6 +1813,7 @@ async def first_line_rule():
     work — so the page says it the instant one is sent (the network alone took 0.8–1.4 s); the stream's own first line (`first`) is then
     the same words, not said twice. Public: words and a pattern, nothing of anyone's."""
     return {"line": _V.FIRST_LINE, "work": _V._WORK.pattern, "flags": "i", "camera_off": _V.CAMERA_OFF,   # 268: her arrival's line
+            "hello": _V.HELLO, "hello_back": _V.HELLO_BACK,   # 271 · B: her arrival ("Hey there" / "Hey <name>", then camera_off)
             "trip": _V._TRIP.pattern, "try": _V.TRY_FIRST}   # 268 item 7: any other request for a service → "Let me see what I can do."
 
 

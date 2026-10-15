@@ -189,6 +189,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "to fill → the one read-back and yes; the person's → handed over with what it is; reservable said as fact; no form or "
             "CAPTCHA of Sasha's own reading on the one path; platform reads refuse off Railway's deployed server",
             ["tests.test_s270"]),
+    "T53": ("a hotel stay is the venue engine's act (CR 102): venue.prepare_booking stay{}, the R6 call that goes with the email is "
+            "submit_booking's call_plan (dialled only from it), the R5 call opens only when booking_status.follow_up.due — no clock of "
+            "Sasha's; her presence on /s2 is one rule: the arrival, then always the corner (never gone), its green ring and paused look",
+            ["tests.test_s271"]),
 }
 
 _RUNNER = """

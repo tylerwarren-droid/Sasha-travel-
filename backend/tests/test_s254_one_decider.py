@@ -112,10 +112,10 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
 
     real_prepare, real_read_back, real_submit = VS.prepare, VS.read_back, VS.submit   # only the CALL act is faked; the rest is real
 
-    async def prepare(account, place, person, date_, time_, party, notes=None, call=None):
+    async def prepare(account, place, person, date_, time_, party, notes=None, call=None, **kw):
         test.vs_calls.append(("prepare", call))
-        if not call:
-            return await real_prepare(account, place, person, date_, time_, party, notes=notes)
+        if not call or kw.get("stay"):   # Sasha 271 · a stay's request act (its number rides with it): the real prepare
+            return await real_prepare(account, place, person, date_, time_, party, notes=notes, call=call, **kw)
         return {"ok": True, "prepared_id": "vpr_" + "a" * 32, "link": "https://agapi.test/p/x", "routes": ["page", "call"]}
 
     async def read_back(account, pid, route=None, call=None):   # Sasha 269 · + the call (a listing number passed again)
@@ -296,24 +296,48 @@ class R4CallsOff(Base):
 # ── R5 / R6 · hotels ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 class R6Hotel(Base):
+    R6_SAY = "On it — I've emailed Hotel Gate, and I'll call them now too and let you know."
+
     def test_arriving_in_18_hours_call_and_email_at_once_one_yes(self):
-        # Sasha 269 · MOVED (CR 100): a hotel STAY (nights) has no AgAPI act, so R6 is its email alone — never a call of Sasha's own
-        # (the call half was /api/booking/calls, which no act opened). A table or a spa: the email act + venue.call_again R6.
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=18, what="a room", venue="Hotel Gate", nights=2)
-        self.assertEqual(out["rules"]["action"], "call_and_email")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "email"))
-        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
-        self.assertEqual(len(self.api.bodies("/api/booking/emails")), 1)
-        self.yes()
-        self.assertIn("/api/booking/emails/e-1/send", self.api.paths())
+        # Sasha 269 · MOVED (CR 100). Sasha 271 · MOVED (CR 102): a hotel STAY is an AgAPI act like a table — venue.prepare_booking with
+        # the stay and the hotel's own number; on the ONE yes venue.submit_booking emails it AND returns the engine's call_plan (R6) under
+        # that same approval; Sasha dials ONLY that plan and says the act's own words. Never Sasha's own call or email.
+        from agapi import venue_calls as VC
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        plan = {"call_id": "vcp_r6", "reason": "R6", "phone": "+34910000000", "source": "venue", "when": "now", "simulate": True}
+        fake = use_fake_agapi(self, {"call_plan": plan, "say": self.R6_SAY,
+                                     "approval": {"inherited": True, "approval_id": "apv_1", "asked_again": False}})
+        dialled = []
+
+        async def dial(account, res, held):
+            dialled.append(res["call_plan"])
+            return {"status": "simulated"}
+        with mock.patch.object(VC, "dial", dial):
+            out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=18, what="a room", venue="Hotel Gate", nights=2, room="twin")
+            self.assertEqual(out["rules"]["action"], "call_and_email")
+            self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
+            prep = fake.body("venue.prepare_booking")
+            self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2, "room": "twin"}, {"phone": "+34910000000"}))
+            self.assertEqual(self.api.bodies("/api/booking/calls"), [])
+            self.assertEqual(self.api.bodies("/api/booking/emails"), [])
+            got = self.yes()
+        self.assertEqual((got["status"], got["line"], got["call"]["reason"]), ("requested", self.R6_SAY, "R6"))
+        self.assertEqual(dialled, [plan])                                                   # the engine's plan, dialled once
+        self.assertEqual(fake.ops().count("sandbox.simulate_approval"), 1)                 # ONE yes for the email and the call
+        self.assertNotIn("venue.call_again", fake.ops())                                    # no call of Sasha's own deciding
         self.assertFalse(any(p.startswith("/api/booking/calls") for p in self.api.paths()))
 
     def test_a_hotel_request_carries_the_24_hour_call_in_its_read_back(self):
+        # Sasha 271 · MOVED (CR 102): more than 24 h out, a stay is the engine's request act — its read-back, and its R5 call later
+        # (booking_status.follow_up), are the engine's: the hotel's number goes with the act; Sasha writes no plan line of her own
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        fake = use_fake_agapi(self)
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=30, what="a room", venue="Hotel Gate", nights=2)
         self.expect(out, "request_email", "request_wait", say_now=False)
-        plan = self.api.bodies("/api/booking/emails")[0]["plan_line"]
-        self.assertIn(f"within {BR.HOTEL_NO_REPLY_HOURS} hours, I'll call them", plan)
-        self.assertIn("Your yes covers these steps", plan)
+        self.assertEqual(out["route"], "agapi")
+        prep = fake.body("venue.prepare_booking")
+        self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2}, {"phone": "+34910000000"}))
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])                       # no plan_line of Sasha's
 
     def test_a_restaurant_request_carries_no_call(self):
         self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=72)
@@ -321,7 +345,8 @@ class R6Hotel(Base):
 
 
 class R5HotelNoReplySweep(unittest.TestCase):
-    """The follow-up runs in proactive's sweep; its TIMING is decide()'s (state.request_sent_at / venue_replied)."""
+    """The follow-up runs in proactive's sweep. Sasha 271 · MOVED (CR 102): its TIMING is the engine's — venue.booking_status.follow_up
+    {reason, due, due_at} — never decide() over a time Sasha kept (state.request_sent_at / venue_replied assumed)."""
 
     def setUp(self):
         from booking_signer import escalation as ESC, ladder_routes as LR, proactive as PR
@@ -337,9 +362,15 @@ class R5HotelNoReplySweep(unittest.TestCase):
         # Sasha 269 · MOVED (CR 100): R5's call is the ACT's — an AgAPI email request act, venue.call_again "R5" (venue_calls.again);
         # Sasha's own auto_call_from_email is deleted. The act's words are what the person is told.
         from agapi import venue_calls as VC, venue_submit as VS
-        self.acts = [{"act_id": "act_h", "venue": "Hotel Gate", "when": f"{day}T{hhmm}", "party": 2, "state": "sent", "category": "hotel",
-                      "country": "ES", "venue_phone": "+34910000000", "sent_at": (self.now - timedelta(hours=25)).isoformat()}]
+        self.acts = [{"act_id": "act_h", "venue": "Hotel Gate", "when": f"{day}T{hhmm}", "party": 2, "state": "sent", "country": "ES",
+                      "venue_phone": "+34910000000"}]
         self.again_says = {"status": "calling", "say": "On it — I'll call them now and let you know."}
+        self.follow_up = {"reason": "R5", "due": True, "due_at": None, "call": "venue.call_again"}   # the engine: no reply in 24 h
+        self.status_asked = []
+
+        async def status(account, act_id):
+            self.status_asked.append(act_id)
+            return {"act_id": act_id, "state": "sent", **({"follow_up": dict(self.follow_up)} if self.follow_up else {})}
 
         async def acts_of(account):
             return [dict(x) for x in self.acts]
@@ -360,6 +391,7 @@ class R5HotelNoReplySweep(unittest.TestCase):
                 return [{"account_id": ACCT, "wa_id_sha256": "x" * 64}]
 
         for p in (mock.patch.object(VS, "acts_of", acts_of), mock.patch.object(VS, "_remember", remember), mock.patch.object(VC, "again", again),
+                  mock.patch.object(VS, "status", status),
                   mock.patch.object(VC, "tell", tell), mock.patch.object(GW, "STORE", Chans()),
                   mock.patch.dict(os.environ, {"SASHA_NO_REPLY_CALL": "1"})):
             p.start()
@@ -371,14 +403,27 @@ class R5HotelNoReplySweep(unittest.TestCase):
         live_access(self)
         done = run(PR.no_reply_offers(self.now))
         self.assertEqual(self.calls, [("act_h", "R5")])                           # the act's own follow-up call (venue.call_again R5)
-        self.assertEqual(done[0]["rules"], "call")
+        self.assertEqual(done[0]["follow_up"], "R5")                              # because booking_status said it's due
         self.assertEqual(self.told, [self.again_says["say"]])                      # the act's words
         self.assertEqual(run(PR.no_reply_offers(self.now)), [])                   # once
 
     def test_23_hours_still_waits(self):
         from booking_signer import proactive as PR
         live_access(self)
-        self.acts[0]["sent_at"] = (self.now - timedelta(hours=23)).isoformat()
+        due_at = (self.now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.follow_up = {"reason": "R5", "due": False, "due_at": due_at, "call": "venue.call_again"}   # the engine: not yet
+        self.assertEqual(run(PR.no_reply_offers(self.now)), [])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(run(PR.no_reply_offers(self.now + timedelta(minutes=30))), [])   # asked again — still not due
+        self.assertEqual(self.status_asked, ["act_h", "act_h"])                    # every sweep asks: no kept due_at of the engine's
+        self.follow_up = {"reason": "R5", "due": True, "due_at": None, "call": "venue.call_again"}   # (the engine's clock moved it)
+        run(PR.no_reply_offers(self.now + timedelta(minutes=31)))                  # due now → the act's call
+        self.assertEqual(self.calls, [("act_h", "R5")])
+
+    def test_no_follow_up_no_call(self):
+        from booking_signer import proactive as PR
+        live_access(self)
+        self.follow_up = None   # the venue replied, a call is open, or the rules attach none
         self.assertEqual(run(PR.no_reply_offers(self.now)), [])
         self.assertEqual(self.calls, [])
 
@@ -392,6 +437,9 @@ class R5HotelNoReplySweep(unittest.TestCase):
 
     def test_no_env_timing(self):
         src = (BACKEND / "booking_signer" / "proactive.py").read_text()
+        block = src[src.index("async def no_reply_offers"):src.index("async def tap_offers")]
+        for gone in ("decide_for", "request_sent_at", "sent_at", "venue_replied", "timedelta"):   # Sasha 271 · no clock of Sasha's
+            self.assertNotIn(gone, block)
         self.assertNotRegex(src, r"\bD\.(reply_hours|urgent_hours|tap_window_min)\(")
         self.assertNotRegex(src, r"from \. import decide")
 

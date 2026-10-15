@@ -71,8 +71,11 @@ class NoSecondCopy(unittest.TestCase):
         for gone in ("auto_call_from_email", "offer_no_reply_call", "offer_escalation"):
             self.assertFalse(hasattr(GW, gone), gone)
         src = pathlib.Path(PR.__file__).read_text()
-        self.assertIn('VC.again(account, act["act_id"], "R5")', src)                    # R5: the act's own follow-up
-        self.assertIn('VC.again(ctx.account, r["act_id"], "R6")', pathlib.Path(VN.__file__).read_text())   # R6 too
+        # Sasha 271 · MOVED (CR 102): R5 is the act's own follow-up, opened when booking_status.follow_up says it's due (its reason);
+        # R6 is the engine's call_plan returned WITH the send under the same yes — Sasha no longer asks venue.call_again R6 herself
+        self.assertIn('VC.again(account, act["act_id"], str(fu.get("reason") or "R5"))', src)
+        self.assertNotIn('"R6")', pathlib.Path(VN.__file__).read_text())
+        self.assertIn('VC.dial(ctx.account, r, {**held, "timezone": _tz_of(held)})', pathlib.Path(VN.__file__).read_text())
 
     def test_gate_nothing_is_redialled_after_a_call(self):
         with mock.patch.object(VS, "call_attempt", mock.AsyncMock(return_value={"ok": True, "result": dict(FIRST)})), \

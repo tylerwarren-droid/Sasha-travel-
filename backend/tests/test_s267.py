@@ -76,7 +76,8 @@ class TheKeepNeverAsksForWhatItHolds(unittest.TestCase):
 class HerFrameNeverSwallowsATap(unittest.TestCase):
     def test_found_by_the_keep_proof(self):
         hello = _src(self, "app/s2/S2Hello.tsx")
-        self.assertIn("pointerEvents: phase === 'faceAgain' ? 'auto' : 'none'", hello)   # her full-size frame: taps pass to the page
+        # Sasha 271 · MOVED: one element — only the corner (and her face brought back) takes a tap; her arrival frame passes them
+        self.assertIn("pointerEvents: corner || p.tap === 'collapse' ? 'auto' : 'none'", hello)
         self.assertEqual(hello.count("onClick={tapToHear} style={{ pointerEvents: 'auto'"), 2)   # except her own tap button
         self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", _src(self, "app/s2/S2App.tsx"))   # another tab: the circle
 

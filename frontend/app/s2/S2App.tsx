@@ -719,7 +719,7 @@ export default function S2App() {
             <button onClick={() => { void newChat() }} disabled={busy || clearing} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
               style={{ background: 'none', border: 0, color: busy || clearing ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
             <span style={{ flex: 1 }} />
-            <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40 }} />{/* her face (S2Hello draws it here) */}
+            <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40 }} />{/* her corner: S2Hello's circle sits over this space (Sasha 271 · measured, never portalled) */}
           </div>
           <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>

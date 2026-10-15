@@ -246,5 +246,32 @@ class GetStatusIsTheEngines(unittest.TestCase):
         self.assertIn(PAGE, line)
 
 
+class NeverNoOnlineForm(unittest.TestCase):
+    """Tyler (15 Oct, added to 269): never "no online booking form" — no own form found → voice.NO_LINK (+ "They do take reservations."
+    when the listing says reservable). Taking the link from the person is wired after CR 101 reports."""
+
+    def test_gate_the_line_by_code(self):
+        self.assertEqual(V.no_link_line(), "I can't see their booking link from here — if you can, send it to me and I'll fill it in.")
+        self.assertEqual(V.no_link_line(True), V.NO_LINK + " They do take reservations.")
+        self.assertIn(V.NO_LINK, V.RULES)
+        self.assertIn('Never say a place has "no online booking form"', V.RULES)
+
+    def _route(self, eng, card=None):
+        ctx = type("Ctx", (), {"account": ACCT, "surface": "s2"})()
+        rd = {"venue": "Casa Gate", "rungs": {"phone": {"value": "+34910000000"}}}
+        with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), mock.patch.object(VN, "_read", mock.AsyncMock(return_value=rd)), \
+                mock.patch.object(VN, "card_of", lambda *a: card), mock.patch.object(VN, "one_path", lambda c: True), \
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VN, "read_channel", lambda r, c: eng):
+            return run(VN.read_booking_route(ctx, {"name": "Casa Gate", "city": "Madrid"}))
+
+    def test_gate_no_own_form_says_it_never_no_form(self):
+        got = self._route({"kind": "phone"})
+        self.assertTrue(got["how"].startswith(V.NO_LINK))
+        self.assertNotIn("no online booking form", got["how"].lower())
+        self.assertEqual(self._route(None)["how"], V.NO_LINK)
+        self.assertTrue(self._route({"kind": "email"}, {"reservable": True})["how"].startswith(V.no_link_line(True)))
+        self.assertNotIn(V.NO_LINK, self._route({"kind": "own_engine"})["how"])           # their own form: as before
+
+
 if __name__ == "__main__":
     unittest.main()

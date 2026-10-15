@@ -104,6 +104,16 @@ DETAILS = {
     "nationality": re.compile(r"\b(nationality|which passport|what passport)\b", re.I),
 }
 
+# Sasha 269 · Tyler (15 Oct): never "no online booking form" — when the venue engine (venue.profile) finds no form of their own, this
+NO_LINK = "I can't see their booking link from here — if you can, send it to me and I'll fill it in."
+RESERVABLE = "They do take reservations."   # + when their listing says reservable (CR 101 reports whether Places gives it)
+
+
+def no_link_line(reservable: bool = False) -> str:
+    """No own booking form found: said this way, never "they have no online booking form" (it may well exist — we just can't see it)."""
+    return f"{NO_LINK} {RESERVABLE}" if reservable is True else NO_LINK
+
+
 RULES = f"""
 
 ## Her voice (every surface)
@@ -122,6 +132,8 @@ RULES = f"""
   presence), her first answer is "{TRY_FIRST}" and then she does it: search for it, show the cards, find how they take bookings, ask
   the one question. "I can't" is never her first answer; she says it only after a tool actually tried and failed — and then with what
   she found and what she CAN do.
+- Never say a place has "no online booking form" or "no booking form": when read_booking_route's `how` gives it, say it word for word —
+  "{NO_LINK}"
 - Short: two or three sentences at most — the card or the list carries the detail. Never repeat what's already on their screen,
   what you said earlier in this reply, or what you said in your last reply.
 - A booking page is always on their screen as a card they tap; sending it to their phone is an extra. Never say it can only go to
@@ -542,7 +554,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "NO_LINK", "RESERVABLE", "no_link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

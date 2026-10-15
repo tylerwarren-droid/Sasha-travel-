@@ -223,8 +223,13 @@ async def read_booking_route(ctx, a: dict) -> dict:
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · the picked card is what's on screen
     if one_path(ctx):   # Sasha 251 · how it books = the ONE channel hold_venue will use (never a second reading of the same place)
         eng = await engine_channel(card) or read_channel(rd, card)
+        how = _how_words(eng)
+        if not eng or eng.get("kind") not in OWN_FORM:   # Sasha 269 · no own form found: never "no online booking form" (voice.py)
+            from app.agent import voice as V
+            reservable = (card or {}).get("reservable") is True or rd.get("reservable") is True
+            how = " ".join(x for x in (V.no_link_line(reservable), how if eng else "") if x)
         return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of_channel(eng),
-                "how": _how_words(eng), "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
+                "how": how, "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
     return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),
             "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
 
@@ -290,6 +295,9 @@ def _routes_of_channel(eng: Optional[dict]) -> List[str]:
         return []
     out = [ENGINE_ROUTE.get(eng["kind"], eng["kind"])] + ([ENGINE_ROUTE.get(eng["alternative"]["kind"], "email")] if eng.get("alternative") else [])
     return list(dict.fromkeys(out))
+
+
+OWN_FORM = ("own_engine", "form", "widget")   # Sasha 269 · a booking form or page of their own (venue.profile's channel kinds)
 
 
 def _how_words(eng: Optional[dict]) -> str:

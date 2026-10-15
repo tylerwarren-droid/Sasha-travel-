@@ -100,8 +100,9 @@ class DirectFirstEveryKind(unittest.TestCase):
         from datetime import date, timedelta
         from agapi import v0 as API, venues as VN
         from tests.test_venue_pick_230 import reader
+        from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: on the one path their form is the engine's read
         ctx = API.Ctx(account=self.ACCT, mode="test", user_said="This one", session="s232", surface=surface)
-        with mock.patch.object(VN, "_read", reader(rungs)):
+        with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             return asyncio.run(VN.hold_venue(ctx, {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": what, "party": 1,
                                                    "day": (date.today() + timedelta(days=6)).isoformat(), "time": "10:00"}))
 

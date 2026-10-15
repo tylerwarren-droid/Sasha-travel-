@@ -86,7 +86,7 @@ class World:
         return [mock.patch.object(TV, "vet", mock.AsyncMock(side_effect=lambda ctx, a: a)),
                 mock.patch.object(VN, "_API", lambda: GW), mock.patch.object(VN, "_read", self.read),
                 mock.patch.object(VN, "_reservation", self.reservation), mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)),
-                mock.patch.object(VN, "read_channel", lambda rd, card=None: None), mock.patch.object(VN, "card_of", lambda *a, **k: None),
+                mock.patch.object(VN, "read_channel", lambda rd, card=None, **k: None), mock.patch.object(VN, "card_of", lambda *a, **k: None),
                 mock.patch.object(VN, "rules_for", self.rules_for), mock.patch.object(VN, "_said", lambda out, d, **k: out),
                 mock.patch.object(VN, "_via_agapi", self.via_agapi), mock.patch.object(VN, "_prepared_now", self.prepared_now),
                 mock.patch.object(VS, "submit", self.submit), mock.patch.object(V0, "claim", mock.AsyncMock()),

@@ -185,6 +185,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "\"try once more\" is venue.call_again under the same approval (asked twice = one call); a listing number never kept; "
             "WhatsApp verified at linking before anything is sent",
             ["tests.test_s269"]),
+    "T52": ("a booking link the person hands over goes through the venue engine's ONE classifier (venue.profile link, CR 101): Kanoe's "
+            "to fill → the one read-back and yes; the person's → handed over with what it is; reservable said as fact; no form or "
+            "CAPTCHA of Sasha's own reading on the one path; platform reads refuse off Railway's deployed server",
+            ["tests.test_s270"]),
 }
 
 _RUNNER = """

@@ -41,7 +41,8 @@ class Base(unittest.TestCase):
 
     def hold(self, surface, rungs, **extra):
         ctx = API.Ctx(account=ACCT, mode="test", user_said="Hammam Al Ándalus, please.", session="s251", surface=surface)
-        with mock.patch.object(VN, "_read", reader(rungs)):
+        from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: their own booking page is the engine's read
+        with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             return asyncio.run(VN.hold_venue(ctx, {"name": "Hammam Al Ándalus Salesas", "city": "Madrid", "country": "ES",
                                                    "what": "a hammam", "party": 2, "day": LATER, "time": "17:00", **extra}))
 
@@ -64,7 +65,8 @@ class OnePath(Base):
 
     def test_how_it_books_is_the_same_channel(self):
         ctx = API.Ctx(account=ACCT, mode="test", user_said="", session="s251", surface="s2")
-        with mock.patch.object(VN, "_read", reader(HAMMAM)):
+        from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: their own booking page is the engine's read
+        with mock.patch.object(VN, "_read", reader(HAMMAM)), mock.patch.object(VN, "engine_channel", engine_from(HAMMAM)):
             r = asyncio.run(VN.read_booking_route(ctx, {"name": "Hammam Al Ándalus Salesas", "city": "Madrid"}))
         self.assertEqual(r["routes"], ["page", "email"])
 
@@ -72,7 +74,8 @@ class OnePath(Base):
         from agapi.booking_rules import booking_rules as BR
         out = self.hold("s2", {})
         self.assertEqual((out["status"], out["rules"]["say_key"]), ("not_contacted", "no_channel"))
-        self.assertEqual(out["say"], BR.PHRASES["no_channel"])
+        # Sasha 270 · MOVED (Tyler, 15 Oct): no way found is "send me their link" (voice.NO_LINK) — never "no form"
+        self.assertEqual(out["say"], f"{V.NO_LINK} {BR.PHRASES['takeover']}")
         self.assertEqual(self.api.calls[-1][1], "/api/booking/contact")
 
 

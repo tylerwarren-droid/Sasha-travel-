@@ -64,7 +64,9 @@ class ATestPerson(Base):
         self.assertIsNone(run(TV.search(ctx("dinner in Madrid tonight"), {"what": "dinner", "where": "Madrid"})))
 
     def test_its_hold_asks_the_one_question(self):
-        with mock.patch.object(VN, "_read", reader({"link": {"value": "https://x.test/api/booking/test-venue/plain"}})):
+        from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: its own form is the engine's read (CR 101)
+        rungs = {"link": {"value": "https://x.test/api/booking/test-venue/plain"}}
+        with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             out = run(VN.hold_venue(ctx(), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid", "country": "ES",
                                             "what": "dinner", "party": 2, "day": LATER, "time": "20:00"}))
         self.assertEqual(out["status"], "choose_route", out)
@@ -128,7 +130,12 @@ class ShortConfirmations(Base):
     screen the venue read-back is its card and she says one line (venues.READ_BACK_ASK); WhatsApp keeps the words (no card there)."""
 
     def handle_it(self, surface):
-        with mock.patch.object(VN, "_read", reader({"link": {"value": "https://x.test/api/booking/test-venue/plain"}, "form": {}})):
+        # Sasha 270 · MOVED (CR 101: one form engine): its form is the engine's read, and "Handle it" is AgAPI's send (faked)
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        from tests.test_s254_one_decider import engine_from
+        use_fake_agapi(self)
+        rungs = {"link": {"value": "https://x.test/api/booking/test-venue/plain"}, "form": {}}
+        with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             return run(VN.hold_venue(ctx("Handle it", surface), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid",
                                                                   "country": "ES", "what": "dinner", "party": 2, "day": LATER, "time": "20:00",
                                                                   "route": "form"}))

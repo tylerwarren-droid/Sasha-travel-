@@ -100,7 +100,7 @@ class Base(unittest.TestCase):
                 return {"wa_id_sha256": "x" * 64}
         for p in (mock.patch.object(GW, "api", self.api), mock.patch.object(GA, "founder", lambda a: False),
                   mock.patch.object(GR, "address_of", mock.AsyncMock(return_value="alex@example.test")),
-                  mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)),
+                  mock.patch.object(VN, "engine_channel", self._engine),
                   mock.patch.object(GW, "tap_platform", tap), mock.patch.object(GW, "_tell", tell),
                   mock.patch.object(GW, "STORE", _Store()),
                   mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value="It's in your bookings")),
@@ -110,6 +110,11 @@ class Base(unittest.TestCase):
             self.addCleanup(p.stop)
         self.addCleanup(VN._HELD.pop, ACCT, None)
 
+    async def _engine(self, card, budget_s=30.0, listing=False):
+        """Sasha 270 · MOVED (CR 101): the venue engine's read of the venue being held — its form on the one path (engine_from)."""
+        from tests.test_s254_one_decider import engine_from
+        return await engine_from(getattr(self, "_rungs", {}))(card, budget_s, listing)
+
     def ctx(self, said="", surface=None, later=False):
         c = API.Ctx(account=ACCT, mode="test", user_said=said, session=self.session, surface=surface or self.surface)
         if later:
@@ -118,6 +123,7 @@ class Base(unittest.TestCase):
 
     def hold(self, rungs, venue="Casa Gate", country="ES", said="", surface=None, **a):
         args = {"name": venue, "city": "Madrid", "country": country, "what": "dinner", "party": 2, **a}
+        self._rungs = rungs   # Sasha 270 · MOVED: on the one path their form is the engine's read (setUp's engine_channel)
         with mock.patch.object(VN, "_read", reader(rungs, venue, country)):
             return run(VN.hold_venue(self.ctx(said, surface), args))
 
@@ -372,15 +378,24 @@ class G14Loyalty(Base):
         self.addCleanup(p.stop)
 
     def test_a_matching_number_goes_into_the_form_by_its_keep_id_never_its_value(self):
+        # Sasha 270 · MOVED (CR 101: one form engine): on the one path "Handle it" is AgAPI's send — Sasha's own form sender (which
+        # carried loyalty_item_id, and ran only when AgAPI wasn't configured) is old S1's. A Keep number never reaches AgAPI, by id or
+        # value; their prepared page still names it, masked (the test below)
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        fake = use_fake_agapi(self)
         LY.find_for.return_value = ITEM
         self.hold({"form": {}}, venue="Sasha Test Venue", day=LATER, time="21:00", route="form")   # Sasha 254 · "Handle it"
-        body = self.api.bodies("/api/booking/forms")[0]
-        self.assertEqual(body["loyalty_item_id"], "v-1")                    # the booking API names it in the read-back, opens it at the send
-        LY.find_for.assert_awaited_with(ACCT, "Sasha Test Venue", "restaurant")
+        self.assertEqual(self.api.bodies("/api/booking/forms"), [])
+        sent = repr([b for _o, b, _a in fake.calls])
+        self.assertNotIn("v-1", sent)
+        self.assertNotIn("loyalty", sent)
 
     def test_no_match_no_number(self):
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        fake = use_fake_agapi(self)   # Sasha 270 · MOVED: as above
         self.hold({"form": {}}, day=LATER, time="21:00", route="form")
-        self.assertNotIn("loyalty_item_id", self.api.bodies("/api/booking/forms")[0])
+        self.assertEqual(self.api.bodies("/api/booking/forms"), [])
+        self.assertNotIn("loyalty", repr([b for _o, b, _a in fake.calls]))
 
     def test_the_prepared_page_names_it_masks_it_and_puts_the_value_only_on_their_phone(self):
         LY.find_for.return_value = ITEM

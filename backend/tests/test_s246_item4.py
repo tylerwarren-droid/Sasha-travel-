@@ -158,7 +158,11 @@ class Rung2Agent(unittest.TestCase):
         with mock.patch.object(GW, "api", api), mock.patch("agapi.venue_truth.prepare", mock.AsyncMock(return_value=None)), \
                 mock.patch.object(GR, "address_of", mock.AsyncMock(return_value=None)), mock.patch.object(OC, "booked", mock.AsyncMock()), \
                 mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value="")), mock.patch.object(GW, "STORE", None):
-            eng = VN.read_channel(rd, {"website": "https://www.hammamalandalus.com/madrid/"})
+            # Sasha 270 · MOVED (CR 101): on the one path their own booking page — and its CAPTCHA, on evidence — is the venue engine's
+            # read (venue.profile), never Sasha's own read of their site
+            self.assertNotEqual((VN.read_channel(rd, None, one_path=True) or {}).get("kind"), "own_engine")
+            eng = {"kind": "own_engine", "name": "their own booking engine", "url": "https://madrid.hammamalandalus.com/reservas/",
+                   "engine_captcha": True}
             d = run(VN.rules_for(ctx, a, rd, res, "2026-10-20T17:00", eng, None, None, NOW))
             self.assertEqual((d["action"], d["say"]), ("prepared_link", "prepared_link_captcha"))
             got = run(VN._execute(ctx, a, rd, res, "2026-10-20T17:00", NOW, d, eng, None))

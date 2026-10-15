@@ -11,15 +11,47 @@
     robots(http, url)     → {"allowed", "robots_url", "status", "rules"}  (cached 6 h per host; unreadable (5xx/refused) = NOT allowed)
     fetch(http, url)      → {"url", "status", "text"} — refused unless named + allowed; redirects followed by hand, each hop
                             re-checked (public host, named platform, robots)
+
+Sasha 270 · THE GUARD IS CODE (incident 10 Oct, mailbox row 1002): a "server-side" check ran in-process under `railway run` and its 8
+robots.txt GETs left from the founder's home network. HTTP — the ONE place a request to a platform leaves this module — now refuses
+anywhere but Railway's DEPLOYED server, loudly (NotOnRailway, logged as an error, never swallowed). `railway run` injects
+RAILWAY_ENVIRONMENT too, so that alone proves nothing: a deployment's own RAILWAY_DEPLOYMENT_ID / RAILWAY_REPLICA_ID must be there
+(checked 15 Oct: `railway run` sets neither).
 """
 from __future__ import annotations
 
+import logging
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlsplit
 
 from . import venue_read as V
+
+log = logging.getLogger("booking_signer.platform_read")
+
+
+class NotOnRailway(RuntimeError):
+    """A platform read asked for off Railway's deployed server (a laptop, `railway run`, a test with no fake): refused, loudly."""
+
+
+def on_railway() -> bool:
+    """True only inside a Railway DEPLOYMENT: RAILWAY_ENVIRONMENT and the deployment's own id (`railway run` sets only the first)."""
+    return bool(os.environ.get("RAILWAY_ENVIRONMENT")) and bool(os.environ.get("RAILWAY_DEPLOYMENT_ID") or os.environ.get("RAILWAY_REPLICA_ID"))
+
+
+def must_be_on_railway(url: str = "") -> None:
+    if not on_railway():
+        host = (urlsplit(str(url or "")).hostname or "?")
+        log.error("[platform_read] REFUSED: a platform read (%s) off Railway's deployed server — never from this machine's network", host)
+        raise NotOnRailway(f"platform reads run only on Railway's deployed server (RAILWAY_ENVIRONMENT + RAILWAY_DEPLOYMENT_ID); "
+                           f"refused here — nothing was sent to {host}")
+
+
+def status() -> dict:
+    """For /api/booking/health: whether platform reads may run on this process (never which platform, never a URL)."""
+    return {"reads_allowed_here": on_railway()}
 
 NAMED = {"fresha": re.compile(r"(^|\.)fresha\.com$"), "treatwell": re.compile(r"(^|\.)treatwell\.(es|co\.uk|de|fr|it|pt|nl|be|at|ch|ie|com)$"),
          "booksy": re.compile(r"(^|\.)booksy\.com$"), "rover": re.compile(r"(^|\.)rover\.com$")}
@@ -97,7 +129,9 @@ def crawl_delay(rules: List[str]) -> float:
 
 
 async def HTTP(method: str, url: str, headers: dict, json: Optional[dict] = None):
-    """A fresh client per request: NO cookie jar is ever kept or sent to a platform (the pooled client keeps one)."""
+    """A fresh client per request: NO cookie jar is ever kept or sent to a platform (the pooled client keeps one).
+    Sasha 270 · the one place a platform request leaves: refused off Railway's deployed server, before anything is opened."""
+    must_be_on_railway(url)
     import httpx
     async with httpx.AsyncClient(follow_redirects=False, timeout=httpx.Timeout(15.0)) as c:
         return await c.request(method, url, headers=headers)
@@ -120,6 +154,8 @@ async def robots(http, url: str) -> dict:
         try:
             r = await _get(http, robots_url)
             got = (time.time(), r.status_code, r.text if r.status_code == 200 else "")
+        except NotOnRailway:
+            raise   # Sasha 270 · loud: never "robots.txt unreadable"
         except Exception as e:
             got = (time.time(), 0, "")
             _ROBOTS[host] = got
@@ -295,6 +331,8 @@ async def offer(http, url: str, asked: str) -> Optional[dict]:
         got = await fetch(http, url)
     except Refused:
         return None
+    except NotOnRailway:
+        raise   # Sasha 270 · loud: never a quiet "no offer" from the wrong machine
     except Exception:
         return None
     if got.get("status") != 200:
@@ -307,4 +345,5 @@ async def offer(http, url: str, asked: str) -> Optional[dict]:
             "slots": None, "slots_why": f"{SLOTS_CLOSED[plat]}'s booking calendar is closed to readers (its robots.txt)"}
 
 
-__all__ = ["named", "robots", "fetch", "Refused", "NAMED", "services", "pick", "price_words", "offer"]
+__all__ = ["named", "robots", "fetch", "Refused", "NAMED", "services", "pick", "price_words", "offer", "NotOnRailway", "on_railway",
+           "must_be_on_railway", "status"]

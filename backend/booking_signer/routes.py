@@ -158,6 +158,7 @@ async def health():
         "outlook": {"configured": __import__("booking_signer.outlook", fromlist=["configured"]).configured()},   # CR 86
         "vault": {**vault_kms.status(), "health_items": bool(vault_api.dpia_ref())},   # S-78 · V-1 Cloud KMS; V-4 the DPIA gate
         "ladder": ladder_routes.status(),
+        "platform_read": __import__("booking_signer.platform_read", fromlist=["status"]).status(),   # Sasha 270 · the guard, as deployed
         # S-64 · the two Stage B hooks in the CTO's conductor: false means a CTO drop removed one — booking-in-chat is off
         "chat_hooks": chat_hooks(),
     }

@@ -95,13 +95,15 @@ def _one(kind: str, value: Optional[str], url: Optional[str] = None, captcha: bo
     return c
 
 
-def channels_of(eng: Optional[dict], rd: Optional[dict] = None, card: Optional[dict] = None) -> List[dict]:
+def channels_of(eng: Optional[dict], rd: Optional[dict] = None, card: Optional[dict] = None, one_path: bool = False) -> List[dict]:
     """THE ONE CHANNEL READER (the rules' venue.channels). The venue engine's read of their own site when it has one (its channel,
     its request alternative, and every other way it read — engine_channel attaches them as `all`); else Sasha's own read
-    (venue_read's rungs). A phone from Sasha's read is added only when the engine found none (R4 needs it within 48 h)."""
+    (venue_read's rungs). A phone from Sasha's read is added only when the engine found none (R4 needs it within 48 h).
+    Sasha 270 · one_path: a CAPTCHA only as the venue engine read it (CR 101: on evidence), never Sasha's own "challenge" guess; and
+    never a form of Sasha's own reading (venues.read_channel) — old S1 (parity off) keeps both, byte-identical."""
     rd = rd or {}
     rungs = rd.get("rungs") or {}
-    captcha = any(f.get("kind") == "challenge" for f in rd.get("facts") or [])
+    captcha = (not one_path) and any(f.get("kind") == "challenge" for f in rd.get("facts") or [])
     out: List[dict] = []
     if eng and eng.get("from") != "read":
         seen = [eng] + ([eng["alternative"]] if eng.get("alternative") else []) + list(eng.get("all") or [])
@@ -109,7 +111,8 @@ def channels_of(eng: Optional[dict], rd: Optional[dict] = None, card: Optional[d
             kind = k.get("kind")
             if kind in ("form", "own_engine", "widget", "whatsapp", "email", "phone", "platform"):
                 out.append(_one(kind, k.get("value") or k.get("name"), k.get("url") or (card or {}).get("website") if kind in ("form", "own_engine", "widget") else k.get("url"),
-                                captcha=bool(k.get("captcha") or (kind in ("form", "own_engine", "widget") and captcha))))
+                                captcha=bool(k.get("captcha") or (one_path and k.get("engine_captcha"))
+                                             or (kind in ("form", "own_engine", "widget") and captcha))))
         if not any(c["kind"] == "phone" for c in out) and "phone" in rungs:
             out.append({"kind": "phone", "value": str((rungs["phone"] or {}).get("value") or "read")})
     else:
@@ -117,6 +120,10 @@ def channels_of(eng: Optional[dict], rd: Optional[dict] = None, card: Optional[d
                            ("email", "email"), ("phone", "phone")):
             if rung not in rungs:
                 continue
+            if one_path:   # Sasha 270 · whether they have a form is the engine's to say (venues._read_rung_kept)
+                from agapi import venues as _VN
+                if not _VN._read_rung_kept(rung, rungs[rung]):
+                    continue
             v = str((rungs[rung] or {}).get("value") or "")
             if rung == "link" and not v.startswith("http"):
                 # the link rung's value is a platform's NAME ("TheFork", "CoverManager"): a booking platform, never submitted to

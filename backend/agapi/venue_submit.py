@@ -88,12 +88,13 @@ def _err(r: dict) -> dict:
 
 
 async def prepare(account: str, place: dict, person: dict, date: str, time_: str, party: int, notes: Optional[str] = None,
-                  call: Optional[dict] = None) -> Dict[str, Any]:
+                  call: Optional[dict] = None, link: Optional[str] = None) -> Dict[str, Any]:
     """venue.prepare_booking → {ok, prepared_id, link, zero_touch_allowed, say, …} or {ok: False, error}. Nothing is submitted.
-    Sasha 265 · item 4 (CR 99): + call {phone E.164, opens_at "HH:MM" local, open_now} — the venue can be called (routes page, call)."""
+    Sasha 265 · item 4 (CR 99): + call {phone E.164, opens_at "HH:MM" local, open_now} — the venue can be called (routes page, call).
+    Sasha 270 · CR 101: + link {url} — the booking link the person handed over (the engine fills THAT form, its own read of it)."""
     body = {"place": {k: v for k, v in place.items() if v and k in ("name", "website", "place_id", "city", "category")},
             "person": {k: v for k, v in person.items() if v}, "date": date, "time": time_, "party": int(party),
-            **({"notes": notes[:500]} if notes else {}), **({"call": call} if call else {})}
+            **({"notes": notes[:500]} if notes else {}), **({"call": call} if call else {}), **({"link": {"url": link[:500]}} if link else {})}
     r = await _call(account, "venue.prepare_booking", body)
     if not r.get("ok"):
         return {"ok": False, "error": _err(r)}

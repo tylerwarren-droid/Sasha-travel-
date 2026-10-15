@@ -106,12 +106,35 @@ DETAILS = {
 
 # Sasha 269 · Tyler (15 Oct): never "no online booking form" — when the venue engine (venue.profile) finds no form of their own, this
 NO_LINK = "I can't see their booking link from here — if you can, send it to me and I'll fill it in."
-RESERVABLE = "They do take reservations."   # + when their listing says reservable (CR 101 reports whether Places gives it)
+RESERVABLE = "They take reservations."   # Sasha 270 · CR 101's reservable.say, word for word (their listing, via the Places API)
 
 
-def no_link_line(reservable: bool = False) -> str:
-    """No own booking form found: said this way, never "they have no online booking form" (it may well exist — we just can't see it)."""
-    return f"{NO_LINK} {RESERVABLE}" if reservable is True else NO_LINK
+def no_link_line(reservable=None) -> str:
+    """No own booking form found: said this way, never "they have no online booking form" (it may well exist — we just can't see it).
+    Sasha 270 · + their listing's reservable, said as fact in the engine's own words (venue.profile reservable.say) when it said."""
+    said = reservable.strip() if isinstance(reservable, str) and reservable.strip() else (RESERVABLE if reservable is True else "")
+    return f"{NO_LINK} {said}" if said else NO_LINK
+
+
+# Sasha 270 · CR 101 · A LINK THE PERSON HANDED OVER, classified by the venue engine (venue.profile link) — said short.
+LINK_ON_IT = "OK, I'm on it."   # theirs to fill by Sasha (owner kanoe): before the read-back's one question
+#: the person's to finish (owner "the person"), by what the link IS — the engine's say without the host it names (her voice never names
+#: how a booking travels), and never "no booking form" about a place
+LINK_THEIRS = {"captcha": "Their form asks you to prove you're human, so that last step is yours — here it is.",
+               "needs_sign_in": "Their form needs you to sign in, so it's yours to fill — here it is.",
+               "platform": "Here's their page — you finish it there.",
+               "not_a_booking_form": "That page isn't a booking form I can fill in — here it is to look at.",
+               "cant_read": "I couldn't read that page from here — here it is to open yourself."}
+
+
+def link_line(channel: Optional[dict]) -> str:
+    """The one line for a handed-over link that is the person's to finish (or couldn't be read): by its kind; else the engine's `say`
+    with any "(host)" taken out."""
+    ch = channel or {}
+    if ch.get("kind") in LINK_THEIRS:
+        return LINK_THEIRS[ch["kind"]]
+    say = re.sub(r"\s*\([^)]*\)", "", str(ch.get("say") or "")).strip()
+    return say or LINK_THEIRS["cant_read"]
 
 
 RULES = f"""
@@ -138,6 +161,8 @@ RULES = f"""
   what you said earlier in this reply, or what you said in your last reply.
 - A booking page is always on their screen as a card they tap; sending it to their phone is an extra. Never say it can only go to
   their phone.
+- When they send a link to a place's booking page (typed, spoken or on WhatsApp), call hold_venue with that booking and `link` set to
+  it, exactly as they sent it. Never judge the link yourself (a form, a platform, a sign-in) — hold_venue's result says.
 """
 
 # Sasha 251 · HONEST RESULTS (found live on /s2: search_venues failed and she said "Have a look whenever you like and tap one if it
@@ -554,7 +579,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "NO_LINK", "RESERVABLE", "no_link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

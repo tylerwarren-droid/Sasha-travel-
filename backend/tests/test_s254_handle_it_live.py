@@ -68,6 +68,20 @@ class FakeAgapi:
         return next(b for o, b, _a in self.calls if o == op)
 
 
+def use_fake_agapi(test: unittest.TestCase, submit: dict = None) -> FakeAgapi:
+    """Sasha 270 · for tests MOVED off Sasha's own form sender: on the one path "Handle it" is AgAPI's send — faked as CR 90 answers."""
+    fake = FakeAgapi()
+    if submit:
+        fake.submit.update(submit)
+    VS._USERS.clear()
+    for p in (mock.patch.object(VS, "CALL", fake), mock.patch.object(VS, "target", mock.AsyncMock(return_value="sandbox")),
+              mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=True)),
+              mock.patch("agapi.s2_memory.kind", mock.AsyncMock(return_value=None))):
+        p.start()
+        test.addCleanup(p.stop)
+    return fake
+
+
 class HandleIt(Base):
     target = "sandbox"
 
@@ -165,8 +179,10 @@ class TheSend(HandleIt):
             return {"ok": False, "error": {"code": "not_configured", "message": "off"}}
         with mock.patch.object(VS, "CALL", off):
             out = self.handle_it()
-        self.assertEqual(out["route"], "form")
-        self.assertIn("/api/booking/forms", self.api.paths())
+        # Sasha 270 · MOVED (CR 101: one form engine): on the one path no AgAPI here is their page, prepared — never Sasha's own
+        # form sender (old S1 keeps it)
+        self.assertEqual((out["status"], out["rules"]["say_key"]), ("not_contacted", "prepared_link"))
+        self.assertNotIn("/api/booking/forms", self.api.paths())
 
 
 class Live(HandleIt):

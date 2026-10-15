@@ -156,6 +156,11 @@ async def platform_check(request: Request, url: str = "", body: int = 0):
         return _refuse(403, "not_listed", "this check is for a listed scratch account")
     if not PR.named(url):
         return _refuse(422, "not_named_platform", "Fresha, Treatwell, Booksy or Rover only")
+    if not PR.on_railway():   # Sasha 270 · loud, before anything: a platform is never read from a laptop's network (row 1002)
+        try:
+            PR.must_be_on_railway(url)
+        except PR.NotOnRailway as e:
+            return _refuse(503, "not_on_railway", str(e))
     rb = await PR.robots(None, url)
     out = {"ok": True, "platform": PR.named(url), "url": url, "robots": rb}
     if body and rb.get("allowed"):

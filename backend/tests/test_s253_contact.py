@@ -69,7 +69,8 @@ class Base(unittest.TestCase):
         self.api = ContactApi()
         for p in (mock.patch.object(GW, "api", self.api), mock.patch.object(GA, "founder", lambda a: False),
                   mock.patch.object(GR, "address_of", mock.AsyncMock(return_value="alex@example.test")),
-                  mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)),
+                  # Sasha 270 · MOVED (CR 101): their form is the engine's read on the one path; "Handle it" is AgAPI's send (faked)
+                  mock.patch.object(VN, "engine_channel", __import__("tests.test_s254_one_decider", fromlist=["x"]).engine_from({"form": {}})),
                   mock.patch.object(VN, "_known_name", mock.AsyncMock(return_value=None)),
                   mock.patch.object(VN, "_read", reader({"form": {}})),
                   mock.patch.object(GW, "STORE", _Store("+447700900333"))):
@@ -77,6 +78,12 @@ class Base(unittest.TestCase):
             self.addCleanup(p.stop)
         self.addCleanup(VN._HELD.pop, ACCT, None)
         self.addCleanup(VN._ASKED.pop, ACCT, None)
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        self.agapi = use_fake_agapi(self)
+
+    def booked_for(self):
+        """Sasha 270 · MOVED: who the booking is for, as AgAPI's venue.prepare_booking got it (was Sasha's own /api/booking/forms)."""
+        return [b["person"] for o, b, _a in self.agapi.calls if o == "venue.prepare_booking"][-1]
 
     def ctx(self, said, surface="s2"):
         return API.Ctx(account=ACCT, mode="test", user_said=said, session=self.session, surface=surface)
@@ -116,9 +123,9 @@ class AskedOnceAndKept(Base):
         out = self.hold("Tyler Warren, +34 600 111 222")
         self.assertTrue(out["ok"], out)
         self.assertEqual(out["result"]["status"], "awaiting_yes")
-        form = next(b for m, p, b in self.api.calls if p == "/api/booking/forms")
-        self.assertEqual(form["reservation"]["who"]["name"], "Tyler Warren")   # the read-back's booking, under that name
-        self.assertEqual(form["reservation"]["who"]["contact"]["mobile_e164"], "+34600111222")
+        who = self.booked_for()
+        self.assertEqual(who["name"], "Tyler Warren")                           # the read-back's booking, under that name
+        self.assertEqual(who["phone"], "+34600111222")
 
     def test_a_number_without_its_code_takes_the_venues_country(self):
         self.hold()
@@ -156,8 +163,7 @@ class AskedOnceAndKept(Base):
         self.assertIn("under", r["error"]["message"])
         self.save("Tyler Warren, +34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
         self.assertTrue(self.hold("Book La Mi Venta under Alex Gate.", under="Alex Gate")["ok"])
-        form = next(b for m, p, b in self.api.calls if p == "/api/booking/forms")
-        self.assertEqual(form["reservation"]["who"]["name"], "Alex Gate")
+        self.assertEqual(self.booked_for()["name"], "Alex Gate")
         self.assertEqual(self.api.contact["name"], "Tyler Warren")
 
 

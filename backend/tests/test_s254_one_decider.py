@@ -80,6 +80,25 @@ def reader(rungs, venue="Casa Gate", country="ES", facts=None):
     return rd
 
 
+def engine_from(rungs, facts=None, url=None):
+    """Sasha 270 · MOVED (CR 101: one classifier): on the one path a FORM is the venue engine's to find (venue.profile), never Sasha's
+    own read. The same venue as `rungs`: its own form / booking page (a form, their own page, a link that isn't a platform's) — and
+    its CAPTCHA, on the engine's evidence — read by the engine, its messages as the engine's other ways. engine_channel is asked with
+    listing=True only on the one path: old S1 (parity off) is unchanged."""
+    from agapi import venues as _VN
+    own = next((r for r in ("form", "own_page", "link") if r in rungs and not _VN._read_rung_kept(r, rungs[r])), None)
+
+    async def eng(card, budget_s=30.0, listing=False):
+        if not listing or not own:
+            return None
+        v = str((rungs[own] or {}).get("value") or "")
+        also = [{"kind": k, "value": (rungs[k] or {}).get("value")} for k in ("whatsapp", "email") if k in rungs]
+        return {"kind": {"form": "form", "own_page": "own_engine", "link": "widget"}[own], "url": v if v.startswith("http") else url,
+                "engine_captcha": any(f.get("kind") == "challenge" for f in facts or []), "all": also,
+                **({"alternative": also[0]} if also else {})}   # (venue_truth.channel: their request way, for the one question)
+    return eng
+
+
 # Sasha 265 · item 4: the phone is the venue's OWN published number (a call act may carry it; a Google listing's never is — Sasha 64)
 ALL4 = {"form": {}, "whatsapp": {"value": "+34600000001"}, "email": {"value": "reservas@casagate.es"}, "phone": {"fact_index": 0, "value": "+34910000000"}}
 
@@ -163,7 +182,7 @@ class Base(unittest.TestCase):
     def hold(self, rungs, hours=72.0, venue="Casa Gate", what="dinner", facts=None, **a):
         day, hhmm = local(hours)
         args = {"name": venue, "city": "Madrid", "country": "ES", "what": what, "party": 2, "day": day, "time": hhmm, **a}
-        with mock.patch.object(VN, "_read", reader(rungs, venue, facts=facts)):
+        with mock.patch.object(VN, "_read", reader(rungs, venue, facts=facts)), mock.patch.object(VN, "engine_channel", engine_from(rungs, facts)):
             return run(VN.hold_venue(self.ctx("book it"), args))
 
     def yes(self):
@@ -224,12 +243,19 @@ class R2TheOneQuestion(Base):
         self.assertNotIn(ACCT, VN._HELD)                                           # nothing prepared before the answer
 
     def test_handle_it_fills_and_sends_the_form_on_the_yes(self):
-        out = self.hold({"form": {}, "email": ALL4["email"]}, route="form")
-        self.expect(out, "fill_form_zero_touch", "sent")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "form"))   # the read-back first
-        got = self.yes()
-        self.assertIn("/api/booking/forms/f-9/send", self.api.paths())
-        self.assertEqual(got["line"], f"{BR.PHRASES['sent']} {BR.PHRASES['takeover']}")
+        # Sasha 270 · MOVED (CR 101: one form engine): on the one path "Handle it" is AgAPI's send (test_s254_handle_it_live.TheSend:
+        # the read-back, the yes, venue.submit_booking). Sasha's own form sender (/api/booking/forms) is old S1's only — with no AgAPI
+        # here, their page, prepared; never a send of Sasha's own
+        decided = []
+
+        async def via(ctx, a, rd, res, at, now, d, card, r6=False, link=None):
+            decided.append(d["action"])
+            return None
+        with mock.patch.object(VN, "_via_agapi", via):
+            out = self.hold({"form": {}, "email": ALL4["email"]}, route="form")
+        self.assertEqual(decided, ["fill_form_zero_touch"])                         # the rules: handle it
+        self.expect(out, "prepared_link", "prepared_link")
+        self.assertNotIn("/api/booking/forms", self.api.paths())
 
     def test_a_prefilled_form_is_their_page_never_sent(self):
         out = self.hold({"form": {}, "email": ALL4["email"]}, route="page", website="https://casagate.es")
@@ -585,8 +611,16 @@ class AccessTest(Base):
         self.assertFalse([p for p in self.api.paths() if p in ("/api/booking/forms", "/api/booking/emails", "/api/booking/calls")])
 
     def test_a_test_venue_is_fine_in_test_mode(self):
-        out = self.hold({"form": {}}, venue="Sasha Test Venue", route="form")
-        self.expect(out, "fill_form_zero_touch", "sent")
+        # Sasha 270 · MOVED: the decision is the same (handle it — never "not_live"); the send is AgAPI's (none here → their page)
+        decided = []
+
+        async def via(ctx, a, rd, res, at, now, d, card, r6=False, link=None):
+            decided.append((d["action"], d["say"]))
+            return None
+        with mock.patch.object(VN, "_via_agapi", via):
+            out = self.hold({"form": {}}, venue="Sasha Test Venue", route="form")
+        self.assertEqual(decided, [("fill_form_zero_touch", "sent")])
+        self.assertNotEqual(out["rules"]["say_key"], "not_live")
 
 
 class AccessSendsOff(Base):

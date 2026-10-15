@@ -50,8 +50,9 @@ class OneDeciderEach(unittest.TestCase):
     def test_the_engine_decides_first(self):
         from agapi import venues as VN
         src = inspect.getsource(VN.hold_venue)
-        self.assertLess(src.index("engine_channel(card)"), src.index("read_channel(rd, card)"))   # Sasha's own read: the fallback only
-        self.assertLess(src.index("read_channel(rd, card)"), src.index("rules_for("))            # Sasha 254 · then the booking rules
+        # Sasha 270 · moved: + their listing on the one path (engine_channel(card or listing_card(rd), …)), Sasha's read without forms
+        self.assertLess(src.index("engine_channel(card"), src.index("read_channel(rd, card"))    # Sasha's own read: the fallback only
+        self.assertLess(src.index("read_channel(rd, card"), src.index("rules_for("))             # Sasha 254 · then the booking rules
 
     def test_the_frontend_picks_no_channel(self):
         here = os.path.dirname(__file__)

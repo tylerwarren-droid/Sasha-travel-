@@ -54,21 +54,39 @@ class APick(unittest.TestCase):
 
     def pick(self, surface, rungs, said="Casa Gate, please.", **extra):
         ctx = API.Ctx(account=ACCT, mode="test", user_said=said, session="s230", surface=surface)
-        with mock.patch.object(VN, "_read", reader(rungs)):
+        from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: on the one path their form is the engine's read
+        with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             return run(VN.hold_venue(ctx, {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": "dinner", "party": 2,
                                            "day": LATER, "time": "21:00", **extra}))
 
     # Sasha 254 · the booking rules decide (agapi/booking_rules via agapi.booking_decide): a form is the ONE question (R2) — "Handle
     # it" (route form) is the form's read-back, the yes in a later turn books it; own channels before a platform (R1/R14)
+    def agapi(self, submit=None):
+        """Sasha 270 · MOVED (CR 101: one form engine): on /s2 "Handle it" is AgAPI's send (venue.prepare_booking → the read-back →
+        venue.submit_booking) — Sasha's own form sender is old S1's only. AgAPI faked as CR 90 answers (test_s254_handle_it_live)."""
+        from agapi import venue_submit as VS
+        from tests.test_s254_handle_it_live import FakeAgapi
+        self.fake = FakeAgapi()
+        if submit:
+            self.fake.submit.update(submit)
+        VS._USERS.clear()
+        for p in (mock.patch.object(VS, "CALL", self.fake), mock.patch.object(VS, "target", mock.AsyncMock(return_value="sandbox")),
+                  mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=True)),
+                  mock.patch("agapi.s2_memory.kind", mock.AsyncMock(return_value=None))):
+            p.start()
+            self.addCleanup(p.stop)
+
     def test_on_s2_a_form_is_the_one_question_then_handle_it_is_the_read_back(self):
+        self.agapi()
         out = self.pick("s2", {"form": {}})
         self.assertEqual((out["status"], out["ask"]), ("choose_route", V.ASK_BOOK))
         self.assertNotIn(ACCT, VN._HELD)
         out = self.pick("s2", {"form": {}}, route="form")
         self.assertEqual(out["status"], "awaiting_yes")                       # the read-back, not "shall I?"
-        self.assertEqual(out["route"], "form")
+        self.assertEqual(out["route"], "agapi")                                # Sasha 270 · MOVED: AgAPI's send (was Sasha's "form")
         self.assertTrue(out["read_back"])
-        self.assertEqual(VN._HELD[ACCT]["rung"], "form")                       # held: the yes (a later turn) books it
+        self.assertEqual(VN._HELD[ACCT]["rung"], "agapi")                      # held: the yes (a later turn) books it
+        self.assertNotIn("/api/booking/forms", [c[1] for c in self.api.calls])
 
     def test_on_s2_their_own_email_comes_before_a_platform(self):
         out = self.pick("s2", {"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
@@ -81,6 +99,7 @@ class APick(unittest.TestCase):
         self.assertNotIn(ACCT, VN._HELD)
 
     def test_the_yes_in_a_later_turn_books_it(self):
+        self.agapi({"status": "confirmed", "reference": "TV-230"})   # Sasha 270 · MOVED: AgAPI's send
         self.pick("s2", {"form": {}}, route="form")
         VN._HELD[ACCT]["at"] -= timedelta(seconds=5)                           # the read-back was said in an earlier turn
         ctx = API.Ctx(account=ACCT, mode="test", user_said="Yes, book it.", session="s230", surface="s2")
@@ -89,7 +108,8 @@ class APick(unittest.TestCase):
                 mock.patch("agapi.v0.claim", mock.AsyncMock()):
             out = run(VN.book_venue(ctx, {"approval": {"said": "Yes, book it."}}))
         self.assertEqual((out["status"], out.get("reference")), ("confirmed", "TV-230"))
-        self.assertEqual(self.api.calls[-1][2]["read_back_sha256"], "e" * 64)   # the read-back they heard, and only that
+        sub = [c for c in self.fake.calls if c[0] == "venue.submit_booking"]
+        self.assertEqual((sub[-1][2], sub[-1][1]["prepared_id"]), ("apv_01JABCDEFGHJKMNPQRSTVWXYZ0", "vpr_" + "a" * 32))   # the yes binds it
 
 if __name__ == "__main__":
     unittest.main()

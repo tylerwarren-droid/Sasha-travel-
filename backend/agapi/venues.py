@@ -222,12 +222,13 @@ async def read_booking_route(ctx, a: dict) -> dict:
     rd = await _read(ctx, a)
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · the picked card is what's on screen
     if one_path(ctx):   # Sasha 251 · how it books = the ONE channel hold_venue will use (never a second reading of the same place)
-        eng = await engine_channel(card) or read_channel(rd, card)
+        eng = await engine_channel(card or listing_card(rd), listing=True) or read_channel(rd, card, one_path=True)
         how = _how_words(eng)
         if not eng or eng.get("kind") not in OWN_FORM:   # Sasha 269 · no own form found: never "no online booking form" (voice.py)
+            from agapi import venue_truth as VT
             from app.agent import voice as V
-            reservable = (card or {}).get("reservable") is True or rd.get("reservable") is True
-            how = " ".join(x for x in (V.no_link_line(reservable), how if eng else "") if x)
+            # Sasha 270 · CR 101: their listing's reservable, said as fact in the engine's words (venue.profile reservable.say)
+            how = " ".join(x for x in (V.no_link_line(VT.reservable_say(card or listing_card(rd))), how if eng else "") if x)
         return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of_channel(eng),
                 "how": how, "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
     return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),
@@ -270,12 +271,16 @@ READ_KIND = {"form": "form", "own_page": "own_engine", "link": "widget", "whatsa
              "instagram": "instagram"}   # their WhatsApp before email (Sasha 232: direct first)
 
 
-def read_channel(rd: dict, card: Optional[dict] = None) -> Optional[dict]:
-    """Sasha 251 · the venue's ONE channel when the engine has none — from what Sasha's read found, in the engine's shape."""
+def read_channel(rd: dict, card: Optional[dict] = None, one_path: bool = False) -> Optional[dict]:
+    """Sasha 251 · the venue's ONE channel when the engine has none — from what Sasha's read found, in the engine's shape.
+    Sasha 270 · one_path: never a FORM of Sasha's own reading (a form, their own page, a widget link that isn't a known platform) —
+    whether a place has a booking form is the venue engine's to say (venue.profile, CR 101), else "send me the link" (voice.NO_LINK)."""
     from agapi import venue_truth as VT
     rungs = rd.get("rungs") or {}
     kinds = []
     for rung, kind in READ_KIND.items():
+        if one_path and not _read_rung_kept(rung, rungs.get(rung)):
+            continue
         if rung in rungs:
             v = str((rungs[rung] or {}).get("value") or "")
             kinds.append({"kind": kind, "value": v, "from": "read", **({"url": v} if v.startswith("http") else {}),
@@ -288,6 +293,23 @@ def read_channel(rd: dict, card: Optional[dict] = None) -> Optional[dict]:
         if not ch.get("url") and ch["kind"] in VT.FILLABLE:
             ch["url"] = (card or {}).get("website")
     return ch
+
+
+def _read_rung_kept(rung: str, r: Optional[dict]) -> bool:
+    """Sasha 270 · on the one path, what Sasha's own read may still say: a message, a phone, a profile — and a link only when it is a
+    known booking platform's (handed over, never booked). Never a form: that is the engine's."""
+    if rung in ("form", "own_page"):
+        return False
+    if rung == "link":
+        from agapi.booking_rules import booking_rules as BR
+        v = str((r or {}).get("value") or "")
+        return not v.startswith("http") or bool(BR.is_platform(v))
+    return True
+
+
+def listing_card(rd: dict) -> Optional[dict]:
+    """Sasha 270 · a venue not on screen: its listing (place_id) for the venue engine — its reservable and its website, if Places has one."""
+    return {"place_id": rd["place_id"], "name": rd.get("venue")} if rd.get("place_id") else None
 
 
 def _routes_of_channel(eng: Optional[dict]) -> List[str]:
@@ -326,11 +348,17 @@ NIGHTS = {"type": "integer", "minimum": 1, "maximum": 30,
                          "when they want to book with the hotel itself — a TEST stay is search_stays / hold_booking"}
 
 
+LINK = {"type": "string", "description": "a link to this place's booking page that THEY sent you (typed, spoken or on WhatsApp), "
+                                         "exactly as sent — the venue engine says what it is and whether you can fill it in. Never a "
+                                         "link you found yourself"}
+
+
 def with_under(tool: dict) -> dict:
     """Sasha 251 · hold_venue's schema with `under` (the person the booking is for) — /s2 and /next under parity only.
-    Sasha 253 · and `open_slot` (G7) and `nights` (G8); day and time no longer required there (API.call: required_of)."""
+    Sasha 253 · and `open_slot` (G7) and `nights` (G8); day and time no longer required there (API.call: required_of).
+    Sasha 270 · and `link` (CR 101): a booking link the person handed over."""
     sch = dict(tool["input_schema"])
-    sch["properties"] = {**sch["properties"], "under": UNDER, "open_slot": OPEN_SLOT, "nights": NIGHTS}
+    sch["properties"] = {**sch["properties"], "under": UNDER, "open_slot": OPEN_SLOT, "nights": NIGHTS, "link": LINK}
     sch["required"] = [k for k in sch["required"] if k not in ("day", "time")]
     return {**tool, "input_schema": sch}
 
@@ -599,7 +627,8 @@ async def hold_venue(ctx, a: dict) -> dict:
     if held and held.get("out") and held["at"] < ctx.started and not stale(held["at"]) \
             and (not a.get("route") or a.get("route") == held.get("rung") or held.get("rung") == "agapi") \
             and str(held.get("when") or "")[:16] == _slot_key(ctx, a) and int(held.get("party") or 0) == int(a.get("party") or 0) \
-            and ((a.get("place_id") and a.get("place_id") == held.get("place_id")) or _base(a.get("name") or "") == _base(held.get("venue") or "")):
+            and ((a.get("place_id") and a.get("place_id") == held.get("place_id")) or _base(a.get("name") or "") == _base(held.get("venue") or "")) \
+            and _link_of(ctx, a) in (None, held.get("link_handed")):   # Sasha 270 · a NEW link they hand over is a new booking route
         card = card_of(ctx.account, a.get("place_id") or held.get("place_id"), a.get("name"))
         # Sasha 258 · found by the scoreboard (item 15, Taverna Correo): on "Yes, send it." she re-held instead of booking; an AgAPI
         # hold's rung is "agapi" whatever channel word she passes ("email"), so it never matched — a NEW read-back, asked again.
@@ -620,17 +649,68 @@ async def hold_venue(ctx, a: dict) -> dict:
     card = card_of(ctx.account, a.get("place_id"), a.get("name"))   # Sasha 213 · this venue's card, highlighted on screen
     if route == "no":
         return _with_card(card, {"status": "not_booking", "venue": rd["venue"]})
+    link = _link_of(ctx, a)
+    if link:   # Sasha 270 · CR 101 · a link THEY handed over: the venue engine's one classifier says whose it is
+        return _with_card(card, await _person_link(ctx, a, rd, res, at, now, card, link))
     # Sasha 248/251 · how it books: the venue engine's read of their own site, else Sasha's own read in the engine's shape
-    eng = await engine_channel(card) or read_channel(rd, card)
+    path = one_path(ctx)   # Sasha 270 · the one path: their listing too (reservable); never a form of Sasha's own reading
+    eng = await engine_channel(card or (listing_card(rd) if path else None), listing=path) or read_channel(rd, card, one_path=path)
     d = await rules_for(ctx, a, rd, res, at, eng, card, route, now)
     return _with_card(card, await _execute(ctx, a, rd, res, at, now, d, eng, card))
+
+
+_URL = re.compile(r"https?://[^\s<>\"'`]+", re.I)
+
+
+def _link_of(ctx, a: dict) -> Optional[str]:
+    """Sasha 270 · the booking link THEY handed over — hold_venue's `link`, else one in their own words this turn (a model that forgot
+    to pass it never loses it). The one path only; old S1 has no link."""
+    if not one_path(ctx):
+        return None
+    for v in (str(a.get("link") or "").strip(), *(_URL.findall(getattr(ctx, "user_said", None) or "")[:1])):
+        m = _URL.match(v)
+        if m:
+            return m.group(0).rstrip(".,;:!?)]}")[:500]
+    return None
+
+
+async def _person_link(ctx, a: dict, rd: dict, res: dict, at: str, now, card: Optional[dict], link: str) -> dict:
+    """Sasha 270 · CR 101 · A LINK THE PERSON HANDED OVER, through the ONE classifier and the ONE ladder (never loaded by Sasha):
+    venue.profile link {url} (+ their place_id and website) → channels[].owner —
+      kanoe       → the booking rules (preference: handle it) → venue.prepare_booking on THAT link → the read-back → ONE yes →
+                    venue.submit_booking → booking_status (get_status), exactly as a form on their own site
+      the person  → their link handed to them, with what it is in her words (voice.link_line): a sign-in, a CAPTCHA, a platform"""
+    from agapi import venue_truth as VT
+    from app.agent import voice as V
+    GW = _API()
+    venue = GW.plain_venue(rd["venue"])
+    place = {"name": (card or {}).get("name") or venue, "place_id": rd.get("place_id") or (card or {}).get("place_id"),
+             "website": (card or {}).get("website") or a.get("website")}
+    got = await VT.link_profile(place, link)
+    ch = (got.get("channel") if got.get("ok") else None) or {"kind": "cant_read", "owner": "the person", "url": link}
+    log.info("[venues] %s: their link is %s (owner %s)", venue, ch.get("kind"), ch.get("owner"))
+    if ch.get("owner") == "kanoe" and at and not _nights(ctx, a) and not _open_slot(ctx, a):
+        d = await rules_for(ctx, a, rd, res, at, {"kind": "form", "url": link, "from": "person"}, card, "form", now)
+        if d["action"] == "fill_form_zero_touch":
+            out = await _via_agapi(ctx, a, rd, res, at, now, d, card, link=link)
+            if out is not None:
+                if out.get("ask"):   # short: "OK, I'm on it." then the read-back's one question (the card carries the detail)
+                    out["ask"] = f"{V.LINK_ON_IT} {out['ask']}"
+                    if _HELD.get(ctx.account):
+                        _HELD[ctx.account]["out"] = {**_HELD[ctx.account].get("out", {}), "ask": out["ask"]}
+                return out
+        # the rules didn't let Sasha send it (test mode for a real venue, sends off, …): their link, with the rules' words
+        return _said({"status": "page_link", "venue": venue, "booked": False, "link_kind": ch.get("kind"), **_link_out(link)},
+                     {**d, "takeover": {**d["takeover"], "link": link}})
+    return {"status": "page_link", "venue": venue, "booked": False, "link_kind": ch.get("kind"), **_link_out(link),
+            "say": V.link_line(ch), "how": "Say `say` exactly — their link is on their screen; never that it's booked."}
 
 
 async def rules_for(ctx, a: dict, rd: dict, res: dict, at: str, eng: Optional[dict], card: Optional[dict], route: Optional[str],
                     now: Optional[datetime] = None) -> dict:
     """Sasha 254 · ONE DECIDER: this booking's Decision from the booking rules (agapi.booking_decide), with the channels it read."""
     from agapi import booking_decide as BD
-    chans = BD.channels_of(eng if eng and eng.get("from") != "read" else None, rd, card)
+    chans = BD.channels_of(eng if eng and eng.get("from") != "read" else None, rd, card, one_path=one_path(ctx))
     if _open_slot(ctx, a) or (res.get("when") or {}).get("mode") == "venue_proposes":
         # Sasha 253 · G7 — no slot: a form or a platform books a SLOT, so for this booking only the request channels exist
         chans = [c for c in chans if c["kind"] not in ("form", "platform")]
@@ -731,14 +811,14 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
         if got is not None:
             return got
     if action == "fill_form_zero_touch":   # R2 · "handle it": the form, filled and sent on their yes
-        if "form" in rungs:
+        if "form" in rungs and not one_path(ctx):   # Sasha 270 · Sasha's own form reading/sender: old S1 only
             return _said(await _form(ctx, a, rd, res), d, when="after_yes", account=ctx.account)
         # the venue engine's form (no form in Sasha's own read): Sasha can't submit it from here yet — their page, prepared, and said so
         return await _prepared_now(ctx, a, rd, res, at, now, eng, card, BD.redecide(d, "page"))
     if action == "prepared_link":
         if key in ("prepared_link", "prepared_link_captcha") and nights and ({"link", "own_page"} & set(rungs)):
             return _said(await _page(ctx, a, rd, res, at), d)   # a hotel's own engine with the stay in its link (G8)
-        if key == "prepared_link_captcha" and "form" in rungs and (await _founder(ctx)):
+        if key == "prepared_link_captcha" and "form" in rungs and not one_path(ctx) and (await _founder(ctx)):
             got = await _form(ctx, a, rd, res, handover=True)   # R13 · Sasha fills the rest; the CAPTCHA is theirs (Tap to finish)
             if got.get("status") == "awaiting_yes":
                 return _said(got, d)
@@ -866,7 +946,7 @@ async def _no_call(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, car
     with the take-over. Never Sasha's own call (no act, never dialled)."""
     from agapi import booking_decide as BD
     if d["say"] == "ask_page_or_call" or BD.page_of(d.get("channels") or [], card):
-        eng = await engine_channel(card) or read_channel(rd, card)
+        eng = await engine_channel(card or listing_card(rd), listing=True) or read_channel(rd, card, one_path=True)
         return await _prepared_now(ctx, a, rd, res, at, now, eng, card, BD.redecide(d, "page"))
     raise _err("no_route", f"{venue} books by phone, and I can't call them from here — {why}. " + d["takeover"]["say"])
 
@@ -895,8 +975,10 @@ AGAPI_RUNG = {"fill_form_zero_touch": ("zero_touch", "web_form"), "request_email
               "request_whatsapp": ("request_reply", "whatsapp")}
 
 
-async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, card: Optional[dict], r6: bool = False) -> Optional[dict]:
-    """The AgAPI send, read back first. None: this server has no venues key (then Sasha's own sender, as before)."""
+async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, card: Optional[dict], r6: bool = False,
+                     link: Optional[str] = None) -> Optional[dict]:
+    """The AgAPI send, read back first. None: this server has no venues key (then Sasha's own sender, as before).
+    Sasha 270 · link: the booking link the person handed over (CR 101) — prepared on THAT form, by the same ladder."""
     from agapi import venue_submit as VS
     from booking_signer import guest_receipt as GR
     GW = _API()
@@ -906,7 +988,8 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
     person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
     asked = _what(a)
     p = await VS.prepare(ctx.account, place, person, at[:10], at[11:16], int(res["how_many"]["count"]),
-                         notes=asked if asked.lower() not in ("a table", "table", "dinner", "lunch") else None)
+                         notes=asked if asked.lower() not in ("a table", "table", "dinner", "lunch") else None,
+                         **({"link": link} if link else {}))
     if not p.get("ok") and p["error"]["code"] == "not_configured":
         log.info("[venues] no venues key here: Sasha's own sender for %s", d["action"])
         return None
@@ -930,7 +1013,8 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
                 extra={"prepared_id": p["prepared_id"], "read_back_id": rb["read_back_id"], "end_user": rb["end_user"], "link": link,
                        "agapi_action": d["action"], **({"venue_phone": own} if own else {}),
                        **({"listing_ref": {**VC.number_ref(listed, place.get("place_id")), "source": "listing"}} if listed and not own else {}),
-                       **({"r6": True} if r6 else {}), "category": (res.get("what") or {}).get("category")})
+                       **({"r6": True} if r6 else {}), **({"link_handed": link} if link else {}),
+                       "category": (res.get("what") or {}).get("category")})
     out["what_happens"] = ("on their yes, Sasha sends it to the venue; it's booked only when they confirm"
                            + (" — their own phone gets a tap to approve it first" if await VS.target(ctx.account) == "live" else ""))
     return _said(out, d, when="after_yes", account=ctx.account)
@@ -972,7 +1056,13 @@ async def _prepared_now(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: Op
             out["how"] = "Say `say` exactly — never that it's booked."
             return out
     link = d["takeover"].get("link")
-    return _said({"status": "not_contacted", "venue": GW.plain_venue(rd["venue"]), "booked": False, **_link_out(link)}, d)
+    out = _said({"status": "not_contacted", "venue": GW.plain_venue(rd["venue"]), "booked": False, **_link_out(link)}, d)
+    if one_path(ctx) and d.get("say") == "no_channel":   # Sasha 270 · no way found: "send me their link" (+ reservable), never "no form"
+        from app.agent import voice as V
+        line = V.no_link_line(VT.reservable_say(card or listing_card(rd)))
+        out["rules"] = {**out["rules"], "say": line}
+        out["say"] = f"{line} {d['takeover']['say']}"
+    return out
 
 
 def _link_out(link: Optional[str]) -> dict:
@@ -1119,16 +1209,16 @@ def _draft(ctx, a: dict, rd: dict, res: dict, at: str, now, ch: str) -> dict:
                             "Sasha sends the drafted message to their phone and they send it; it is NOT booked until the place replies"}
 
 
-async def engine_channel(card: Optional[dict], budget_s: float = 30.0) -> Optional[dict]:
+async def engine_channel(card: Optional[dict], budget_s: float = 30.0, listing: bool = False) -> Optional[dict]:
     """Sasha 248 · ONE BOOKING PATH: how this venue books, from the venue engine's read of its own site (agapi/venue_truth) —
     the same read its card and detail sheet show. None: no site / not readable (then Sasha's own read decides, as before).
     Sasha 254 · with every other way the engine read (`all`) — the booking rules weigh them all (booking_decide.channels_of)."""
     import asyncio
     from agapi import venue_truth as VT
-    if not card or not card.get("website"):
+    if not card or not (card.get("website") or (listing and card.get("place_id"))):   # Sasha 270 · listing: the one path, no website
         return None
     try:
-        p = await asyncio.wait_for(VT.profile(card), timeout=budget_s)
+        p = await asyncio.wait_for(VT.profile(card, listing=listing), timeout=budget_s)
     except Exception:
         p = VT.shape(card, VT.cached(card))
     ch = p.get("channel")

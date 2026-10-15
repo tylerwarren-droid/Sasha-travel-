@@ -90,11 +90,17 @@ def _from_profile(res: dict) -> dict:
     for a in bk.get("also") or []:
         if a.get("kind") in ("email", "whatsapp", "phone") and a.get("value") and not a.get("note"):   # a conditional one ("groups of 12+") isn't a way to book this
             kinds.append({"kind": a["kind"], "value": a["value"]})
+    if bk.get("rung") == 2 and kinds and isinstance(res.get("form"), dict):   # Sasha 270 · the engine's own CAPTCHA reading (CR 101: on
+        kinds[0]["engine_captcha"] = bool(res["form"].get("captcha"))      # evidence only) — the one path reads it, never Sasha's guess
     photos = [p.get("url") for p in res.get("photos") or [] if isinstance(p, dict) and str(p.get("url") or "").startswith("https://")]
     return {"name": _vp_fact(facts.get("name")), "type": _vp_fact(facts.get("type")), "hours": _vp_fact(facts.get("hours")),
             "price": _vp_fact(facts.get("price_range")), "city": _vp_fact(facts.get("city")), "channels": kinds, "photos": photos,
             "rung": bk.get("rung"), "rung_label": bk.get("rung_label"), "engine_said": bk.get("say"), "confirm": res.get("confirm"),
             "form": res.get("form"),
+            # Sasha 270 · CR 101 (row 1000): their listing's reservable as a fact with its source and its words; every channel the
+            # engine classified (site / person), each with its owner — Sasha reads these, never decides "has a form" herself
+            **({"reservable": res["reservable"]} if isinstance(res.get("reservable"), dict) else {}),
+            **({"sources": [c for c in res["channels"] if isinstance(c, dict)]} if isinstance(res.get("channels"), list) else {}),
             "venue_id": res.get("venue_id"), "cant_read": _said(res.get("cant_read"))}
 
 
@@ -121,9 +127,9 @@ def _from_engine(res: dict) -> dict:
             "cant_read": _said(res.get("cant_read"))}
 
 
-async def _read_site(website: str, replay: bool = False, place: Optional[dict] = None) -> Optional[dict]:
+async def _read_site(website: Optional[str], replay: bool = False, place: Optional[dict] = None, key: Optional[str] = None) -> Optional[dict]:
     place = place or {"website": website}
-    host = _host(website)
+    host = key or _host(website)   # Sasha 270 · a listing read (no website) is kept under "place:<place_id>"
     if not host:
         return None
     hit = _CACHE.get(host)
@@ -168,8 +174,14 @@ async def prepare(place: dict, person: dict, date: str, time_: str, party: int) 
             "expires_at": res.get("expires_at")}
 
 
+def _key_of(place: dict) -> str:
+    """The cache key: their website's host; with no website, their listing ("place:<place_id>" — Sasha 270)."""
+    h = _host(place["website"]) if place.get("website") else ""   # never _host(None): that is "none", one key for every listing
+    return h or (f"place:{place['place_id']}" if place.get("place_id") else "")
+
+
 def cached(place: dict) -> Optional[dict]:
-    hit = _CACHE.get(_host(place.get("website")))
+    hit = _CACHE.get(_key_of(place))
     return hit["profile"] if hit and time.time() - hit["at"] < TTL_S else None
 
 
@@ -214,12 +226,48 @@ def shape(place: dict, site: Optional[dict]) -> dict:
             **({"cant_read": _said(site["cant_read"])} if site.get("cant_read") else {})}
 
 
-async def profile(place: dict, replay: bool = False) -> dict:
-    """The place, from its own site (the engine), shaped once. No website → the listing only, labelled."""
-    site = await _read_site(place["website"], replay, {"name": place.get("name"), "website": place.get("website"),
-                                                       "category": place.get("google_type") or (place.get("type") if place.get("type_source") != "site" else None),
-                                                       "place_id": place.get("place_id")}) if place.get("website") else None
+async def profile(place: dict, replay: bool = False, listing: bool = False) -> dict:
+    """The place, from its own site (the engine), shaped once. No website → the listing only, labelled.
+    Sasha 270 · listing=True (the one path's booking, never a search's cards): no website but a place_id → venue.profile on their listing
+    alone (CR 101: reservable, its website if Places has one) — the engine's answer, kept under "place:<place_id>"."""
+    meta = {"name": place.get("name"), "website": place.get("website"),
+            "category": place.get("google_type") or (place.get("type") if place.get("type_source") != "site" else None),
+            "place_id": place.get("place_id")}
+    if place.get("website"):
+        site = await _read_site(place["website"], replay, meta)
+    elif listing and place.get("place_id") and ENGINE_OP == "venue.profile":
+        site = await _read_site(None, replay, {"place_id": place["place_id"], "name": place.get("name")}, key=_key_of(place))
+    else:
+        site = None
     return shape(place, site)
+
+
+def person_channel(res: dict, url: str) -> Optional[dict]:
+    """The channel venue.profile classified for the link the person handed over (source "person"): its kind, owner, say."""
+    ch = [c for c in res.get("channels") or [] if isinstance(c, dict) and c.get("source") == "person"]
+    return next((c for c in reversed(ch) if str(c.get("url") or "") == str(url)[:500]), ch[-1] if ch else None)
+
+
+async def link_profile(place: dict, url: str) -> Dict[str, Any]:
+    """Sasha 270 · CR 101 · A LINK THE PERSON HANDED OVER (chat, a voice transcript, WhatsApp): venue.profile link {url} (+ place.place_id
+    and their website when Sasha has them). The ONE classifier says what it IS and whose it is — channels[].owner: "kanoe" (Sasha fills
+    it after the one yes) or "the person" (handed to them with its say). Sasha never loads the link herself.
+      → {ok, channel {kind, owner, say, host, url, note?}, reservable?, booking?, form?} or {ok: False, error}"""
+    body = {"link": {"url": str(url)[:500]},
+            **({"place": {k: v for k, v in {"place_id": place.get("place_id"), "name": place.get("name")}.items() if v}}
+               if place.get("place_id") or place.get("name") else {}),
+            **({"url": place["website"]} if place.get("website") else {})}
+    try:
+        r = await CALL(ENGINE_OP, body)
+    except Exception as e:
+        log.warning("[venue_truth] a handed-over link wasn't classified: %s", type(e).__name__)
+        return {"ok": False, "error": {"code": "unavailable", "message": "the venue engine didn't answer"}}
+    if not r.get("ok"):
+        return {"ok": False, "error": {"code": (r.get("error") or {}).get("code") or "unavailable",
+                                       "message": (r.get("error") or {}).get("message") or "the venue engine didn't answer"}}
+    res = r.get("result") or {}
+    return {"ok": True, "channel": person_channel(res, url), "booking": res.get("booking"), "form": res.get("form"),
+            **({"reservable": res["reservable"]} if isinstance(res.get("reservable"), dict) else {})}
 
 
 _BG: set = set()   # reads that outlast a search's budget: held here until they finish (they warm the cache for the detail sheet)
@@ -290,4 +338,11 @@ def type_words(p: dict) -> str:
     return t.get("value") or ""
 
 
-__all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "ASK_FILL", "ENGINE_OP", "CALL"]
+def reservable_say(place: Optional[dict]) -> Optional[str]:
+    """Sasha 270 · CR 101 · what their listing says about reservations, in the engine's words ("They take reservations."), when it said."""
+    r = ((cached(place) or {}) if place else {}).get("reservable") or {}
+    return str(r["say"]) if isinstance(r, dict) and r.get("say") else None
+
+
+__all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "ASK_FILL", "ENGINE_OP", "CALL",
+           "link_profile", "person_channel", "reservable_say"]

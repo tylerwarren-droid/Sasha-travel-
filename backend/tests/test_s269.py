@@ -252,7 +252,9 @@ class NeverNoOnlineForm(unittest.TestCase):
 
     def test_gate_the_line_by_code(self):
         self.assertEqual(V.no_link_line(), "I can't see their booking link from here — if you can, send it to me and I'll fill it in.")
-        self.assertEqual(V.no_link_line(True), V.NO_LINK + " They do take reservations.")
+        # Sasha 270 · moved: reservable is CR 101's fact, said in the engine's words (reservable.say) — "They take reservations."
+        self.assertEqual(V.no_link_line(True), V.NO_LINK + " They take reservations.")
+        self.assertEqual(V.no_link_line("They take reservations."), V.NO_LINK + " They take reservations.")
         self.assertIn(V.NO_LINK, V.RULES)
         self.assertIn('Never say a place has "no online booking form"', V.RULES)
 
@@ -261,7 +263,8 @@ class NeverNoOnlineForm(unittest.TestCase):
         rd = {"venue": "Casa Gate", "rungs": {"phone": {"value": "+34910000000"}}}
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), mock.patch.object(VN, "_read", mock.AsyncMock(return_value=rd)), \
                 mock.patch.object(VN, "card_of", lambda *a: card), mock.patch.object(VN, "one_path", lambda c: True), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VN, "read_channel", lambda r, c: eng):
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VN, "read_channel", lambda r, c, **k: eng), \
+                mock.patch("agapi.venue_truth.reservable_say", lambda c: "They take reservations." if (c or {}).get("reservable") else None):
             return run(VN.read_booking_route(ctx, {"name": "Casa Gate", "city": "Madrid"}))
 
     def test_gate_no_own_form_says_it_never_no_form(self):

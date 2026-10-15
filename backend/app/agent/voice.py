@@ -154,7 +154,8 @@ SHOWS = {
     "cancel_subscription": "The cancellation",
 }
 SAYS = ("prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_list", "keep_use", "note_not_yet", "note_rental",
-        "remember_name", "save_contact", "file_confirmation", "time_between", "add_to_trip", "save_for_later")   # Sasha 253 · said, no card
+        "remember_name", "save_contact", "file_confirmation", "time_between", "add_to_trip", "save_for_later",   # Sasha 253 · said, no card
+        "call_again")   # Sasha 269 · the act's own `say`
 
 FAILED = "{what} didn't work{why}. Say the word and I'll try again."
 
@@ -516,7 +517,32 @@ def outage_line(kind: str, tool: str) -> str:
     return OUTAGE.get(kind, OUTAGE["slow"]).format(what=what, service=service)
 
 
+# ── Sasha 269 · "CALL THEM AGAIN" IS THE ENGINE'S (CR 100, booking-rules/2.1) ──────────────────────────────────────────────────────
+# After a no-answer she reads AgAPI's own words (venue.call_attempt / venue.booking_status): `say` ("They didn't pick up."), then `ask`
+# — the ONE question — as a card with its `choices`. The second no-answer: `say` + their page, no question. Her words below only join
+# them; nothing here decides a call (venue.call_again does, under the booking's one approval).
+NO_CALL_OPEN = "There's no call of theirs I can try again — nothing was dialled."
+WA_TRY_AGAIN = "Reply \"try once more\" and I'll call them again."       # on WhatsApp the card's first choice is a reply
+FORM_HERE = "Their form: {page}"
+
+
+def no_answer_words(res: dict, channel: str = "page") -> str:
+    """AgAPI's no-answer, said: its `say`, then (the first time) its `ask`, and their page — never a line of her own about a call."""
+    said = str(res.get("say") or "").strip()
+    ask = str(res.get("ask") or "").strip()
+    page = str((res.get("next_step") or {}).get("page") or (res.get("next_step") or {}).get("phone") or "").strip()
+    parts = [said]
+    if ask and channel == "whatsapp":   # no card on WhatsApp: the question, how to answer it, and the form's link
+        parts += [ask, WA_TRY_AGAIN] + ([FORM_HERE.format(page=page)] if page else [])
+    elif ask:
+        parts.append(ask)               # on the page the choices are the card's buttons
+    elif page:
+        parts.append(page)              # the second: the line + the link, no question
+    return " ".join(p for p in parts if p)
+
+
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

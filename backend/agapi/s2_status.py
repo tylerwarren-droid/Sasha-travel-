@@ -52,8 +52,10 @@ def _call_line(b: dict) -> str:
         # only a real wait is said (R10's 30 minutes): never "now" or a count — found live, she turned "next call now, 3 left today"
         # into "they haven't picked up so far, I can try again now" before any call was made
         extra = f" · the next call from {str(nc['allowed_at'])[11:16]} UTC"
-    if b.get("status") == "no_answer" and step:
-        extra = f" · their page: {step['page']}" if step.get("page") else f" · their number: {step['phone']}" if step.get("phone") else ""
+    if b.get("status") == "no_answer":   # Sasha 269 · CR 100 §C: venue.booking_status's own words — its say, its ONE question, its page
+        said = " ".join(str(b.get(k) or "").strip() for k in ("how", "ask") if b.get(k))
+        extra = (f" · {said}" if said else "") + (f" · their page: {step['page']}" if step.get("page") else
+                                                   f" · their number: {step['phone']}" if step.get("phone") else "")
     return _venue_line(b) + extra
 
 

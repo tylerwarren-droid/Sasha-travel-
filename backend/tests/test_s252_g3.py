@@ -144,33 +144,29 @@ class NoReplyCall(Base):
     B = {"id": "bk-12345678-0000", "venue": "Botavara Chamberí", "date": "2026-10-03", "time": "21:00", "party": 2, "read_id": "r-1"}
     READ = {"read_id": "r-1", "read": {"name": "Botavara Chamberí", "country": "ES", "facts": [{"kind": "phone"}]}}
 
+    # Sasha 269 (CR 100) · MOVED: Sasha's own R5 question ("No reply yet … Shall I call them?") and its call are deleted — R5 is the act's
+    # (venue.call_again). A question left in a stored state from before is still answered, and nothing is prepared or dialled.
     def ask(self):
-        # Sasha 254 · the old flow's route is the booking rules' (agapi.booking_decide.legacy_decision): this person may call
-        p = mock.patch("agapi.booking_decide.access_cached", lambda a: {"mode": "live", "calls": "on", "real_venue_sends": "on"})
-        p.start()
-        self.addCleanup(p.stop)
-        run(GW.offer_no_reply_call(self.ch, self.B, self.READ))
+        self.assertFalse(hasattr(GW, "offer_no_reply_call") or hasattr(GW, "auto_call_from_email") or hasattr(GW, "offer_escalation"))
+        st = self.st()
+        st["pending"] = {"kind": "no_reply_call", "at": GW.NOW().isoformat(), "id": self.B["id"], "sha": "s" * 64, "read": {}, "draft": {},
+                         "prefer": "call"}
+        run(GW.STORE.put_state(GW.wa_key(GUEST), st))
         self.assertEqual(self.pend()["kind"], "no_reply_call")
 
     def test_tap_then_the_routes_own_question_tapped(self):
         self.ask()
-        self.say("", payload=self.last_buttons()[0], text="Yes, prepare the call")
-        # Sasha 254 · the rules decided the call: its OWN read-back and yes (no second "which way?" question — decide.ladder retired)
-        self.assertEqual((self.pend()["kind"], self.pend()["rung"]), ("confirm", "call"))
-        self.say("", payload=self.last_buttons()[0], text="Yes")
-        self.assertIn("/api/booking/calls", self.paths())            # its read-back made and approved, the call placed (old _approve)
-        self.assertTrue(any(p.endswith("/place") for p in self.paths()))
+        self.say("", payload=f"yes:{self.B['id'][:8]}:{'s' * 16}", text="Yes, prepare the call")
+        self.assertIsNone(self.st()["pending"])
+        self.assertNotIn("/api/booking/calls", self.paths())          # nothing prepared, nothing placed
         self.assertEqual(self.seen, [])
 
     def test_typed_yes_after_a_message_in_between_and_typed_to_the_routes_question(self):
         self.ask()
         self.in_between()
-        self.say("yes")                                               # was: → the brain → lost
-        self.assertEqual((self.pend()["kind"], self.pend()["rung"]), ("confirm", "call"))   # Sasha 254 · the call's own read-back
-        self.in_between()
         self.say("yes")
-        self.assertTrue(any(p.endswith("/place") for p in self.paths()))
-        self.assertEqual(self.seen, ["what's the weather in Madrid tomorrow"] * 2)
+        self.assertFalse(any(p.endswith("/place") for p in self.paths()))
+        self.assertEqual(self.seen, ["what's the weather in Madrid tomorrow"])
 
     def test_typed_no(self):
         self.ask()

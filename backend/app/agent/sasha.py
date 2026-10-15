@@ -178,6 +178,7 @@ RENDER.update({"remember_name": "inline"})   # Sasha 246
 RENDER.update({"save_contact": "inline"})   # Sasha 253 · the booking contact, saved
 RENDER.update({"hotel_request": "read_back"})   # Sasha 235 · upgrade my room: its read-back, then the outcome on the same card
 RENDER.update({"file_confirmation": "inline", "time_between": "inline", "add_to_trip": "inline", "save_for_later": "inline"})   # Sasha 253
+RENDER.update({"call_again": "inline"})   # Sasha 269 · "try once more": the act's own words, said
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
@@ -1593,6 +1594,10 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
     from agapi import venues as VN
     from agapi import agapi_route as _AR
     ctx = API.Ctx(account=account, mode=_AR.ctx_mode(), user_said=message, session=session, surface=surface)
+    if tap.get("choice") == "call_again" and tap.get("act_id"):   # Sasha 269 · the no-answer card's "Try once more": the act's own call
+        async for ev in _try_again(account, str(tap["act_id"])[:80]):
+            yield ev
+        return
     rid = str(tap.get("read_back_id") or "")[:80]
     choice = "page" if tap.get("choice") == "page" else "call"
     ctx.idem = f"card_tap:{account}:{rid}:{choice}"
@@ -1612,6 +1617,21 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
     yield {"type": "text", "delta": line}
     yield {"type": "say", "text": line}
     yield {"type": "done", "text": line, "guard": [], "tools": [{"tool": tool, "ok": r["ok"], "status": res.get("status")}]}
+
+
+async def _try_again(account: str, act_id: str):
+    """Sasha 269 · CR 100 · "Try once more" on the no-answer card → venue.call_again reason person_asked under the booking's ONE approval
+    (no new card) → Sasha dials ONLY its call_plan. Said: the act's own `say`. A double tap is the same call (the act answers it)."""
+    from agapi import venue_calls as VC
+    try:
+        res = await VC.again(account, act_id, "person_asked")
+    except Exception as e:
+        log.error("[agent] try once more failed: %s: %s", type(e).__name__, e)
+        res = {"status": "error", "say": _V.NO_CALL_OPEN}
+    line = str(res.get("say") or _V.NO_CALL_OPEN).strip()
+    yield {"type": "text", "delta": line}
+    yield {"type": "say", "text": line}
+    yield {"type": "done", "text": line, "guard": [], "tools": [{"tool": "call_again", "ok": res.get("status") == "calling", "status": res.get("status")}]}
 
 
 @router.post("/turn")

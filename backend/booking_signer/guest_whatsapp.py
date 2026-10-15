@@ -117,7 +117,7 @@ NO_CONTACT = ("I need the name and mobile to book under first. Add them once at 
 
 _STOP = re.compile(r"^\s*(stop|parar|baja|arr[eê]t|unsubscribe|cancelar suscripci[oó]n)\s*[.!]?\s*$", re.I)
 _START = re.compile(r"^\s*(start|unstop|alta)\s*[.!]?\s*$", re.I)
-_LINK = re.compile(r"^\s*link\s+(\d{6})\s*$", re.I)
+_LINK = re.compile(r"^\s*(?:kanoe\s+)?link\s+(\d{6})\s*$", re.I)   # Sasha 269 · AgAPI's text: "Kanoe link 123456"
 _RECEIPTS = re.compile(r"\b(receipts?|my bookings?|my reservations?|itinerary|what have i booked)\b", re.I)
 _HELP = re.compile(r"^\s*(help|ayuda|\?|hi|hello|hola)\s*[.!?]?\s*$", re.I)
 _NO = re.compile(r"^\s*(no|nope|not now|don'?t|cancel that|stop that)\b", re.I)
@@ -616,13 +616,22 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     m = _LINK.match(p.get("Body") or "")
     if m:
         tries = [t for t in st.get("link_tries") or [] if _dt(t) > now - timedelta(hours=1)]
-        if len(tries) >= LINK_TRIES_PER_HOUR:
+        if len(tries) >= LINK_TRIES_PER_HOUR:   # Sasha 269 · an unverified number: nothing is sent to it (CR 100)
             await STORE.put_state(key, {**st, "link_tries": tries})
-            return _twiml_message(TOO_MANY.format(web=web_url()))
+            log.info("[guest_whatsapp] too many link tries — nothing sent to that number")
+            return ""
         code = await STORE.take_code(m[1], now)
-        if code is None:
+        if code is None:   # Sasha 269 · an UNVERIFIED number: nothing is sent to it (CR 100) — the page says what to do
             await STORE.put_state(key, {**st, "link_tries": tries + [now.isoformat()]})
-            return _twiml_message(BAD_CODE.format(web=web_url()))
+            log.info("[guest_whatsapp] a link code that isn't waiting — nothing sent to that number")
+            return ""
+        # Sasha 269 · CR 100 §F: AgAPI says whether the code came FROM the number being linked (Sasha-signed) — verified only then
+        from agapi import venue_submit as VS
+        ok = await VS.confirm_whatsapp(code["account_id"], sender, p.get("MessageSid") or "", p.get("Body") or "")
+        if not ok.get("ok") or ok.get("state") != "verified":
+            await STORE.put_state(key, {**st, "link_tries": tries + [now.isoformat()]})
+            log.info("[guest_whatsapp] link not verified by AgAPI (%s) — nothing linked, nothing sent", (ok.get("error") or {}).get("code"))
+            return ""
         await STORE.link({"account_id": code["account_id"], "wa_id_sha256": key, "number_e164": sender, "linked_at": now,
                           "consent_at": code["consent_at"], "consent_wording_version": code["consent_wording_version"],
                           "consent_text_sha256": code["consent_text_sha256"]})
@@ -2153,10 +2162,10 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             out.text("OK — nothing more. I'll show you their reply if one arrives.")
             return True
-        if payload.startswith("yes:") or YS.is_yes(body):
-            st["pending"] = None
-            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
-                                        "prefer": pend.get("prefer") or "call"})
+        if payload.startswith("yes:") or YS.is_yes(body):   # Sasha 269 · a question left from before 269: Sasha's own R5 call is gone
+            st["pending"] = None                              # (a call is the act's — venue.call_again); nothing is prepared or dialled
+            from app.agent import voice as V
+            out.text(V.NO_CALL_OPEN)
             return True
         return False
     if kind in ("confirm", "cancel_confirm"):
@@ -2454,10 +2463,10 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             out.text("OK — nothing more. I'll show you their reply if one arrives.")
             return True
-        if payload.startswith("yes:") or YS.is_yes(body):
-            st["pending"] = None
-            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
-                                        "prefer": pend.get("prefer") or "call"})
+        if payload.startswith("yes:") or YS.is_yes(body):   # Sasha 269 · a question left from before 269: Sasha's own R5 call is gone
+            st["pending"] = None                              # (a call is the act's — venue.call_again); nothing is prepared or dialled
+            from app.agent import voice as V
+            out.text(V.NO_CALL_OPEN)
             return True
         return False
     if kind in ("confirm", "cancel_confirm"):
@@ -3190,28 +3199,7 @@ def result_lines(v: dict, venue: str, purpose: str, what: str = "") -> List[str]
     return out
 
 
-async def offer_escalation(ch: dict, b: dict, read_row: dict, prefer: str, question: str, yes_title: str) -> str:
-    """Sasha 130/131 · the next rung of the escalation policy, ASKED: one question, inside the 24-hour window only. Its yes
-    leads to that route's own read-back and yes; nothing is sent or dialled from the question itself."""
-    st = await STORE.get_state(ch["wa_id_sha256"])
-    last = st.get("last_inbound_at")
-    if not (last and NOW() - last <= SESSION_WINDOW) or not guest_numbers():
-        return "not sent: outside the 24-hour window"
-    read = read_row.get("read") or {}
-    venue = b.get("venue") or read.get("name") or "the venue"
-    kinds = {f.get("kind") for f in read.get("facts") or []}
-    rd = {"read_id": str(read_row.get("read_id") or b["read_id"]), "country": read.get("country"), "venue": venue,
-          "rungs": {**({"phone": {"fact_index": None, "value": None}} if "phone" in kinds else {}),
-                    **({"email": {"fact_index": None, "value": None}} if "email" in kinds else {})},
-          "open_now": None, "opens_at": None}
-    draft = {"what": {"activity": b.get("what") or "a table", "activity_venue_lang": b.get("what") or "a table",
-                      "category": b.get("category") or "restaurant"},
-             "when": {"mode": "at", "at": f"{b['date']}T{b['time']}"}, "how_many": {"count": b.get("count") or b.get("party"), "unit": "people"}}
-    sha = hashlib.sha256(f"{b['id']}|{prefer}".encode()).hexdigest()
-    out = Out().ask(question, [(yes_title, f"yes:{b['id'][:8]}:{sha[:16]}"), ("No", f"no:{b['id'][:8]}:{sha[:16]}")])
-    st["pending"] = {"kind": "no_reply_call", "at": NOW().isoformat(), "id": b["id"], "sha": sha, "read": rd, "draft": draft, "prefer": prefer}
-    await STORE.put_state(ch["wa_id_sha256"], st)
-    return ", ".join(await deliver(ch, sender_for(st), out, last))
+# Sasha 269 · offer_escalation (the R5 question's sender) DELETED with offer_no_reply_call — R5 is the act's (venue.call_again).
 
 
 _TAPPED: set = set()
@@ -3321,31 +3309,8 @@ def _draft_of(b: dict) -> dict:
             "how_many": {"count": b.get("count") or b.get("party") or 2, "unit": "people"}}
 
 
-async def auto_call_from_email(ch: dict, b: dict, email_id: str) -> str:
-    """Sasha 132 · no reply within 24 h and the guest's yes covered it: the call is prepared and PLACED under that yes."""
-    account = ch["account_id"]
-    s, cj = await api(account, "POST", "/api/booking/calls", {"reservation": _draft_of(b), "read_id": str(b["read_id"])})
-    if s != 200:
-        await _tell(ch, f"No reply from {b.get('venue')} in 24 hours. I was going to call them as agreed, but couldn't prepare it: {refusal_words(cj, s)}.")
-        return f"not prepared: {s}"
-    s2, pj = await api(account, "POST", f"/api/booking/calls/{cj['call_id']}/place",
-                       {"read_back_sha256": cj["read_back"]["sha256"], "approval": {"how": "escalation_plan", "from": {"kind": "email", "id": email_id}}}, timeout=120)
-    if s2 != 200 or pj.get("status") not in ("placed", "uncertain", "scheduled"):
-        await _tell(ch, f"No reply from {b.get('venue')} in 24 hours. I tried to call them as agreed, but couldn't: {pj.get('why') or refusal_words(pj, s2)}.")
-        return "not placed"
-    when = f" at {str(pj.get('scheduled_for') or '')[11:16]}, when they open" if pj.get("status") == "scheduled" else " now"
-    await _tell(ch, f"No reply from {b.get('venue')} to my email in 24 hours, so — as you agreed — I'm calling them{when}. I'll tell you what they say.")
-    if pj.get("status") in ("placed", "uncertain") and guest_numbers():
-        _spawn(watch_call(ch, sender_for(await STORE.get_state(ch["wa_id_sha256"])), account, cj["call_id"], b.get("venue") or "the venue", "book",
-                          f"{SN.day_words(b['date'])} at {b['time']}"))
-    return pj.get("status")
-
-
-async def offer_no_reply_call(ch: dict, b: dict, read_row: dict) -> str:
-    venue = b.get("venue") or (read_row.get("read") or {}).get("name") or "the venue"
-    return await offer_escalation(ch, b, read_row, "call",
-                                  f"No reply yet from {venue} to my email about {SN.day_words(b['date'])} at {b['time']}. Shall I call them? "
-                                  f"I'll show you exactly what I'll say first.", "Yes, prepare the call")
+# Sasha 269 (CR 100) · DELETED: auto_call_from_email and offer_no_reply_call (Sasha 130/132's own R5 call after an email nobody answered).
+# R5 is the act's: proactive.no_reply_offers → venue_calls.again(act, "R5") → venue.call_again → its call_plan only.
 
 
 WATCH_DEPOSIT = (15, 40)   # every 15 s for 10 minutes
@@ -3767,8 +3732,9 @@ async def whatsapp_view(request: Request):
 
 @router.post("/whatsapp/link")
 async def whatsapp_link(request: Request):
-    """The guest ticked consent v2 (its version and hash prove these exact words were shown): a six-digit code, ten
-    minutes, one use, and the wa.me link that opens their WhatsApp with "LINK 123456" ready to send."""
+    """The guest ticked consent v2 (its version and hash prove these exact words were shown) and gave their WhatsApp number.
+    Sasha 269 · CR 100 §E: users.link_whatsapp registers it UNVERIFIED and returns a one-time code — NOTHING is sent to it; the
+    wa.me link opens their WhatsApp with AgAPI's text ("Kanoe link 123456") ready to send to Kanoe. Verified only when it arrives."""
     from .account import account_for
     account = account_for(request)
     try:
@@ -3783,20 +3749,28 @@ async def whatsapp_link(request: Request):
         return _refuse(503, "whatsapp_off", "Sasha isn't on WhatsApp for guests on this server yet")
     if STORE is None:
         return _refuse(503, "storage_not_provisioned", "WhatsApp linking is not set up on this server")
+    theirs = re.sub(r"[^\d+]", "", str(body.get("whatsapp") or ""))
+    if not re.fullmatch(r"\+[1-9]\d{6,14}", theirs):
+        return _refuse(422, "number_invalid", "your WhatsApp number, with its country code (+34 …)")
+    from agapi import venue_submit as VS
+    got = await VS.link_whatsapp(account, theirs)   # registered UNVERIFIED; nothing is sent to it
+    if not got.get("ok"):
+        return _refuse(422 if got["error"]["code"] == "invalid_input" else 503, got["error"]["code"], got["error"]["message"])
+    if got.get("state") == "verified" or not got.get("code"):
+        return {"verified": True, "say": got.get("say")}
     now = NOW()
-    for _ in range(5):
-        code = f"{secrets.randbelow(10 ** 6):06d}"
-        try:
-            ok = await STORE.put_code({"code": code, "account_id": account, "consent_at": now, "consent_wording_version": c["version"],
-                                       "consent_text_sha256": c["sha256"], "created_at": now})
-        except StorageUnavailable as e:
-            return _refuse(503, e.rule, e.detail)
-        if ok:
-            from urllib.parse import quote
-            return {"code": code, "expires_at": (now + CODE_LIFE).isoformat(), "number": number,
-                    "wa_link": f"https://wa.me/{number.lstrip('+')}?text={quote('LINK ' + code)}",
-                    "join": os.getenv("SASHA_WA_SANDBOX_JOIN", "").strip() or None}
-    return _refuse(503, "code_unavailable", "no code could be made just now; try again")
+    try:   # Sasha's own note of whose code it is (the inbound message names the account), the code AgAPI made
+        ok = await STORE.put_code({"code": got["code"], "account_id": account, "consent_at": now, "consent_wording_version": c["version"],
+                                   "consent_text_sha256": c["sha256"], "created_at": now})
+    except StorageUnavailable as e:
+        return _refuse(503, e.rule, e.detail)
+    if not ok:
+        return _refuse(503, "code_unavailable", "no code could be made just now; try again")
+    from urllib.parse import quote
+    text = str(got.get("text") or f"Kanoe link {got['code']}")
+    return {"code": got["code"], "text": text, "expires_at": got.get("expires_at"), "number": number, "sent": False,
+            "wa_link": f"https://wa.me/{number.lstrip('+')}?text={quote(text)}", "say": got.get("say"),
+            "join": os.getenv("SASHA_WA_SANDBOX_JOIN", "").strip() or None}
 
 
 @router.delete("/whatsapp")

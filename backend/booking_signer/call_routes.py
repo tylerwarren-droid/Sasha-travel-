@@ -153,119 +153,9 @@ RESOLVE_AFTER = timedelta(seconds=90)    # S-57 · longer than the 60 s the requ
 GIVE_UP_AFTER = timedelta(minutes=10)    # no call in Bland's log by then: it was not placed
 
 
-#: Sasha 108 · an UNCLEAR booking call resolves itself: ONE short confirmation call to the same venue, at once, covered by
-#: the guest's yes (it confirms the same booking, it books nothing new), ending with the explicit recap. Spanish and
-#: English venues; any other language goes straight to the written ask.
-CONFIRM_OPENING = {
-    "es": "Hola, soy Sasha otra vez, la concierge de inteligencia artificial de Kanoe Technologies SL. Les llamé hace un "
-          "momento por una reserva y se cortó la llamada. ",
-    "en": "Hello, it's Sasha again, the AI concierge from Kanoe Technologies SL. I called a moment ago about a booking and "
-          "we were cut off. ",
-}
-CONFIRM_TASK = ("This is a short CONFIRMATION call. Minutes ago you called this venue to book exactly this booking, and the "
-                "call ended before it was confirmed. Do NOT book it a second time: if they say it is already noted, that is "
-                "fine — still read the recap and wait for its yes. ")
-
-
-def confirm_brief(call: dict) -> Optional[dict]:
-    """The confirmation call's brief: the booking's own brief, its opening now the call-back sentence with the recap."""
-    brief = dict(call.get("brief") or {})
-    lang = (brief.get("language") or "")[:2]
-    if brief.get("purpose") != "book" or brief.get("confirms_call_id") or lang not in CONFIRM_OPENING or not brief.get("recap"):
-        return None
-    first = CONFIRM_OPENING[lang] + brief["recap"]
-    task = str(brief.get("task") or "")
-    old_first = brief.get("first_sentence") or ""
-    task = task.replace(f'You already said: "{old_first}"', f'You already said: "{first}"') if old_first in task else task
-    return {**brief, "first_sentence": first, "task": CONFIRM_TASK + task, "confirms_call_id": str(call["call_id"])}
-
-
-async def confirm_unclear(call: dict) -> str:
-    """Place the ONE confirmation call. Returns "placed" or why not, in words (logged; the tests read it)."""
-    if _no_act(call):   # Sasha 265 · item 4: a confirmation call is a booking call — no act, never placed
-        return "not placed: " + NO_ACT
-    if not C.calls_enabled() or not C.bland_key():
-        return "not placed: phone calls are off"
-    brief = confirm_brief(call)
-    if brief is None:
-        return "not placed: not a booking call that can be confirmed by phone (or already a confirmation)"
-    if await CALL_STORE.confirming(str(call["call_id"])):
-        return "not placed: a confirmation call already exists"
-    refused = await ladder_routes._optin_refusal(brief.get("venue_ids"), "phone")
-    if refused:
-        return "not placed: the venue asked not to be called"
-    now = NOW()
-    lines = list(call["read_back_lines"]) + [f"Sasha calls back once to confirm it, as your yes covered: \"{brief['first_sentence']}\""]
-    row = {"call_id": str(uuid.uuid4()), "account_id": str(call["account_id"]), "venue_key": call["venue_key"],
-           "dialled_number": call["dialled_number"], "language": call["language"], "guest_name": call.get("guest_name"),
-           "guest_phone": call.get("guest_phone"), "brief": brief, "brief_sha256": C._sha256hex(C._canonical(brief)),
-           "read_back_lines": lines, "read_back_sha256": C._sha256hex("\n".join(lines)), "created_at": now,
-           "request": call.get("request")}
-    await CALL_STORE.put_cancel_call(row, str(call["trip_item_id"]))   # the SAME reservation (no new trip item)
-    try:
-        dial = await PT.dialable(HTTP, brief, now)
-    except PT.ListingUnavailable as e:
-        return f"not placed: {e}"
-    approval = {"by": str(call["account_id"]), "how": "auto", "said": None, "at": now.isoformat(), "kind": "confirm_unclear",
-                "after_call": str(call["call_id"]), "covered_by_read_back_sha256": call["read_back_sha256"],
-                "read_back_sha256": row["read_back_sha256"], "brief_sha256": row["brief_sha256"]}
-    if await too_soon(str(call["account_id"]), row, now):
-        # Sasha 254 · R10 — never an instant redial to the same venue: the confirmation call waits the rules' 30 minutes, covered by
-        # the same yes; place_due asks the rules again (calls on, 3 a day, 30 minutes) when it is due, and a stop is told
-        from agapi.booking_rules import booking_rules as BR
-        later = now + timedelta(minutes=BR.MIN_MINUTES_BETWEEN_CALLS_SAME_VENUE)
-        r = await CALL_STORE.schedule(str(call["account_id"]), row["call_id"],
-                                      {**approval, "scheduled_for": later.isoformat(), "opens_at": later.isoformat(),
-                                       "hours_basis": "the booking rules: 30 minutes between two calls to the same venue (R10)",
-                                       "hours_notes": []}, now, now - APPROVAL_WINDOW)
-        return f"scheduled for {later.strftime('%H:%M')} UTC" if r == "scheduled" else f"not placed: {r}"
-    claimed = await CALL_STORE.claim(str(call["account_id"]), row["call_id"], approval, now, now - APPROVAL_WINDOW, cap(),
-                                     cap_window(now), account_cap())
-    if claimed != "claimed":
-        return f"not placed: {claimed}"
-    placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(dial, row["call_id"]))
-    placed = dataclasses.replace(placed, answer=PT.scrub_bland(placed.answer, brief))
-    await CALL_STORE.mark_placed(row["call_id"], placed, NOW())
-    return "placed" if (placed.placed or placed.uncertain) else f"not placed: {placed.why}"
-
-
-async def retry_confirmation(conf: dict) -> str:
-    """Sasha 108 · a confirmation call that reached no one (voicemail, no answer) is tried ONCE more — when the venue
-    opens by its listed hours, else in 30 minutes — covered by the same yes. Never a third attempt."""
-    brief = dict(conf.get("brief") or {})
-    field = "confirms_call_id" if brief.get("confirms_call_id") else "cancels_call_id"   # Sasha 109 · a cancelling call too
-    original = brief.get(field)
-    if not original:
-        return "not scheduled: not a confirmation or cancelling call"
-    if len(await CALL_STORE.confirmations(original, field)) >= 2:
-        return "not scheduled: it was already tried twice"
-    if field == "confirms_call_id" and _no_act(conf):   # Sasha 265 · item 4
-        return "not scheduled: " + NO_ACT
-    if not C.calls_enabled() or not C.bland_key():
-        return "not scheduled: phone calls are off"
-    account, now = str(conf["account_id"]), NOW()
-    read = await _read_of(account, brief)
-    st = H.status(read, now, brief["timezone"]) if read else {"known": False}
-    if st.get("known") and st.get("open_now") is False and st.get("call_at"):
-        when, opens, basis, notes = st["call_at"], st["opens_at"], st.get("basis"), st.get("notes")
-        hhmm = (datetime.fromisoformat(st["opens_at"]) + H.AFTER_OPENING).strftime("%H:%M")
-    else:
-        later = now + timedelta(minutes=30)
-        when, opens, basis, notes = later.isoformat(), later.isoformat(), "30 minutes after a call nobody answered", []
-        from zoneinfo import ZoneInfo
-        hhmm = later.astimezone(ZoneInfo(brief["timezone"])).strftime("%H:%M")
-    row = {"call_id": str(uuid.uuid4()), "account_id": account, "venue_key": conf["venue_key"], "dialled_number": conf["dialled_number"],
-           "language": conf["language"], "guest_name": conf.get("guest_name"), "guest_phone": conf.get("guest_phone"),
-           "brief": brief, "brief_sha256": conf["brief_sha256"], "read_back_lines": conf["read_back_lines"],
-           "read_back_sha256": conf["read_back_sha256"], "created_at": now, "request": conf.get("request")}
-    await CALL_STORE.put_cancel_call(row, str(conf["trip_item_id"]))   # the SAME reservation
-    approval = {"by": account, "how": "auto", "said": None, "at": now.isoformat(),
-                "kind": "confirm_retry" if field == "confirms_call_id" else "cancel_retry", "after_call": str(conf["call_id"]),
-                "covered_by_read_back_sha256": (conf.get("approval") or {}).get("covered_by_read_back_sha256"),
-                "read_back_sha256": row["read_back_sha256"], "brief_sha256": row["brief_sha256"],
-                "scheduled_for": when, "opens_at": opens, "hours_basis": basis, "hours_notes": notes}
-    r = await CALL_STORE.schedule(account, row["call_id"], approval, now, now - APPROVAL_WINDOW)
-    return f"scheduled for {hhmm}" if r == "scheduled" else f"not scheduled: {r}"
+#: Sasha 269 (CR 100, booking-rules/2.1) · DELETED: Sasha 108's automatic confirmation call after an unclear booking call
+#: (confirm_unclear) and its retry after a no-answer (retry_confirmation, confirmation and cancelling calls alike). A call is an act's,
+#: opened by AgAPI only (venue.call_again on the person's "try once more"): Sasha keeps no call decision, retry or timer of its own.
 
 
 def money_or_time_asked(reading) -> Optional[str]:
@@ -302,18 +192,11 @@ async def _follow_up(call: dict, reading) -> None:
         return
     if (call.get("brief") or {}).get("confirms_call_id") or (call.get("approval") or {}).get("scheduled_for") \
             or ((call.get("brief") or {}).get("purpose") == "cancel" and reading.state == "not_reached"):
-        # Sasha 108 · a confirmation call's own result: retried once if nobody answered, and told to the guest on
-        # WhatsApp from HERE — a call scheduled hours ahead has no one watching it
-        nxt = None
-        if reading.state == "not_reached" and ((call.get("brief") or {}).get("confirms_call_id") or (call.get("brief") or {}).get("cancels_call_id")):
-            try:
-                nxt = await retry_confirmation(call)
-            except Exception as e:
-                nxt = f"not scheduled: {type(e).__name__}: {e}"
-            log.info("[confirm] confirmation call %s reached no one; the retry: %s", call.get("call_id"), nxt)
+        # Sasha 108 · a confirmation / scheduled / cancelling call's own result, told to the guest on WhatsApp from HERE (a call scheduled
+        # hours ahead has no one watching it). Sasha 269: never retried by Sasha (retry_confirmation deleted) — told, and that's all
         try:
             from . import guest_whatsapp as GW
-            log.info("[confirm] whatsapp: %s", await GW.push_confirmation_result(call, reading, nxt))
+            log.info("[confirm] whatsapp: %s", await GW.push_confirmation_result(call, reading, None))
         except Exception as e:
             log.error("[confirm] the WhatsApp result failed: %s: %s", type(e).__name__, e)
     # Sasha 254 · R8 (Tyler: deposits are REFUSED, never asked about) — the venue asked for a deposit, a fee or another time: the
@@ -334,15 +217,6 @@ async def _follow_up(call: dict, reading) -> None:
                 log.info("[booking_calls] call %s: money or another time asked — the call ended; told: %s", call.get("call_id"), d.get("told"))
             except Exception as e:
                 log.error("[booking_calls] the person was not told of call %s's stop: %s: %s", call.get("call_id"), type(e).__name__, e)
-    if reading.outcome == "unclear" and not deposit and (call.get("brief") or {}).get("purpose") == "book" \
-            and not (call.get("brief") or {}).get("confirms_call_id"):
-        try:
-            what = await confirm_unclear(call)
-        except Exception as e:
-            what = f"not placed: {type(e).__name__}: {e}"
-        log.info("[confirm] call %s was unclear; the confirmation call: %s", call.get("call_id"), what)
-        if what == "placed" or what.startswith("scheduled"):
-            return   # the written ask and the receipt follow the confirmation call's own result
     try:
         what = await FU.after_call(call, reading.outcome, NOW())
         if what:

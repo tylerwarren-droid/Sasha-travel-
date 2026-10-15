@@ -124,16 +124,17 @@ class NewChatClearsTheConversationOnly(unittest.TestCase):
 
 
 # ── 4 · CR 99 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-ROW_934 = {"booking_rules.py": "1ee3c87abd347eaf87bd627a3887f5bd9d9e37c9d723d408dd6184409716dd0c",
-           "vectors.json": "e326bbc7e268ad1d4032bccf56676346b3fc660819ac237e507c2dd9edc65b47",
-           "test_booking_rules.py": "188aa758b1df7ef343496de15cb547cf464d1c000192cc2b021a92d6ffe8a8f2"}
+# Sasha 269 · moved to booking-rules/2.1 (CR 100, mailbox row 965) — was row 934's booking-rules/2
+ROW_965 = {"booking_rules.py": "451de0e8d9de307ff8baabf384758b7f149231f3a8e3709d71009285813fbf73",
+           "vectors.json": "0897fbc1b1f6b4d91ed09858452ea7cb4f892d58c9f934561bc629854e66aa03",
+           "test_booking_rules.py": "f8ea37181ff9dcb7a4bae65f0dea311f73e07be5091893ca77dcdaa00cf03b23"}
 PAGE_AND_PHONE = {"form": {}, "phone": {"fact_index": 0, "value": "+34910000000"}}
 
 
 class BookingRules2(unittest.TestCase):
-    def test_gate_vendored_byte_identical_to_row_934(self):
+    def test_gate_vendored_byte_identical_to_row_965(self):
         d = BACKEND / "agapi" / "booking_rules"
-        for name, want in ROW_934.items():
+        for name, want in ROW_965.items():
             self.assertEqual(hashlib.sha256((d / name).read_bytes()).hexdigest(), want, name)
         self.assertTrue(BR.VERSION.startswith("booking-rules/2"))
 
@@ -234,13 +235,15 @@ class OnlyFromTheAct(unittest.TestCase):
     def test_gate_after_every_call_the_attempt_and_its_words(self):
         told = []
 
-        async def tell(account, text):
+        async def tell(account, text, card=None, wa_text=None):
             told.append(text)
             return "captured"
         reading = C.CallReading(state="not_reached", outcome=None, venue_words="", quote=None, why="no answer", offer=None)
-        res = {"ok": True, "result": {"status": "recorded", "state": "no_answer", "say": BR.PHRASES["no_answer"],
+        # Sasha 269 · moved to booking-rules/2.1: the SECOND no-answer is "the form is the fastest way" + their page (no question)
+        res = {"ok": True, "result": {"status": "recorded", "state": "no_answer", "say": BR.PHRASES["no_answer"], "no_answers": 2,
                                       "next_step": {"kind": "their_page", "page": "https://casagate.es/reservas"}}}
-        with mock.patch.object(VS, "call_attempt", mock.AsyncMock(return_value=res)) as ca, mock.patch.object(VC, "tell", tell):
+        with mock.patch.object(VS, "call_attempt", mock.AsyncMock(return_value=res)) as ca, mock.patch.object(VC, "tell", tell), \
+                mock.patch.object(VS, "acts_of", mock.AsyncMock(return_value=[])):
             got = run(VC.after_call({"account_id": ACCT, "brief": {"act_id": "act_1"}}, reading))
         ca.assert_awaited_once_with(ACCT, "act_1", "no_answer", None, "none")
         self.assertEqual(told, [BR.PHRASES["no_answer"] + " https://casagate.es/reservas"])  # the next step, with it

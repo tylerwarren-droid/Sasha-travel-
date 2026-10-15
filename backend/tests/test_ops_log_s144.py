@@ -68,7 +68,7 @@ class TestCallsAreLogged(unittest.TestCase):
         self.assertTrue(run(CRT.CALL_STORE.record_reading("c1", reading, {}, NOW)))
         self.assertEqual(CRT.CALL_STORE.attempts, [])
         with mock.patch.object(GR, "send_after_call", mock.AsyncMock(side_effect=AssertionError("no receipt for a test"))), \
-             mock.patch.object(CRT, "confirm_unclear", mock.AsyncMock(side_effect=AssertionError("no confirmation call"))):
+             mock.patch.object(CRT.C, "place_call", mock.AsyncMock(side_effect=AssertionError("no confirmation call"))):   # Sasha 269 · moved: no call is placed
             run(CRT._follow_up(CRT.CALL_STORE.calls["c1"], reading))
 
 

@@ -196,11 +196,12 @@ class G7NoSlot(Base):
         out = self.hold({"phone": {"fact_index": 2}}, what="a 60-minute massage", open_slot="whenever")
         self.assertEqual((out["status"], out["rules"]["action"]), ("need_day", "wait"))
         self.assertEqual(self.api.bodies("/api/booking/calls"), [])
-        out = self.hold({"phone": {"fact_index": 2}}, what="a 60-minute massage", open_slot="whenever", day=LATER)
-        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "call", "wait"))
-        res = self.api.bodies("/api/booking/calls")[0]["reservation"]
-        self.assertEqual((res["when"], res["flow"]), ({"mode": "venue_proposes"}, "availability"))   # the old flow's reservation
-        self.assertTrue(out["when"].startswith("whenever they have space"))                        # GW.summary
+        # Sasha 269 · MOVED (CR 100): with a day but no time ("whenever they have space") the act has no slot to ask for — no call of
+        # Sasha's own (the old availability call was /api/booking/calls, never placed without an act): said, with the take-over
+        with self.assertRaises(API.ToolError) as e:
+            self.hold({"phone": {"fact_index": 2}}, what="a 60-minute massage", open_slot="whenever", day=LATER)
+        self.assertEqual(e.exception.code, "no_route")
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
 
     def test_the_venue_engines_own_page_never_takes_a_request_with_no_slot(self):
         eng = {"kind": "own_engine", "url": "https://casagate.es/reservas", "from": "engine", "ask": True,
@@ -249,18 +250,19 @@ class G8HotelOnTheLadder(Base):
         self.assertEqual(got["status"], "page_on_phone")
         self.assertFalse(any(p in ("/api/booking/forms",) for _m, p, _b in self.api.calls))
 
+    # Sasha 269 · MOVED (CR 100): a hotel STAY by phone was Sasha's own call (/api/booking/calls) — a call no act opened, never placed.
+    # Every call is an AgAPI act now, and a stay (nights) has none: said plainly, with the take-over — never a call of Sasha's own
     def test_a_call_says_the_stay_in_spanish_in_spain(self):
-        """hotel_ladder_s138 OnWhatsApp.test_a_call_says_the_stay_in_spanish_in_spain, on the brain's path."""
-        self.hold({"phone": {"fact_index": 0}}, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2, route="call")
-        what = self.api.bodies("/api/booking/calls")[0]["reservation"]["what"]
-        self.assertEqual(what["activity_venue_lang"], f"una habitación para 2 noches (salida el {OUT_DAY})")
-        self.assertEqual(what["activity"], f"a room for 2 nights (check-out {OUT_DAY})")
-        self.assertEqual(self.api.bodies("/api/booking/draft"), [])                                # the stay's own words, not a table
+        with self.assertRaises(API.ToolError) as e:
+            self.hold({"phone": {"fact_index": 0}}, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2, route="call")
+        self.assertEqual(e.exception.code, "no_route")
+        self.assertIn("take it over", e.exception.message)
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
 
     def test_outside_spain_the_call_says_it_in_english(self):
-        self.hold({"phone": {"fact_index": 0}}, venue="Anantara", country="VN", what="hotel", day=LATER, nights=2, route="call")
-        what = self.api.bodies("/api/booking/calls")[0]["reservation"]["what"]
-        self.assertEqual(what["activity_venue_lang"], what["activity"])
+        with self.assertRaises(API.ToolError):
+            self.hold({"phone": {"fact_index": 0}}, venue="Anantara", country="VN", what="hotel", day=LATER, nights=2, route="call")
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
 
     def test_request_from_the_hotel_is_the_real_path(self):
         """hotel_test_s135 OnWhatsApp.test_request_from_the_hotel_is_the_real_path: the hotel is READ, as any real booking — never

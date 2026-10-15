@@ -479,43 +479,21 @@ class CallRoutes:
         r = self.c.post("/api/booking/calls", json={**JOHNSON, "phone_number": "+15555550100"})
         self.assertEqual(r.json()["rule"], "number_from_request")
 
-    def test_sasha108_an_unclear_booking_gets_one_confirmation_call_on_the_same_reservation(self):
+    # Sasha 269 (CR 100, booking-rules/2.1) · MOVED: Sasha 108/109's automatic confirmation call and its retry (confirm_unclear,
+    # retry_confirmation) are deleted — Sasha keeps no call decision of its own; a call is an act's (venue.call_again on the person's ask)
+    def test_sasha108_an_unclear_booking_gets_no_call_of_sashas_own(self):
         prep = self.prepare()
         self.assertEqual(self.yes(prep).json()["status"], "placed")
-        from booking_signer.identity import founder_account
-        acct = founder_account()
-        call = self.c.portal.call(self.store.get_call, str(acct), prep["call_id"])
         before = len(self.bland.requests)
-        # Sasha 254 · R10 — never an instant redial: the confirmation call waits the rules' 30 minutes (covered by the same yes)
-        self.assertEqual(self.c.portal.call(call_routes.confirm_unclear, call), f"scheduled for {(self.now + timedelta(minutes=30)).strftime('%H:%M')} UTC")
-        self.assertEqual(len(self.bland.requests), before)                                       # nothing dialled now
-        conf_id = self.c.portal.call(self.store.confirming, prep["call_id"])
+        self.assertFalse(hasattr(call_routes, "confirm_unclear") or hasattr(call_routes, "confirm_brief"))
         self.now = self.now + timedelta(minutes=31)
-        self.assertEqual(self.c.portal.call(call_routes.place_due), 1)                          # 30 minutes on: placed
-        self.assertEqual(len(self.bland.requests), before + 1)
-        conf = self.c.portal.call(self.store.get_call, str(acct), conf_id)
-        self.assertEqual(str(conf["trip_item_id"]), str(call["trip_item_id"]))                 # the SAME reservation
-        self.assertEqual((conf["approval"]["how"], conf["approval"]["kind"]), ("auto", "confirm_unclear"))
-        self.assertTrue(conf["brief"]["first_sentence"].endswith(call["brief"]["recap"]))      # it ends with the recap
-        self.assertEqual(conf["brief"]["confirms_call_id"], prep["call_id"])
-        self.assertEqual(self.c.portal.call(call_routes.confirm_unclear, call), "not placed: a confirmation call already exists")
-        self.assertIsNone(call_routes.confirm_brief(conf))                                      # never a confirmation of a confirmation
+        self.assertEqual(self.c.portal.call(call_routes.place_due), 0)                          # nothing scheduled, nothing dialled
+        self.assertEqual(len(self.bland.requests), before)
+        self.assertIsNone(self.c.portal.call(self.store.confirming, prep["call_id"]))
 
-    def test_sasha108_a_confirmation_nobody_answered_is_tried_once_more_never_a_third_time(self):
-        from booking_signer.identity import founder_account
-        prep = self.prepare()
-        self.yes(prep)
-        acct = founder_account()
-        call = self.c.portal.call(self.store.get_call, str(acct), prep["call_id"])
-        self.c.portal.call(call_routes.confirm_unclear, call)
-        conf = self.c.portal.call(self.store.get_call, str(acct), self.c.portal.call(self.store.confirming, prep["call_id"]))
-        r = self.c.portal.call(call_routes.retry_confirmation, conf)
-        self.assertTrue(r.startswith("scheduled for "), r)
-        tries = self.c.portal.call(self.store.confirmations, prep["call_id"])
-        self.assertEqual(len(tries), 2)
-        self.assertEqual(tries[1]["approval"]["kind"], "confirm_retry")
-        self.assertEqual(str(tries[1]["trip_item_id"]), str(call["trip_item_id"]))
-        self.assertEqual(self.c.portal.call(call_routes.retry_confirmation, tries[1]), "not scheduled: it was already tried twice")
+    def test_sasha108_a_confirmation_nobody_answered_is_never_retried_by_sasha(self):
+        self.assertFalse(hasattr(call_routes, "retry_confirmation"))
+        self.assertNotIn("retry_confirmation(", pathlib.Path(call_routes.__file__).read_text().split("def money_or_time_asked")[1])
 
     def test_sasha109_the_answered_call_stays_the_booking_after_an_unanswered_confirmation(self):
         """Live: Yatri's confirmation calls (one voicemail, one stopped) made "cancel" pick a call never answered."""
@@ -524,7 +502,6 @@ class CallRoutes:
         prep = self.prepare()
         self.yes(prep)
         call = self.c.portal.call(self.store.get_call, acct, prep["call_id"])
-        self.c.portal.call(call_routes.confirm_unclear, call)
         self.c.portal.call(self.store.record_reading, prep["call_id"],
                            C.CallReading(state="answered", outcome="unclear", venue_words="Sí, sí.", quote="Sí, sí.", why=""), {}, self.now)
         rows = self.c.portal.call(self.store.receipt_rows, acct, str(call["trip_item_id"]))
@@ -532,8 +509,8 @@ class CallRoutes:
         r = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]})
         self.assertEqual(r.status_code, 200, r.text)                                              # an unclear booking can be cancelled
 
-    def test_sasha109_a_cancelling_call_nobody_answered_is_tried_once_more(self):
-        """Live: Yatri's cancelling call (15:21) reached no one; an answering machine cancels nothing."""
+    def test_sasha109_a_cancelling_call_nobody_answered_is_not_retried_by_sasha(self):
+        """Live: Yatri's cancelling call (15:21) reached no one; an answering machine cancels nothing — and Sasha 269: nothing redials it."""
         from booking_signer.identity import founder_account
         acct = str(founder_account())
         prep = self.prepare()
@@ -543,12 +520,9 @@ class CallRoutes:
         self.now = self.now + timedelta(minutes=31)   # Sasha 254 · R10: 30 minutes between two calls to the same venue
         cx = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]}).json()
         self.c.post(f"/api/booking/calls/{cx['call_id']}/place", json={"read_back_sha256": cx["read_back"]["sha256"], "approval": {"how": "button"}})
-        cancel = self.c.portal.call(self.store.get_call, acct, cx["call_id"])
-        r = self.c.portal.call(call_routes.retry_confirmation, cancel)
-        self.assertTrue(r.startswith("scheduled for "), r)
         tries = self.c.portal.call(self.store.confirmations, prep["call_id"], "cancels_call_id")
-        self.assertEqual([t["approval"].get("kind") for t in tries][1], "cancel_retry")
-        self.assertEqual(self.c.portal.call(call_routes.retry_confirmation, tries[1]), "not scheduled: it was already tried twice")
+        self.assertEqual(len(tries), 1)                                                          # the one cancelling call, never a retry
+        self.assertFalse(hasattr(call_routes, "retry_confirmation"))
 
     def test_the_yes_must_be_for_this_read_back(self):
         prep = self.prepare()

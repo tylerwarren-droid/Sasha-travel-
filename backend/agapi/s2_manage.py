@@ -605,6 +605,24 @@ async def save_for_later(ctx, a: dict) -> dict:
     return {"saved": said.startswith("Saved"), "say": said, "how": "Say this line as it is."}
 
 
+async def call_again(ctx, a: dict) -> dict:
+    """Sasha 269 · "try once more" / "call them again" in WORDS (the card's tap goes straight to venue_calls.again, no model between): the
+    booking's act → venue.call_again reason person_asked, under its ONE approval (no new card, nothing asked again) → Sasha dials only
+    that call_plan. Asked twice: the same call. Said: the act's own `say`."""
+    from agapi import venue_calls as VC, venue_submit as VS
+    from app.agent import voice as V
+    acts = [x for x in await VS.acts_of(ctx.account) if x.get("route") == "call" and not x.get("cancels")]
+    want = str(a.get("act_id") or "").strip()
+    name = re.sub(r"\W+", " ", str(a.get("venue") or "").lower()).strip()
+    act = next((x for x in acts if want and x.get("act_id") == want), None) \
+        or next((x for x in reversed(acts) if name and name in re.sub(r"\W+", " ", str(x.get("venue") or "").lower())), None) \
+        or next((x for x in reversed(acts) if x.get("state") == "no_answer"), None)
+    if not act:
+        return {"status": "no_act", "say": V.NO_CALL_OPEN, "how": "Say `say` as it is."}
+    got = await VC.again(ctx.account, act["act_id"], "person_asked")
+    return {**got, "venue": act.get("venue"), "booked": False, "how": "Say `say` word for word — nothing else."}
+
+
 def tools() -> List[dict]:
     from agapi.v0 import _t
     appr = {"approval": {"type": "object", "properties": {"said": {"type": "string"}}, "description": "the person's own words (filled by the caller)"}}
@@ -661,8 +679,13 @@ def tools() -> List[dict]:
            "tab and Requests (nothing booked, nothing contacted).",
            {"name": {"type": "string", "maxLength": 200}, "when": {"type": "string", "description": "YYYY-MM-DD or YYYY-MM-DDTHH:MM, if said"},
             "city": {"type": "string"}}, ["name"], {"type": "object", "properties": {"saved": {"type": "boolean"}}}, ["name_missing", "date_invalid"]),
+        _t("call_again", "Austen", call_again, "ONLY after a call that wasn't picked up, when they say 'try once more' / 'call them again': "
+           "the SAME booking's call, under the yes they already gave (never a new read-back, never ask again). The engine decides when "
+           "(never sooner than 30 minutes) and how many; say its `say` word for word.",
+           {"venue": {"type": "string"}, "act_id": {"type": "string"}}, [],
+           {"type": "object", "properties": {"status": {"type": "string"}, "say": {"type": "string"}}}, ["no_act"]),
     ]
 
 
 __all__ = ["my_plans", "running_late", "change_booking", "cancel_booking", "plans_of", "tools", "file_confirmation", "time_between",
-           "add_to_trip", "save_for_later"]
+           "add_to_trip", "save_for_later", "call_again"]

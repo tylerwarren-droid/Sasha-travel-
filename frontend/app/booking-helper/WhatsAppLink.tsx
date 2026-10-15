@@ -3,9 +3,10 @@
 /**
  * S-75 step 5 · USE SASHA ON WHATSAPP — link this account to the guest's WhatsApp number.
  *
- * The guest ticks the consent sentence (v2; its version and hash prove these exact words were shown), gets a six-digit
- * code (ten minutes, one use) and a wa.me link that opens their WhatsApp with "LINK 123456" ready to send. Sending it
- * proves the number is theirs; nothing is texted to them first. In the SANDBOX phase the number is Twilio's sandbox and
+ * The guest ticks the consent sentence (v2; its version and hash prove these exact words were shown), gives their WhatsApp
+ * number, and gets AgAPI's one-time text (Sasha 269 · CR 100: users.link_whatsapp — "Kanoe link 123456") and a wa.me link that
+ * opens their WhatsApp with it ready to send. Sending it proves the number is theirs (users.confirm_whatsapp); NOTHING is sent to
+ * the number before that. In the SANDBOX phase the number is Twilio's sandbox and
  * the guest must first join it ("join …"), which the server names when it knows the words.
  */
 import { useEffect, useState } from 'react'
@@ -16,13 +17,14 @@ import { Reminders } from './Reminders'
 
 type View = { linked: boolean; opted_out: boolean; number: string | null; join: string | null
   consent: { version: string; text: string; sha256: string } }
-type Code = { code: string; expires_at: string; number: string; wa_link: string; join: string | null }
+type Code = { code: string; text: string; expires_at: string; number: string; wa_link: string; join: string | null; say?: string }
 
 export function WhatsAppLink() {
   const [view, setView] = useState<View | null>(null)
   const [words, setWords] = useState<string | null>(null)
   const [ticked, setTicked] = useState(false)
   const [code, setCode] = useState<Code | null>(null)
+  const [wa, setWa] = useState('')   // Sasha 269 · their WhatsApp number: registered unverified, nothing sent to it
   const [busy, setBusy] = useState(false)
   // Sasha 104 · a WhatsApp booking needs the name and mobile to book under — saved here, once, under their own consent
   const [contact, setContact] = useState<{ saved: boolean; consent: Consent } | null>(null)
@@ -55,8 +57,9 @@ export function WhatsAppLink() {
         if (!c.ok) { setWords(`Not saved, so no code — ${refusal(c.json, c.status)}.`); return }
         setContact({ ...contact, saved: true })
       }
-      const r = await bookingReq('/api/booking/whatsapp/link', { consent_version: view.consent.version, consent_sha256: view.consent.sha256 })
+      const r = await bookingReq('/api/booking/whatsapp/link', { consent_version: view.consent.version, consent_sha256: view.consent.sha256, whatsapp: wa.trim() })
       if (!r.ok) { setWords(`No code — ${refusal(r.json, r.status)}.`); return }
+      if (r.json.verified) { setWords(String(r.json.say || 'That WhatsApp number is already linked.')); await load(); return }
       setCode(r.json as unknown as Code)
     } finally { setBusy(false) }
   }
@@ -102,8 +105,10 @@ export function WhatsAppLink() {
               </label>
             </div>
           )}
+          <input className="w-full rounded border px-2 py-1" inputMode="tel" placeholder="Your WhatsApp number, e.g. +34 600 000 000"
+            value={wa} onChange={(e) => setWa(e.target.value)} />
           <GatedButton label="Get my link code" onClick={() => { getCode().catch((e) => setWords((e as Error).message)) }}
-            needs={[!ticked && 'the box above ticked', contact && !contact.saved && who.name.trim().length < 2 && 'your name',
+            needs={[!ticked && 'the box above ticked', wa.replace(/\D/g, '').length < 8 && 'your WhatsApp number', contact && !contact.saved && who.name.trim().length < 2 && 'your name',
               contact && !contact.saved && who.mobile.trim().length < 8 && 'your mobile', contact && !contact.saved && !who.ticked && 'the details box ticked',
               busy && 'the last step to finish']} />
         </div>
@@ -111,9 +116,9 @@ export function WhatsAppLink() {
       {code && (
         <div className="space-y-1">
           {code.join && <p>1. This is Twilio&rsquo;s test number: first send <strong>{code.join}</strong> to {code.number} on WhatsApp.</p>}
-          <p>{code.join ? '2. ' : ''}Then send <strong>LINK {code.code}</strong> to {code.number} — this button opens WhatsApp with it ready:</p>
+          <p>{code.join ? '2. ' : ''}Then send <strong>{code.text}</strong> to {code.number} from that WhatsApp — this button opens WhatsApp with it ready:</p>
           <a className="inline-block rounded border px-3 py-1" href={code.wa_link} target="_blank" rel="noopener noreferrer">Open WhatsApp ↗</a>
-          <p className="text-xs opacity-70">The code works once, for ten minutes.</p>
+          <p className="text-xs opacity-70">{code.say || 'Nothing is sent to your number until that message arrives.'} The code works once, for ten minutes.</p>
         </div>
       )}
     </section>

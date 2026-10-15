@@ -116,7 +116,9 @@ class Unlinked(Base):
         c = GW.consent()
         run(GW.STORE.put_code({"code": "123456", "account_id": ACCOUNT, "consent_at": NOW, "consent_wording_version": "v3",
                                "consent_text_sha256": c["sha256"], "created_at": NOW}))
-        r = self.dispatch("SM4", "LINK 123456", sender=GUEST)
+        with mock.patch("agapi.venue_submit.confirm_whatsapp",   # Sasha 269 · moved: linked only once AgAPI says verified (CR 100 §F)
+                        mock.AsyncMock(return_value={"ok": True, "state": "verified"})):
+            r = self.dispatch("SM4", "LINK 123456", sender=GUEST)
         self.assertIn("Linked.", r)
         self.assertEqual(run(GW.STORE.channel_for(GW.wa_key(GUEST)))["account_id"], ACCOUNT)
 

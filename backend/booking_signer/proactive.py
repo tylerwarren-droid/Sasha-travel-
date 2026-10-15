@@ -515,58 +515,37 @@ def _daytime(now: datetime, tz: str) -> bool:
 
 async def no_reply_offers(now: datetime) -> List[dict]:
     """Sasha 254 · R5 — the no-reply follow-up's TIMING is the booking rules' (booking_rules.decide with state.request_sent_at /
-    venue_replied for each open email request), never a number of Sasha's (SASHA_EMAIL_REPLY_HOURS / decide.reply_hours are gone).
-    decide() says call → the call under the person's one yes (the plan in the email's read-back), else ONE WhatsApp question;
-    the rules refuse the call (3 a day, 30 minutes, calls off) → booking_rules.stopped(), and the person is TOLD. A call goes
-    only when they're open by their hours, else in the daytime (the rules' follow-up: "venue open or 10:00–20:00")."""
-    from . import guest_whatsapp as GW, hours as H, ladder_routes as LR
-    from agapi import booking_decide as BD
-    if not no_reply_call_on() or STORE is None or GW.STORE is None or LR.LADDER_STORE is None:
+    venue_replied for each open request), never a number of Sasha's.
+    Sasha 269 (CR 100) · the follow-up CALL is the act's: an AgAPI email / WhatsApp request act the venue hasn't answered → decide() says
+    call → venue_calls.again(act, "R5") → venue.call_again under the booking's ONE approval → Sasha dials ONLY its call_plan. Sasha's own
+    R5 call (auto_call_from_email, offer_no_reply_call — a booking_calls row no act opened) is DELETED. Once per act."""
+    from . import guest_whatsapp as GW
+    from agapi import booking_decide as BD, venue_calls as VC, venue_submit as VS
+    if not no_reply_call_on() or GW.STORE is None:
         return []
     done: List[dict] = []
     for ch in await GW.STORE.all_channels():
         account = ch["account_id"]
         from agapi import person_access as PA
         await PA.warm(account)   # Sasha 254 · the rules' access (calls) from the one record
-        for b in await GW._upcoming(account, names=False):   # email bookings: no receipt name to re-read
-            if b.get("channel") != "email" or b.get("status") not in ("requested", "attempting") or not b.get("read_id") or not b.get("requested_at"):
+        for act in await VS.acts_of(account):
+            if act.get("route") == "call" or act.get("cancels") or act.get("r5") or str(act.get("state") or "") not in ("sent", "requested"):
                 continue
-            row = await LR.LADDER_STORE.get_read(account, str(b["read_id"]))
-            read = (row or {}).get("read") or {}
-            from . import escalation as ESC
-            email = await LR.LADDER_STORE.get_email(account, str(b.get("intent_id") or "")) if b.get("intent_id") else None
-            planned = bool(email and ESC.has_plan(email.get("read_back_lines")))   # the person's one yes covered the call
-            kinds = {f.get("kind") for f in read.get("facts") or []}
-            chans = [{"kind": "email", "value": "read"}] + ([{"kind": "phone", "value": "read"}] if "phone" in kinds else [])
-            d = await BD.decide_for(account, channels=chans, vtype="hotel" if planned or BD.venue_type(b.get("type")) == "hotel" else BD.venue_type(b.get("type")),
-                                    test=BD.is_test_venue({"venue": b.get("venue")}), local_at=f"{b.get('date')}T{b.get('time') or '12:00'}" if b.get("date") else None,
-                                    country=read.get("country"), venue_key=f"read:{b['read_id']}", now=now,
-                                    extra_state={"request_sent_at": BD._iso(datetime.fromisoformat(b["requested_at"])), "venue_replied": False})
+            if not (act.get("venue_phone") or act.get("listing_ref")) or not act.get("sent_at"):
+                continue   # no number to give the act: nothing to call
+            when = str(act.get("when") or "")
+            d = await BD.decide_for(account, channels=[{"kind": "email", "value": "read"}, {"kind": "phone", "value": "read"}],
+                                    vtype=BD.venue_type(act.get("category")), test=BD.is_test_venue({"venue": act.get("venue")}),
+                                    local_at=when[:16] or None, country=act.get("country"), venue_key=f"act:{act['act_id']}", now=now,
+                                    extra_state={"request_sent_at": act["sent_at"], "venue_replied": False})
             refused_call = any(r.get("rule") == "R10" for r in d.get("refusals") or [])
             if d["action"] not in ("call", "call_and_email") and not refused_call:
-                continue   # the rules: still a request, and wait
-            tz = b.get("timezone") or "Europe/Madrid"
-            try:
-                st = H.status(read, now, tz)
-            except Exception:
-                st = {"known": False}
-            if not refused_call and not (st.get("open_now") if st.get("known") else _daytime(now, tz)):
-                continue
-            sid = await STORE.claim({"account_id": account, "trip_item_id": b["id"], "kind": "no_reply_call",
-                                     "local_day": now.astimezone(ZoneInfo(tz)).date(), "status_at_send": b.get("status")})
-            if sid is None:
-                continue
-            if refused_call:   # R12 · an automatic stop is told, never only logged
-                told = await BD.tell_stopped(account, f"the follow-up call to {b.get('venue') or 'the venue'}",
-                                             {"calls_cap": "today's calls are made", "too_soon": "I called them less than 30 minutes ago"}
-                                             .get(d["say"], "calls are off for your account"))
-                outcome = f"stopped: {told.get('told')}"
-            elif planned:
-                outcome = await GW.auto_call_from_email(ch, b, str(email["email_id"]))
-            else:
-                outcome = await GW.offer_no_reply_call(ch, b, row)
-            await STORE.finish(sid, "whatsapp_session" if outcome == "sent" else "skipped", outcome)
-            done.append({"kind": "no_reply_call", "booking": b["id"], "outcome": outcome, "rules": d["action"]})
+                continue   # the rules: still a request, and wait (a refused call is asked of the act too: it says why, and it is told)
+            await VS._remember(account, {**act, "r5": now.isoformat()})   # once per act, whatever the act answers
+            got = await VC.again(account, act["act_id"], "R5")
+            if got.get("say"):
+                await VC.tell(account, got["say"])
+            done.append({"kind": "no_reply_call", "act": act["act_id"], "outcome": got.get("status"), "rules": d["action"]})
     return done
 
 

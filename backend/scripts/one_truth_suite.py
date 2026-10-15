@@ -181,6 +181,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T50": ("her arrival in one framing (half-body still = live), off to work on his first request by code; she tries first — never "
             "\"I can't\" before a tool tried; one labelled pause that lets go of her face",
             ["tests.test_s268"]),
+    "T51": ("\"call them again\" is the engine's (CR 100, booking-rules/2.1): no retry of Sasha's own; a no-answer asks the ONE question, "
+            "\"try once more\" is venue.call_again under the same approval (asked twice = one call); a listing number never kept; "
+            "WhatsApp verified at linking before anything is sent",
+            ["tests.test_s269"]),
 }
 
 _RUNNER = """

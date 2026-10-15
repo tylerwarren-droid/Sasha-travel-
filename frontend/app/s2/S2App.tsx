@@ -53,6 +53,7 @@ type Card =
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
+  | { k: 'no_answer'; act_id: string; ask?: string; choices: { id: string; label: string; page?: string }[]; page?: string }   // Sasha 269 · AgAPI's
 const NOT_CLEARED = 'I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'   // Sasha 265 · item 3
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[]; hold?: string; restored?: boolean }   // Sasha 257 · hold: the holding line, until her words come
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a stream event, shaped by its own `type` (agent/sasha.py)
@@ -287,9 +288,28 @@ function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (titl
     </Box>)
 }
 
+/** Sasha 269 · CR 100 · after a call nobody picked up: AgAPI's ONE question with its two choices ("Try once more" → the same booking's
+ *  call, no new card · "Fill in their form" → their page), or — the second time — their page alone. Labels and words: the engine's. */
+function NoAnswerCard({ c, tap }: { c: Extract<Card, { k: 'no_answer' }>; tap: (title: string, actId: string, route: string) => void }) {
+  const [tapped, setTapped] = useState(false)
+  const pill = (gold: boolean) => ({ padding: '10px 18px', borderRadius: 999, border: gold ? 0 : `1px solid ${C.gold}`, background: gold ? C.gold : 'transparent',
+    color: gold ? '#111' : C.gold, fontWeight: 700, textDecoration: 'none', display: 'inline-block' })
+  return (
+    <Box k="No answer" h={untag(c.ask || '')}>
+      <div data-no-answer={c.act_id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+        {c.choices.map(o => o.id === 'call_again'
+          ? <button key={o.id} type="button" disabled={tapped} data-card-choice="call_again" style={{ ...pill(true), opacity: tapped ? 0.4 : 1 }}
+              onClick={() => { setTapped(true); tap(o.label, c.act_id, 'call_again') }}>{o.label}</button>
+          : (o.page || c.page) ? <a key={o.id} href={o.page || c.page} target="_blank" rel="noopener noreferrer" data-card-choice="their_page" style={pill(false)}>{o.label}</a> : null)}
+        {!c.choices.length && c.page ? <a href={c.page} target="_blank" rel="noopener noreferrer" data-card-choice="their_page" style={pill(false)}>{untag(c.page)}</a> : null}
+      </div>
+    </Box>)
+}
+
 function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void
   tap: (title: string, readBackId: string, route: string) => void }) {
   if (c.k === 'read_back' && c.choices && c.choices.length && c.read_back_id) return <CallCard c={c} tap={tap} />
+  if (c.k === 'no_answer') return <NoAnswerCard c={c} tap={tap} />
   if (c.k === 'counter_card') return <CounterCard card={c.card} />
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
@@ -465,7 +485,10 @@ export default function S2App() {
       if (ev.type === 'proactive' && ev.say) {   // Sasha 227 · "day before pickup": her one line, and the counter card
         const card: Card[] = ev.render?.kind === 'counter_card' && ev.render.card ? [{ k: 'counter_card', card: ev.render.card }]
           : ev.render?.kind === 'subscriptions' && Array.isArray(ev.render.items)   // Sasha 260 · their receipts, read after the turn: the same card
-            ? [{ k: 'subscriptions', items: ev.render.items, total: ev.render.total, source: ev.render.source }] : []
+            ? [{ k: 'subscriptions', items: ev.render.items, total: ev.render.total, source: ev.render.source }]
+          : ev.render?.kind === 'no_answer' && ev.render.act_id   // Sasha 269 · a call nobody picked up: AgAPI's question, as a card
+            ? [{ k: 'no_answer', act_id: String(ev.render.act_id), ask: ev.render.ask || undefined, page: ev.render.page || undefined,
+                 choices: Array.isArray(ev.render.choices) ? ev.render.choices : [] }] : []
         setMsgs(ms => [...ms, { role: 'sasha', text: untag(String(ev.say)), cards: card }])
         speaker.say(String(ev.say))
         return
@@ -485,7 +508,7 @@ export default function S2App() {
     return () => es.close()
   }, [signedIn, speaker])
 
-  const send = useCallback(async (text: string, pick?: { place_id: string }, tap?: { read_back_id: string; choice: string }) => {
+  const send = useCallback(async (text: string, pick?: { place_id: string }, tap?: { read_back_id?: string; act_id?: string; choice: string }) => {
     const t = text.trim()
     if (!t) return
     // Sasha 257 · Jon (row 861): "she can't hear me or just doesn't respond — tried 5 times". One turn reached her; the rest were
@@ -673,7 +696,7 @@ export default function S2App() {
                     {m.text}</div>
                 ) : <div aria-busy="true" data-sasha-working style={{ color: C.dim, padding: '8px 4px' }}>{m.hold || '…'}</div>}{/* Sasha 259 · ONE working mark: the holding line, else "…" (aria-busy says she's working) */}
                 {/* Sasha 230 · a pick sends the card's name QUOTED: a listing like "Comida Hindu - Restaurante India, NAMASTE INDIA(…)" + ", please." read as TWO places — she asked which, the yes didn't answer it, the loop */}
-                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} tap={(title, rid, route) => { speaker.unlock(); send(title, undefined, { read_back_id: rid, choice: route }) }} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} tap={(title, rid, route) => { speaker.unlock(); send(title, undefined, route === 'call_again' ? { act_id: rid, choice: route } : { read_back_id: rid, choice: route }) }} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>

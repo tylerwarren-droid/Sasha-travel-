@@ -99,7 +99,7 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
             return await real_prepare(account, place, person, date_, time_, party, notes=notes)
         return {"ok": True, "prepared_id": "vpr_" + "a" * 32, "link": "https://agapi.test/p/x", "routes": ["page", "call"]}
 
-    async def read_back(account, pid, route=None):
+    async def read_back(account, pid, route=None, call=None):   # Sasha 269 · + the call (a listing number passed again)
         test.vs_calls.append(("read_back", route))
         if route != "call":
             return await real_read_back(account, pid)
@@ -201,14 +201,14 @@ class R1ChannelOrder(Base):
         self.assertNotIn("/api/booking/calls", self.api.paths())
 
     def test_phone_only_far_away_waits_to_call(self):
+        # Sasha 269 · MOVED (CR 100): R3's call is the ACT's — its card (venue.submit_booking route "call"), never Sasha's own
+        # /api/booking/calls (a call no act opened is never placed)
         out = self.hold({"phone": ALL4["phone"]})
-        self.expect(out, "wait", "wait_to_call")
-        self.assertEqual(out["route"], "call")
+        self.assertEqual(out["rules"]["action"], "wait")
+        self.assertEqual(out["route"], "agapi_call")
         got = self.yes()
-        body = self.api.bodies("/api/booking/calls/k-1/place")[0]
-        due = datetime.fromisoformat(body["scheduled_for"])
-        self.assertAlmostEqual((due - datetime.now(timezone.utc)).total_seconds() / 3600, 72 - BR.URGENT_HOURS, delta=0.2)
-        self.assertEqual(got["status"], "placed")   # the recorder's answer — the real route schedules it (CallRoutes below)
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
+        self.assertEqual(got["status"], "calling")
 
 
 # ── R2 · a form → the ONE question; its two answers ──────────────────────────────────────────────────────────────────────────
@@ -271,15 +271,16 @@ class R4CallsOff(Base):
 
 class R6Hotel(Base):
     def test_arriving_in_18_hours_call_and_email_at_once_one_yes(self):
+        # Sasha 269 · MOVED (CR 100): a hotel STAY (nights) has no AgAPI act, so R6 is its email alone — never a call of Sasha's own
+        # (the call half was /api/booking/calls, which no act opened). A table or a spa: the email act + venue.call_again R6.
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=18, what="a room", venue="Hotel Gate", nights=2)
-        self.expect(out, "call_and_email", "call_and_email")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "call_email"))
-        self.assertEqual(len(self.api.bodies("/api/booking/calls")), 1)
+        self.assertEqual(out["rules"]["action"], "call_and_email")
+        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "email"))
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
         self.assertEqual(len(self.api.bodies("/api/booking/emails")), 1)
-        got = self.yes()                                                           # ONE yes: both
+        self.yes()
         self.assertIn("/api/booking/emails/e-1/send", self.api.paths())
-        self.assertIn("/api/booking/calls/k-1/place", self.api.paths())
-        self.assertEqual((got["status"], got["email"]), ("placed", "sent"))
+        self.assertFalse(any(p.startswith("/api/booking/calls") for p in self.api.paths()))
 
     def test_a_hotel_request_carries_the_24_hour_call_in_its_read_back(self):
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=30, what="a room", venue="Hotel Gate", nights=2)
@@ -307,32 +308,34 @@ class R5HotelNoReplySweep(unittest.TestCase):
                     "requested_at": (self.now - timedelta(hours=25)).isoformat()}
         plan = ESC.plan_line(f"If they haven't replied within {BR.HOTEL_NO_REPLY_HOURS} hours, I'll call them", None)
 
-        class Ladder:
-            async def get_read(self, account, rid):
-                return {"read": {"name": "Hotel Gate", "country": "ES", "facts": [{"kind": "phone", "value": "+34910000000"},
-                                                                                    {"kind": "email", "value": "h@gate.es"}]}}
+        # Sasha 269 · MOVED (CR 100): R5's call is the ACT's — an AgAPI email request act, venue.call_again "R5" (venue_calls.again);
+        # Sasha's own auto_call_from_email is deleted. The act's words are what the person is told.
+        from agapi import venue_calls as VC, venue_submit as VS
+        self.acts = [{"act_id": "act_h", "venue": "Hotel Gate", "when": f"{day}T{hhmm}", "party": 2, "state": "sent", "category": "hotel",
+                      "country": "ES", "venue_phone": "+34910000000", "sent_at": (self.now - timedelta(hours=25)).isoformat()}]
+        self.again_says = {"status": "calling", "say": "On it — I'll call them now and let you know."}
 
-            async def get_email(self, account, eid):
-                return {"email_id": "e-h", "read_back_lines": ["I'll email Hotel Gate", plan]}
+        async def acts_of(account):
+            return [dict(x) for x in self.acts]
+
+        async def remember(account, act):
+            self.acts = [x for x in self.acts if x["act_id"] != act["act_id"]] + [dict(act)]
+
+        async def again(account, act_id, reason="person_asked"):
+            self.calls.append((act_id, reason))
+            return dict(self.again_says)
+
+        async def tell(account, text, card=None, wa_text=None):
+            self.told.append(text)
+            return "sent (captured)"
 
         class Chans:
             async def all_channels(self):
                 return [{"account_id": ACCT, "wa_id_sha256": "x" * 64}]
 
-            async def channel_of_account(self, a):
-                return {"account_id": a, "wa_id_sha256": "x" * 64}
-
-        async def auto(ch, b, email_id):
-            self.calls.append((b["id"], email_id))
-            return "placed"
-
-        async def tell(ch, text, template=None):
-            self.told.append(text)
-            return "sent (captured)"
-        for p in (mock.patch.object(LR, "LADDER_STORE", Ladder()), mock.patch.object(PR, "STORE", PR.MemoryProactiveStore()),
-                  mock.patch.object(GW, "STORE", Chans()), mock.patch.object(GW, "_upcoming", mock.AsyncMock(side_effect=lambda a, **k: [dict(self.row)])),
-                  mock.patch.object(GW, "auto_call_from_email", auto), mock.patch.object(GW, "_tell", tell),
-                  mock.patch.dict(os.environ, {"SASHA_NO_REPLY_CALL": "1"}), mock.patch.object(CR, "CALL_STORE", CS.MemoryCallStore())):
+        for p in (mock.patch.object(VS, "acts_of", acts_of), mock.patch.object(VS, "_remember", remember), mock.patch.object(VC, "again", again),
+                  mock.patch.object(VC, "tell", tell), mock.patch.object(GW, "STORE", Chans()),
+                  mock.patch.dict(os.environ, {"SASHA_NO_REPLY_CALL": "1"})):
             p.start()
             self.addCleanup(p.stop)
         BD._STOPPED.pop(ACCT, None)
@@ -341,25 +344,25 @@ class R5HotelNoReplySweep(unittest.TestCase):
         from booking_signer import proactive as PR
         live_access(self)
         done = run(PR.no_reply_offers(self.now))
-        self.assertEqual(self.calls, [("t-h", "e-h")])
+        self.assertEqual(self.calls, [("act_h", "R5")])                           # the act's own follow-up call (venue.call_again R5)
         self.assertEqual(done[0]["rules"], "call")
+        self.assertEqual(self.told, [self.again_says["say"]])                      # the act's words
         self.assertEqual(run(PR.no_reply_offers(self.now)), [])                   # once
 
     def test_23_hours_still_waits(self):
         from booking_signer import proactive as PR
         live_access(self)
-        self.row["requested_at"] = (self.now - timedelta(hours=23)).isoformat()
+        self.acts[0]["sent_at"] = (self.now - timedelta(hours=23)).isoformat()
         self.assertEqual(run(PR.no_reply_offers(self.now)), [])
         self.assertEqual(self.calls, [])
 
     def test_calls_off_the_stop_is_told(self):
         from booking_signer import proactive as PR
         live_access(self, {**LIVE, "calls": "off"})
+        self.again_says = {"status": "not_allowed", "say": BR.PHRASES["no_real_sends"]}   # the ACT refuses it, in its words
         done = run(PR.no_reply_offers(self.now))
-        self.assertEqual(self.calls, [])
-        self.assertTrue(done[0]["outcome"].startswith("stopped"))
-        self.assertTrue(self.told and self.told[0].startswith("I stopped the follow-up call to Hotel Gate"))
-        self.assertIn("Nothing else was cancelled", BD.stops_of(ACCT)[0])
+        self.assertEqual(done[0]["outcome"], "not_allowed")
+        self.assertEqual(self.told, [BR.PHRASES["no_real_sends"]])
 
     def test_no_env_timing(self):
         src = (BACKEND / "booking_signer" / "proactive.py").read_text()
@@ -411,7 +414,7 @@ class R8DepositAsked(unittest.TestCase):
         for p in (mock.patch.object(GW, "_tell", tell), mock.patch.object(GW, "STORE", _Store()),
                   mock.patch.object(GW, "venue_display", mock.AsyncMock(return_value="Casa Lucio")),
                   mock.patch.object(GW, "push_payment_question", mock.AsyncMock(side_effect=AssertionError("asked to pay"))),
-                  mock.patch.object(CR, "confirm_unclear", mock.AsyncMock(side_effect=AssertionError("a confirmation call"))),
+                  mock.patch.object(CR.C, "place_call", mock.AsyncMock(side_effect=AssertionError("a confirmation call"))),   # Sasha 269 · moved
                   mock.patch("booking_signer.followup.after_call", mock.AsyncMock(return_value=None)),
                   mock.patch("booking_signer.followup.sms_ask", mock.AsyncMock(return_value="no")),
                   mock.patch("booking_signer.guest_receipt.send_after_call", mock.AsyncMock(return_value="sent"))):

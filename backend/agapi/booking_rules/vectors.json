@@ -1,5 +1,5 @@
 {
- "version": "booking-rules/2 · 2026-10-14",
+ "version": "booking-rules/2.1 · 2026-10-14",
  "vectors": [
   {
    "rule": "R1",
@@ -2351,7 +2351,7 @@
   },
   {
    "rule": "R10",
-   "name": "booking-rules/2: the last call unanswered, a page → 'No one picked up again — I'd fill in their page instead.'",
+   "name": "booking-rules/2: the last call unanswered, a page → 'They didn't pick up again — the form is the fastest way.'",
    "fn": "no_answer",
    "input": {
     "page_link": "https://agapi.kanoe.ai/prepared/x",
@@ -2360,7 +2360,7 @@
    "expect": {
     "action": "prepared_link",
     "say": "no_answer",
-    "say_text": "No one picked up again — I'd fill in their page instead.",
+    "say_text": "They didn't pick up again — the form is the fastest way.",
     "takeover.link": "https://agapi.kanoe.ai/prepared/x"
    }
   },
@@ -2374,7 +2374,7 @@
    },
    "expect": {
     "say": "no_answer_no_page",
-    "say_text": "No one picked up again — here's their number so you can reach them yourself.",
+    "say_text": "They didn't pick up again — here's their number so you can reach them yourself.",
     "channel.value": "+34910000001"
    }
   },
@@ -2448,6 +2448,87 @@
    },
    "expect": {
     "text": "On it — I'll call them at 13:10 and let you know."
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2.1: the FIRST unanswered call, a page → 'They didn't pick up.' + the ONE question (try once more, or their form)",
+   "fn": "no_answer",
+   "input": {
+    "page_link": "https://agapi.kanoe.ai/prepared/x",
+    "phone": "+34910000001",
+    "n": 1
+   },
+   "expect": {
+    "action": "ask_one_question",
+    "say": "no_answer_first",
+    "say_text": "They didn't pick up.",
+    "ask": "ask_try_again",
+    "ask_text": "Try once more, or fill in their form so you just tap confirm?",
+    "ask_once.0": "try_again_or_page",
+    "takeover.link": "https://agapi.kanoe.ai/prepared/x"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2.1: the first unanswered call, no page → 'They didn't pick up.' + 'Shall I try them once more?'",
+   "fn": "no_answer",
+   "input": {
+    "page_link": null,
+    "phone": "+34910000001",
+    "n": 1
+   },
+   "expect": {
+    "say": "no_answer_first",
+    "ask": "ask_try_again_no_page",
+    "ask_text": "Shall I try them once more?",
+    "ask_once.0": "try_again"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2.1: the SECOND unanswered call, a page → 'the form is the fastest way', no question, no third call offered",
+   "fn": "no_answer",
+   "input": {
+    "page_link": "https://agapi.kanoe.ai/prepared/x",
+    "phone": "+34910000001",
+    "n": 2
+   },
+   "expect": {
+    "action": "prepared_link",
+    "say": "no_answer",
+    "say_text": "They didn't pick up again — the form is the fastest way.",
+    "ask": null,
+    "ask_once": [],
+    "takeover.link": "https://agapi.kanoe.ai/prepared/x"
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2.1: a third unanswered call (the person asked) says the same — the form",
+   "fn": "no_answer",
+   "input": {
+    "page_link": "https://agapi.kanoe.ai/prepared/x",
+    "n": 3
+   },
+   "expect": {
+    "say": "no_answer",
+    "say_text": "They didn't pick up again — the form is the fastest way."
+   }
+  },
+  {
+   "rule": "R10",
+   "name": "booking-rules/2.1: the second unanswered call, no page, an email → their email",
+   "fn": "no_answer",
+   "input": {
+    "page_link": null,
+    "email": "reservas@example.test",
+    "n": 2
+   },
+   "expect": {
+    "say": "no_answer_no_page",
+    "say_text": "They didn't pick up again — here's their email so you can reach them yourself.",
+    "channel.value": "reservas@example.test"
    }
   }
  ]

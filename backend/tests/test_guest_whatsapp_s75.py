@@ -187,23 +187,43 @@ class Webhook(Base):
         self.assertNotIn("hello", json.dumps(GW.STORE.state, default=str))        # nor the words
         self.assertFalse(self.wa("SM4", GUEST, "anyone?", SANDBOX).text.count("<Message>"))   # not again within ten minutes
 
+    # Sasha 269 (CR 100 §E/§F) · MOVED: a link is VERIFIED by AgAPI (users.confirm_whatsapp, Sasha-signed, from that number) before
+    # anything is sent to it — a used, stale or wrong code, or too many tries, now sends NOTHING (was "didn't work" / "Too many tries")
     def test_a_link_code_works_once_and_expires(self):
         c = GW.consent()
+        seen = []
+
+        async def confirm(account, wa_id, message_id, text, t=None, nonce=None):
+            seen.append((account, wa_id, message_id, text))
+            return {"ok": True, "state": "verified", "number": "+" + wa_id}
         run(GW.STORE.put_code({"code": "123456", "account_id": ACCOUNT, "consent_at": NOW,
                                "consent_wording_version": "v2", "consent_text_sha256": c["sha256"], "created_at": NOW}))
-        self.assertIn("Linked.", self.wa("SM5", GUEST, "LINK 123456", SANDBOX).text)
-        ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
-        self.assertEqual((ch["account_id"], ch["consent_wording_version"]), (ACCOUNT, "v2"))
-        other = "+447700900999"
-        self.assertIn("didn't work", self.wa("SM6", other, "LINK 123456", SANDBOX).text)            # used: once only
-        run(GW.STORE.put_code({"code": "654321", "account_id": ACCOUNT, "consent_at": NOW, "consent_wording_version": "v2",
-                               "consent_text_sha256": c["sha256"], "created_at": NOW - timedelta(minutes=11)}))
-        self.assertIn("didn't work", self.wa("SM7", other, "LINK 654321", SANDBOX).text)            # ten minutes, then gone
+        with mock.patch("agapi.venue_submit.confirm_whatsapp", confirm):
+            self.assertIn("Linked.", self.wa("SM5", GUEST, "Kanoe link 123456", SANDBOX).text)   # AgAPI's text
+            self.assertEqual(seen, [(ACCOUNT, GUEST, "SM5", "Kanoe link 123456")])
+            ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
+            self.assertEqual((ch["account_id"], ch["consent_wording_version"]), (ACCOUNT, "v2"))
+            other = "+447700900999"
+            self.assertNotIn("<Message>", self.wa("SM6", other, "LINK 123456", SANDBOX).text)       # used: once only — nothing sent
+            run(GW.STORE.put_code({"code": "654321", "account_id": ACCOUNT, "consent_at": NOW, "consent_wording_version": "v2",
+                                   "consent_text_sha256": c["sha256"], "created_at": NOW - timedelta(minutes=11)}))
+            self.assertNotIn("<Message>", self.wa("SM7", other, "LINK 654321", SANDBOX).text)       # ten minutes, then gone
+        self.assertEqual(len(seen), 1)
+
+    def test_not_verified_by_agapi_links_nothing_and_sends_nothing(self):
+        run(GW.STORE.put_code({"code": "222222", "account_id": ACCOUNT, "consent_at": NOW, "consent_wording_version": "v2",
+                               "consent_text_sha256": GW.consent()["sha256"], "created_at": NOW}))
+        with mock.patch("agapi.venue_submit.confirm_whatsapp",
+                        mock.AsyncMock(return_value={"ok": False, "error": {"code": "approval_untrusted_origin"}})):
+            self.assertNotIn("<Message>", self.wa("SM9", GUEST, "Kanoe link 222222", SANDBOX).text)
+        self.assertIsNone(run(GW.STORE.channel_for(GW.wa_key(GUEST))))
+        self.assertEqual(GW.SENDER.sent, [])
 
     def test_link_tries_are_limited(self):
-        for i in range(5):
-            self.assertIn("didn't work", self.wa(f"SMx{i}", GUEST, "LINK 000000", SANDBOX).text)
-        self.assertIn("Too many tries", self.wa("SMx5", GUEST, "LINK 000000", SANDBOX).text)
+        for i in range(6):
+            self.assertNotIn("<Message>", self.wa(f"SMx{i}", GUEST, "LINK 000000", SANDBOX).text)   # nothing sent, ever
+        st = run(GW.STORE.get_state(GW.wa_key(GUEST)))
+        self.assertEqual(len(st["link_tries"]), 5)                                               # counted, then refused
 
     def test_a_linked_guest_is_answered_in_the_background_not_in_the_webhook(self):
         self.link()

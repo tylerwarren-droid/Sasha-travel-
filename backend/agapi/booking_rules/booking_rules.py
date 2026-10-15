@@ -22,13 +22,18 @@ booking-rules/2 (CR 99, Tyler 14 Oct, row 928): the ONE question IS the read-bac
     shall I call them?" (answered: preference "link" → their page; "call" → the call)
   · no page, within the threshold, a phone → "I'll call them when they open at <time> — OK?" (open now: "… — shall I call them now?")
   · after the answer: "On it — <next step>." · the last unanswered call: "No one picked up again — I'd fill in their page instead."
+
+booking-rules/2.1 (CR 100, Tyler 14 Oct: "if the user says call, try again, say it wasn't picked up, recommend the form"): EVERY call is an act
+(venue.call_attempt), first or follow-up (R3/R5/R6), under the booking's ONE approval — nobody keeps a retry loop of their own.
+  · the first unanswered call: "They didn't pick up." then the ONE question: "Try once more, or fill in their form so you just tap confirm?"
+  · the second: "They didn't pick up again — the form is the fastest way." (+ the page) — no third call unless the person asks (the cap holds)
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-VERSION = "booking-rules/2 · 2026-10-14"
+VERSION = "booking-rules/2.1 · 2026-10-14"
 
 # ── the constants, as data (never env vars) ──────────────────────────────────────────────────────────────────────────────
 URGENT_HOURS = 48                           # R3/R4 · more than this → request and wait; within it → call or their own page
@@ -75,8 +80,12 @@ PHRASES = {
     "ask_call_when_open": "I'll call them when they open at {opens_at} — OK?",
     "ask_call_now": "{head} — shall I call them now?",
     "on_it": "On it — {next}.",
-    "no_answer": "No one picked up again — I'd fill in their page instead.",
-    "no_answer_no_page": "No one picked up again — here's their {how} so you can reach them yourself.",
+    "no_answer": "They didn't pick up again — the form is the fastest way.",                                   # booking-rules/2.1 · the 2nd
+    "no_answer_no_page": "They didn't pick up again — here's their {how} so you can reach them yourself.",
+    "no_answer_first": "They didn't pick up.",                                                                   # booking-rules/2.1 · the 1st
+    "ask_try_again": "Try once more, or fill in their form so you just tap confirm?",                            # … then the ONE question
+    "ask_try_again_no_page": "Shall I try them once more?",
+    "call_not_asked": "No call is open for this booking — I only call again when you ask.",                    # a call nobody asked for
 }
 
 # ── calls (R7–R9): the fixed preamble and rules, as data ──────────────────────────────────────────────────────────────
@@ -150,8 +159,13 @@ def call_allowed(access: dict, state: dict, now_iso: Optional[str]) -> Dict[str,
     return {"allowed": ok, "reason": why}
 
 
-def no_answer(page_link: Optional[str], phone: Optional[str] = None, email: Optional[str] = None) -> Dict[str, Any]:
-    """booking-rules/2 · the last call went unanswered: said, never silent — their page prefilled, else their number or email."""
+def no_answer(page_link: Optional[str], phone: Optional[str] = None, email: Optional[str] = None, n: int = 2) -> Dict[str, Any]:
+    """booking-rules/2.1 · a call went unanswered (n = the unanswered calls for this booking so far): said, never silent.
+    n == 1 → "They didn't pick up." + the ONE question (try once more, or their form); n >= 2 → the form is the fastest way (their page
+    prefilled, else their number or email) and no third call unless the person asks."""
+    if int(n or 0) <= 1:
+        return _decision("ask_one_question", "no_answer_first", None, page_link, ask="ask_try_again" if page_link else "ask_try_again_no_page",
+                         ask_once=["try_again_or_page" if page_link else "try_again"], follow_ups=[{"action": "tell_person", "reason": "no one picked up"}])
     if page_link:
         return _decision("prepared_link", "no_answer", None, page_link, follow_ups=[{"action": "tell_person", "reason": "no one picked up"}])
     how = "number" if phone else "email" if email else "details"
@@ -166,9 +180,10 @@ def stopped(what: str, why: str, prepared_link: Optional[str] = None) -> Dict[st
 
 
 def _decision(action: str, say: str, channel: Optional[dict], link: Optional[str], *, fmt: Optional[dict] = None, ask_once: Optional[list] = None,
-              follow_ups: Optional[list] = None, refusals: Optional[list] = None) -> Dict[str, Any]:
+              follow_ups: Optional[list] = None, refusals: Optional[list] = None, ask: Optional[str] = None) -> Dict[str, Any]:
     text = PHRASES[say].format(**(fmt or {}))
-    return {"action": action, "say": say, "say_text": text, "ask_once": ask_once or [], "channel_used": (channel or {}).get("kind"),
+    return {"action": action, "say": say, "say_text": text, **({"ask": ask, "ask_text": PHRASES[ask]} if ask else {}),
+            "ask_once": ask_once or [], "channel_used": (channel or {}).get("kind"),
             "channel": channel, "rung": _RUNG.get(action), "billable_on_confirm": action not in ("refuse", "wait"),
             "price_class": _RUNG.get(action),
             "takeover": {"link": link, "say": PHRASES["takeover"]},          # R11 · ALWAYS present

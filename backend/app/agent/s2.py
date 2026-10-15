@@ -66,7 +66,8 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
             "remember_name",   # Sasha 246 · the name she greets them by (asked once)
             "save_contact",    # Sasha 253 · the booking name and mobile (asked once, with the consent)
             # Sasha 253 · the WhatsApp old flow's capabilities, in the one brain (S252 audit G1 · G9 · G10 · G13)
-            "file_confirmation", "time_between", "add_to_trip", "save_for_later")
+            "file_confirmation", "time_between", "add_to_trip", "save_for_later",
+            "call_again")   # Sasha 269 · "try once more" after a no-answer: the booking's own act (venue.call_again)
 
 
 # Sasha 241 · S1 PARITY: /next keeps its own "Who she is" and gains S2's capability lines — taken from S2_WHO itself, so the two

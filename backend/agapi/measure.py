@@ -56,6 +56,7 @@ _TURN: contextvars.ContextVar = contextvars.ContextVar("measure_turn", default=N
 _CID: contextvars.ContextVar = contextvars.ContextVar("measure_cid", default=None)
 _BOOKINGS: Dict[str, dict] = {}       # cid → the booking row being derived (this process)
 _OF: Dict[str, str] = {}              # (account|place) / prepared id / act id → cid
+_LAST: Dict[str, str] = {}            # account → the cid of its latest booking request (a yes carries no place: it is THAT one's)
 _Q: Optional[asyncio.Queue] = None
 _WRITER: Optional[asyncio.Task] = None
 _STATS = {"queued": 0, "written": 0, "failed": 0, "dropped": 0, "observe_us": 0, "observe_n": 0}
@@ -150,6 +151,10 @@ async def _rehydrate(job: dict) -> None:
     _BOOKINGS[src["cid"]] = {**src, "closed": False}
     for a in src.get("acts") or []:
         _OF["act:" + a] = src["cid"]
+    if job.get("then"):
+        job["then"](_BOOKINGS[src["cid"]])
+        _save(_BOOKINGS[src["cid"]])
+        return
     _rehydrating = True
     try:
         agapi_op(job["op"], job["body"], job["env"], job["ms"], job["url"], job["version"])
@@ -352,8 +357,19 @@ def tool(ctx: Any, name: str, args: dict, res: dict, ms: int) -> None:
         if name not in BOOKING_TOOLS:
             return
         out = res.get("result") if res.get("ok") else None
+        act0 = (args or {}).get("act_id") or ((out or {}).get("act_id") if isinstance(out, dict) else None)
+        if name == "cancel_venue" and act0:   # a cancel names its booking by the act: the same request's row, never a new one
+            status = (out or {}).get("status") if isinstance(out, dict) else None
+            _with_act(act0, lambda b: _cancelled(b, status))
+            return
         place, vtype = _venue_of(args or {}, out)
-        b = _booking(getattr(ctx, "account", None), place, vtype, getattr(ctx, "surface", "s1"))
+        acct = getattr(ctx, "account", None)
+        last = _BOOKINGS.get(_LAST.get(str(acct)) or "")
+        if place is None and name in ("book_venue", "answer_card", "call_again") and last is not None and not last.get("closed"):
+            b = last   # their yes (or the card's tap) answers the read-back they were shown — the same request
+        else:
+            b = _booking(acct, place, vtype, getattr(ctx, "surface", "s1"))
+        _LAST[str(acct)] = b["cid"]
         _CID.set(b["cid"])
         if t is not None and t["searches"]:
             b["cost"]["searches"] += t["searches"]
@@ -413,6 +429,28 @@ def _bind(b: dict, act: str) -> None:
     _OF["act:" + ha] = b["cid"]
 
 
+def _cancelled(b: dict, status: Optional[str]) -> None:
+    b["cancel_at"] = b.get("cancel_at") or _now()
+    if status in ("cancelled", "sent", "requested", "confirmed"):
+        b["outcome"], b["outcome_at"] = "cancelled", _now()
+
+
+def _with_act(act: str, fn) -> None:
+    """Apply fn to the booking row of this act — from this process, or (after a restart) found in the store by the writer."""
+    cid = _OF.get("act:" + str(h(act)))
+    b = _BOOKINGS.get(cid) if cid else None
+    if b is not None:
+        fn(b)
+        _save(b)
+        return
+    q = _queue()
+    if q is not None:
+        try:
+            q.put_nowait({"_rehydrate": {"act": act, "then": fn}})
+        except asyncio.QueueFull:
+            _STATS["dropped"] += 1
+
+
 def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional[str] = None) -> None:
     """agapi_route.post, after EVERY AgAPI call (the one transport). Bookings see their acts' events here: a submit (and its
     duplicates), a status (the outcome), a profile lookup; an action after the person cancelled is counted."""
@@ -461,6 +499,8 @@ def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional
                 _stop(b, "no_answer")
         if op == "venue.profile":
             b["profile_ms"].append(ms)
+        if op == "venue.cancel_booking" and isinstance(env, dict) and env.get("ok") and (body or {}).get("act_id"):
+            _cancelled(b, (result or {}).get("status") or (result or {}).get("state"))
         _save(b)
     except Exception as e:
         log.info("[measure] agapi op not measured: %s", type(e).__name__)

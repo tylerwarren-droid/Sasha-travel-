@@ -39,7 +39,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.w = _Rows()
         MS.WRITE = self.w
-        MS._BOOKINGS.clear(); MS._OF.clear(); MS._Q = None; MS._WRITER = None
+        MS._BOOKINGS.clear(); MS._OF.clear(); MS._LAST.clear(); MS._Q = None; MS._WRITER = None
 
     def tearDown(self):
         MS.WRITE = None
@@ -112,7 +112,7 @@ class Bookings(Base):
             a = {"place_id": "fixture_place_taverna_phone", "name": "Casa Gate", "guest": NAME, "phone": PHONE, "email": EMAIL}
             self._tool("read_booking_route", a, True, {"venue": "Casa Gate", "routes": ["call"], "card": {"place_id": a["place_id"], "google_type": "restaurant"}})
             self._tool("hold_venue", a, True, {"status": "awaiting_yes", "venue": "Casa Gate", "read_back": [WORDS]})
-            self._tool("book_venue", a, True, {"status": "calling", "act_id": "act-1"})
+            self._tool("book_venue", {"approval": {"said": "yes"}}, True, {"status": "calling", "act_id": "act-1"})   # a yes carries no place
             self._env("venue.submit_booking", {"act_id": "act-1"}, {"act_id": "act-1"})
             self._env("venue.booking_status", {"act_id": "act-1"}, {"state": "confirmed"})
             await MS.flush()
@@ -142,7 +142,7 @@ class Bookings(Base):
         async def go():
             a = {"place_id": "fixture_place_hotel"}
             self._tool("hold_venue", a, True, {"status": "awaiting_yes"})
-            self._tool("book_venue", a, True, {"status": "sent", "act_id": "act-2"})
+            self._tool("book_venue", {"approval": {"said": "yes"}}, True, {"status": "sent", "act_id": "act-2"})
             self._env("venue.submit_booking", {"act_id": "act-2"}, {"act_id": "act-2"})
             self._env("venue.submit_booking", {"act_id": "act-2"}, {"act_id": "act-2"})     # a second submit: a duplicate
             self._tool("cancel_venue", a, True, {"status": "cancelled"})
@@ -153,6 +153,21 @@ class Bookings(Base):
         self.assertEqual(d["duplicates"], 1)
         self.assertEqual(d["after_cancel"], 1)
         self.assertEqual(d["outcome"], "cancelled")
+
+    def test_a_later_cancel_lands_on_its_own_booking(self):
+        # 275b · found by the production gate: a cancel in a later turn named its booking by the act; it made a new row instead
+        async def go():
+            self._tool("hold_venue", {"place_id": "fixture_place_taverna_phone"}, True, {"status": "awaiting_yes"})
+            self._tool("book_venue", {}, True, {"status": "calling", "act_id": "act-9"})
+            self._env("venue.booking_status", {"act_id": "act-9"}, {"state": "confirmed"})
+            self._tool("cancel_venue", {"act_id": "act-9", "venue": "Taverna Sandbox"}, True, {"status": "awaiting_yes"})
+            self._env("venue.cancel_booking", {"act_id": "act-9"}, {"status": "sent"})
+            await MS.flush()
+        self.run_(go())
+        books = [r["data"] for r in self.w.rows.values() if r["kind"] == "booking"]
+        self.assertEqual(len(books), 1)                                   # ONE request, one row
+        self.assertEqual(books[0]["outcome"], "cancelled")
+        self.assertEqual(books[0]["furthest"], "confirmed")
 
     def test_guest_and_policy_stops(self):
         async def go():

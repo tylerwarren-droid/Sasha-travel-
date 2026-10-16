@@ -491,6 +491,15 @@ def is_ack(sentence: str) -> bool:
     return bool(p) and p in {_plain(x) for x in (FIRST_LINE, TRY_FIRST) + ACKS}
 
 
+def discover_line(tool: str, r: dict) -> str:
+    """Sasha 276 · /s2's search answered by AgAPI venue.discover: its own say_text (or checks' ask, or the refusal) — said by code,
+    once, with its cards; the turn ends on it. The words are AgAPI's: nothing here composes them."""
+    res = (r or {}).get("result") if (r or {}).get("ok") else None
+    if tool != "search_venues" or not isinstance(res, dict) or not isinstance(res.get("discover"), dict):
+        return ""
+    return str(res.get("say") or "").strip()
+
+
 def progress_line(tool: Optional[str], account: str = "") -> str:
     """The next progress line for the step running now (`tool`: the tool running, None while she's still thinking) — rotating per
     person, so the same step never sounds the same twice in a row."""
@@ -682,7 +691,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

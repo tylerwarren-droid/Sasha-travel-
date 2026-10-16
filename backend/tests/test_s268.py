@@ -54,7 +54,8 @@ class SheTriesFirst(unittest.TestCase):
         self.assertIn(f'her first answer — "{V.TRY_FIRST}" or a short acknowledgement — is said for her by code', V.RULES.replace("\n  ", " "))   # Sasha 273 · moved: once per request, by code
         self.assertIn("\"I can't\" is never her first answer", S2.S2_WHO)
         self.assertIn("a dog walker", S2.S2_SEARCH)                                        # /s2's search: any business
-        self.assertIn('{**t, "description": S2.S2_SEARCH} if t["name"] == "search_venues"', pathlib.Path(S.__file__).read_text())
+        self.assertIn('{**t, "description": S2.S2_SEARCH, "input_schema": S2.search_schema(t["input_schema"])} if t["name"] == "search_venues"',
+                      pathlib.Path(S.__file__).read_text())   # 276: + venue.discover's dates / when_words / near
 
     def test_gate_cant_only_after_a_tool_tried(self):
         HOME._MEM.clear()

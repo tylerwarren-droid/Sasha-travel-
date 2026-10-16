@@ -102,7 +102,7 @@ class DemoSetting(unittest.TestCase):
                     s1 = run(API.search_venues(API.Ctx(account=ACCOUNT), a))
                 with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "on"}):
                     s1p = run(API.search_venues(API.Ctx(account=ACCOUNT), a))
-                s2 = run(API.search_venues(API.Ctx(account=ACCOUNT, surface="s2"), a))
+                s2 = run(API.search_venues(API.Ctx(account=ACCOUNT, surface="s2", via="wa"), a))   # Sasha 276 · moved onto WhatsApp's brain: /s2's page asks venue.discover (its own cache)
         finally:
             API._LAST_FIND.pop(ACCOUNT, None)
         self.assertEqual(set(s1), {"venues", "note"})   # S1 with parity off: exactly as before

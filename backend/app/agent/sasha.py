@@ -182,6 +182,7 @@ RENDER.update({"file_confirmation": "inline", "time_between": "inline", "add_to_
 RENDER.update({"call_again": "inline"})   # Sasha 269 · "try once more": the act's own words, said
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
+KINDS_S2_PAGE = {"discover"}   # Sasha 276 · venue.discover's groups + pick: /s2's page only (via "page") — never /next (s1) or WhatsApp (via "wa", until 277)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}
 KINDS_S2_ONLY |= {"prepared"}   # Sasha 248 · their own booking page + the details to copy (components/cards, /s2 and /next)
@@ -244,6 +245,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "card": flight_card(res, args)}
     if kind == "stays":
         return {"type": "render", "kind": kind, "card": stays_card(res)}
+    if tool == "search_venues" and isinstance(res.get("discover"), dict):   # Sasha 276 · AgAPI venue.discover: its groups, options, pick
+        return {"type": "render", "kind": "discover", **res["discover"]}
     if kind == "venues" and res.get("preset"):   # Sasha 213 · the search's OWN cards — the card never searches again
         return {"type": "render", "kind": kind, "find": res["find"], "preset": res["preset"], "ribbon": res.get("ribbon")}
     if kind == "venues" and res.get("card"):   # Sasha 213 · a pick / a booking: THAT card, highlighted — nothing else
@@ -500,6 +503,7 @@ _HANDOVER: Dict[str, str] = {}   # Sasha 239 · session → what she remembers (
 
 def _card_names(ev: dict) -> List[str]:
     out = [c.get("name") for c in ((ev.get("preset") or {}).get("cards") or [])]
+    out += [o.get("name") for o in (ev.get("options") or []) if ev.get("kind") == "discover"]   # Sasha 276 · AgAPI's grouped options
     for card in (ev.get("cards") or []) + ([ev["card"]] if ev.get("card") else []):
         out += [o.get("name") for o in card.get("options") or []]
     return [x for x in out if x]
@@ -559,7 +563,8 @@ _TEST_TAG = [(re.compile(r"\s*\((?:Duffel )?TEST[^)]*\)"), ""), (re.compile(r",?
              (re.compile(r"\bTEST\s+"), ""), (re.compile(r"\s*\bTEST\b"), "")]
 _MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note", "breakdown",   # Sasha 212 · one total
                     "preset", "find", "card", "ribbon",   # Sasha 213 · the screen's copy; she gets the cards as `venues` only
-                    "checkout_url", "view_url", "page_url", "checkout", "client_secret"}   # Sasha 220 · the pay card's, never hers   # Sasha 214 · links for the page, never words for her
+                    "checkout_url", "view_url", "page_url", "checkout", "client_secret",
+                    "discover"}   # Sasha 276 · AgAPI's grouped answer is the screen's; she gets the names and the line   # Sasha 220 · the pay card's, never hers   # Sasha 214 · links for the page, never words for her
 
 
 def clean_for_model(obj: Any) -> Any:
@@ -664,7 +669,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     first_text_ms = None
     from agapi import agapi_route as _AR   # Sasha 249 · ONE ROUTE: the v0 mode comes from the route ("test": v0 is Duffel TEST only)
     ctx = API.Ctx(account=account, mode=_AR.ctx_mode(), user_said=message, session=session, surface=surface,
-                  space=_now_space.get("space") or "sasha")
+                  space=_now_space.get("space") or "sasha", via="wa" if wa else "page")   # Sasha 276 · WhatsApp's brain keeps find until 277
     voice["ctx"] = ctx   # Sasha 215 · what already happened this turn, for the line said if the turn fails or runs out of time
     msgs: List[dict] = [{"role": m["role"], "content": str(m.get("content") or "")} for m in (history or [])
                         if m.get("role") in ("user", "assistant") and str(m.get("content") or "").strip()][-40:]
@@ -701,7 +706,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from app.agent import s2 as S2
         tools = [t for t in tools if t["name"] in S2.S2_TOOLS]
         tools = [{**t, "description": S2.S2_BOOK} if t["name"] == "book" else t for t in tools]   # Sasha 236 · /s2's own words (S1's untouched)
-        tools = [{**t, "description": S2.S2_SEARCH} if t["name"] == "search_venues" else t for t in tools]   # Sasha 268 · any business
+        tools = [{**t, "description": S2.S2_SEARCH, "input_schema": S2.search_schema(t["input_schema"])} if t["name"] == "search_venues" else t
+                 for t in tools]   # Sasha 268 · any business · 276: venue.discover's own inputs (dates, when_words, near)
         from agapi import via_agapi as VIA   # CR 71 · SASHA_S2_VIA_AGAPI (0 · shadow · reads · 1), read here and nowhere else
         run = VIA.runner(API.call)
         from agapi import s2_subscriptions as SUBS   # CR 72 · the subscription radar: /s2's own three tools, run here
@@ -925,7 +931,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 yield {"type": "say", "text": SP.speakable(line)}
             # Sasha 262 · S2 item 10: the read-back's ONE line, said by code; the turn ends on it (the model once added "I need a clear
             # yes first"). Sasha 263 · and the in-app yes's line (nothing waiting / booked + the calendar question), the same way
-            rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r) or _V.page_line(u.name, r)) if honest else ""   # 264: + a page
+            rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r) or _V.page_line(u.name, r)
+                  or _V.discover_line(u.name, r)) if honest else ""   # 264: + a page · 276: AgAPI's say_text, with its cards
             if rb:
                 read_back_said = True
                 if rb not in said:
@@ -973,6 +980,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                     if ev.get("kind") == "venues" and ev.get("preset"):
                         tstate["cards"] = [c for c in ev["preset"].get("cards") or [] if c.get("place_id")]
                         tstate["ribbon"] = ev.get("ribbon")
+                    elif ev.get("kind") == "discover":   # Sasha 276 · a tap names a place or an independent by its card (never a marketplace)
+                        tstate["cards"] = [{**({"place_id": o["place_id"]} if o.get("kind") == "place" and o.get("place_id") else
+                                               {"ref": o.get("ref"), "website": o.get("link")}), "name": o.get("name")}   # a ref is never a listing
+                                           for o in ev.get("options") or [] if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")]
                 if ev:
                     tstate["drawn"] = True   # Sasha 251 · something reached their screen this turn
                     yield {**ev, "turn": turn_key}
@@ -1043,7 +1054,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         yield {"type": "replace", "text": text, "speak": False}
     # Sasha 213 · the turn's ONE state: its cards, its ribbon, and the card(s) she named — highlighted
     said_k = set(_key(text))
-    hl = [c["place_id"] for c in tstate["cards"] if c.get("name") and set(_key(c["name"])) and set(_key(c["name"])) <= said_k]
+    hl = [c.get("place_id") or c.get("ref") for c in tstate["cards"] if c.get("name") and set(_key(c["name"])) and set(_key(c["name"])) <= said_k]
     if tstate.get("focus") and tstate["focus"] not in hl:
         hl.insert(0, tstate["focus"])
     _SCREEN[session or "-"] = {"cards": tstate["cards"], "ribbon": tstate["ribbon"], "names": tstate["names"]}
@@ -1051,7 +1062,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     await _MEMK.put_kinds(account, {"screen": {"session": session, "cards": tstate["cards"][:8], "ribbon": tstate["ribbon"],
                                                "names": tstate["names"]} if tstate["cards"] else None,
                                     "openers": {"session": session, "said": sorted(_OPENERS.get(session or "-") or [])[-40:]}})
-    yield {"type": "state", "turn": turn_key, "cards": [c["place_id"] for c in tstate["cards"]], "ribbon": tstate["ribbon"],
+    yield {"type": "state", "turn": turn_key, "cards": [c.get("place_id") or c.get("ref") for c in tstate["cards"]], "ribbon": tstate["ribbon"],
            "names": tstate["names"], "carried": not tstate["new"], "highlight": hl,
            **({"names_dropped": tstate["dropped"]} if tstate["dropped"] else {})}
     if tstate["dropped"]:
@@ -1809,6 +1820,11 @@ async def agent_turn(request: Request):
                 if remembers:
                     if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
                         seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))
+                    elif ev.get("type") == "render" and ev.get("kind") == "discover":   # Sasha 276 · its place / independent cards, remembered
+                        seen.update(cards=[{**({"place_id": o["place_id"]} if o.get("kind") == "place" and o.get("place_id") else
+                                               {"ref": o.get("ref"), "website": o.get("link")}), "name": o.get("name"), "rating": o.get("rating"),
+                                            "rating_count": o.get("reviews"), "type": o.get("type")}
+                                           for o in ev.get("options") or [] if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")])
                     elif ev.get("type") == "render" and ev.get("kind") in ("focus", "venues") and ev.get("focus"):   # Sasha 239 · the place they chose
                         seen["focus"] = ev["focus"]
                     elif ev.get("type") == "done":

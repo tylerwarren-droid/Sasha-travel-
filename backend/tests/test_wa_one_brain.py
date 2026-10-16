@@ -19,7 +19,7 @@ NOW = datetime(2026, 10, 11, 12, 0, tzinfo=timezone.utc)
 class EveryKindIsDrawn(unittest.TestCase):
     def test_every_render_kind_has_a_whatsapp_drawing(self):
         from app.agent import sasha as AG
-        kinds = set(AG.RENDER.values()) | AG.KINDS | AG.KINDS_S2_ONLY
+        kinds = set(AG.RENDER.values()) | AG.KINDS | AG.KINDS_S2_ONLY | AG.KINDS_S2_PAGE   # 276: + /s2's page-only kinds (named, never silent)
         self.assertEqual(sorted(k for k in kinds if k not in WA.KIND_MAP), [], "a render kind with no WhatsApp drawing")
 
 

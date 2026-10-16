@@ -208,7 +208,7 @@ class TheConfirmationIsTwoSentencesSaidByCode(unittest.TestCase):
     def test_the_turn_says_it_and_ends_on_it(self):
         from app.agent import sasha as S
         src = inspect.getsource(S.turn)
-        self.assertIn('rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r) or _V.page_line(u.name, r)) if honest else ""', src)   # 264: + a page
+        self.assertIn('rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r) or _V.page_line(u.name, r)\n                  or _V.discover_line(u.name, r)) if honest else ""', src)   # 264: + a page; 276: + discover's say_text
         self.assertIn("if agapi_out or read_back_said:", src)
 
 

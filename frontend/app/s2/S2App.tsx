@@ -55,6 +55,7 @@ type Card =
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
+  | { k: 'discover'; groups: { id: string; label: string; refs: string[]; more?: number }[]; options: Ev[]; pick?: Ev | null }   // Sasha 276 · AgAPI venue.discover
   | { k: 'sign_in' }   // Sasha 274 · a guest's booking: sign in to book for real (this conversation kept)
   | { k: 'no_answer'; act_id: string; ask?: string; choices: { id: string; label: string; page?: string }[]; page?: string }   // Sasha 269 · AgAPI's
 const NOT_CLEARED = 'I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'   // Sasha 265 · item 3
@@ -216,6 +217,53 @@ const AFTER: Partial<Record<string, string>> = {
   calendar: 'It’s in your Activity too, with its proof.',
   pay: 'I’ll tell you here the moment it’s confirmed.',
   sent: 'It’s in your Activity, with its proof.',
+}
+
+/** Sasha 276 · AgAPI venue.discover's answer, as it is: its groups in its order (platforms · private options · places, or as AgAPI
+ *  orders them), each group's options through the ONE place card, the ONE pick marked with its reason, "more" when the group has more.
+ *  A place or an independent: their pick, as today (the tap goes to its next). A marketplace: its hand-over — the link THEY open, and
+ *  each detail with one-tap copy, and AgAPI's own words. Nothing is ever sent there, and nothing of it is read. Sasha adds no rule. */
+function DiscoverCards({ c, choose }: { c: Extract<Card, { k: 'discover' }>; choose: (name: string, placeId: string) => void }) {
+  const [over, setOver] = useState<Ev | null>(null)
+  const byRef = new Map(c.options.map(o => [String(o.ref), o]))
+  const asCard = (o: Ev) => ({ place_id: String(o.place_id || o.ref), name: o.name, rating: o.rating, rating_count: o.reviews, type: o.type,
+                               photo: o.photo?.url || undefined, ...(o.kind === 'independent' ? { website: o.link } : {}) })
+  const copy = (v: string) => { try { void navigator.clipboard?.writeText(v) } catch { /* the person copies by hand */ } }
+  return (
+    <div data-discover style={{ width: '100%' }}>
+      {c.groups.map(g => {
+        const opts = (g.refs || []).map(r => byRef.get(String(r))).filter(Boolean) as Ev[]
+        if (!opts.length) return null
+        return (
+          <div key={g.id} data-group={g.id} style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', color: C.dim, margin: '4px 2px' }}>
+              {untag(g.label)}{g.more ? <span style={{ fontWeight: 500, textTransform: 'none' }}> · {g.more} more</span> : null}</div>
+            <div style={{ display: 'flex', gap: 10, overflowX: 'auto', maxWidth: '100%', padding: '4px 2px 8px', scrollSnapType: 'x mandatory' }}>
+              {opts.map(o => (
+                <PlaceCard key={String(o.ref)} card={asCard(o)} badge={o.pick ? 'Sasha’s pick' : null}
+                  onBook={o.kind === 'independent' ? (n: string) => choose(n, '') : choose}   /* an independent by its name: its ref is never a listing */
+                  noDetails={o.kind === 'marketplace'}
+                  action={o.kind === 'marketplace' && o.hand_over ? { label: 'Open it', onClick: () => setOver(o) } : undefined}
+                  extra={{ feel: o.feel, price_level: o.price_level, distance_m: o.distance_m, availability_words: o.availability_words,
+                           how_far_words: o.how_far_words, photo_by: o.photo?.by, reason: o.pick ? (c.pick?.reason || o.reason) : null }} />))}
+            </div>
+          </div>)
+      })}
+      {over?.hand_over ? (
+        <div role="dialog" aria-label="Finish it there" data-hand-over={String(over.ref)} style={{ marginTop: 6, background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14 }}>
+          {over.hand_over.say ? <div style={{ fontSize: 14.5, marginBottom: 8 }}>{untag(String(over.hand_over.say))}</div> : null}
+          {(over.hand_over.fields || []).map((f: Ev, i: number) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 0', fontSize: 14 }}>
+              <span><span style={{ color: C.dim }}>{untag(String(f.label))}: </span>{untag(String(f.value))}</span>
+              <button type="button" data-copy={String(f.label)} onClick={() => copy(String(f.value))} style={{ padding: '4px 10px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600, fontSize: 12.5 }}>Copy</button>
+            </div>))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            {over.hand_over.link ? <a href={String(over.hand_over.link)} target="_blank" rel="noopener noreferrer" data-hand-over-link style={{ padding: '9px 16px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>Open their page</a> : null}
+            <button type="button" onClick={() => setOver(null)} style={{ padding: '9px 16px', borderRadius: 999, border: `1px solid ${C.line}`, background: 'transparent', color: C.dim }}>Close</button>
+          </div>
+        </div>) : null}
+    </div>
+  )
 }
 
 function VenueCards({ cards, choose }: { cards: Extract<Card, { k: 'venues' }>['cards']; choose: (name: string, placeId: string) => void }) {
@@ -381,6 +429,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
           {g.items.map(i => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{i}</div>)}
         </div>))}
     </Box>)
+  if (c.k === 'discover') return <DiscoverCards c={c} choose={pick} />   // Sasha 276 · AgAPI's groups, its pick, through the ONE place card
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={pick} />   // Sasha 231 · the tap carries the card's place_id
   if (c.k === 'booked') return <><Box k={/^Partly booked/i.test(c.line) ? 'Partly booked' : 'Booked'} h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^(Partly )?Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
   if (c.k === 'calendar') return (
@@ -681,6 +730,8 @@ export default function S2App() {
             // Sasha 274 · rows 1063/1064: a booking tried as a GUEST offers sign-in, in the conversation, under its card
             const add = (c: Card) => { add0(c); if (ACTING === 'guest' && ['read_back', 'prepared', 'wa_open', 'handover', 'pay'].includes(c.k)) add0({ k: 'sign_in' }) }
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
+            else if (ev.kind === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length)   // Sasha 276 · refused: no cards
+              add({ k: 'discover', groups: ev.groups, options: ev.options, pick: ev.pick || null })
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
               ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })

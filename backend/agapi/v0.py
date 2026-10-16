@@ -48,6 +48,7 @@ class Ctx:
     act_name: Optional[str] = None     # CR 76 · /s2: the act this call is (claim() runs THE ONE YES RULE on it)
     act_said: Optional[str] = None     # CR 76 · /s2: the person's words this turn, as the act was called
     space: str = "sasha"               # Sasha 249 · the account's space (products/space.py), read at the start of sasha.turn
+    via: str = "page"                  # Sasha 276 · "wa" when WhatsApp's brain runs as s2 (its list cards keep find's shape until 277)
 
 
 class ToolError(Exception):
@@ -455,6 +456,8 @@ _LAST_FIND: Dict[str, tuple] = {}   # account → (the search, when, its result)
 
 
 async def search_venues(ctx: Ctx, a: dict) -> dict:
+    if ctx.surface == "s2" and getattr(ctx, "via", "page") == "page":   # Sasha 276 · /s2: always AgAPI's own answer (it keeps its own cache)
+        return await _search_venues(ctx, a)
     key = ((a.get("what") or "").strip().lower(), (a.get("where") or "").strip().lower(), a.get("open_at"))
     last = _LAST_FIND.get(ctx.account)
     if last and last[0][:2] == key[:2] and time.time() - last[1] < 1200 \
@@ -491,6 +494,8 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
     tv = await TV.search(ctx, a)   # Sasha 256 · a TEST person who names Kanoe's test venue: its card, no Places call
     if tv is not None:
         return tv
+    if ctx.surface == "s2" and getattr(ctx, "via", "page") == "page":   # Sasha 276 · /s2's ONE discovery: AgAPI decides (never her own search)
+        return await _discover(ctx, a)
     body = {k: v for k, v in {"what": a["what"], "where": a["where"], "country": a.get("country"), "open_at": a.get("open_at"),
                               "near": a.get("near")}.items() if v}
     status, r = await GW.api(ctx.account, "POST", "/api/booking/venues/find", body)
@@ -508,6 +513,49 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
                                        "party": a.get("party")}.items() if v},
             "preset": {"all": r.get("candidates") or [], "ranking": r.get("ranking"), "show": r.get("show") or 5,
                        "near": r.get("near"), "cards": shown}}
+
+
+# ── Sasha 276 · /s2 ASKS AgAPI venue.discover (v1.18, CR 106) — the ONE source: its groups, ranking, pick and reason, refusals,
+# checks, hand-overs and say_text. Sasha keeps no rule of her own: no ranking, no category or platform list, no permission logic.
+#: what of each option reaches the screen — never `contacts` (unconfirmed: never shown as a way she writes)
+DISCOVER_CARD = ("ref", "group", "kind", "name", "feel", "type", "rating", "reviews", "price_level", "distance_m", "availability_words",
+                 "how_far", "how_far_words", "photo", "link", "place_id", "next", "hand_over", "reason", "rank", "address")
+
+
+async def _discover(ctx: Ctx, a: dict) -> dict:
+    from agapi import venue_submit as VS, venues as VN
+    dates = a.get("dates") if isinstance(a.get("dates"), dict) else None
+    body = {"what": str(a["what"])[:120], "where": {"query": str(a["where"])[:120], **({"country": a["country"]} if a.get("country") else {})},
+            **({"open_at": str(a["open_at"])[:16]} if a.get("open_at") else {}),
+            **({"dates": {k: str(dates[k])[:10] for k in ("from", "to") if dates.get(k)}} if dates else {}),
+            **({"when_words": str(a["when_words"])[:60]} if a.get("when_words") else {}),
+            **({"party": int(a["party"])} if a.get("party") else {}), **({"near": str(a["near"])[:120]} if a.get("near") else {})}
+    r = await VS._call(ctx.account, "venue.discover", body)
+    if not r.get("ok"):
+        e = r.get("error") or {}
+        raise ToolError(e.get("code") or "discover_failed", e.get("message") or "the search didn't answer")
+    res = r.get("result") or {}
+    checks = res.get("checks") if isinstance(res.get("checks"), dict) else None
+    refused = bool(res.get("refused"))
+    options = [] if refused else [{k: o[k] for k in DISCOVER_CARD if k in o} for o in res.get("options") or [] if isinstance(o, dict)]
+    pick = res.get("pick") if isinstance(res.get("pick"), dict) else None
+    for o in options:
+        o["pick"] = bool(pick and o.get("ref") == pick.get("ref"))
+    # the cards a tap names (read_booking_route → card_of): a place by its listing; an independent by its own site ONLY — its ref is
+    # AgAPI's option id, never a listing, so it never travels as a place_id (venue.profile reads place.place_id through Places)
+    VN.remember_cards(ctx.account, [{**({"place_id": o["place_id"]} if o.get("kind") == "place" and o.get("place_id") else
+                                        {"ref": o["ref"], "website": o.get("link")}),
+                                     "name": o.get("name"), "type": o.get("type"), "rating": o.get("rating"), "rating_count": o.get("reviews"),
+                                     "address": o.get("address")}
+                                    for o in options if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")])
+    say = (checks or {}).get("say_text") or res.get("say_text") or ""
+    return {"venues": [{"name": o.get("name"), "kind": o.get("kind"), "group": o.get("group"), "pick": o["pick"]} for o in options],
+            "say": say, "refused": refused, **({"checks": {"ask_text": checks.get("ask_text")}} if checks else {}),
+            "how": ("Said for you already, from the search's own answer: say nothing more this turn. "
+                    + ("If they want to book, book nothing until they answer checks.ask_text. " if checks else "")
+                    + "A tap on a card is their pick."),
+            "discover": {"groups": [] if refused else (res.get("groups") or []), "options": options, "pick": None if refused else pick,
+                         "refused": refused, "checks": checks, "say_text": say, "agapi": r.get("agapi")}}
 
 
 # ── Sasha 205 · the prefetch: the slow work starts while she's still chatting ──────────────────────────────────────────────

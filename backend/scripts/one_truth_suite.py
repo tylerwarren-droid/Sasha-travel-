@@ -208,6 +208,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T57": ("S1 measure (observation only): every turn and every booking measured one way — ids only, never content; how far a "
             "booking got and why it stopped; duplicates and actions after a cancel counted; the store never read by behaviour",
             ["tests.test_s275"]),
+    "T58": ("/s2 shows AgAPI venue.discover's answer as it is (CR 106): its groups in order, its ONE pick and reason, refused → its "
+            "line only, checks → their question first, a marketplace handed over (never a send); no rule of her own in her prompt",
+            ["tests.test_s276"]),
 }
 
 _RUNNER = """

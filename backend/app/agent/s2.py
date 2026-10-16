@@ -99,6 +99,17 @@ S2_SEARCH = ("Any business or service in a city — a restaurant, a spa, a dog w
              "anything with a web presence (Google listings; nothing contacted). The person sees them as photo cards and picks one by tap "
              "or voice; booking it goes through that business's own route. Try this BEFORE ever saying you can't.")
 
+def search_schema(base: dict) -> dict:
+    """Sasha 276 · /s2's search_venues takes what AgAPI venue.discover takes — its days, the person's own words for when, near what —
+    S1's schema (v0.TOOLS) untouched. The fields are discover's; Sasha adds no meaning to them."""
+    props = dict(base.get("properties") or {})
+    props.update({"dates": {"type": "object", "properties": {"from": {"type": "string", "format": "date"}, "to": {"type": "string", "format": "date"}},
+                            "description": "a people-based service's days (\"next week\" → from/to)"},
+                  "when_words": {"type": "string", "maxLength": 60, "description": "their own words for when (\"weekday afternoons\")"},
+                  "near": {"type": "string", "maxLength": 120, "description": "a hotel or an address they named"}})
+    return {**base, "properties": props}
+
+
 S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they just heard (the last "
            "hold_booking, unless read_back_sha256 is given) — the pay card on this screen (Apple Pay / Google Pay), or on their phone if "
            "they ask. Nothing is booked until it is paid — get_status says when.")

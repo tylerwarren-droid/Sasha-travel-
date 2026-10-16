@@ -17,7 +17,13 @@ const GOLD = '#E8B923'
 // they're reading. Cleared only when they close it (or open another).
 let OPEN_SHEET: string | null = null
 
-export function PlaceCard({ card: shown, onBook, tone = 'dark', badge }: { card: Ev; onBook: (name: string, placeId: string) => void; tone?: 'dark' | 'light'; badge?: string | null }) {
+/** Sasha 276 · what AgAPI venue.discover says on a card (its words, never Sasha's): feel, price level, distance, availability, how far
+ *  Sasha can take it, the pick's reason, and the photo's credit. All optional: /next's cards are unchanged without them. */
+export type CardExtra = { feel?: string | null; price_level?: number | null; distance_m?: number | null; availability_words?: string | null
+  how_far_words?: string | null; reason?: string | null; photo_by?: string | null }
+
+export function PlaceCard({ card: shown, onBook, tone = 'dark', badge, extra, action, noDetails }: { card: Ev; onBook: (name: string, placeId: string) => void; tone?: 'dark' | 'light'; badge?: string | null
+  extra?: CardExtra; action?: { label: string; onClick: () => void }; noDetails?: boolean }) {
   const [open, setOpenNow] = useState(() => !!shown?.place_id && OPEN_SHEET === shown.place_id)
   const setOpen = (v: boolean) => {
     if (v) OPEN_SHEET = shown?.place_id ?? null
@@ -27,7 +33,7 @@ export function PlaceCard({ card: shown, onBook, tone = 'dark', badge }: { card:
   // the venue engine's read of their site may land after the search (it's never waited for): the card asks once and updates
   const [fresh, setFresh] = useState<Ev | null>(null)
   useEffect(() => {
-    if (!shown?.place_id || placeFacts(shown).type?.source === 'site') return
+    if (noDetails || !shown?.place_id || placeFacts(shown).type?.source === 'site') return   // 276: a marketplace is never read
     let live = true
     fetch(`/api/place/${encodeURIComponent(shown.place_id)}`, { cache: 'no-store' }).then(r => r.json())
       .then(j => { if (live && j?.ok && j.place?.read === 'site') setFresh(j.place) }).catch(() => { /* the listing stays, labelled */ })
@@ -40,14 +46,14 @@ export function PlaceCard({ card: shown, onBook, tone = 'dark', badge }: { card:
   const named = typeof card?.name === 'string' && !!untag(card.name).trim()
   useEffect(() => { if (!named) report('card_empty', { why: Object.keys(shown || {}).slice(0, 12).join(',') || typeof shown }) }, [named])   // eslint-disable-line react-hooks/exhaustive-deps
   const dim = tone === 'dark' ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.6)'
-  const photo = photoOk ? photoOf(card) : null
+  const photo = photoOk ? (extra?.photo_by && card.photo ? { url: String(card.photo), mark: String(extra.photo_by) } : photoOf(card)) : null   // 276: the photo's own credit
   const t = placeFacts(card).type
   if (!named) return null
   return (
     <div data-place={card.place_id} style={{ minWidth: 230, maxWidth: 260, background: tone === 'dark' ? '#16151d' : '#fff', color: tone === 'dark' ? '#fff' : '#111',
       border: `1px solid ${tone === 'dark' ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.12)'}`, borderRadius: 16, overflow: 'hidden', scrollSnapAlign: 'start',
       isolation: 'isolate', transform: 'translateZ(0)', flex: 'none' }}>{/* Sasha 274 · its own layer: WebKit never leaves a rounded, clipped card in a scrolling row unpainted */}
-      <button type="button" aria-label={`Open ${untag(card.name)} — photos, site, hours and prices`} onClick={() => setOpen(true)} onDoubleClick={() => setOpen(true)}
+      <button type="button" aria-label={`Open ${untag(card.name)} — photos, site, hours and prices`} onClick={() => { if (!noDetails) setOpen(true) }} onDoubleClick={() => { if (!noDetails) setOpen(true) }}
         style={{ display: 'block', width: '100%', padding: 0, border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', color: 'inherit' }}>
         {photo ? (
           <span style={{ display: 'block', position: 'relative' }}>
@@ -62,12 +68,18 @@ export function PlaceCard({ card: shown, onBook, tone = 'dark', badge }: { card:
           {t ? <span style={{ display: 'block', fontSize: 13, color: dim, marginTop: 2 }}>{untag(t.value)}{t.source === 'site' ? ' · their site' : ''}</span> : null}
           <span style={{ display: 'block', fontSize: 13, color: dim, marginTop: 2 }}>
             {card.rating ? `★ ${card.rating}${card.rating_count ? ` (${Number(card.rating_count).toLocaleString()})` : ''}` : ''}{card.rating && card.area ? ' · ' : ''}{untag(card.area || '')}
+            {extra?.price_level ? `${card.rating || card.area ? ' · ' : ''}${'€'.repeat(Math.max(1, Math.min(4, Number(extra.price_level))))}` : ''}
+            {typeof extra?.distance_m === 'number' ? ` · ${extra.distance_m < 1000 ? `${Math.round(extra.distance_m)} m` : `${(extra.distance_m / 1000).toFixed(1)} km`}` : ''}
           </span>
+          {extra?.feel ? <span style={{ display: 'block', fontSize: 13, color: dim, marginTop: 2 }}>{untag(extra.feel)}</span> : null}
+          {extra?.availability_words ? <span style={{ display: 'block', fontSize: 12.5, color: dim, marginTop: 2 }}>{untag(extra.availability_words)}</span> : null}
+          {extra?.how_far_words ? <span style={{ display: 'block', fontSize: 12.5, color: dim, marginTop: 2 }}>{untag(extra.how_far_words)}</span> : null}
+          {extra?.reason ? <span data-pick-reason style={{ display: 'block', fontSize: 12.5, color: GOLD, marginTop: 4 }}>{untag(extra.reason)}</span> : null}
         </span>
       </button>
       <div style={{ padding: '8px 12px 12px', display: 'flex', gap: 8 }}>
-        <button type="button" onClick={() => onBook(untag(card.name), card.place_id)} style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${GOLD}`, background: GOLD, color: '#111', fontWeight: 700 }}>Book</button>
-        <button type="button" onClick={() => setOpen(true)} style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${GOLD}`, background: 'transparent', color: tone === 'dark' ? GOLD : '#7a5c00', fontWeight: 700 }}>Details</button>
+        <button type="button" data-card-action={action ? 'hand_over' : 'book'} onClick={() => (action ? action.onClick() : onBook(untag(card.name), card.place_id))} style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${GOLD}`, background: GOLD, color: '#111', fontWeight: 700 }}>{action ? action.label : 'Book'}</button>
+        {noDetails ? null : <button type="button" onClick={() => setOpen(true)} style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${GOLD}`, background: 'transparent', color: tone === 'dark' ? GOLD : '#7a5c00', fontWeight: 700 }}>Details</button>}
       </div>
       {open ? <PlaceSheet card={card} onClose={() => setOpen(false)} onBook={() => { setOpen(false); onBook(untag(card.name), card.place_id) }} /> : null}
     </div>

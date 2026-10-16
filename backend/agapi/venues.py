@@ -148,7 +148,7 @@ def card_for_model(c: dict) -> dict:
 def remember_cards(account: str, cards: List[dict]) -> None:
     m = _SHOWN.setdefault(account, {})
     for c in cards:
-        m[c["place_id"]] = c
+        m[c.get("place_id") or c["ref"]] = c   # Sasha 276 · an independent (venue.discover) by its ref: no listing
     while len(m) > 60:
         m.pop(next(iter(m)))
 

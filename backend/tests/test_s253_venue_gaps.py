@@ -462,8 +462,8 @@ class G14Luxury(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def search(self, what, surface="s2"):
-        ctx = API.Ctx(account=ACCT, mode="test", user_said=what, session="s254-lux", surface=surface)
+    def search(self, what, surface="s2"):   # Sasha 276 · moved onto WhatsApp's brain (via "wa"): /s2's pages show venue.discover's own order
+        ctx = API.Ctx(account=ACCT, mode="test", user_said=what, session="s254-lux", surface=surface, via="wa")
         return run(API._search_venues(ctx, {"what": what, "where": "Madrid"}))
 
     def test_luxury_puts_three_euro_signs_and_up_first(self):

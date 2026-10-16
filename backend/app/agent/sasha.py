@@ -738,7 +738,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     screen = _SCREEN.get(session or "-") or {}
     tstate: Dict[str, Any] = {"cards": list(screen.get("cards") or []), "ribbon": screen.get("ribbon"),
                               "names": list(screen.get("names") or []), "allowed": set(screen.get("names") or []), "dropped": [],
-                              "new": False, "tool_names": set()}
+                              "new": False, "tool_names": set(), "searched": screen.get("searched")}
     # Sasha 251 · HONEST RESULTS: this turn's showing tools (voice.SHOWS) and whether anything reached their screen — a claim of
     # cards, a form or a total after they all failed is never said. Off on /next with parity off (byte-identical: SASHA_S1_PARITY=off)
     honest = surface == "s2" or s1_parity()
@@ -773,6 +773,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                       "don't say that again — call hold_booking and read back.")
         if remembered:
             extra += "\n\n" + remembered
+        if surface == "s2" and screen.get("searched"):   # Sasha 276 · her search's line was said by code, so her history has no search
+            s_ = screen["searched"]                       # in it: what's on their screen is told as the fact it is (never a rule)
+            extra += (f"\n\nOn their screen now: the cards from your search_venues for “{s_.get('what')}” in {s_.get('where')} (already "
+                      f"run — its line was said for you): {', '.join(screen.get('names') or []) or 'no cards'}.")
         if space_line:   # Sasha 249 · ONE SPACE (nothing is added while they're in Sasha)
             extra += space_line
         if used_openers:
@@ -973,7 +977,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                     names = _card_names(ev)
                     if names:   # this turn's results REPLACE the screen (never shown beside older ones)
                         if not tstate["new"]:
-                            tstate.update(cards=[], names=[], ribbon=None, new=True)
+                            tstate.update(cards=[], names=[], ribbon=None, new=True, searched=None)
                             tstate["allowed"] = set(tstate["tool_names"])   # what left the screen may no longer be named
                         tstate["names"] += names
                         tstate["allowed"] |= set(names)
@@ -984,6 +988,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                         tstate["cards"] = [{**({"place_id": o["place_id"]} if o.get("kind") == "place" and o.get("place_id") else
                                                {"ref": o.get("ref"), "website": o.get("link")}), "name": o.get("name")}   # a ref is never a listing
                                            for o in ev.get("options") or [] if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")]
+                        tstate["searched"] = {"what": str(args.get("what") or "")[:120], "where": str(args.get("where") or "")[:120]}   # its line was said by code
                 if ev:
                     tstate["drawn"] = True   # Sasha 251 · something reached their screen this turn
                     yield {**ev, "turn": turn_key}
@@ -1057,7 +1062,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     hl = [c.get("place_id") or c.get("ref") for c in tstate["cards"] if c.get("name") and set(_key(c["name"])) and set(_key(c["name"])) <= said_k]
     if tstate.get("focus") and tstate["focus"] not in hl:
         hl.insert(0, tstate["focus"])
-    _SCREEN[session or "-"] = {"cards": tstate["cards"], "ribbon": tstate["ribbon"], "names": tstate["names"]}
+    _SCREEN[session or "-"] = {"cards": tstate["cards"], "ribbon": tstate["ribbon"], "names": tstate["names"],
+                               **({"searched": tstate["searched"]} if tstate.get("searched") else {})}   # Sasha 276
     # Sasha 249 · ONE MEMORY: the screen and the openers said, kept in s2_memory as well (awaited: kept before the turn answers)
     await _MEMK.put_kinds(account, {"screen": {"session": session, "cards": tstate["cards"][:8], "ribbon": tstate["ribbon"],
                                                "names": tstate["names"]} if tstate["cards"] else None,

@@ -10,6 +10,7 @@ Offline: the three answers below are agapi-sandbox's own (16 Oct, v1.18.0 — do
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import pathlib
 import unittest
@@ -114,6 +115,15 @@ class Discover(unittest.TestCase):
         src = (BACKEND / "app" / "agent" / "sasha.py").read_text(encoding="utf-8")
         self.assertIn("or _V.discover_line(u.name, r)) if honest else", src)               # the turn ends on it (read_back_said)
         self.assertIn('if tool == "search_venues" and isinstance(res.get("discover"), dict):', src)
+
+    def test_the_next_turn_knows_the_search_ran(self):
+        """Gate, production 16 Oct: her line was said by code, so her next turn's history held "I've pulled up…" with no search in it
+        — she re-ran the dog walker search on "Buy me cocaine" and drew its cards again. What's on screen is told as the fact it is."""
+        src = inspect.getsource(AG.turn)
+        self.assertIn('tstate["searched"] = {"what": str(args.get("what") or "")[:120]', src)
+        self.assertIn('if surface == "s2" and screen.get("searched"):', src)              # /s2 only — never S1, never without a discover
+        self.assertIn("(already \"\n                      f\"run — its line was said for you)", src)
+        self.assertIn('tstate.update(cards=[], names=[], ribbon=None, new=True, searched=None)', src)   # a new result replaces it
 
     def test_one_path_on_s2_whatsapp_and_old_s1_unchanged(self):
         for ctx in (_ctx("s2", "wa"), _ctx("s1")):

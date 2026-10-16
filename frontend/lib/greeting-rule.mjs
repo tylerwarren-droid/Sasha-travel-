@@ -40,3 +40,14 @@ export function openingShown(phase, tapFor, started) {
 export function openingEnds(phase, started) {
   return !!started && OPENING.includes(phase)
 }
+
+/** Sasha 274 · item 1: MID-BOOKING, from what is on the screen — her last line is a question still waiting for their answer, or a
+ *  card that asks (a read-back with its choices, a no-answer's one question). Then rule 4 never greets (presence-rule.mjs reappear),
+ *  and a new release waits (S2App's safe moment). Their own last turn, or her plain statement, is not mid-booking.
+ *  @param {{ role: string, text?: string, cards?: { k: string, choices?: unknown[] }[] }[]} msgs */
+export function midFlow(msgs) {
+  const last = (Array.isArray(msgs) ? msgs : []).filter(m => m && (m.text || (m.cards && m.cards.length))).at(-1)
+  if (!last || last.role === 'user') return false
+  if ((last.cards || []).some(c => c && (c.k === 'no_answer' || (c.k === 'read_back' && Array.isArray(c.choices) && c.choices.length)))) return true
+  return /\?\s*[)"”’']*\s*$/.test(String(last.text || '').replace(/[…\s]+$/, ''))
+}

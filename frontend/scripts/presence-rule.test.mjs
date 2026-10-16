@@ -122,3 +122,18 @@ test('273 · 4 + 5: /s2 greets only from rule 4, has one return handler, and its
   assert.match(app, /voiceOf\(\{ asleep, dormant, micLive \}\)/)
   assert.match(app, /strict ctlRef=\{voiceCtl\} onConnectedChange=\{setMicLive\}/)
 })
+
+// ── Sasha 274 (rows 1061/1062, Tyler's iPhone 14:48–14:53) ───────────────────────────────────────────────────────────────────
+test('274 · 1: rule 4 never greets under her own unanswered booking question — even after 30 minutes', async () => {
+  const { midFlow } = await import('../lib/greeting-rule.mjs')
+  const now = Date.parse('2026-10-16T12:47:58Z')
+  const q = [{ role: 'user', text: 'Book Trebbiano for 4 at 21:00' }, { role: 'sasha', text: '4 people at Trebbiano, today at 21:00. Shall I call them now?…', cards: [] }]
+  assert.equal(midFlow(q), true)
+  assert.deepEqual(reappear({ lastAt: now - 45 * 60e3, now, tz: 'Europe/Madrid', midFlow: true }), { greet: false, lead: null, why: 'mid_booking' })
+  assert.equal(reappear({ lastAt: now - 45 * 60e3, now, tz: 'Europe/Madrid', midFlow: false }).greet, true)       // not mid-booking: as 273
+  assert.equal(reappear({ lastAt: now - 45 * 60e3, now, midFlow: true, news: 'You’re booked.' }).lead, 'news')     // news still leads
+  assert.equal(midFlow([{ role: 'sasha', text: '', cards: [{ k: 'read_back', choices: [{ title: 'Call them' }] }] }]), true)
+  assert.equal(midFlow([{ role: 'sasha', text: 'Booked: Trebbiano, 21:00.', cards: [] }]), false)
+  assert.equal(midFlow([{ role: 'user', text: 'what about 22:00?' }]), false)
+  assert.equal(midFlow([]), false)
+})

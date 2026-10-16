@@ -48,7 +48,7 @@ interface VoiceButtonProps {
 }
 
 /** Sasha 273 · what /s2 may ask of its mic: on return, resume what was live; on a tap, listen (start or resume — never stop). */
-export type VoiceCtl = { resume: () => void; tap: () => void }
+export type VoiceCtl = { resume: () => void; tap: () => void; granted: () => boolean }
 /** Sasha 273 · strict: no frame for this long and the mic is not hearing (the screen stops saying "Voice on"). */
 const LIVE_FRAME_MS = 1500
 
@@ -228,7 +228,16 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   const strictRef = useRef(strict)   // Sasha 273 · /s2: "on" only while frames arrive
   useEffect(() => { strictRef.current = strict }, [strict])
   const wasLiveRef = useRef(false)   // Sasha 273 · it was live when the page went to the background: resume it on return
-  const listenRef = useRef<(() => void) | null>(null)   // Sasha 273 · "Tap to talk" on a connected mic that isn't hearing: resume it
+  const listenRef = useRef<(() => void) | null>(null)
+  // Sasha 274 · item 4: the browser's own answer for the microphone, known BEFORE a tap — so a tap that starts a conversation (New
+  // chat, a chip) can start listening inside it, synchronously, when it is already granted (never a permission prompt from it)
+  const permRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!strict) return
+    let st: PermissionStatus | null = null
+    navigator.permissions?.query({ name: 'microphone' as PermissionName }).then(p => { st = p; permRef.current = p.state; p.onchange = () => { permRef.current = p.state } }).catch(() => { permRef.current = null })
+    return () => { if (st) st.onchange = null }
+  }, [strict])   // Sasha 273 · "Tap to talk" on a connected mic that isn't hearing: resume it
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)   // the socket is open — NOT "on" (Sasha 266: that is `hearing`)
@@ -873,7 +882,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   }
   useEffect(() => {
     if (!ctlRef) return
-    ctlRef.current = { resume: resumeMic, tap: listenNow }
+    ctlRef.current = { resume: resumeMic, tap: listenNow, granted: () => permRef.current === 'granted' }
     return () => { ctlRef.current = null }
   })
   useEffect(() => { listenRef.current = listenNow })
@@ -958,8 +967,9 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
           asleep        ? 'bg-white/10 opacity-60'
           : muted       ? 'bg-white/10 opacity-60'
           : isSpeaking  ? 'bg-green-500 animate-pulse scale-110'
+          : hearing && strict ? 'bg-emerald-600'   /* Sasha 274 · item 3: live — the same green as its ring and "Voice on" */
           : hearing     ? 'bg-red-500 animate-pulse'
-          : isConnected ? 'bg-yellow-500'
+          : isConnected && !strict ? 'bg-yellow-500'
           : isConnecting ? 'bg-yellow-500'
           : 'bg-indigo-600 hover:bg-indigo-700'
         } disabled:opacity-40`}
@@ -967,8 +977,9 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         {asleep ? <MicOff className="w-4 h-4 text-white/50" />
           : muted ? <MicOff className="w-4 h-4 text-white/50" />
           : isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+          : hearing && strict ? <Mic className="w-4 h-4 text-white" />   /* Sasha 274 · item 3: live = the mic, never crossed out beside "Voice on" */
           : hearing ? <MicOff className="w-4 h-4 text-white" />
-          : isConnected ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+          : isConnected && !strict ? <Loader2 className="w-4 h-4 text-white animate-spin" />   /* 274: strict — connected, not hearing = "Tap to talk" */
           : <Mic className="w-4 h-4 text-white" />}
       </button>
       {!quiet && micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}

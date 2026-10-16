@@ -77,11 +77,15 @@ export function ring(look, talking = false) {
 /** Sasha 273 · item 4 · WHEN SHE REAPPEARS — rule 4, the ONE place it is decided (an arrival at load, and a return to the page).
  *  She reappears and greets only when (a) IDLE_MS have passed with no activity, (b) it is a new day in the person's time zone, or
  *  (c) she has news since their last activity — then she leads with it. Paused stays paused. No activity known (a first visit): (a).
- *  @param {{ lastAt: number | null, now: number, tz?: string, news?: string | null, asleep?: boolean }} s
- *  @returns {{ greet: boolean, lead: 'news' | 'hello' | null, why: 'paused' | 'news' | 'idle' | 'new_day' | 'active' }} */
+ *  @param {{ lastAt: number | null, now: number, tz?: string, news?: string | null, asleep?: boolean, midFlow?: boolean }} s
+ *  @returns {{ greet: boolean, lead: 'news' | 'hello' | null, why: 'paused' | 'news' | 'mid_booking' | 'idle' | 'new_day' | 'active' }} */
 export function reappear(s) {
   if (s.asleep) return { greet: false, lead: null, why: 'paused' }
   if (s.news) return { greet: true, lead: 'news', why: 'news' }
+  // Sasha 274 · item 1 (row 1061, Tyler's iPhone 14:48): after 30 quiet minutes she greeted UNDER her own unanswered booking question
+  // ("…Trebbiano, today at 21:00. Shall I call them now?" → "Hey Tyler, what can I help you with?"). Mid-booking — her question still
+  // waiting for their answer (greeting-rule.mjs midFlow, or the record's pending) — she never greets: the question is what's there.
+  if (s.midFlow) return { greet: false, lead: null, why: 'mid_booking' }
   if (!s.lastAt || !Number.isFinite(s.lastAt) || s.now - s.lastAt >= IDLE_MS) return { greet: true, lead: 'hello', why: 'idle' }
   if (dayOf(s.lastAt, s.tz) !== dayOf(s.now, s.tz)) return { greet: true, lead: 'hello', why: 'new_day' }
   return { greet: false, lead: null, why: 'active' }

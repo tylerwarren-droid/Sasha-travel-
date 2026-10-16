@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
 import { cantRead, placeFacts, photoOf, sourceWord } from '@/lib/place-view.mjs'
+import { report } from '@/lib/mic-state'   // Sasha 274 · a card that arrived without its content says so (its keys only, never a value)
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 const GOLD = '#E8B923'
@@ -33,18 +34,25 @@ export function PlaceCard({ card: shown, onBook, tone = 'dark', badge }: { card:
     return () => { live = false }
   }, [shown?.place_id])   // eslint-disable-line react-hooks/exhaustive-deps
   const card: Ev = fresh ? { ...shown, place: fresh, type: fresh.type?.value ?? shown.type, type_source: fresh.type?.source ?? shown.type_source } : shown
+  // Sasha 274 · item 2 (row 1061, Tyler's iPhone 14:48: two cards as EMPTY dark boxes): a card is its content — the name and details
+  // at once, the photo streaming in after (a photo that fails is never left as a dark box). No name → no card, and it is reported.
+  const [photoOk, setPhotoOk] = useState(true)
+  const named = typeof card?.name === 'string' && !!untag(card.name).trim()
+  useEffect(() => { if (!named) report('card_empty', { why: Object.keys(shown || {}).slice(0, 12).join(',') || typeof shown }) }, [named])   // eslint-disable-line react-hooks/exhaustive-deps
   const dim = tone === 'dark' ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.6)'
-  const photo = photoOf(card)
+  const photo = photoOk ? photoOf(card) : null
   const t = placeFacts(card).type
+  if (!named) return null
   return (
     <div data-place={card.place_id} style={{ minWidth: 230, maxWidth: 260, background: tone === 'dark' ? '#16151d' : '#fff', color: tone === 'dark' ? '#fff' : '#111',
-      border: `1px solid ${tone === 'dark' ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.12)'}`, borderRadius: 16, overflow: 'hidden', scrollSnapAlign: 'start' }}>
+      border: `1px solid ${tone === 'dark' ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.12)'}`, borderRadius: 16, overflow: 'hidden', scrollSnapAlign: 'start',
+      isolation: 'isolate', transform: 'translateZ(0)', flex: 'none' }}>{/* Sasha 274 · its own layer: WebKit never leaves a rounded, clipped card in a scrolling row unpainted */}
       <button type="button" aria-label={`Open ${untag(card.name)} — photos, site, hours and prices`} onClick={() => setOpen(true)} onDoubleClick={() => setOpen(true)}
         style={{ display: 'block', width: '100%', padding: 0, border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', color: 'inherit' }}>
         {photo ? (
           <span style={{ display: 'block', position: 'relative' }}>
             {/* eslint-disable-next-line @next/next/no-img-element -- a remote venue photo (Google's short-lived URL, or the venue's own), sized by the card */}
-            <img src={photo.url} alt="" referrerPolicy="no-referrer" style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
+            <img src={photo.url} alt="" referrerPolicy="no-referrer" loading="lazy" onError={() => { setPhotoOk(false); report('card_photo_failed', { why: photo.mark }) }} style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
             <span style={{ position: 'absolute', right: 6, bottom: 6, fontSize: 10.5, padding: '1px 6px', borderRadius: 6, background: 'rgba(0,0,0,.55)', color: '#fff' }}>{photo.mark}</span>
           </span>
         ) : null}

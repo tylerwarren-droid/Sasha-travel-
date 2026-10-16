@@ -201,6 +201,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "visible viewport); the voice label and green ring are the mic actually hearing; she greets only by rule 4 (30 min quiet, "
             "a new day, news) — never mid-flow; one booking card for every account; never names or limits how a place books",
             ["tests.test_s273"]),
+    "T56": ("Tyler's iPhone (16 Oct 14:48): never a greeting under her own unanswered booking question; an open page picks up a new "
+            "release at a safe moment; a place card is never empty; the mic's icon, label and ring agree; a tap that starts a "
+            "conversation starts listening",
+            ["tests.test_s274"]),
 }
 
 _RUNNER = """

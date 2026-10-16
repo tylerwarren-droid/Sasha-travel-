@@ -27,7 +27,7 @@ import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
-import { loadFirstLine, firstLineFor, cameraOffLine } from '@/lib/first-line'
+import { loadFirstLine, isWork, takeFirstLine, forgetAcks, cameraOffLine } from '@/lib/first-line'
 import { BLOCKED, stepsFor } from '@/lib/mic-state'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
@@ -531,9 +531,11 @@ export default function S2App() {
       // away (hidden) or replayed as it loads: rule 4's (c). Her return leads with it; a person here and talking just hears it.
       const said = String(ev.say || ev.text || '').trim()
       const at = Number(ev.at) > 0 ? Number(ev.at) * 1000 : Date.now()
+      let held = false   // news kept for her return: her reappearance says it — once, never also here
       if (said && ['proactive', 'venue_notice', 'booked', 'booking_failed'].includes(String(ev.type)) && (!lastAt.current || at > lastAt.current)
           && (document.visibilityState === 'hidden' || Date.now() - loadedAt.current < 10000)) {
         newsRef.current = untag(said)
+        held = true
         if (document.visibilityState !== 'hidden') setTimeout(() => comeBackRef.current?.(), 0)   // the load's own replay: rule 4 now
       }
       if (ev.type === 'proactive' && ev.say) {   // Sasha 227 · "day before pickup": her one line, and the counter card
@@ -544,14 +546,14 @@ export default function S2App() {
             ? [{ k: 'no_answer', act_id: String(ev.render.act_id), ask: ev.render.ask || undefined, page: ev.render.page || undefined,
                  choices: Array.isArray(ev.render.choices) ? ev.render.choices : [] }] : []
         setMsgs(ms => [...ms, { role: 'sasha', text: untag(String(ev.say)), cards: card }])
-        speaker.say(String(ev.say))
+        if (!held) speaker.say(String(ev.say))
         return
       }
       if (ev.type === 'venue_notice') {   // Sasha 226 · the venue's answer to "I'm running late" / a change — in their words, when it comes
         const lines: string[] = Array.isArray(ev.lines) ? ev.lines.map(String) : [String(ev.say || '')]
         const title = `${ev.purpose === 'change' ? 'Change' : 'Running late'} · ${String(ev.venue || 'the venue')}`
         setMsgs(ms => [...ms, { role: 'sasha', text: '', cards: [{ k: 'notice', title, lines, status: ev.outcome === 'yes' ? 'Done' : ev.state === 'not_reached' ? 'No answer' : 'Their answer' }] }])
-        speaker.say(String(ev.say || ''))
+        if (!held) speaker.say(String(ev.say || ''))
         return
       }
       if (ev.type !== 'booked' && ev.type !== 'booking_failed') return
@@ -578,9 +580,9 @@ export default function S2App() {
     // Sasha 265 · item 5: a request for work hears voice.first_line the instant it's sent (the network took 0.8–1.4 s)
     // Sasha 268 · item 4: his FIRST REAL REQUEST while she is full size (voice.py's work rule, or a card's pick or tap — each starts
     // work; small talk never) → her line by code (voice.CAMERA_OFF), said by her (bye), then the corner circle and the work
-    const isRequest = !!(pick || tap || firstLineFor(t))
+    const isRequest = !!(pick || tap || isWork(t))
     const leaving = isRequest && !!helloCtl.current?.big()
-    const said1 = leaving ? (cameraOffLine() || null) : pick || tap ? null : firstLineFor(t)
+    const said1 = leaving ? (cameraOffLine() || null) : pick || tap ? null : takeFirstLine(t)   // Sasha 273 · item 8: once per request, then the quiver
     if (leaving) {
       if (said1) patch(m => ({ ...m, hold: said1 }))
       byeUntil.current = Date.now() + 9000   // her line first: the stream's lines are shown, not spoken over it
@@ -595,7 +597,7 @@ export default function S2App() {
     try {
       arm()
       const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
-        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, ...(pick ? { pick } : {}), ...(tap ? { tap } : {}) }) })   // Sasha 265 · the card's tap
+        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, ...(pick ? { pick } : {}), ...(tap ? { tap } : {}), ...(said1 && !leaving ? { said_first: said1 } : {}) }) })   // Sasha 265 · the card's tap
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const rd = r.body?.getReader()
       const dec = new TextDecoder()
@@ -686,6 +688,7 @@ export default function S2App() {
       if (!r.ok || !j?.ok) throw new Error('not cleared')
       histRef.current = []
       queued.current = []
+      forgetAcks()   // Sasha 273 · item 8: a new chat is a new request
       session.current = `s2-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
       setInput('')
       setMsgs([])
@@ -795,31 +798,31 @@ export default function S2App() {
               {micNote === BLOCKED ? <div style={{ color: C.dim, marginTop: 4 }}>{stepsFor()}</div> : null}
             </div>) : null}
           {/* Sasha 259 · Tyler (row 884): ONE row of ordinary controls — the moon, her voice, her face — nothing floating over send */}
-          <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px 6px', fontSize: 13.5, flexWrap: 'nowrap', minWidth: 0 }}>
-            <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={36} />
-            {/* Sasha 273 · item 3: the voice label is the MIC's real state (lib/presence-rule.mjs voiceOf, from VoiceButton's strict
-                `hearing`) — "Voice on" only while it hears; otherwise "Tap to talk", and the tap starts or resumes it */}
-            {(() => { const vo = voiceOf({ asleep, dormant, micLive }); return (
-              <button type="button" data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-label={vo.live ? 'Voice on — she is listening' : vo.words}
-                onClick={() => { speaker.unlock(); micUsed.current = true; if (asleepRef.current) sleepEvent('press_mic'); voiceCtl.current?.tap() }}
-                style={{ background: 'none', border: 0, color: vo.live ? '#34d399' : C.gold, padding: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                {vo.live ? '● ' : '🎙 '}{vo.words}</button>) })()}
+          {/* Sasha 273 · item 5: the row fits a 390 px phone with nothing shrunk under its words (found at 390: the Pause button squeezed to
+              36 px, "Pause Sasha" spilling over the mic's label) — no item shrinks; her sound is its icon (its words are its label) */}
+          <div data-s2-controls style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 6, padding: '0 16px 6px', fontSize: 13, flexWrap: 'nowrap', minWidth: 0 }}>
+            <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={36} style={{ flexShrink: 0, padding: '0 10px' }} />
             {voiceBlocked && !muted ? (
-              <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                🔈 Tap to hear</button>
+              <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" title="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17 }}>
+                🔈</button>
             ) : (   /* her SPEAKER (Sasha 230's remembered mute) — its own word, never "Voice": that word is the mic's */
-            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her sound on' : 'Mute her sound'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>
-              {muted ? '🔇 Sound off' : '🔊 Sound'}</button>)}
+            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Her sound is off — turn it on' : 'Her sound is on — mute it'} title={muted ? 'Sound off' : 'Sound on'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17, opacity: muted ? 0.6 : 1 }}>
+              {muted ? '🔇' : '🔊'}</button>)}
             <button onClick={() => { void newChat() }} disabled={busy || clearing} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
-              style={{ background: 'none', border: 0, color: busy || clearing ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
+              style={{ background: 'none', border: 0, color: busy || clearing ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
             <span style={{ flex: 1 }} />
-            <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40 }} />{/* her corner: S2Hello's circle sits over this space (Sasha 271 · measured, never portalled) */}
+            <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40, flexShrink: 0 }} />{/* her corner: S2Hello's circle sits over this space (Sasha 271 · measured, never portalled) */}
           </div>
           <footer style={{ flex: 'none', padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
+            {/* Sasha 273 · item 3: the voice label is the MIC's real state (lib/presence-rule.mjs voiceOf, from VoiceButton's strict `hearing`),
+                on the mic itself — "Voice on" and its green ring only while it hears; otherwise "Tap to talk" (the tap starts or resumes it) */}
+            {(() => { const vo = voiceOf({ asleep, dormant, micLive }); return (
+            <div className="s2-mic" data-live={vo.live ? '1' : '0'} onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={send} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
                 strict ctlRef={voiceCtl} onConnectedChange={setMicLive} />}{/* Sasha 273 · item 3: "on" only while it hears */}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
-            </div>
+              <span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-live="polite"
+                style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{vo.words}</span>
+            </div>) })()}
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
               <input ref={typeBox} value={input} onChange={e => { if (asleepRef.current) sleepEvent('typed'); setInput(e.target.value) }} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
@@ -828,7 +831,7 @@ export default function S2App() {
                 style={{ padding: '0 16px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700, opacity: !input.trim() ? 0.5 : 1 }}>➤</button>{/* Sasha 257 · sendable while she answers: it goes next */}
             </form>
           </footer>
-          <style>{`.s2-mic button{width:56px;height:56px;border-radius:50%}`}</style>
+          <style>{`.s2-mic button{width:56px;height:56px;border-radius:50%}.s2-mic[data-live="1"] button{box-shadow:0 0 0 3px #34d399}`}</style>
         </>
       )}
     </main>{hello}

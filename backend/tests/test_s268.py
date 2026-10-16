@@ -51,7 +51,7 @@ class SheTriesFirst(unittest.TestCase):
         for text in (S2.S2_WHO, V.RULES, S2.S2_SEARCH, str(HOME.tools()[1]["description"])):
             self.assertNotIn("I can't do that yet", text)
             self.assertNotIn("noted it", text)
-        self.assertIn(f'her first answer is "{V.TRY_FIRST}"', V.RULES.replace("\n  ", " "))
+        self.assertIn(f'her first answer — "{V.TRY_FIRST}" or a short acknowledgement — is said for her by code', V.RULES.replace("\n  ", " "))   # Sasha 273 · moved: once per request, by code
         self.assertIn("\"I can't\" is never her first answer", S2.S2_WHO)
         self.assertIn("a dog walker", S2.S2_SEARCH)                                        # /s2's search: any business
         self.assertIn('{**t, "description": S2.S2_SEARCH} if t["name"] == "search_venues"', pathlib.Path(S.__file__).read_text())

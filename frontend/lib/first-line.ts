@@ -6,17 +6,17 @@
  */
 import { apiUrl } from '@/lib/api'
 
-let rule: { line: string; re: RegExp; cameraOff: string; trip: RegExp | null; tryLine: string; hello: string; helloBack: string } | null = null
+let rule: { line: string; re: RegExp; cameraOff: string; trip: RegExp | null; tryLine: string; hello: string; helloBack: string; acks: string[] } | null = null
 let loading: Promise<void> | null = null
 
 export function loadFirstLine(): Promise<void> {
   if (rule || loading) return loading || Promise.resolve()
   loading = fetch(apiUrl('/api/agent/first-line'), { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
-    .then((j: { line?: string; work?: string; flags?: string; camera_off?: string; trip?: string; try?: string; hello?: string; hello_back?: string } | null) => {
+    .then((j: { line?: string; work?: string; flags?: string; camera_off?: string; trip?: string; try?: string; hello?: string; hello_back?: string; acks?: string[] } | null) => {
       if (j?.line && j?.work) rule = { line: j.line, re: new RegExp(j.work, j.flags || 'i'), cameraOff: j.camera_off || '',
                                        trip: j.trip ? new RegExp(j.trip, j.flags || 'i') : null, tryLine: j.try || '',
-                                       hello: j.hello || '', helloBack: j.hello_back || '' }
+                                       hello: j.hello || '', helloBack: j.hello_back || '', acks: Array.isArray(j.acks) ? j.acks.filter(x => typeof x === 'string' && x) : [] }
     })
     .catch(() => { /* not read: the stream's own first line still comes (~1 s) */ })
     .finally(() => { loading = null })
@@ -51,4 +51,37 @@ export async function newsLine(news: string): Promise<string> {
 export function firstLineFor(text: string): string | null {
   if (!rule || !rule.re.test(text || '')) return null
   return !rule.tryLine || !rule.trip || rule.trip.test(text || '') ? rule.line : rule.tryLine
+}
+
+/** Sasha 273 · item 8 (row 1047): "Let me see what I can do" repeated on every turn of a booking. /s2's first line, by voice.py's ONE
+ *  rule (voice.ack_for): the special line (the trip's / TRY_FIRST) at most ONCE per request, then the next line of voice.ACKS — never
+ *  the same line twice in a row. The words are the backend's (GET /api/agent/first-line acks); the page only keeps what it said. A
+ *  request is over after ACK_RESET_MS quiet or a New chat (forgetAcks). The stream is told what was said (said_first) and keeps it. */
+const ACK_RESET_MS = 30 * 60 * 1000
+let acked: { last: string | null; tried: Set<string>; at: number } = { last: null, tried: new Set(), at: 0 }
+
+/** Is this message a request for work (no state touched)? */
+export function isWork(text: string): boolean {
+  return !!rule && rule.re.test(text || '')
+}
+
+/** The first line to say for this message now — and remembered as said; null when it isn't a request for work. */
+export function takeFirstLine(text: string, now: number = Date.now()): string | null {
+  const special = firstLineFor(text)
+  if (!special || !rule) return null
+  if (now - acked.at > ACK_RESET_MS) acked = { last: null, tried: new Set(), at: now }
+  let line = special
+  if (acked.tried.has(special) || acked.last === special) {
+    const q = rule.acks
+    if (!q.length) return null   // no quiver read: nothing rather than the same line again
+    const i = acked.last && q.includes(acked.last) ? q.indexOf(acked.last) + 1 : 0
+    line = q[i % q.length]
+  }
+  acked = { last: line, tried: new Set([...acked.tried, ...(line === special ? [special] : [])]), at: now }
+  return line
+}
+
+/** New chat (or a new arrival): the next request may open with its first line again. */
+export function forgetAcks(): void {
+  acked = { last: null, tried: new Set(), at: 0 }
 }

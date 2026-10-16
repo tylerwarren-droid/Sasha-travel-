@@ -92,6 +92,52 @@ class ChannelNeverLimited(unittest.TestCase):
         self.assertIn("if one_path(ctx):", ex.split("WAIT_TO_CALL")[0][-400:])
 
 
+class TheTurnNeverSaysIt(unittest.TestCase):
+    """6 · the whole turn (sasha.turn, the model stubbed): Tyler's demo words, written by the model after read_booking_route on a
+    phone-only place, never reach the person on /s2 — the rest of what she said does. Old S1 (parity off) says what it always said."""
+
+    SAID = ("Periplo takes bookings by phone only. The only route I can use is a phone call. "
+            "I'll make the booking — shall I call them now?")
+
+    def _turn(self, surface):
+        import types
+        from agapi import v0 as API
+        from tests.test_agapi_guards import _Block, _Stream
+        steps = [types.SimpleNamespace(content=[_Block(type="tool_use", id="t1", name="read_booking_route", input={"name": "Periplo", "city": "Madrid"})]),
+                 types.SimpleNamespace(content=[_Block(type="text", text=self.SAID)])]
+
+        class Msgs:
+            def stream(self, **kw):
+                return _Stream(steps.pop(0))
+
+            async def create(self, **kw):
+                return types.SimpleNamespace(content=[_Block(type="text", text="")])
+        import app.services.llm as LLM
+        real_client, real_call = LLM.client, API.call
+
+        async def spy(ctx, name, args):   # the phone-only place, as read_booking_route answers on the one path now
+            return {"ok": True, "result": {"venue": "Periplo", "routes": ["call"], "how": V.BOOK_IT}}
+        LLM.client, API.call = types.SimpleNamespace(messages=Msgs()), spy
+        try:
+            async def go():
+                return [ev async for ev in AG.turn(ACCT, "Book Periplo for four at 21:00 tonight", [], "s273-turn", surface=surface)]
+            with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"}):
+                evs = run(go())
+        finally:
+            LLM.client, API.call = real_client, real_call
+        return " ".join(str(e.get("text") or e.get("delta") or "") for e in evs if e.get("type") in ("text", "say", "done", "replace"))
+
+    def test_s2_never_says_it(self):
+        said = self._turn("s2")
+        self.assertNotIn("by phone only", said)
+        self.assertNotIn("only route", said)
+        self.assertFalse(V.limits_channel(said), said)
+        self.assertIn("shall I call them now?", said)
+
+    def test_old_s1_unchanged(self):
+        self.assertIn("by phone only", self._turn("s1"))   # parity off: no new filter (its own words are S1's, unchanged)
+
+
 class OneCardPath(unittest.TestCase):
     """2 · Jon's account (no access record → closed: nothing sent to venues) got the drafted message for a booking, and the draft drew
     no card — Tyler's got the read-back card. The same booking now shows the same card, whatever the account's access."""
@@ -156,6 +202,60 @@ class ReturnRead(unittest.TestCase):
         self.assertIn("'at': ev.get('_at')", inspect.getsource(AG.agent_events))
 
 
+class OneAckPerRequest(unittest.TestCase):
+    """8 · row 1047 (Tyler, 13:48): "Let me see what I can do" repeats. The special first line at most once per request, then the ONE
+    quiver (voice.ACKS) — never the same line twice in a row; the model never writes any of them."""
+
+    def setUp(self):
+        V.forget_acks(ACCT)
+
+    def test_once_then_the_quiver_never_twice_in_a_row(self):
+        said = [V.first_ack(ACCT, m, now=1000.0 + i) for i, m in enumerate(
+            ["Can you find me a dog walker?", "I want a walker on Saturday", "I'd like a slot at 10", "book the first one", "book it", "find another"])]
+        self.assertEqual(said[0], V.TRY_FIRST)
+        self.assertEqual(said.count(V.TRY_FIRST), 1)
+        for a, b in zip(said, said[1:]):
+            self.assertNotEqual(a, b)
+        self.assertTrue(all(x in V.ACKS for x in said[1:]))
+        self.assertIsNone(V.first_ack(ACCT, "thanks!", now=1010.0))                        # not a request for work: none
+        self.assertEqual(V.first_ack(ACCT, "find me a florist", now=1010.0 + V.ACK_RESET_S + 1), V.TRY_FIRST)   # a new request later
+        V.forget_acks(ACCT)                                                                 # New chat
+        self.assertEqual(V.first_ack(ACCT, "Book a table tonight", now=5000.0), V.FIRST_LINE)
+
+    def test_the_page_said_it(self):
+        self.assertEqual(V.first_ack(ACCT, "book it", said=V.TRY_FIRST, now=1.0), V.TRY_FIRST)   # the stream's first line = the page's words
+        self.assertEqual(V.first_ack(ACCT, "book it", said=V.ACKS[2], now=2.0), V.ACKS[2])
+        self.assertEqual(V.first_ack(ACCT, "book it", now=3.0), V.ACKS[3])                  # …each kept as said: never TRY_FIRST again
+
+    def test_the_rule_is_pure_and_the_page_reads_its_words(self):
+        self.assertEqual(V.ack_for(V.TRY_FIRST, None, []), V.TRY_FIRST)
+        self.assertEqual(V.ack_for(V.TRY_FIRST, V.TRY_FIRST, [V.TRY_FIRST]), V.ACKS[0])
+        self.assertEqual(V.ack_for(V.TRY_FIRST, V.ACKS[-1], [V.TRY_FIRST]), V.ACKS[0])
+        self.assertIsNone(V.ack_for(None, None, []))
+        self.assertEqual(len(set(V.ACKS)), len(V.ACKS))
+        self.assertEqual(run(AG.first_line_rule())["acks"], list(V.ACKS))
+
+    def test_the_model_never_says_one(self):
+        self.assertIn("never write it\n  yourself", V.RULES)
+        self.assertTrue(V.is_ack("Let me see what I can do."))
+        self.assertTrue(V.is_ack("hold on one second while I sort that out"))
+        self.assertFalse(V.is_ack("Let me see what they have on Saturday."))
+        src = inspect.getsource(AG)
+        self.assertIn("if honest and _V.is_ack(x):", src)
+        self.assertIn('first=_V.first_ack(account, message, said=body.get("said_first"))', src)
+        self.assertIn("V.forget_acks(account)", inspect.getsource(M.clear_conversation))
+
+    def test_the_page_once_per_request(self):
+        fl = _front(self, "lib/first-line.ts")
+        self.assertIn("export function takeFirstLine(", fl)
+        self.assertIn("if (acked.tried.has(special) || acked.last === special) {", fl)
+        app = _front(self, "app/s2/S2App.tsx")
+        self.assertIn("takeFirstLine(t)", app)
+        self.assertIn("said_first: said1", app)
+        self.assertIn("forgetAcks()", app)
+        self.assertNotIn("firstLineFor(", app)
+
+
 class FrontHeld(unittest.TestCase):
     """1, 3, 4, 5 · the page's halves, held from the backend suite too (scripts/presence-rule.test.mjs holds them in node)."""
 
@@ -176,6 +276,9 @@ class FrontHeld(unittest.TestCase):
         self.assertIn("data-s2-shell style={{ height: '100dvh'", app)
         self.assertIn("strict ctlRef={voiceCtl} onConnectedChange={setMicLive}", app)
         self.assertNotIn("'🔊 Voice on'", app)
+        # 7 · row 1047: a new chat with the mic off — the discreet cue by the mic, from the ONE mic state; never a modal
+        self.assertIn("<span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'}", app)
+        self.assertIn('.s2-mic[data-live="1"] button{box-shadow:0 0 0 3px #34d399}', app)
         self.assertIn("const r = rule4()", app)
         vb = _front(self, "app/components/VoiceButton.tsx")
         self.assertIn("if (!strictRef.current || !hearingRef.current) return", vb)   # strict is /s2's alone: /next unchanged

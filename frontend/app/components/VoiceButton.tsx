@@ -228,6 +228,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   const strictRef = useRef(strict)   // Sasha 273 · /s2: "on" only while frames arrive
   useEffect(() => { strictRef.current = strict }, [strict])
   const wasLiveRef = useRef(false)   // Sasha 273 · it was live when the page went to the background: resume it on return
+  const listenRef = useRef<(() => void) | null>(null)   // Sasha 273 · "Tap to talk" on a connected mic that isn't hearing: resume it
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)   // the socket is open — NOT "on" (Sasha 266: that is `hearing`)
@@ -839,6 +840,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       deafRef.current = false; reportMicError(null)
       return
     }
+    if (connectedRef.current && strictRef.current && !hearingRef.current) { listenRef.current?.(); return }   // Sasha 273 · "Tap to talk": resume, never off
     if (connectedRef.current) { stopAll(); return }
     // Sasha 171 · a CLICK on the mic is the guest asking to talk: the gate opens now. It started closed "until the avatar
     // finishes speaking" — in the text box, with no call, the avatar never speaks, so nothing said ever reached Deepgram
@@ -874,6 +876,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     ctlRef.current = { resume: resumeMic, tap: listenNow }
     return () => { ctlRef.current = null }
   })
+  useEffect(() => { listenRef.current = listenNow })
   useEffect(() => {   // Sasha 273 · was it live as the page went to the background? (only that is resumed on return)
     if (!strict) return
     const seen = () => { if (document.visibilityState === 'hidden') wasLiveRef.current = hearingRef.current || connectedRef.current }

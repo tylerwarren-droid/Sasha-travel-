@@ -152,7 +152,8 @@ RULES = f"""
   cards, a form, a booking, a message sent or a total that the tool didn't return — nothing is on their screen unless a tool put it
   there this turn.
 - Try first. Asked for any service or business (a dog walker, a tattoo, a dentist, a plumber, a florist — anything with a web
-  presence), her first answer is "{TRY_FIRST}" and then she does it: search for it, show the cards, find how they take bookings, ask
+  presence), her first answer — "{TRY_FIRST}" or a short acknowledgement — is said for her by code before you start: never write it
+  yourself; she does it: search for it, show the cards, find how they take bookings, ask
   the one question. "I can't" is never her first answer; she says it only after a tool actually tried and failed — and then with what
   she found and what she CAN do.
 - Never say a place has "no online booking form" or "no booking form": when read_booking_route's `how` gives it, say it word for word —
@@ -439,6 +440,57 @@ def first_line(message: str) -> Optional[str]:
     return FIRST_LINE if _TRIP.search(m) else TRY_FIRST if _ASK.search(m) else None
 
 
+# Sasha 273 · item 8 (row 1047, Tyler 16 Oct 13:48): "Let me see what I can do" repeated — every request for work in a booking (the
+# place, the time, "four of us") was a "request", so every turn opened with it, and the model, told to, said it again. Now: the special
+# first line (FIRST_LINE for a trip / TRY_FIRST for a service) at most ONCE per request; any later work turn of that request opens with
+# the next line of this ONE quiver — never the same line twice in a row. Said by code only (the page instantly; the stream for the
+# other surfaces); the model never says any of them (RULES; sasha.turn drops one it writes on /s2 and S1 parity).
+ACKS = ("Let me look into that.", "Hold on one second while I sort that out.", "On it — one moment.", "Give me a second to sort that.")
+ACK_RESET_S = 30 * 60   # a request is over after this long quiet (rule 4's 30 minutes) — the next one may open with its first line again
+_ACK: dict = {}
+
+
+def next_ack(last: Optional[str]) -> str:
+    """The quiver's line after `last` — never `last` again."""
+    i = ACKS.index(last) + 1 if last in ACKS else 0
+    return ACKS[i % len(ACKS)]
+
+
+def ack_for(special: Optional[str], last: Optional[str], tried: Iterable[str]) -> Optional[str]:
+    """THE rule (pure): no special line (not a request for work) → None; its special line not yet said this request → it; else the
+    quiver's next line after `last`."""
+    if not special:
+        return None
+    return special if special not in set(tried) and special != last else next_ack(last)
+
+
+def first_ack(account: str, message: str, said: Optional[str] = None, now: Optional[float] = None) -> Optional[str]:
+    """The first line of this turn for `account` — by ack_for, remembered per person. `said`: the page already said this one (it
+    picks by the same rule, instantly): it is kept as said, and returned so the stream's first line is the same words."""
+    import time as _t
+    now = _t.time() if now is None else now
+    st = _ACK.get(account or "")
+    if not st or now - st["at"] > ACK_RESET_S:
+        st = _ACK[account or ""] = {"last": None, "tried": set(), "at": now}
+    line = said if isinstance(said, str) and said.strip() else ack_for(first_line(message), st["last"], st["tried"])
+    if line:
+        st["last"], st["at"] = line, now
+        if line in (FIRST_LINE, TRY_FIRST):
+            st["tried"].add(line)
+    return line
+
+
+def forget_acks(account: str) -> None:
+    """New chat: a new request may open with its first line again."""
+    _ACK.pop(account or "", None)
+
+
+def is_ack(sentence: str) -> bool:
+    """One of the lines said for her by code at a turn's start (the first lines and the quiver) — never hers to write."""
+    p = _plain(sentence)
+    return bool(p) and p in {_plain(x) for x in (FIRST_LINE, TRY_FIRST) + ACKS}
+
+
 def progress_line(tool: Optional[str], account: str = "") -> str:
     """The next progress line for the step running now (`tool`: the tool running, None while she's still thinking) — rotating per
     person, so the same step never sounds the same twice in a row."""
@@ -630,7 +682,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

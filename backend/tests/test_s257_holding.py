@@ -66,7 +66,7 @@ class OnS2AndNext(unittest.TestCase):
     def test_the_stream_uses_it_on_the_s2_shell(self):
         import inspect
         src = inspect.getsource(S)
-        self.assertIn("with_holding(turn_events, account, first=_V.first_line(message)) if remembers else turn_events", src)   # Sasha 265 · + the first line
+        self.assertIn('with_holding(turn_events, account, first=_V.first_ack(account, message, said=body.get("said_first"))) if remembers else turn_events', src)   # Sasha 265 · + the first line · 273: once per request (moved)
 
 
 class OnWhatsApp(TG.Base):

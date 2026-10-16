@@ -800,6 +800,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if guard_check(x, allowed, bool(booked_now), figs):
                 held = True
                 break
+            if honest and _V.is_ack(x):   # Sasha 273 · item 8: the turn's first line is said by code — never again by the model
+                internal_log.append(f"ack: {x[:60]}")
+                continue
             if honest and _V.limits_channel(x) and not _V.is_told(x, told):   # Sasha 273 · rule 15: never limits how a place books
                 internal_log.append(f"channel limited: {x[:60]}")
                 continue
@@ -1761,7 +1764,8 @@ async def agent_turn(request: Request):
         try:
             turn_events = turn_with_quiver(account, message, body.get("history") or [], session_id, surface)
             # Sasha 265 · item 5: a request for work hears voice.first_line at once (the stream's first event, before the timing)
-            held = with_holding(turn_events, account, first=_V.first_line(message)) if remembers else turn_events
+            # Sasha 273 · item 8: the first line ONCE per request, then the quiver (voice.first_ack) — the page's own (said_first) kept as said
+            held = with_holding(turn_events, account, first=_V.first_ack(account, message, said=body.get("said_first"))) if remembers else turn_events
             async for ev in held:   # Sasha 257 · the holding line
                 if timing and not ev.get("first"):   # Sasha 265 · item 5: the timing goes out after the first line (if one), never before
                     yield timing
@@ -1820,7 +1824,7 @@ async def first_line_rule():
     the same words, not said twice. Public: words and a pattern, nothing of anyone's."""
     return {"line": _V.FIRST_LINE, "work": _V._WORK.pattern, "flags": "i", "camera_off": _V.CAMERA_OFF,   # 268: her arrival's line
             "hello": _V.HELLO, "hello_back": _V.HELLO_BACK,   # 271 · B: her arrival ("Hey there" / "Hey <name>", then camera_off)
-            "trip": _V._TRIP.pattern, "try": _V.TRY_FIRST}   # 268 item 7: any other request for a service → "Let me see what I can do."
+            "trip": _V._TRIP.pattern, "try": _V.TRY_FIRST, "acks": list(_V.ACKS)}   # 273 item 8: the one quiver (the page's rule: voice.ack_for)   # 268 item 7: any other request for a service → "Let me see what I can do."
 
 
 @router.delete("/memory")

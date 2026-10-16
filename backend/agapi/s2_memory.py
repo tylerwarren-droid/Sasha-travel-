@@ -422,6 +422,8 @@ async def clear_conversation(account: str) -> dict:
         for key in [k for k in store if k[0] == account]:
             store.pop(key, None)
     VN._SHOWN.pop(account, None)
+    from app.agent import voice as V
+    V.forget_acks(account)   # Sasha 273 · item 8: a new chat is a new request
     return {"cleared": gone, "kept": sorted(kept)}
 
 

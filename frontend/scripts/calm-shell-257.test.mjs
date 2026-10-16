@@ -58,7 +58,7 @@ test('Sasha 259 · a calm phone screen: her face is a real still (268: half-body
   assert.doesNotMatch(hello, /\{img \? '' : 'S'\}/)
   assert.match(hello, /document\.getElementById\('s2-face-slot'\)/)
   assert.match(app, /<span id="s2-face-slot"/)
-  assert.match(app, /<SleepButton asleep=\{asleep\} onToggle=\{\(\) => sleepEvent\('tap_pause'\)\} size=\{36\} \/>/)
+  assert.match(app, /<SleepButton asleep=\{asleep\} onToggle=\{\(\) => sleepEvent\('tap_pause'\)\} size=\{36\} style=\{\{ flexShrink: 0, padding: '0 10px' \}\} \/>/)   // Sasha 273 · moved: never squeezed at 390 px
   assert.doesNotMatch(app, /position: 'fixed', zIndex: 46, left: 16/)                   // the moon no longer floats over "Voice off"
   assert.match(app, /<VoiceButton quiet /)
   assert.match(mic, /\{!quiet && !asleep && muted && <p/)

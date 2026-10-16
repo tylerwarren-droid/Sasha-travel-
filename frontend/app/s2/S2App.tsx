@@ -85,7 +85,7 @@ const CARRY = 's2_carry'
 type Carry = { msgs: Msg[]; hist: { role: string; content: string }[] }
 /** The conversation, across a reload for a new release — this tab only, read once, never a payment card. */
 function putCarry(msgs: Msg[], hist: { role: string; content: string }[], key: string = CARRY): void {
-  try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), msgs: msgs.slice(-40).map(m => ({ ...m, hold: undefined, cards: m.cards.filter(c => c.k !== 'pay') })), hist: hist.slice(-30) })) } catch { /* private mode: recall restores what it can */ }
+  try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), msgs: msgs.slice(-40).map(m => ({ ...m, hold: undefined, cards: m.cards.filter(c => c.k !== 'pay' && c.k !== 'sign_in') })), hist: hist.slice(-30) })) } catch { /* private mode: recall restores what it can */ }
 }
 function takeCarry(): Carry | null {
   try {

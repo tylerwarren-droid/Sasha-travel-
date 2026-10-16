@@ -267,6 +267,26 @@ def channel_words(text: str) -> List[str]:
     return found
 
 
+# Sasha 273 · rule 15 (row 1035 · 6, Tyler's demo 16 Oct): never name OR LIMIT how a place books. She said "Periplo takes bookings by
+# phone only" and "the only route I can use is a phone call" — the model's paraphrase of read_booking_route's "By phone." and its routes.
+# How a place books is said as BOOK_IT (read_booking_route's `how` on the one path), then the one question (the card); a sentence of hers
+# that limits the channel is dropped before it is said (sasha.turn, /s2 and S1 parity) and flagged by faults() (the deploy gate).
+BOOK_IT = "I'll make the booking."
+#: the booking rules' R3 wait ("Their only way to book is by phone, and it's still a while away — …"), said on the one path without the limit
+WAIT_TO_CALL = "It's still a while away — I'll call them closer to the day."
+_MEANS = r"(?:the )?(?:phone|telephone|calls?|(?:a )?message|messages|text|texts|e-?mail|emails|their form|forms?|online)"
+_LIMIT = re.compile(
+    r"\b(?:takes?|accepts?|does|do|handles?)\s+(?:bookings|reservations|booking|reservation)s?\s+(?:only\s+)?(?:by|via|over|through)\s+" + _MEANS +
+    r"|\b(?:by|via|over|through)\s+" + _MEANS + r"\s+only\b|\bonly\s+(?:by|via|over|through)\s+" + _MEANS +
+    r"|\b(?:the|their|its) only (?:route|way|option|channel|method)s?\b[^.?!]{0,40}\b(?:book\w*|reserv\w*|phone|call\w*|message\w*|e-?mail|use)\b"
+    r"|\b(?:phone|a call|calls?|messages?|e-?mail)\s+(?:is|are)\s+(?:the|their)\s+only\b", re.I)
+
+
+def limits_channel(text: str) -> bool:
+    """Sasha 273 · one thing she says names a single way a place books as its only one ("by phone only", "the only route…")."""
+    return bool(_LIMIT.search(text or ""))
+
+
 def _questions(text: str) -> List[str]:
     return [q.strip() for q in re.findall(r"[^.?!\n]*\?", text or "")]
 
@@ -281,6 +301,8 @@ def faults(transcript: Iterable[Tuple[str, str]]) -> List[str]:
             continue
         for w in channel_words(text):
             out.append(f"turn {i}: names the channel {w!r}")
+        if limits_channel(text):   # Sasha 273 · rule 15: nor limits it
+            out.append(f"turn {i}: limits the channel {_LIMIT.search(text).group(0)!r}")
         for q in _questions(text):
             for d, rx in DETAILS.items():
                 if rx.search(q):
@@ -608,7 +630,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

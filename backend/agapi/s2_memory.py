@@ -362,14 +362,18 @@ async def opening(account: str) -> str:
     return ASK_NAME
 
 
-async def recall(account: str, session: Optional[str]) -> dict:
+async def recall(account: str, session: Optional[str], surface: Optional[str] = None) -> dict:
     """On return: the opening line (Sasha 246), the recent conversation (masked), the cards she'd shown (on screen again, for this
-    session) — what she remembers is kept and handed to the model, never recited."""
+    session) — what she remembers is kept and handed to the model, never recited.
+    Sasha 273 · + last_at: the conversation's last turn (fold's updated_at) — /s2's rule 4 (lib/presence-rule.mjs reappear) greets only
+    after 30 minutes, on a new day or with news; so on /s2 (surface "s2") the model is not told she greeted: it sees it in the history
+    when she did."""
     m = await _load(account)
     line = line_for(m, account)
     opening_line = await opening(account)
+    last_at = (m or {}).get("updated_at")
     if not m or not line:
-        return {"line": opening_line, "recent": [], "screen": None, "summary": (m or {}).get("summary") or []}
+        return {"line": opening_line, "recent": [], "screen": None, "summary": (m or {}).get("summary") or [], "last_at": last_at}
     scr = m.get("screen") or None
     if scr and scr.get("cards") and session:
         from app.agent import sasha as AG
@@ -380,14 +384,17 @@ async def recall(account: str, session: Optional[str]) -> dict:
     note = handover(m)
     if session:   # Sasha 239 · the model's first turn back hears exactly what was (and wasn't) decided
         from app.agent import sasha as AG
-        AG._HANDOVER[session] = note + (" They have just come back and you greeted them with \"" + opening_line + "\" — never bring "
-                                         "this up yourself; use it only when THEY refer to it.")
+        AG._HANDOVER[session] = note + ((" They have just come back to the conversation — never bring this up yourself; use it only when "
+                                          "THEY refer to it.") if surface == "s2" else
+                                         (" They have just come back and you greeted them with \"" + opening_line + "\" — never bring "
+                                          "this up yourself; use it only when THEY refer to it."))
         # Sasha 249 · ONE MEMORY: kept in the table too, so the first turn back hears it even if this process restarted between
         await put_kinds(account, {"handover": {"session": session, "note": AG._HANDOVER[session]},
                                   **({"screen": {"session": session, "cards": scr["cards"], "ribbon": scr.get("ribbon"),
                                                  "names": [c.get("name") for c in scr["cards"] if c.get("name")]}}
                                      if scr and scr.get("cards") else {})})
     return {"line": opening_line, "recent": m.get("recent") or [], "screen": scr, "summary": m.get("summary") or [], "handover": note,
+            "last_at": last_at,
             "pending": ({"kind": "hold", "what": p.get("what"), "waiting": _hold_live(account, p)} if p.get("kind") == "hold" else
                         {"kind": "question", "asked": p.get("asked")} if p.get("kind") == "question" else None)}
 

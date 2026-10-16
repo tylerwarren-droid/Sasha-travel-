@@ -39,7 +39,18 @@ interface VoiceButtonProps {
   // brings the mic back only if it was on (or wanted) when she fell asleep.
   asleep?: boolean
   onWake?: () => void
+  // Sasha 273 · item 3 (/s2 only — /next is unchanged): `hearing` is STRICT — frames arriving NOW (within LIVE_FRAME_MS), a live
+  // unmuted track, the audio running. A page that went to the background (an iPhone suspends both) is never "on". `ctlRef` gives
+  // the page the mic's two moves for its one return handler and its "Tap to talk": resume (on return, what the browser allows
+  // without a tap) and tap (inside a tap: start or resume, never stop).
+  strict?: boolean
+  ctlRef?: { current: VoiceCtl | null }
 }
+
+/** Sasha 273 · what /s2 may ask of its mic: on return, resume what was live; on a tap, listen (start or resume — never stop). */
+export type VoiceCtl = { resume: () => void; tap: () => void }
+/** Sasha 273 · strict: no frame for this long and the mic is not hearing (the screen stops saying "Voice on"). */
+const LIVE_FRAME_MS = 1500
 
 // What the page needs to render its own mic picker: the choosable devices, what's selected
 // now, and the switcher (which tears down and reopens the pipeline on the new device).
@@ -213,7 +224,10 @@ const AUDIO_MODE = 'I can’t hear you — your phone kept this page’s sound p
 const PREROLL_MS = 600        // Sasha 265 · item 1: kept while she speaks, sent only if the person talks over her (barge-in)
 const RESUME_WAIT_MS = 1000   // Sasha 265 · item 1: how long the audio may take to start before the socket opens anyway (and the screen says tap)
 
-export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake, strict = false, ctlRef }: VoiceButtonProps) {
+  const strictRef = useRef(strict)   // Sasha 273 · /s2: "on" only while frames arrive
+  useEffect(() => { strictRef.current = strict }, [strict])
+  const wasLiveRef = useRef(false)   // Sasha 273 · it was live when the page went to the background: resume it on return
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)   // the socket is open — NOT "on" (Sasha 266: that is `hearing`)
@@ -346,6 +360,14 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     transcriptRef.current = ''
   }, [])
 
+  // Sasha 273 · strict (/s2): the mic stops being "on" the moment it stops hearing — the track muted or ended, the audio suspended, or
+  // no frame for LIVE_FRAME_MS — and is "on" again only when frames arrive again (the frame handler, below).
+  const notHearing = useCallback((why: string) => {
+    if (!strictRef.current || !hearingRef.current) return
+    hearingRef.current = false; setHearing(false); onConnectedChangeRef.current?.(false)
+    micLog('not_hearing', { why })
+  }, [])
+
   const connect = useCallback(async () => {
     if (asleepRef.current) { resumeRef.current = true; micLog('asleep', { connect: 'deferred until she wakes' }); return }   // Sasha 246 · asleep: never listening
     if (connectedRef.current || connectingRef.current) return
@@ -443,8 +465,8 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
             reportMicError('Microphone disconnected — reconnecting')
             try { wsRef.current?.close() } catch {}
           }
-          track.onended = () => dead('ended')
-          track.onmute = () => { clearTimeout(muteTimer); muteTimer = setTimeout(() => dead('stayed muted'), 4000) }
+          track.onended = () => { notHearing('the track ended'); dead('ended') }
+          track.onmute = () => { notHearing('the track was muted'); clearTimeout(muteTimer); muteTimer = setTimeout(() => dead('stayed muted'), 4000) }
           track.onunmute = () => clearTimeout(muteTimer)
         }
       }
@@ -462,7 +484,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       // Sasha 264 · item 7: a phone only lets the mic's audio run from a tap — started without one (autoStart), it stays suspended and
       // no frame ever comes. Never "Listening" then: the screen says to tap, and the tap (toggleListening) turns it on.
       if (ctx.state !== 'running') { deafRef.current = true; reportMicError(DEAF_TAP); micLog('deaf', { why: 'audio suspended until a tap' }) }
-      ctx.onstatechange = () => micLog('audiocontext', { state: ctx.state })   // iOS suspends it when the page loses audio focus
+      ctx.onstatechange = () => { micLog('audiocontext', { state: ctx.state }); if (ctx.state !== 'running') notHearing('audio ' + ctx.state) }   // iOS suspends it when the page loses audio focus · 273: then never "on"
       console.log('[DG] AudioContext sampleRate:', ctx.sampleRate)
 
       const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
@@ -771,6 +793,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   useEffect(() => {
     const t = setInterval(() => {
       const now = Date.now()
+      if (hearingRef.current && now - lastFrameRef.current > LIVE_FRAME_MS) notHearing('no frames')   // Sasha 273 · strict only (notHearing)
       // a gate closed from the start (before her greeting) gets a clock too, so rule 1 covers the first turn
       if (micGatedRef.current && !gatedSinceRef.current && connectedRef.current) gatedSinceRef.current = now
       // Sasha 197 · the decision is lib/voice-watchdog.mjs (held by scripts/check-voice-watchdog.mjs at build).
@@ -803,7 +826,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       }
     }, 2000)
     return () => clearInterval(t)
-  }, [connect])
+  }, [connect, notHearing])
 
   const toggleListening = () => {
     if (asleepRef.current) {   // Sasha 246 · pressing the mic wakes her — and she listens
@@ -825,6 +848,38 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     console.log('[GATE] opened by a click on the mic')
     connect()
   }
+
+  // Sasha 273 · item 3 · the page's one return handler and its "Tap to talk" (/s2, strict). resume: on return from the background,
+  // what the browser allows WITHOUT a tap — the audio resumed, or a mic whose track the background ended opened again — and only for a
+  // mic that was live when the page left. Whatever the browser refuses stays honestly "Tap to talk". tap: inside a tap — listen now.
+  const resumeMic = () => {
+    if (asleepRef.current || !wasLiveRef.current) return
+    const tr = streamRef.current?.getAudioTracks()[0]
+    const ctx = audioCtxRef.current
+    micLog('return', { state: ctx?.state || 'none', why: tr ? tr.readyState : 'no track' })
+    if (connectedRef.current && (!tr || tr.readyState === 'ended')) { stopAll(); manualStopRef.current = false; connect(); return }
+    if (connectedRef.current && ctx && ctx.state !== 'running') { ctx.resume().then(() => micLog('audiocontext', { state: ctx.state, by: 'return' })).catch(() => {}); return }
+    if (!connectedRef.current && !connectingRef.current) connect()
+  }
+  const listenNow = () => {
+    if (asleepRef.current || !connectedRef.current) { toggleListening(); return }   // asleep: wakes her and listens · off: starts it
+    const tr = streamRef.current?.getAudioTracks()[0]
+    if (!tr || tr.readyState === 'ended') { stopAll(); manualStopRef.current = false; micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); connect(); return }
+    audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(() => {})   // inside the tap
+    micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); lastFrameRef.current = Date.now()
+    if (deafRef.current) { deafRef.current = false; reportMicError(null) }
+  }
+  useEffect(() => {
+    if (!ctlRef) return
+    ctlRef.current = { resume: resumeMic, tap: listenNow }
+    return () => { ctlRef.current = null }
+  })
+  useEffect(() => {   // Sasha 273 · was it live as the page went to the background? (only that is resumed on return)
+    if (!strict) return
+    const seen = () => { if (document.visibilityState === 'hidden') wasLiveRef.current = hearingRef.current || connectedRef.current }
+    document.addEventListener('visibilitychange', seen)
+    return () => document.removeEventListener('visibilitychange', seen)
+  }, [strict])
 
   useEffect(() => {
     console.log('[DG] readyToListen:', readyToListen, 'autoStart:', autoStart, 'disabled:', disabled)

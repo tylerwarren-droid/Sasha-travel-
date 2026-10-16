@@ -219,6 +219,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]],
                 # Sasha 265 · item 4: the call's card IS the ONE question — its words and its buttons (the tap is the approval)
                 **({"ask": res["ask"], "choices": res["choices"], "read_back_id": res.get("read_back_id")} if res.get("choices") else {})}
+    if tool in ("hold_venue", "book_venue") and res.get("status") == "draft_message" and res.get("read_back"):   # Sasha 273 · item 2: the
+        return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]]}               # draft's booking card too
     if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
         return {"type": "render", "kind": "prepared", **res["prepared"]}
     # Sasha 254 · hold_venue too: the booking rules' take-over link (their page) when they hand it over or won't contact the venue
@@ -798,6 +800,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if guard_check(x, allowed, bool(booked_now), figs):
                 held = True
                 break
+            if honest and _V.limits_channel(x) and not _V.is_told(x, told):   # Sasha 273 · rule 15: never limits how a place books
+                internal_log.append(f"channel limited: {x[:60]}")
+                continue
             if honest:   # Sasha 264 · item 5 (voice.brief): short, never what she said last time or what a card already says
                 kept_, tstate["brief_n"], tstate["asked"] = _V.brief([x], [last_reply], tstate["seen"], tstate["brief_n"], tstate["asked"])
                 if not kept_:
@@ -1361,7 +1366,8 @@ async def agent_events(request: Request):
         since = 0
 
     def frame(ev: dict) -> str:
-        return f"id: {ev['id']}\ndata: {json.dumps({k: v for k, v in ev.items() if k != '_at'}, default=str)}\n\n"
+        # Sasha 273 · + "at" (epoch s): the page's rule 4 leads with news that came after their last activity
+        return f"id: {ev['id']}\ndata: {json.dumps({**{k: v for k, v in ev.items() if k != '_at'}, 'at': ev.get('_at')}, default=str)}\n\n"
 
     async def stream():
         q = LE.subscribe(account)
@@ -1877,7 +1883,7 @@ async def s2_memory(request: Request, session: str = ""):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     from agapi import s2_memory as MEM
     try:
-        return {"ok": True, **(await MEM.recall(account, session[:64] or None))}
+        return {"ok": True, **(await MEM.recall(account, session[:64] or None, surface="s2"))}
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}

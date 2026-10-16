@@ -7,40 +7,96 @@
 //                 me naturally. You can always tap to get me back." (backend voice.py) — then the corner. Tap the corner: full size.
 //   the corner    ALWAYS drawn once she has arrived (signed in): her still, in the voice row's corner on her own tab, else the
 //                 screen's bottom-right corner. Never nothing: no tab, no rest, no released live face takes her off the screen.
-//   the ring      green while she is awake and listening · a calm, different look while paused (dimmed, no ring, "Wake") · faded at rest.
+//   the ring      green ONLY while the mic is actually live (Sasha 273) · awake but not hearing: no green, "Tap to talk" · a calm,
+//                 different look while paused (dimmed, no ring, "Wake") · faded at rest.
+//
+// Sasha 273 (rows 1031–1035, Tyler's demo with Jon, 16 Oct) — four more inputs, each the REAL state, never a flag or a guess:
+//   micLive       VoiceButton's `hearing`: a live, unmuted track delivering frames NOW (AudioContext running). The voice row's label
+//                 ("Voice on" / "Tap to talk") and the green ring are this and nothing else — "Voice on" was her speaker toggle, shown
+//                 while the mic was dead after a return (row 1034).
+//   speech ended  her arrival leaves full size only on her line's own speech-ended event (her face: LiveAvatar's AVATAR_SPEAK_ENDED;
+//                 her voice: the audio's `ended`), then HOLD_MS, then the corner — never a duration guessed from the audio's size.
+//   the viewport  the corner sits inside the VISIBLE viewport (visualViewport): never under a browser's bottom bar (row 1035 · 5).
+//   last activity reappear() — rule 4 (Tyler, 16 Oct): she reappears and greets ONLY after 30 minutes with no activity, on a new day
+//                 in the person's time zone, or with news (which she leads with). A quick return mid-conversation: nothing.
 import { OPENING, openingShown } from './greeting-rule.mjs'
 import { buttonLabel, mayListen } from './sleep-rule.mjs'
 
 export const GREEN = '#34d399'
+/** Sasha 273 · item 1: after her line's speech-ended event, she holds this long, then goes to the corner. */
+export const HOLD_MS = 500
+/** Sasha 273 · item 4 (a): this long with no activity, and a return is a new arrival (she reappears and greets). */
+export const IDLE_MS = 30 * 60 * 1000
 /** @typedef {'full' | 'corner' | 'none'} Where */
-/** @typedef {'arriving' | 'listening' | 'paused' | 'resting'} Look */
+/** @typedef {'arriving' | 'listening' | 'idle' | 'paused' | 'resting'} Look */
+
+/** Sasha 273 · item 3: the voice row's words, from the mic's REAL state — never "on" while it isn't hearing. */
+export const VOICE_ON = 'Voice on'
+export const TAP_TO_TALK = 'Tap to talk'
+export const PAUSED = 'Paused'
+/** The voice row's label and whether her mic is hearing — the ONE derivation (presence() uses it; /s2's voice row shows it).
+ *  @param {{ asleep?: boolean, dormant?: boolean, micLive?: boolean }} s */
+export function voiceOf(s) {
+  const live = mayListen(!!s.asleep) && !s.dormant && !!s.micLive
+  return { live, words: s.asleep ? PAUSED : live ? VOICE_ON : TAP_TO_TALK }
+}
 
 /**
  * @param {{ phase: string, tapFor?: 'face' | 'voice', started?: boolean, signedIn: boolean | null, soon?: boolean, asleep?: boolean,
- *           dormant?: boolean, reduced?: boolean }} s
- * @returns {{ where: Where, look: Look, card: boolean, tap: 'face_back' | 'wake' | 'collapse' | null, listening: boolean, label: string }}
+ *           dormant?: boolean, reduced?: boolean, micLive?: boolean, arrive?: boolean }} s
+ * @returns {{ where: Where, look: Look, card: boolean, tap: 'face_back' | 'wake' | 'collapse' | null, listening: boolean, label: string,
+ *             voice: string }}
  */
 export function presence(s) {
   const asleep = !!s.asleep, dormant = !!s.dormant
-  const listening = mayListen(asleep) && !dormant   // the mic: never while paused (sleep-rule) or at rest
+  const listening = mayListen(asleep) && !dormant   // the mic MAY listen: never while paused (sleep-rule) or at rest
+  const { live, words: voice } = voiceOf(s)         // Sasha 273 · and it IS hearing, now
   const label = buttonLabel(asleep)                  // the Pause button's word: "Wake" while paused
-  if (s.signedIn === false) return { where: 'none', look: 'resting', card: false, tap: null, listening: false, label }   // her opening is for the signed-in
+  if (s.signedIn === false) return { where: 'none', look: 'resting', card: false, tap: null, listening: false, label, voice }   // her opening is for the signed-in
   const shown = openingShown(s.phase, s.tapFor || 'voice', !!s.started)
   // before the opening's first step: full size at once when this browser holds a sign-in (Sasha 268 — no blank page, no one-tick flip)
-  const before = s.phase === 'off' && !s.started && !asleep && !s.reduced && (s.signedIn === true || (s.signedIn === null && !!s.soon))
+  // — Sasha 273 · unless rule 4 has already said this is no arrival (a quick return mid-conversation): then never full size
+  const before = s.phase === 'off' && !s.started && !asleep && !s.reduced && s.arrive !== false && (s.signedIn === true || (s.signedIn === null && !!s.soon))
   if (shown || before) {
-    return { where: 'full', look: s.phase === 'faceAgain' ? (listening ? 'listening' : 'paused') : 'arriving', card: shown === 'card',
-             tap: s.phase === 'faceAgain' ? 'collapse' : null, listening, label }
+    return { where: 'full', look: s.phase === 'faceAgain' ? (live ? 'listening' : listening ? 'idle' : 'paused') : 'arriving', card: shown === 'card',
+             tap: s.phase === 'faceAgain' ? 'collapse' : null, listening, label, voice }
   }
-  if (s.signedIn !== true && s.phase === 'off') return { where: 'none', look: 'resting', card: false, tap: null, listening: false, label }
-  return { where: 'corner', look: asleep ? 'paused' : dormant ? 'resting' : 'listening', card: false, tap: asleep ? 'wake' : 'face_back', listening, label }
+  if (s.signedIn !== true && s.phase === 'off') return { where: 'none', look: 'resting', card: false, tap: null, listening: false, label, voice }
+  return { where: 'corner', look: asleep ? 'paused' : dormant ? 'resting' : live ? 'listening' : 'idle', card: false, tap: asleep ? 'wake' : 'face_back',
+           listening, label, voice }
 }
 
-/** The corner's ring, from presence's look: green awake and listening (brighter while she speaks); paused and resting have none. */
+/** The corner's ring, from presence's look: green only while the mic hears (brighter while she speaks); idle, paused and resting have none. */
 export function ring(look, talking = false) {
   if (look === 'listening') return { border: `2.5px solid ${GREEN}`, glow: `0 0 0 ${talking ? 6 : 4}px rgba(52,211,153,${talking ? 0.4 : 0.25})` }
   if (look === 'paused') return { border: '2px solid rgba(255,255,255,.22)', glow: 'none' }
+  if (look === 'idle') return { border: '2px solid rgba(255,255,255,.35)', glow: 'none' }
   return { border: '2px solid rgba(255,255,255,.18)', glow: 'none' }
+}
+
+/** Sasha 273 · item 4 · WHEN SHE REAPPEARS — rule 4, the ONE place it is decided (an arrival at load, and a return to the page).
+ *  She reappears and greets only when (a) IDLE_MS have passed with no activity, (b) it is a new day in the person's time zone, or
+ *  (c) she has news since their last activity — then she leads with it. Paused stays paused. No activity known (a first visit): (a).
+ *  @param {{ lastAt: number | null, now: number, tz?: string, news?: string | null, asleep?: boolean }} s
+ *  @returns {{ greet: boolean, lead: 'news' | 'hello' | null, why: 'paused' | 'news' | 'idle' | 'new_day' | 'active' }} */
+export function reappear(s) {
+  if (s.asleep) return { greet: false, lead: null, why: 'paused' }
+  if (s.news) return { greet: true, lead: 'news', why: 'news' }
+  if (!s.lastAt || !Number.isFinite(s.lastAt) || s.now - s.lastAt >= IDLE_MS) return { greet: true, lead: 'hello', why: 'idle' }
+  if (dayOf(s.lastAt, s.tz) !== dayOf(s.now, s.tz)) return { greet: true, lead: 'hello', why: 'new_day' }
+  return { greet: false, lead: null, why: 'active' }
+}
+
+/** The calendar day of `ms` in time zone `tz` (the device's own when not given) — "2026-10-16". */
+export function dayOf(ms, tz) {
+  try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)) }
+  catch { return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)) }
+}
+
+/** Sasha 273 · items 1 + 5: may the corner sit on this spot? Only inside the VISIBLE viewport (a browser's bottom bar is outside it).
+ *  @param {{ top: number, bottom: number, width: number }} r  @param {{ top: number, height: number }} vv  the visual viewport */
+export function inView(r, vv, size = 40) {
+  return !!r && r.width > 0 && r.top >= vv.top && r.top + size <= vv.top + vv.height
 }
 
 /** Is this phase her arrival (the opening)? Re-exported so S2Hello asks one module. */

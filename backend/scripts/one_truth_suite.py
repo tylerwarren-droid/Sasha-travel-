@@ -197,6 +197,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "number; submit_booking and call_again carry no call object; the number is AgAPI's at each step (call_plan; a scheduled "
             "dial asks the act again); no number on their listing now → the no-channel line and their link; no digits or hash kept",
             ["tests.test_s272"]),
+    "T55": ("Tyler's demo with Jon (16 Oct): her arrival ends on its own speech-ended event, then ~0.5 s, then the corner (always in the "
+            "visible viewport); the voice label and green ring are the mic actually hearing; she greets only by rule 4 (30 min quiet, "
+            "a new day, news) — never mid-flow; one booking card for every account; never names or limits how a place books",
+            ["tests.test_s273"]),
 }
 
 _RUNNER = """

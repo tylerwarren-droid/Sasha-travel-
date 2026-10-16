@@ -37,6 +37,15 @@ export async function arrivalLine(name: string | null | undefined, back: boolean
   return `${back && first ? rule.helloBack.replace('{name}', first) : rule.hello}. ${rule.cameraOff}`
 }
 
+/** Sasha 273 · item 4 (c): her reappearance with NEWS leads with it — the news in its own words (the event's `say`, from the backend),
+ *  then voice.CAMERA_OFF, exactly as her arrival. '' when the rule hasn't been read (she then just goes to the corner). */
+export async function newsLine(news: string): Promise<string> {
+  await loadFirstLine()
+  const said = String(news || '').trim()
+  if (!said || !rule?.cameraOff) return ''
+  return `${/[.!?]$/.test(said) ? said : `${said}.`} ${rule.cameraOff}`
+}
+
 /** The first line for this message, when it is a request for work (and the rule has been read); else null. Sasha 268 · item 7: a
  *  trip, a table or dates → voice.FIRST_LINE; any other request for a service → voice.TRY_FIRST ("Let me see what I can do."). */
 export function firstLineFor(text: string): string | null {

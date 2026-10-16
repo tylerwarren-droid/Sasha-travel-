@@ -9,8 +9,9 @@
  *   · her voice: what she says is spoken (TTS) once the person has used the mic or turned her voice on; her face on screen as she speaks (S2Hello; Sasha 232)
  * Nothing shown here carries a "test" or "stand-in" label (lib/no-test-label.mjs) — what's underneath is unchanged.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import VoiceButton from '@/app/components/VoiceButton'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import VoiceButton, { type VoiceCtl } from '@/app/components/VoiceButton'
+import { reappear, voiceOf } from '@/lib/presence-rule.mjs'   // Sasha 273 · rule 4 and the mic's truth: the ONE presence rule
 import { WhoLine } from '@/app/components/SignedInLine'   // Sasha 257 · who is signed in, quietly in the header
 import { PayHere } from '@/app/components/PayHere'
 import S2Hello, { type HelloCtl } from './S2Hello'
@@ -70,6 +71,13 @@ function firstSentences(t: string, n: number): string {
 }
 
 const GREETING = 'Hey there — what can I do for you?'
+/** Sasha 273 · item 4 · LAST ACTIVITY: the conversation's last turn — the server's (s2-memory's last_at, every device) and this page's
+ *  own sends and taps since. This browser keeps its own last one so a reload can answer rule 4 before the server does — only ever to
+ *  say "recent" (the server's is never older than it), never to skip the server's answer. */
+const LAST_KEY = 's2_last_at'
+const localLastAt = (): number | null => { try { const v = Number(localStorage.getItem(LAST_KEY)); return v > 0 ? v : null } catch { return null } }
+const noSub = () => () => {}
+const tzNow = (): string | undefined => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return undefined } }
 /** Sasha 257 · a reply stream silent this long is stopped and said (her longest tool turns stream within it) — never "busy" for ever */
 const STALL_MS = 75000
 
@@ -436,12 +444,25 @@ export default function S2App() {
   // She wakes on the button, a tap on her face, a press of the mic, or typing — and says "I'm here".
   const [asleep, setAsleep] = useState(false)
   const asleepRef = useRef(false)
+  // Sasha 273 · items 3 + 4: the mic's REAL state (VoiceButton strict: hearing now), its two moves, the last activity, rule 4's answer
+  const [micLive, setMicLive] = useState(false)
+  const voiceCtl = useRef<VoiceCtl | null>(null)
+  const lastAt = useRef<number | null>(null)
+  const touch = useCallback(() => { const t = Date.now(); lastAt.current = t; try { localStorage.setItem(LAST_KEY, String(t)) } catch { /* private mode */ } }, [])
+  const [arrive, setArrive] = useState<boolean | undefined>(undefined)
+  // a reload while this browser's own last activity is recent: no arrival, from the first paint (never a one-tick full-size flip)
+  const quick = useSyncExternalStore(noSub, () => { const l = localLastAt(); return l && !reappear({ lastAt: l, now: Date.now(), tz: tzNow() }).greet ? false : undefined }, () => undefined)
+  const newsRef = useRef<string | null>(null)   // Sasha 273 · item 4 (c): news that came while they were away
+  const [lead, setLead] = useState<string | null>(null)   // …and the arrival that leads with it
+  const loadedAt = useRef(0)
+  const comeBackRef = useRef<(() => void) | null>(null)   // Sasha 273 · the one return handler (below), for the events' replay
   const sleepEvent = useCallback((ev: 'tap_pause' | 'tap_face' | 'press_mic' | 'typed') => {
     const r = sleepStep(asleepRef.current ? ASLEEP : AWAKE, ev)
     const nowAsleep = r.state === ASLEEP
     if (nowAsleep === asleepRef.current) return
     asleepRef.current = nowAsleep
     setAsleep(nowAsleep)
+    try { sessionStorage.setItem('s2_paused', nowAsleep ? '1' : '0') } catch { /* private mode */ }   // Sasha 273 · paused stays paused, a reload too
     if (r.effects.stopAudio) speaker.setAsleep(true)   // mid-word: the element pauses, the queue empties (her face: S2Hello)
     if (nowAsleep) return
     speaker.setAsleep(false)
@@ -452,28 +473,52 @@ export default function S2App() {
   }, [speaker])
   // Sasha 231 · MEMORY ACROSS VISITS: what she remembers for this account (masked) — "Welcome back — we were looking at …"
   const [backLine, setBackLine] = useState<string | null | undefined>(undefined)
+  const backLineRef = useRef<string | null | undefined>(undefined)
+  useEffect(() => { backLineRef.current = backLine }, [backLine])
+  /** Sasha 273 · item 4 · RULE 4 now (lib/presence-rule.mjs reappear): the last activity known, the news that came, paused or not. */
+  const rule4 = useCallback(() => reappear({ lastAt: lastAt.current, now: Date.now(), tz: tzNow(), news: newsRef.current, asleep: asleepRef.current }), [])
   useEffect(() => {
     if (!signedIn) return
     let live = true
-    const t = setTimeout(() => setBackLine(b => (b === undefined ? null : b)), 2500)
+    loadedAt.current = Date.now()
+    const l = localLastAt()
+    if (l) lastAt.current = l
+    const t = setTimeout(() => { setBackLine(b => (b === undefined ? null : b)); setArrive(a => (a === undefined ? rule4().greet : a)) }, 2500)
     fetch(`/api/s2-memory?session=${encodeURIComponent(session.current)}`, { cache: 'no-store' }).then(r => r.json()).then((j: Ev) => {
       if (!live) return
       const line = typeof j?.line === 'string' && j.line ? untag(j.line) : null
+      const server = typeof j?.last_at === 'string' ? Date.parse(j.last_at) : NaN   // Sasha 273 · the conversation's last turn, every device
+      if (Number.isFinite(server) && server > (lastAt.current || 0)) lastAt.current = server
+      // Sasha 273 · item 4 (the 11:03 bug, Tyler's screenshot): the opening line was appended on EVERY load — an iPhone reloading a
+      // backgrounded tab mid-booking put "Hey Tyler, what can I help you with?" right after "Shall I call them now…?". Only rule 4 greets.
+      const r = rule4()
+      const greet = r.greet && r.lead === 'hello'
+      if (r.lead === 'news') { setLead(newsRef.current); newsRef.current = null }   // she leads with it (her arrival's first words)
+      setArrive(a => (a === undefined ? r.greet : a))
       setBackLine(line)
+      if (r.greet) touch()
       if (!line) return
       const recent: { role: string; content: string; cards?: boolean }[] = (Array.isArray(j.recent) ? j.recent : [])
         .filter((m: Ev) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content && m.content !== '[removed]')
-      histRef.current = [...recent.map(m => ({ role: m.role, content: m.content })), { role: 'assistant', content: line }]   // she carries on from where it stopped
+      histRef.current = [...recent.map(m => ({ role: m.role, content: m.content })), ...(greet ? [{ role: 'assistant', content: line }] : [])]   // she carries on from where it stopped
       // Sasha 233 · her cards go back under the line that SHOWED them (marked by the server), never simply under the last line
       const marked = recent.map(m => !!m.cards).lastIndexOf(true)
       const from = Math.max(0, Math.min(recent.length - 8, marked >= 0 ? marked - 1 : recent.length))
       const cards = j.screen?.cards
       const shown: Msg[] = recent.slice(from).map(m => ({ role: m.role === 'user' ? 'user' as const : 'sasha' as const, text: untag(m.content), restored: true,
         cards: m.cards && Array.isArray(cards) && cards.length ? [{ k: 'venues' as const, cards: untagDeep(cards) }] : [] }))
-      setMsgs(ms => (ms.length ? ms : [...shown, { role: 'sasha', text: line, cards: [], restored: true }]))
-    }).catch(() => setBackLine(null))
+      setMsgs(ms => (ms.length ? ms : [...shown, ...(greet ? [{ role: 'sasha' as const, text: line, cards: [], restored: true }] : [])]))
+    }).catch(() => { setBackLine(null); setArrive(a => (a === undefined ? rule4().greet : a)) })
     return () => { live = false; clearTimeout(t) }
-  }, [signedIn])
+  }, [signedIn, rule4, touch])
+  useEffect(() => {   // Sasha 273 · paused stays paused — a reload of this tab too (the Pause is theirs, kept for the tab)
+    let p = false
+    try { p = sessionStorage.getItem('s2_paused') === '1' } catch { /* private mode */ }
+    if (!p || asleepRef.current) return
+    asleepRef.current = true; speaker.setAsleep(true)
+    const t = setTimeout(() => setAsleep(true), 0)
+    return () => clearTimeout(t)
+  }, [speaker])
 
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs])
   useEffect(() => {   // a payment settled (Pacioli): said here, and the pay card turns to Paid
@@ -482,6 +527,15 @@ export default function S2App() {
     es.onmessage = m => {
       let ev: Ev
       try { ev = untagDeep(JSON.parse(m.data)) } catch { return }
+      // Sasha 273 · item 4 (c): NEWS — her line about something that happened after their last activity, heard while the page was
+      // away (hidden) or replayed as it loads: rule 4's (c). Her return leads with it; a person here and talking just hears it.
+      const said = String(ev.say || ev.text || '').trim()
+      const at = Number(ev.at) > 0 ? Number(ev.at) * 1000 : Date.now()
+      if (said && ['proactive', 'venue_notice', 'booked', 'booking_failed'].includes(String(ev.type)) && (!lastAt.current || at > lastAt.current)
+          && (document.visibilityState === 'hidden' || Date.now() - loadedAt.current < 10000)) {
+        newsRef.current = untag(said)
+        if (document.visibilityState !== 'hidden') setTimeout(() => comeBackRef.current?.(), 0)   // the load's own replay: rule 4 now
+      }
       if (ev.type === 'proactive' && ev.say) {   // Sasha 227 · "day before pickup": her one line, and the counter card
         const card: Card[] = ev.render?.kind === 'counter_card' && ev.render.card ? [{ k: 'counter_card', card: ev.render.card }]
           : ev.render?.kind === 'subscriptions' && Array.isArray(ev.render.items)   // Sasha 260 · their receipts, read after the turn: the same card
@@ -517,6 +571,7 @@ export default function S2App() {
     if (dormant) setDormant(false)   // Sasha 231 · a message wakes her, with no re-introduction
     if (asleepRef.current) sleepEvent('typed')   // Sasha 246 item 2 · a message wakes her
     setBusy(true)
+    touch()   // Sasha 273 · activity: their turn (typed, spoken, a chip or a card's tap)
     setInput('')
     setMsgs(ms => [...ms, { role: 'user', text: t, cards: [] }, { role: 'sasha', text: '', cards: [] }])
     const patch = (f: (m: Msg) => Msg) => setMsgs(ms => { const c = ms.slice(); c[c.length - 1] = f(c[c.length - 1]); return c })
@@ -600,9 +655,10 @@ export default function S2App() {
     } finally {
       if (stall) clearTimeout(stall)
       histRef.current = [...histRef.current, { role: 'user', content: t }, { role: 'assistant', content: reply }]
+      touch()   // Sasha 273 · activity: her answer
       setBusy(false)
     }
-  }, [busy, speaker, dormant, sleepEvent, muted])
+  }, [busy, speaker, dormant, sleepEvent, muted, touch])
   useEffect(() => {   // Sasha 257 · what they said while she was answering goes next, in order (never dropped)
     if (busy || asleep || !queued.current.length) return   // Sasha 268 · paused: it waits for Wake — a message typed BEFORE the pause never undoes it
     const [nxt, ...rest] = queued.current
@@ -639,9 +695,38 @@ export default function S2App() {
       setClearing(false)
     }
   }, [busy, clearing, speaker])
+  // Sasha 273 · items 3 + 4 · THE ONE RETURN HANDLER (the page back from another tab or app — visibilitychange, a restored page —
+  // and the load's own replayed news). The mic: resume what was live, if the browser allows it without a tap (else "Tap to talk",
+  // honestly). Her: rule 4 (lib/presence-rule.mjs reappear) — 30 min quiet, a new day, or news → she reappears ("Hey <name>…", or
+  // her news first); a quick return mid-conversation → nothing, no greeting. Paused stays paused (rule 4 says so). Leaving the page
+  // stops what she is saying — she never resumes mid-sentence.
+  const tabRef = useRef(tab)
+  useEffect(() => { tabRef.current = tab }, [tab])
+  const comeBack = useCallback(() => {
+    voiceCtl.current?.resume()
+    if (arrive === undefined && Date.now() - loadedAt.current < 3000) return   // the load's own rule 4 hasn't answered yet: it will
+    const r = rule4()
+    if (!r.greet || tabRef.current !== 'sasha') return
+    if (!helloCtl.current?.again(r.lead === 'news' ? newsRef.current : null)) return
+    newsRef.current = null
+    const line = backLineRef.current
+    if (r.lead === 'hello' && line) {
+      setMsgs(ms => [...ms, { role: 'sasha', text: line, cards: [] }])
+      histRef.current = [...histRef.current, { role: 'assistant', content: line }]
+    }
+    touch()
+  }, [arrive, rule4, touch])
+  useEffect(() => { comeBackRef.current = comeBack }, [comeBack])
+  useEffect(() => {
+    if (!signedIn) return
+    const vis = () => { if (document.visibilityState === 'hidden') speaker.interrupt(); else comeBackRef.current?.() }
+    const shown = (e: PageTransitionEvent) => { if (e.persisted) comeBackRef.current?.() }
+    document.addEventListener('visibilitychange', vis); window.addEventListener('pageshow', shown)
+    return () => { document.removeEventListener('visibilitychange', vis); window.removeEventListener('pageshow', shown) }
+  }, [signedIn, speaker])
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
-    started={tab !== 'sasha'} ctlRef={helloCtl} />   // Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
+    started={tab !== 'sasha'} ctlRef={helloCtl} arrive={arrive !== undefined ? arrive : quick} micLive={micLive} lead={lead} />   // Sasha 273 · rule 4's answer, the mic's truth, her news · Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>
@@ -653,7 +738,9 @@ export default function S2App() {
     </main>{hello}</>)
 
   return (<>
-    <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflowX: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
+    {/* Sasha 273 · item 5 (Tyler's iPhone, Safari 26: the bottom address pill sat on "Voice on" and "New chat"): the shell IS the dynamic
+        viewport (height 100dvh) — the conversation scrolls inside it, the controls never leave it, and the bottom keeps the safe area */}
+    <main data-s2-shell style={{ height: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflow: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px', paddingTop: 'max(18px, calc(env(safe-area-inset-top) + 10px))' }}>
         {/* Sasha 257 · Tyler (row 860): who is signed in, said quietly here (whoami) — the floating pill over the chat is gone */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
@@ -665,21 +752,21 @@ export default function S2App() {
       </header>
       <WhoLine style={{ padding: '0 16px 8px', textAlign: 'right' }} />{/* one quiet line, under the tabs — never over content */}
       {tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
-        <section className="s2-trip" style={{ flex: 1, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
+        <section className="s2-trip" style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
           <style>{TRIP_BOARD_CSS}</style>
           <TripPanel richItinerary={null} openDays={openDays} travellerCount={0 /* Sasha 249 · no page default: the trip's own party, else "—" */}
             toggleDay={(d: number) => setOpenDays(s => { const n = new Set(s); if (n.has(d)) n.delete(d); else n.add(d); return n })} />
         </section>
       ) : tab === 'keep' ? (   /* Sasha 235 · My Keep: the same screen as S1's /keep — masks, what each was used for and when, add, delete */
-        <section style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
+        <section style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0 }}>
           <div className="mx-3 mb-4 rounded-2xl bg-white pb-4 pt-2 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
             <h2 className="px-4 pb-1 pt-3 text-xl font-bold">My Keep</h2>
             <KeepScreen leadClassName="px-4 pb-2 text-sm opacity-60" />{/* Sasha 246 · its line names THEIR item, never a fixed example */}
           </div>
         </section>
-      ) : tab === 'activity' ? <Activity /> : (
+      ) : tab === 'activity' ? <section style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0 }}><Activity /></section> : (
         <>
-          <section style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, padding: '0 16px 12px' }}>
+          <section style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, padding: '0 16px 12px' }}>
             {msgs.length === 0 ? (
               <div style={{ textAlign: 'center', paddingTop: '18vh' }}>
                 <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Playfair Display',Georgia,serif", lineHeight: 1.25 }}>{GREETING}</div>
@@ -708,22 +795,30 @@ export default function S2App() {
               {micNote === BLOCKED ? <div style={{ color: C.dim, marginTop: 4 }}>{stepsFor()}</div> : null}
             </div>) : null}
           {/* Sasha 259 · Tyler (row 884): ONE row of ordinary controls — the moon, her voice, her face — nothing floating over send */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px 6px', fontSize: 13.5 }}>
+          <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px 6px', fontSize: 13.5, flexWrap: 'nowrap', minWidth: 0 }}>
             <SleepButton asleep={asleep} onToggle={() => sleepEvent('tap_pause')} size={36} />
+            {/* Sasha 273 · item 3: the voice label is the MIC's real state (lib/presence-rule.mjs voiceOf, from VoiceButton's strict
+                `hearing`) — "Voice on" only while it hears; otherwise "Tap to talk", and the tap starts or resumes it */}
+            {(() => { const vo = voiceOf({ asleep, dormant, micLive }); return (
+              <button type="button" data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-label={vo.live ? 'Voice on — she is listening' : vo.words}
+                onClick={() => { speaker.unlock(); micUsed.current = true; if (asleepRef.current) sleepEvent('press_mic'); voiceCtl.current?.tap() }}
+                style={{ background: 'none', border: 0, color: vo.live ? '#34d399' : C.gold, padding: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {vo.live ? '● ' : '🎙 '}{vo.words}</button>) })()}
             {voiceBlocked && !muted ? (
-              <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700 }}>
-                🔈 Tap to hear her</button>
-            ) : (
-            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her voice on' : 'Mute her voice'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>
-              {muted ? '🔇 Voice off' : '🔊 Voice on'}</button>)}
+              <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                🔈 Tap to hear</button>
+            ) : (   /* her SPEAKER (Sasha 230's remembered mute) — its own word, never "Voice": that word is the mic's */
+            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Turn her sound on' : 'Mute her sound'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {muted ? '🔇 Sound off' : '🔊 Sound'}</button>)}
             <button onClick={() => { void newChat() }} disabled={busy || clearing} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
-              style={{ background: 'none', border: 0, color: busy || clearing ? C.dim : C.gold, padding: 4, fontWeight: 600 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
+              style={{ background: 'none', border: 0, color: busy || clearing ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
             <span style={{ flex: 1 }} />
             <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40 }} />{/* her corner: S2Hello's circle sits over this space (Sasha 271 · measured, never portalled) */}
           </div>
-          <footer style={{ padding: '10px 12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <footer style={{ flex: 'none', padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="s2-mic" onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, height: 56 }}>
-              {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={send} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')} />}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
+              {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={send} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
+                strict ctlRef={voiceCtl} onConnectedChange={setMicLive} />}{/* Sasha 273 · item 3: "on" only while it hears */}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
             </div>
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>

@@ -228,7 +228,9 @@ async def read_booking_route(ctx, a: dict) -> dict:
             from agapi import venue_truth as VT
             from app.agent import voice as V
             # Sasha 270 · CR 101: their listing's reservable, said as fact in the engine's words (venue.profile reservable.say)
-            how = " ".join(x for x in (V.no_link_line(VT.reservable_say(card or listing_card(rd))), how if eng else "") if x)
+            # Sasha 273 · rule 15 (Tyler's demo, Periplo): never "By phone." / "By a message they answer." — the model said it as "Periplo
+            # takes bookings by phone only". How they book is hers to do: voice.BOOK_IT, then the one question (the card).
+            how = " ".join(x for x in (V.no_link_line(VT.reservable_say(card or listing_card(rd))), V.BOOK_IT if eng else "") if x)
         return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of_channel(eng),
                 "how": how, "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
     return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),
@@ -875,7 +877,14 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
                           "how": "There's no day to call closer to: ask them which day (one short question), then hold_venue again."}, d)
         got = await _call(ctx, a, rd, res, extra={"scheduled_for": due})
         got["what_happens"] = "on their yes, Sasha calls them closer to the day (it's scheduled); booked only if they say yes on the call"
-        return _said(got, d)
+        out = _said(got, d)
+        if one_path(ctx):   # Sasha 273 · rule 15: the rules' R3 words without "their only way to book is by phone" (voice.WAIT_TO_CALL)
+            from agapi.booking_rules import booking_rules as BR
+            from app.agent import voice as V
+            for o in (out, out.get("rules") or {}):
+                if isinstance(o.get("say"), str):
+                    o["say"] = o["say"].replace(BR.PHRASES["wait_to_call"], V.WAIT_TO_CALL)
+        return out
     if action in ("call", "call_and_email"):
         if action == "call_and_email" and "email" in rungs:   # R6 · the call AND the email at once: one read-back, one yes
             return _said(await _call_and_email(ctx, a, rd, res, at, d), d)
@@ -1242,7 +1251,12 @@ def _draft(ctx, a: dict, rd: dict, res: dict, at: str, now, ch: str) -> dict:
     _HELD[ctx.account] = {"rung": "draft", "id": ch, "sha": sha, "at": prev["at"] if prev and prev.get("sha") == sha else now,
                           "venue": rd["venue"], "summary": GW.summary(res), "when": at, "party": res["how_many"]["count"],
                           "message": msg, "link": link, "channel": ch}
+    # Sasha 273 · item 2 (Tyler's demo with Jon, 16 Oct): ONE CARD PATH — an account whose access sends nothing to venues gets this
+    # draft, and the draft drew no card, so the same booking showed a card on one account and none on another. On the one path the
+    # draft carries its read-back too: the same booking card (sasha.render → "read_back"), on every account and every device.
+    card_lines = [GW.plain_venue(rd["venue"]), GW.summary(res), f"The message: “{msg}”"] if one_path(ctx) else None
     return {"status": "draft_message", "venue": GW.plain_venue(rd["venue"]), "route": ch, "message": msg,
+            **({"read_back": card_lines} if card_lines else {}),
             **({"open_in_" + ch: link} if link else {}),
             "what_happens": f"they book by a {('WhatsApp' if ch == 'whatsapp' else 'Instagram')} message: on their yes, "
                             "Sasha sends the drafted message to their phone and they send it; it is NOT booked until the place replies"}

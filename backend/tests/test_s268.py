@@ -89,13 +89,13 @@ class OneFraming(unittest.TestCase):
         self.assertIn("transition: big ? 'none' : 'left .45s ease, top .45s ease", hello)   # she appears full size at once: no grow-in
         # Sasha 271 · MOVED: from first paint — presence()'s own clause (lib/presence-rule.mjs)
         self.assertIn("(s.signedIn === true || (s.signedIn === null && !!s.soon))", _src(self, "lib/presence-rule.mjs"))
-        self.assertIn("presence({ phase, tapFor, started, signedIn, soon, asleep, dormant, reduced: reducedMotion() })", hello)
+        self.assertIn("presence({ phase, tapFor, started, signedIn, soon, asleep, dormant, reduced: reducedMotion(), micLive, arrive })", hello)   # Sasha 273 · moved: + the mic's truth, rule 4
 
 
 class LeavesOnHisFirstRequest(unittest.TestCase):
     def test_gate_said_by_code_then_the_circle_and_back_on_a_tap(self):
         hello = _src(self, "app/s2/S2Hello.tsx")
-        self.assertIn("export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void> }", hello)
+        self.assertIn("export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void>; again: (news?: string | null) => boolean }", hello)   # Sasha 273 · moved: + again (rule 4)
         # Sasha 271 · MOVED (row 1008): her arrival goes to the corner as its own lines end; bye is for a tap that brought her back
         self.assertIn("if (phaseRef.current !== 'faceAgain' || byeing.current) return", hello)
         self.assertIn("await collapse()\n  }", hello)

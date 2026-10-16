@@ -579,23 +579,36 @@ def act_line(say: Optional[str]) -> str:
     return str(say or "").strip() or SENT
 
 
+def takeover_line(say: Optional[str], link: Optional[str]) -> str:
+    """Sasha 272 · CR 103 · a call the booking can't make because their listing shows no number at that moment (takeover {kind
+    "their_listing", link}): the act's own words when it gave them, else the existing no-channel line — always with their listing's link."""
+    from agapi.booking_rules import booking_rules as BR
+    said = str(say or "").strip() or BR.PHRASES["no_channel"]
+    return f"{said} {link}" if link and link not in said else said
+
+
 def no_answer_words(res: dict, channel: str = "page") -> str:
-    """AgAPI's no-answer, said: its `say`, then (the first time) its `ask`, and their page — never a line of her own about a call."""
+    """AgAPI's no-answer, said: its `say`, then (the first time) its `ask`, and their page — never a line of her own about a call.
+    Sasha 272 · CR 103 · the take-over on their listing (next_step {kind their_listing, phone?, link?}): its number when the listing shows one
+    now, and their listing's link — each only once (the act's say may already carry it)."""
     said = str(res.get("say") or "").strip()
     ask = str(res.get("ask") or "").strip()
-    page = str((res.get("next_step") or {}).get("page") or (res.get("next_step") or {}).get("phone") or "").strip()
+    step = res.get("next_step") or {}
+    page = str(step.get("page") or step.get("phone") or "").strip()
+    link = str(step.get("link") or "").strip() if step.get("kind") == "their_listing" else ""
+    page, link = ("" if page and page in said else page), ("" if link and link in said else link)
     parts = [said]
     if ask and channel == "whatsapp":   # no card on WhatsApp: the question, how to answer it, and the form's link
         parts += [ask, WA_TRY_AGAIN] + ([FORM_HERE.format(page=page)] if page else [])
     elif ask:
         parts.append(ask)               # on the page the choices are the card's buttons
-    elif page:
-        parts.append(page)              # the second: the line + the link, no question
+    else:
+        parts += [page, link]           # the second: the line + the link, no question
     return " ".join(p for p in parts if p)
 
 
 __all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

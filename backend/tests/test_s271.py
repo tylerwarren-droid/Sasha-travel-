@@ -42,7 +42,7 @@ class TheStayIsTheEnginesAct(Base):
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=96, what="a room", venue="Hotel Gate", nights=3, room="a double")
         self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
         body = fake.body("venue.prepare_booking")
-        self.assertEqual((body["stay"], body["party"], body["call"]), ({"nights": 3, "room": "a double"}, 2, {"phone": "+34910000000"}))
+        self.assertEqual((body["stay"], body["party"], body["call"]), ({"nights": 3, "room": "a double"}, 2, {"phone": "+34910000000", "source": "venue"}))
         self.assertNotIn("notes", body)                                                     # the stay says it — never free text
         self.assertEqual(out["read_back"][0], "I'll send Casa Gate's own booking form: 2 people, under Alex Gate.")   # the ENGINE's read-back
         self.assertEqual(self.api.bodies("/api/booking/emails"), [])                        # never Sasha's own room email
@@ -90,8 +90,8 @@ class TheStatusIsTheEngines(unittest.TestCase):
         self.assertEqual(VS.stay_of(stay), {k: stay[k] for k in ("check_in", "check_out", "nights", "guests", "room", "arrival")})
 
     def test_an_act_keeps_no_time_or_flag_to_decide_a_call_from(self):
-        kept = VS._follow_up_of({"venue_phone": "+34910000000", "r6": True, "category": "hotel", "stay": {"nights": 2}})
-        self.assertEqual(kept, {"venue_phone": "+34910000000", "stay": {"nights": 2}})
+        kept = VS._follow_up_of({"call_source": "venue", "venue_phone": "+34910000000", "r6": True, "category": "hotel", "stay": {"nights": 2}})
+        self.assertEqual(kept, {"call_source": "venue", "stay": {"nights": 2}})   # Sasha 272: its source only — the number is the record's
 
 
 class NoSecondCopy(unittest.TestCase):

@@ -131,7 +131,7 @@ class AfterANoAnswer(unittest.TestCase):
 class TryOnceMore(unittest.TestCase):
     ACT = {"act_id": "act_1", "venue": "Taverna Sandbox", "when": "2026-10-16T21:00", "party": 2, "route": "call", "state": "no_answer",
            "call": {"venue": "Taverna Sandbox", "timezone": "Europe/Madrid", "lines": ["2 people at Taverna Sandbox"],
-                    "call_ref": {**VC.number_ref(LISTING, "ChIJ-taverna"), "source": "listing"}}}
+                    "call_ref": VC.place_ref("ChIJ-taverna")}}   # Sasha 272 · CR 103: its listing only — no number, no hash
     OPEN = {"act_id": "act_1", "status": "calling", "reason": "person_asked", "say": "On it — I'll try them again in 30 minutes.",
             "approval": {"inherited": True, "approval_id": "apv_1", "asked_again": False},
             "call_plan": {"phone": LISTING, "source": "listing", "when": "in 30 minutes", "simulate": False, "call_id": "vcp_1",
@@ -154,8 +154,7 @@ class TryOnceMore(unittest.TestCase):
             acts[:] = [a for a in acts if a["act_id"] != act["act_id"]] + [act]
 
         async def listing_number(http, ref, now):
-            self.assertEqual(ref["sha256"], hashlib.sha256(LISTING.encode()).hexdigest())
-            return LISTING
+            raise AssertionError("Sasha 272: Sasha never re-reads a booking's listing number — the act reads it")
         for p in (mock.patch.object(VS, "CALL", call), mock.patch.object(VS, "acts_of", mock.AsyncMock(side_effect=lambda a: list(acts))),
                   mock.patch.object(VS, "_remember", remember), mock.patch.object(VS, "target", mock.AsyncMock(return_value="sandbox")),
                   mock.patch("booking_signer.places_terms.listing_number", listing_number), mock.patch.object(CR, "CALL_STORE", self.store),
@@ -169,7 +168,7 @@ class TryOnceMore(unittest.TestCase):
         evs = run(self.collect(S._try_again(ACCT, "act_1")))
         self.assertEqual(evs[-1]["text"], self.OPEN["say"])                                  # the act's own words
         again = [b for op, b in self.ops if op == "venue.call_again"]
-        self.assertEqual(again, [{"act_id": "act_1", "reason": "person_asked", "call": {"phone": LISTING, "source": "listing"}, "end_user": "usr_1"}])
+        self.assertEqual(again, [{"act_id": "act_1", "reason": "person_asked", "end_user": "usr_1"}])   # Sasha 272 · CR 103: no call object
         self.assertFalse([op for op, _ in self.ops if op.startswith("approvals.") or op == "venue.submit_booking"])   # no new approval
 
     def test_gate_asked_twice_is_one_call(self):
@@ -179,8 +178,9 @@ class TryOnceMore(unittest.TestCase):
         rows = [r for r in self.store.calls.values() if (r["brief"] or {}).get("call_plan_id") == "vcp_1"]
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["approval"]["scheduled_for"][:4], "2099")                  # at next_call.allowed_at, never sooner
-        self.assertTrue(rows[0]["dialled_number"].startswith("sha256:"))                     # a listing's: its hash, never its digits
+        self.assertEqual(rows[0]["dialled_number"], "listing:ChIJ-taverna")                  # Sasha 272 · a listing's: its place, never digits or hash
         self.assertNotIn(LISTING[1:], json.dumps(rows[0], default=str))
+        self.assertNotIn(hashlib.sha256(LISTING.encode()).hexdigest(), json.dumps(rows[0], default=str))
 
     @staticmethod
     async def collect(gen):
@@ -191,10 +191,12 @@ class ListingNumbers(unittest.TestCase):
     def test_gate_the_listing_number_goes_to_the_act_for_one_call(self):
         rd = {"facts": [{"kind": "phone", "source_kind": "places", "value": LISTING}]}
         self.assertIsNone(VN.own_number(rd))
-        self.assertEqual(VN.listing_number(rd), LISTING)
+        # Sasha 272 · MOVED (CR 103): the listing goes to the booking ONCE as its place_id — never its number, never passed again
+        self.assertEqual(VN.call_of(rd, None, "ChIJ-t"), {"source": "listing", "place_id": "ChIJ-t"})
+        self.assertIsNone(VN.call_of(rd, None, None))                                        # no place_id: nothing to hand the booking
         src = pathlib.Path(VN.__file__).read_text()
-        self.assertIn('phone, source = listing_number(rd), "listing"', src)
-        self.assertIn('rb = await VS.read_back(ctx.account, p["prepared_id"], route="call", call=call)', src)   # passed again (gate)
+        self.assertNotIn("listing_number(", src)
+        self.assertIn('rb = await VS.read_back(ctx.account, p["prepared_id"], route="call")', src)
         brief = VC.brief_of("act_1", {"phone": LISTING, "source": "listing", "call_id": "vcp_1"}, {"place_id": "ChIJ-t"})
         self.assertIsNone(brief["number"])
         self.assertNotIn(LISTING[1:], json.dumps(brief))

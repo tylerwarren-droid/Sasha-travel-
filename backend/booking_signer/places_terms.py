@@ -139,6 +139,8 @@ def seal_call(built: dict, venue) -> dict:
 async def listing_number(http, number_ref: Mapping[str, Any], now: datetime) -> str:
     """Re-read the listing's number for the dial. ⛔ Only the number the guest approved (its hash) is ever returned."""
     pid = number_ref.get("place_id")
+    if number_ref.get("source") == "listing":   # Sasha 272 · CR 103 · a booking act's listing: its number is the act's, never re-read here
+        raise ListingUnavailable("listing_is_the_bookings", "their listing's number is read by the booking itself, so nothing was dialled from here")
     key = V.places_key()
     if not pid or not key:
         raise ListingUnavailable("listing_unreadable", "the listing's number could not be re-read (no place id or no Places key), so nothing was dialled")

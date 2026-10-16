@@ -806,8 +806,12 @@ async def place_due() -> int:
         if C.calls_enabled() is False or not C.bland_key() or not calls_on(str(call.get("account_id") or "")):
             await _stop_scheduled(call, "calls were switched off when it was due, so nothing was dialled", "calls are off")
             continue
+        from agapi import venue_calls as VC
         try:
-            dial = await PT.dialable(HTTP, call["brief"], now)   # Sasha 64 · re-read and checked, before the claim
+            if VC.act_of(call) and (call["brief"].get("number_ref") or {}).get("source") == "listing":   # Sasha 272 · CR 103: an act's call on
+                dial = {**call["brief"], "number": await VC.number_now(str(call["account_id"]), call["brief"])}   # their listing — the act's number
+            else:
+                dial = await PT.dialable(HTTP, call["brief"], now)   # Sasha 64 · re-read and checked, before the claim
         except PT.ListingUnavailable as e:
             await _stop_scheduled(call, str(e), "their number couldn't be checked")
             continue

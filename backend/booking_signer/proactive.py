@@ -532,8 +532,8 @@ async def no_reply_offers(now: datetime) -> List[dict]:
         for act in await VS.acts_of(account):
             if act.get("route") == "call" or act.get("cancels") or act.get("r5") or str(act.get("state") or "") not in ("sent", "requested"):
                 continue
-            if not (act.get("stay") or act.get("venue_phone") or act.get("listing_ref")):
-                continue   # the act was given no number: there's nothing it could call
+            if not (act.get("stay") or act.get("call_source")):
+                continue   # the act was given no number (Sasha 272: its source only is kept): there's nothing it could call
             st = await VS.status(account, act["act_id"])   # asked every sweep: when it's due is the engine's alone (never a kept due_at)
             if st is None:
                 continue
@@ -546,7 +546,7 @@ async def no_reply_offers(now: datetime) -> List[dict]:
             await VS._remember(account, {**act, "state": state, "follow_up": fu, "r5": now.isoformat()})
             got = await VC.again(account, act["act_id"], str(fu.get("reason") or "R5"))
             if got.get("say"):
-                await VC.tell(account, got["say"])
+                await VC.tell(account, got["say"], got.get("card"))   # Sasha 272 · a take-over (no number on their listing now): with its link
             done.append({"kind": "no_reply_call", "act": act["act_id"], "outcome": got.get("status"), "follow_up": fu.get("reason")})
     return done
 

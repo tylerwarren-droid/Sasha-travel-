@@ -193,6 +193,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "submit_booking's call_plan (dialled only from it), the R5 call opens only when booking_status.follow_up.due — no clock of "
             "Sasha's; her presence on /s2 is one rule: the arrival, then always the corner (never gone), its green ring and paused look",
             ["tests.test_s271"]),
+    "T54": ("ONE booking record (CR 103): a Google listing goes to venue.prepare_booking once as {source listing, place_id} — never its "
+            "number; submit_booking and call_again carry no call object; the number is AgAPI's at each step (call_plan; a scheduled "
+            "dial asks the act again); no number on their listing now → the no-channel line and their link; no digits or hash kept",
+            ["tests.test_s272"]),
 }
 
 _RUNNER = """

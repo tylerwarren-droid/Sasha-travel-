@@ -317,7 +317,7 @@ class R6Hotel(Base):
             self.assertEqual(out["rules"]["action"], "call_and_email")
             self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
             prep = fake.body("venue.prepare_booking")
-            self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2, "room": "twin"}, {"phone": "+34910000000"}))
+            self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2, "room": "twin"}, {"phone": "+34910000000", "source": "venue"}))
             self.assertEqual(self.api.bodies("/api/booking/calls"), [])
             self.assertEqual(self.api.bodies("/api/booking/emails"), [])
             got = self.yes()
@@ -336,7 +336,7 @@ class R6Hotel(Base):
         self.expect(out, "request_email", "request_wait", say_now=False)
         self.assertEqual(out["route"], "agapi")
         prep = fake.body("venue.prepare_booking")
-        self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2}, {"phone": "+34910000000"}))
+        self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2}, {"phone": "+34910000000", "source": "venue"}))
         self.assertEqual(self.api.bodies("/api/booking/emails"), [])                       # no plan_line of Sasha's
 
     def test_a_restaurant_request_carries_no_call(self):
@@ -363,7 +363,7 @@ class R5HotelNoReplySweep(unittest.TestCase):
         # Sasha's own auto_call_from_email is deleted. The act's words are what the person is told.
         from agapi import venue_calls as VC, venue_submit as VS
         self.acts = [{"act_id": "act_h", "venue": "Hotel Gate", "when": f"{day}T{hhmm}", "party": 2, "state": "sent", "country": "ES",
-                      "venue_phone": "+34910000000"}]
+                      "call_source": "venue"}]   # Sasha 272 · CR 103: the act keeps the call's source only — the number is the record's
         self.again_says = {"status": "calling", "say": "On it — I'll call them now and let you know."}
         self.follow_up = {"reason": "R5", "due": True, "due_at": None, "call": "venue.call_again"}   # the engine: no reply in 24 h
         self.status_asked = []

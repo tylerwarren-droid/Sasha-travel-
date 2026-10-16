@@ -159,7 +159,7 @@ class TheCardIsTheQuestion(T254.Base):
         self.assertEqual(out["status"], "awaiting_yes")
         self.assertEqual(out["choices"], list(BD.CALL_CHOICES))                         # "Fill in their page" / "Call them"
         self.assertTrue(out["ask"].endswith("— fill in their page now, or shall I call them?"), out["ask"])
-        self.assertIn(("prepare", {"phone": "+34910000000", "open_now": False}), self.vs_calls)   # the act carries the call
+        self.assertIn(("prepare", {"phone": "+34910000000", "source": "venue", "open_now": False}), self.vs_calls)   # the act carries the call
         self.assertIn(("read_back", "call"), self.vs_calls)                              # the CALL's read-back
         self.assertEqual(V.read_back_line("hold_venue", {"ok": True, "result": out}), out["ask"])   # said by code, word for word
         ev = S.render("hold_venue", out, {})

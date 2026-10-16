@@ -109,24 +109,24 @@ async def prepare(account: str, place: dict, person: dict, date: str, time_: str
     return {"ok": True, **res}
 
 
-async def read_back(account: str, prepared_id: str, route: Optional[str] = None, call: Optional[dict] = None) -> Dict[str, Any]:
+async def read_back(account: str, prepared_id: str, route: Optional[str] = None) -> Dict[str, Any]:
     """CR 90 · the read-back first: submit_booking with no approval → approval_required + read_back_id + its lines.
     Sasha 265 · item 4: route "call" → the CALL's read-back (CR 99: "<head>." · "I'll call them <when> and let you know." · its terms).
-    Sasha 269 · CR 100 §D: a number from their Google listing is never kept by the prepared booking — it is passed again here (call), and
-    AgAPI holds it for that one call (found by the sandbox gate: listing_not_kept)."""
+    Sasha 272 · CR 103: no call object — the booking record holds the number (a listing's: its place_id, read fresh by AgAPI)."""
     uid = await end_user(account)
     if not uid:
         return {"ok": False, "error": {"code": "no_end_user", "message": "the venue booking service doesn't know this person yet"}}
-    r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": prepared_id, **({"route": route} if route else {}),
-                                                      **({"call": call} if call and route == "call" else {})})
+    r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": prepared_id, **({"route": route} if route else {})})
     e = r.get("error") or {}
     if e.get("code") != "approval_required":
         res = r.get("result") or {}
         if r.get("ok") and str(res.get("status") or "") in ("not_allowed", "refused"):
             # Sasha 254 · found by the gate on live: a person without real-venue sends is REFUSED with ok + status not_allowed —
             # never an error: she says it kindly and gives their prepared page
+            tk = res.get("takeover") or {}   # Sasha 272 · CR 103 · their listing shows no number: their listing's link is the card's
             return {"ok": False, "error": {"code": "not_allowed", "message": res.get("say") or "this account can't contact venues yet",
-                                           "details": {"link": res.get("link") or res.get("prepared_link")}}}
+                                           "details": {"link": (tk.get("link") if tk.get("kind") == "their_listing" else None)
+                                                       or res.get("link") or res.get("prepared_link")}}}
         if r.get("ok"):   # it never sends without the person's yes; a send here would be a contract breach — said, not hidden
             log.error("[venue_submit] submit_booking answered without an approval (%s)", res.get("status"))
             return {"ok": False, "error": {"code": "sent_without_yes", "message": "the service didn't ask for their yes"}}
@@ -180,9 +180,8 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         if not ap.get("approval_id") or ap.get("state") != "valid":
             return {"ok": True, "status": "waiting_for_their_tap"}
         approval = ap["approval_id"]
-    call = held.get("call") if held.get("rung") == "agapi_call" else None   # Sasha 269 · a phone booking with its approval: route "call"
-    r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": pid, **({"route": "call", "call": call} if call else {})},
-                    approval=approval)
+    route = {"route": "call"} if held.get("rung") == "agapi_call" else {}   # a phone booking: route "call" — Sasha 272: no call object
+    r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": pid, **route}, approval=approval)
     if not r.get("ok"):
         return {"ok": False, "error": _err(r)}
     res = r.get("result") or {}
@@ -195,15 +194,15 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
 
 
 def _follow_up_of(held: dict) -> dict:
-    """Sasha 269 · what an act keeps for the engine's follow-up call (R5 — venue.call_again): the venue's OWN number (read on their own
-    site), or a listing number's place and hash only (re-read when the call is opened — never its digits).
+    """What an act keeps for the engine's follow-up call (R5/R6 — venue.call_again). Sasha 272 · CR 103: only that the booking was given a
+    number, and its source (venue | listing | person) — never a number or its hash: the booking record holds it (a listing's: its place_id).
     Sasha 271 · CR 102: WHEN that call is due is the engine's (booking_status.follow_up) — no sent time, no R6 flag, no venue type kept
     here to work it out from."""
     out: Dict[str, Any] = {}
-    if held.get("venue_phone"):
-        out["venue_phone"] = held["venue_phone"]
-    elif held.get("listing_ref"):
-        out["listing_ref"] = dict(held["listing_ref"])
+    if held.get("call_source"):
+        out["call_source"] = str(held["call_source"])
+        if held["call_source"] == "listing" and held.get("place_id"):
+            out["place_id"] = str(held["place_id"])   # their listing's id (the terms allow it) — never its number
     if held.get("stay"):
         out["stay"] = dict(held["stay"])
     return out
@@ -253,6 +252,12 @@ STATUS_KEYS = ("state", "words", "say_now", "answered", "next_call", "next_step"
                "booking", "follow_up")   # Sasha 271 · CR 102: the act's own booking (a stay) and the call the rules attach (R5/R6)
 
 
+def unkept(step: dict) -> dict:
+    """Sasha 272 · CR 103 · a next_step as the act KEEPS it: the take-over on their listing (kind their_listing) is shown with its number
+    at that moment, and kept without it — a listing's number is never Sasha's to store (row 942)."""
+    return {k: v for k, v in step.items() if k != "phone"} if isinstance(step, dict) and step.get("kind") == "their_listing" else step
+
+
 def stay_of(booking: dict) -> Dict[str, Any]:
     """Sasha 271 · CR 102 · a stay's own fields as venue.booking_status gives them (booking {kind stay, …}) — shown, never re-derived."""
     return {k: booking[k] for k in ("check_in", "check_out", "nights", "guests", "room", "arrival") if booking.get(k) is not None}
@@ -281,7 +286,8 @@ async def bookings(account: str) -> List[dict]:
                 changed = True
             continue
         new = {"state": st.get("state"), "words": _words(st), "say_now": st.get("say"), "follow_up": st.get("follow_up"),
-               **{k: st[k] for k in ("next_call", "next_step", "ask", "choices", "calls", "booking") if st.get(k)}}   # Sasha 269 · as AgAPI says them
+               **{k: st[k] for k in ("next_call", "ask", "choices", "calls", "booking") if st.get(k)},
+               **({"next_step": unkept(st["next_step"])} if st.get("next_step") else {})}   # Sasha 269 · as AgAPI says them
         if any(new.get(k) != a.get(k) for k in new):
             a.update(new)
             changed = True
@@ -455,15 +461,17 @@ async def call_attempt(account: str, act_id: str, outcome: str, venue_words: Opt
     for a in await acts_of(account):   # the act as get_status shows it, at once
         if a.get("act_id") == act_id and res.get("state"):
             await _remember(account, {**{k: v for k, v in a.items() if k not in ("ask", "choices")}, "state": res["state"], "say_now": res.get("say"),
-                                      **{k: res[k] for k in ("next_call", "next_step", "ask", "choices") if res.get(k)}})
+                                      **{k: res[k] for k in ("next_call", "ask", "choices") if res.get(k)},
+                                      **({"next_step": unkept(res["next_step"])} if res.get("next_step") else {})})
     return {"ok": True, "result": res}
 
 
-async def call_again(account: str, act_id: str, reason: str, call: Optional[dict] = None) -> Dict[str, Any]:
-    """Sasha 269 · CR 100 §A · venue.call_again {act_id, reason ∈ person_asked | R3 | R5 | R6, call?: {phone, source?}} — a follow-up call
-    is an act too, under the booking's ONE approval (inherited: no new card, nothing asked again). → {ok, result: {status calling |
-    not_allowed, call_plan, say, approval}} — Sasha dials ONLY that call_plan. Asking twice answers the SAME open call (its call_id)."""
-    body = {"act_id": act_id, "reason": reason, **({"call": call} if call else {})}
+async def call_again(account: str, act_id: str, reason: str) -> Dict[str, Any]:
+    """Sasha 269 · CR 100 §A · venue.call_again {act_id, reason ∈ person_asked | R3 | R5 | R6} — a follow-up call is an act too, under the
+    booking's ONE approval (inherited: no new card, nothing asked again). → {ok, result: {status calling | not_allowed, call_plan, say,
+    approval, takeover?}} — Sasha dials ONLY that call_plan. Asking twice answers the SAME open call (its call_id).
+    Sasha 272 · CR 103: no call object — the number is the booking record's (a listing's read fresh by AgAPI for this one call)."""
+    body = {"act_id": act_id, "reason": reason}
     uid = await end_user(account)
     if uid:
         body["end_user"] = uid
@@ -531,4 +539,4 @@ async def _approval(account: str, rid: str, said: str):
 
 __all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL",
            "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt",
-           "call_again", "link_whatsapp", "confirm_whatsapp", "whatsapp_link_signature", "stay_of"]
+           "call_again", "link_whatsapp", "confirm_whatsapp", "whatsapp_link_signature", "stay_of", "unkept"]

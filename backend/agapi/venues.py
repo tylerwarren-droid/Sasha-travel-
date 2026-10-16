@@ -898,16 +898,13 @@ async def _call_question(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dic
             and _base(held.get("venue") or "") == _base(rd["venue"]):   # their words answered the card: the call act, now
         _PREV.pop(ctx.account, None)
         return await _finish(ctx, held, {"how": "words", "said": (ctx.user_said or "")[:200]})
-    phone, source = own_number(rd, card), None
-    if not phone:   # Sasha 269 · CR 100 §D: their Google listing's number goes to the act for that ONE call (source "listing") — never
-        phone, source = listing_number(rd), "listing"   # stored here (the act keeps it for that call, then purges it)
-    if not phone:
-        return await _no_call(ctx, a, rd, res, at, now, d, card, venue, "there's no number for them to call")
-    v = (d.get("ctx") or {}).get("venue") or {}
-    call = {"phone": phone, **({"source": source} if source else {}), **({"opens_at": v["opens_at"]} if v.get("opens_at") else {}),
-            "open_now": bool(v.get("open_now"))}
     place = {"name": (card or {}).get("name") or venue, "website": (card or {}).get("website") or a.get("website"),
              "place_id": rd.get("place_id") or (card or {}).get("place_id"), "city": a.get("city"), "category": (res.get("what") or {}).get("category")}
+    v = (d.get("ctx") or {}).get("venue") or {}
+    call = call_of(rd, card, place.get("place_id"))   # Sasha 272 · CR 103: once, here — a listing as its place_id, never its number
+    if not call:
+        return await _no_call(ctx, a, rd, res, at, now, d, card, venue, "there's no number for them to call")
+    call = {**call, **({"opens_at": v["opens_at"]} if v.get("opens_at") else {}), "open_now": bool(v.get("open_now"))}
     person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
     p = await VS.prepare(ctx.account, place, person, at[:10], at[11:16], int(res["how_many"]["count"]), call=call,
                          **({"stay": _stay(ctx, a)} if _stay(ctx, a) else {}))   # Sasha 271 · CR 102: a stay's call says the stay
@@ -915,7 +912,7 @@ async def _call_question(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dic
         return await _no_call(ctx, a, rd, res, at, now, d, card, venue, "calls go through the booking service, which isn't on here")
     if not p.get("ok"):
         raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {p['error']['message']}. " + d["takeover"]["say"])
-    rb = await VS.read_back(ctx.account, p["prepared_id"], route="call", call=call)
+    rb = await VS.read_back(ctx.account, p["prepared_id"], route="call")
     if not rb.get("ok"):
         if rb["error"]["code"] == "not_allowed":
             link = next((x for x in (rb["error"].get("details", {}).get("link"), p.get("link"), d["takeover"].get("link"))
@@ -940,7 +937,7 @@ async def _call_question(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dic
 
 def own_number(rd: dict, card: Optional[dict] = None) -> Optional[str]:
     """Sasha 265 · item 4 · the number the call ACT may carry (AgAPI keeps it, and Bland dials it): the venue's OWN published number, read
-    on their own site — or a Kanoe test venue's sandbox number. A Google listing's is listing_number's (Sasha 269: source "listing")."""
+    on their own site — or a Kanoe test venue's sandbox number. A Google listing's is never Sasha's to pass (Sasha 272: call_of)."""
     if BD_is_test(rd, card) and str((card or {}).get("phone") or "").startswith("+"):
         return card["phone"]
     v = str((((rd.get("rungs") or {}).get("phone") or {}).get("value")) or "")
@@ -951,11 +948,23 @@ def own_number(rd: dict, card: Optional[dict] = None) -> Optional[str]:
     return v if v.startswith("+") and not facts else None
 
 
-def listing_number(rd: dict) -> Optional[str]:
-    """Sasha 269 · CR 100 §D · the number on their Google listing, as this read has it NOW (re-read from Google, never stored): passed to
-    the act as call {phone, source: "listing"} for one call. None: the read doesn't carry it."""
-    return next((str(f["value"]) for f in rd.get("facts") or [] if f.get("kind") == "phone" and f.get("source_kind") == "places"
-                 and str(f.get("value") or "").startswith("+")), None)
+def listed(rd: dict) -> bool:
+    """Sasha 272 · their Google listing shows a number in this read (what the place card shows) — whether to hand the booking their
+    listing. Its digits are never taken from here: AgAPI reads the number fresh from the listing for each call (CR 103, row 942)."""
+    return any(f.get("kind") == "phone" and f.get("source_kind") == "places" and str(f.get("value") or "").startswith("+")
+               for f in rd.get("facts") or [])
+
+
+def call_of(rd: dict, card: Optional[dict], place_id: Optional[str]) -> Optional[dict]:
+    """Sasha 272 · CR 103 · the ONE call object, given ONCE at venue.prepare_booking (never again at submit_booking or call_again — the
+    booking record is the truth): the venue's own number {phone, source "venue"}, or their listing {source "listing", place_id} with NO
+    phone. None: no number to call."""
+    own = own_number(rd, card)
+    if own:
+        return {"phone": own, "source": "venue"}
+    if place_id and listed(rd):
+        return {"source": "listing", "place_id": place_id}
+    return None
 
 
 def BD_is_test(rd: dict, card: Optional[dict]) -> bool:   # noqa: N802
@@ -1011,9 +1020,8 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
              "city": a.get("city"), "category": (res.get("what") or {}).get("category")}
     person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
     asked = _what(a)
-    from agapi import venue_calls as VC
-    own, listed = own_number(rd, card), listing_number(rd)   # Sasha 269 · for the engine's R5/R6 follow-up call (venue.call_again)
-    call = ({"phone": own} if own else {"phone": listed, "source": "listing"} if listed else None) if stay else None
+    # Sasha 272 · CR 103 · the stay's number for the engine's R5/R6 calls: given ONCE here (a listing as its place_id), kept by the record
+    call = call_of(rd, card, place.get("place_id")) if stay else None
     p = await VS.prepare(ctx.account, place, person, at[:10], at[11:16], int(res["how_many"]["count"]),
                          notes=None if stay else asked if asked.lower() not in ("a table", "table", "dinner", "lunch") else None,
                          **({"link": link} if link else {}), **({"stay": stay} if stay else {}), **({"call": call} if call else {}))
@@ -1036,8 +1044,8 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
     link = p.get("link") if str(p.get("link") or "").startswith("https://") else d["takeover"].get("link")
     out = _hold(ctx, "agapi", p["prepared_id"], {"lines": rb["lines"], "sha256": rb["sha256"]}, rd, res,
                 extra={"prepared_id": p["prepared_id"], "read_back_id": rb["read_back_id"], "end_user": rb["end_user"], "link": link,
-                       "agapi_action": d["action"], **({"venue_phone": own} if own else {}),
-                       **({"listing_ref": {**VC.number_ref(listed, place.get("place_id")), "source": "listing"}} if listed and not own else {}),
+                       "agapi_action": d["action"], **({"call_source": call["source"], **({"place_id": call["place_id"]} if call.get("place_id") else {})}
+                                                       if call else {}),   # its source (and a listing's place_id) only, never a number
                        **({"link_handed": link} if link else {}), **({"stay": stay} if stay else {}),
                        "category": (res.get("what") or {}).get("category")})
     out["what_happens"] = ("on their yes, Sasha sends it to the venue; it's booked only when they confirm"
@@ -1585,8 +1593,17 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
                     "line": V.act_line(r.get("say")), "call": {"status": "calling", "dial": dialled.get("status"),
                                                                "reason": r["call_plan"].get("reason")},
                     **({"in_app": True} if VS.TAP.get() is not None else {}), "how": "Say `line` word for word — nothing else."}
+        if (r.get("takeover") or {}).get("kind") == "their_listing":   # Sasha 272 · CR 103 · R6 was due, but their listing shows no number
+            from app.agent import voice as V                            # now: the email went; said with their listing — never a silent skip
+            link = r["takeover"].get("link")
+            return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "act_id": r.get("act_id"),
+                    "line": V.takeover_line(r.get("say"), link), "call": {"status": "no_number", "reason": "R6"}, **_link_out(link),
+                    **({"in_app": True} if VS.TAP.get() is not None else {}), "how": "Say `line` word for word — nothing else."}
+        sent_line = BD.say({"say_text": BR.PHRASES["sent"], "takeover": {"say": BR.PHRASES["takeover"]}})
+        # Sasha 272 · found by gate D: her own rules said "call AND email" from her own read, but the ENGINE opened no call with it (its
+        # read-back named none: their listing shows no number now) — never promise a call the booking won't make: the sent line
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "act_id": r.get("act_id"),
-                "line": held.get("rules_say") or BD.say({"say_text": BR.PHRASES["sent"], "takeover": {"say": BR.PHRASES["takeover"]}})}
+                "line": sent_line if held.get("agapi_action") == "call_and_email" else held.get("rules_say") or sent_line}
     if st == "not_allowed":   # not this person (yet): kindly, with their prepared page — nothing reached the venue
         link = held.get("link")
         return {"status": "not_allowed", "venue": venue, "when": held["summary"], "booked": False,

@@ -8,7 +8,8 @@ its own. A follow-up ("try once more", R3/R5/R6) is venue.call_again → Sasha d
                                 built from call_plan alone — Bland gets call_plan.phone, its opening (the AI disclosure first, R7), its
                                 rules (R8/R9) and its payload (no voicemail, no recording, 4 minutes) — placed at call_plan.when (closed
                                 now: when they open), never before next_call.allowed_at. A number from their Google listing
-                                (call_plan.source "listing") is dialled and never stored: the row keeps its hash (places_terms).
+                                (call_plan.source "listing") is dialled and never stored — Sasha 272 · CR 103: not even its hash; the row
+                                keeps the listing's place_id, and a scheduled dial asks the act for the number again (number_now).
   after_call(call, reading)     after EVERY call it placed: venue.call_attempt {act_id, outcome, venue_words, answered_by} and its words
                                 told to the person — `say`, then the ONE question (`ask`, its `choices` as the card) after the first
                                 no-answer, or their page after the second. NOTHING is redialled here: only the person's "try once more".
@@ -18,7 +19,6 @@ its own. A follow-up ("try once more", R3/R5/R6) is venue.call_again → Sasha d
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -55,20 +55,22 @@ def row_id(act_id: str, plan: dict) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"agapi-call:{act_id}:{cid}")) if cid else str(uuid.uuid4())
 
 
-def number_ref(phone: str, place_id: Optional[str]) -> Dict[str, Any]:
-    """A listing number as Sasha may keep it (Sasha 64 / CR 100 §D): its place and its hash — never its digits."""
-    return {"source": "places", "place_id": place_id, "sha256": hashlib.sha256(phone.encode()).hexdigest()}
+def place_ref(place_id: Optional[str]) -> Dict[str, Any]:
+    """Sasha 272 · CR 103 · a listing's number as Sasha keeps it: NOTHING of the number — its listing (place_id) only. The booking record
+    (AgAPI) reads the number fresh for each call (row 942)."""
+    return {"source": "listing", "place_id": place_id}
 
 
 def brief_of(act_id: str, plan: dict, held: dict) -> Dict[str, Any]:
     """The call's brief, from the act's call_plan ONLY (its number, its opening, its rules) — nothing Sasha adds to what is said.
-    A listing number (source "listing") is not in it: number_ref (its place and hash), re-read at a scheduled dial."""
+    A listing number (source "listing") is not in it: place_ref (its place only) — a scheduled dial asks the act again (number_now)."""
     rules = [str(r) for r in plan.get("rules") or []]
     task = (f"You are calling {held.get('venue') or 'the venue'} to book {held.get('summary') or 'a table'}. "
             + " ".join(rules))[:2000]
     listing = plan.get("source") == "listing"
     return {ACT_KEY: act_id, PLAN_KEY: plan.get("call_id"), "purpose": "book", "number": None if listing else plan["phone"],
-            **({"number_ref": number_ref(plan["phone"], held.get("place_id")), "number_source_kind": "places"} if listing else {}),
+            **({"number_ref": place_ref(held.get("place_id")), "number_source_kind": "places"} if listing else {}),
+            "reason": plan.get("reason"),
             "first_sentence": str(plan.get("opening") or ""), "task": task, "language": "en", "venue_key": f"act:{act_id}",
             "venue_name": held.get("venue"), "timezone": held.get("timezone") or "Europe/Madrid", "payload": dict(plan.get("payload") or {}),
             "when": plan.get("when"), "opens_at": plan.get("opens_at")}
@@ -122,7 +124,7 @@ async def dial(account: str, result: dict, held: dict) -> Dict[str, Any]:
         return {"dialled": False, "status": "already_open", "call_id": cid}
     brief = brief_of(act_id, plan, held)
     listing = plan.get("source") == "listing"
-    dialled_number = ("sha256:" + brief["number_ref"]["sha256"]) if listing else plan["phone"]
+    dialled_number = f"listing:{held.get('place_id') or act_id}" if listing else plan["phone"]   # Sasha 272 · never the number, nor its hash
     lines = [str(x) for x in held.get("lines") or held.get("read_back") or []] or [f"Call {held.get('venue')} for {held.get('summary')}"]
     when = str(held.get("when") or "")
     row = {"request": None, "call_id": cid, "account_id": account, "venue_key": brief["venue_key"],
@@ -161,18 +163,34 @@ async def dial(account: str, result: dict, held: dict) -> Dict[str, Any]:
 
 
 async def _keep(account: str, act_id: str, plan: dict, held: dict) -> None:
-    """What a later "try once more" needs to dial the same act — the venue, its zone, its read-back lines, and how its number is found
-    again (the venue's own: AgAPI keeps it; a listing's: its place and hash only, re-read then). Never a listing's digits."""
+    """What a later "try once more" needs to dial the same act — the venue, its zone, its read-back lines, and the call's source. The
+    number is the booking record's (AgAPI's), never kept here — Sasha 272: not a listing's digits, nor its hash."""
     from agapi import venue_submit as VS
     keep = {"venue": held.get("venue"), "timezone": held.get("timezone"), "lines": list(held.get("lines") or [])[:12],
             "name": held.get("name"), "summary": held.get("summary"), "place_id": held.get("place_id"),
-            "call_ref": ({**number_ref(plan["phone"], held.get("place_id")), "source": "listing"} if plan.get("source") == "listing"
-                         else {"source": plan.get("source") or "venue"})}
+            "call_ref": (place_ref(held.get("place_id")) if plan.get("source") == "listing" else {"source": plan.get("source") or "venue"})}
     for a in await VS.acts_of(account):
         if a.get("act_id") == act_id:
             if a.get("call") != keep:
                 await VS._remember(account, {**a, "call": keep})
             return
+
+
+async def number_now(account: str, brief: dict) -> str:
+    """Sasha 272 · CR 103 · a SCHEDULED dial of an act's call on their listing (closed now, or the act's 30 minutes): the number is asked of
+    the act again at the dial — venue.call_again on the SAME open call answers its call_plan, the listing read fresh by AgAPI — never
+    re-read by Sasha, never kept. Raises places_terms.ListingUnavailable (said, nothing dialled) when the act gives none."""
+    from agapi import venue_submit as VS
+    from booking_signer import places_terms as PT
+    r = await VS.call_again(account, str(brief.get(ACT_KEY) or ""), str(brief.get("reason") or "person_asked"))
+    res = r.get("result") or {} if r.get("ok") else {}
+    plan = res.get("call_plan") or {}
+    if res.get("status") == "calling" and plan.get("call_id") == brief.get(PLAN_KEY) and str(plan.get("phone") or "").startswith("+"):
+        return str(plan["phone"])
+    if (res.get("takeover") or {}).get("kind") == "their_listing":
+        raise PT.ListingUnavailable("listing_number_gone", f"their Google listing shows no number now, so nothing was dialled — "
+                                                           f"{res['takeover'].get('link') or 'their listing'}")
+    raise PT.ListingUnavailable("act_gave_no_number", "the booking didn't give its number for this call, so nothing was dialled")
 
 
 def outcome_of(reading) -> Dict[str, Optional[str]]:
@@ -194,7 +212,7 @@ def card_of(act_id: str, res: dict) -> Optional[Dict[str, Any]]:
     """Sasha 269 · the no-answer as their page draws it: AgAPI's `ask` with its `choices` (the first time), or their page alone (the
     second) — the labels, the page and the question exactly as the engine gave them."""
     step = res.get("next_step") or {}
-    page = step.get("page") if str(step.get("page") or "").startswith("https://") else None
+    page = next((str(x) for x in (step.get("page"), step.get("link")) if str(x or "").startswith("https://")), None)   # Sasha 272 · or their listing
     choices = [{"id": str(c.get("id") or ""), "label": str(c.get("label") or ""), **({"page": c["page"]} if c.get("page") else {})}
                for c in res.get("choices") or [] if c.get("id") in ("call_again", "their_page")]
     if not res.get("ask") and not page:
@@ -250,34 +268,31 @@ async def after_call(call: dict, reading) -> Dict[str, Any]:
 
 async def again(account: str, act_id: str, reason: str = "person_asked") -> Dict[str, Any]:
     """Sasha 269 · "try once more" (or R3/R5/R6): venue.call_again under the booking's ONE approval → dial ONLY its call_plan. → {status,
-    say, dial} — said: the act's own `say` ("On it — I'll try them again in 30 minutes."). A listing number is re-read for it (Places),
-    checked against the hash the person approved, and passed to the act for that one call."""
+    say, dial} — said: the act's own `say` ("On it — I'll try them again in 30 minutes.").
+    Sasha 272 · CR 103: nothing of the number is passed — the booking record has it (a listing's is read fresh by AgAPI for this one call).
+    Their listing showing no number now: takeover {kind their_listing, link} — said with the no-channel line and their link."""
     from agapi import venue_submit as VS
     from app.agent import voice as V
     act = next((a for a in await VS.acts_of(account) if a.get("act_id") == act_id), None)
     if not act:
         return {"status": "no_act", "say": V.NO_CALL_OPEN}
-    ref = (act.get("call") or {}).get("call_ref") or act.get("listing_ref") or {}
-    call = None
-    if not act.get("call") and act.get("venue_phone"):   # an email / WhatsApp request act (R5/R6): their own number, the first time
-        call = {"phone": act["venue_phone"], "source": "venue"}
-    elif ref.get("source") in ("listing", "places"):   # its place and hash only: re-read now, checked against the hash, passed for this one call
-        from booking_signer import call_routes as CRT, places_terms as PT
-        try:
-            call = {"phone": await PT.listing_number(CRT.HTTP, ref, NOW()), "source": "listing"}
-        except PT.ListingUnavailable as e:
-            return {"status": "not_allowed", "say": str(e)[:1].upper() + str(e)[1:] + "."}
-    r = await VS.call_again(account, act_id, reason, call)
+    ref = (act.get("call") or {}).get("call_ref") or {}
+    r = await VS.call_again(account, act_id, reason)
     if not r.get("ok"):
         return {"status": "error", "code": r["error"]["code"], "say": r["error"]["message"]}
     res = r["result"]
+    if (res.get("takeover") or {}).get("kind") == "their_listing":
+        link = res["takeover"].get("link")
+        return {"status": res.get("status"), "say": V.takeover_line(res.get("say"), link), "takeover": res["takeover"],
+                "card": {"kind": "no_answer", "act_id": act_id, "say": res.get("say"), "ask": None, "choices": [],
+                         **({"page": link} if str(link or "").startswith("https://") else {})}}
     if res.get("status") != "calling":   # not allowed (the cap, test mode): said in the act's words, nothing dialled
         return {"status": res.get("status"), "say": res.get("say") or "", "next_call": res.get("next_call")}
-    held = {"venue": act.get("venue"), "place_id": ref.get("place_id"), **(act.get("call") or {}), "when": act.get("when"),
+    held = {"venue": act.get("venue"), "place_id": ref.get("place_id") or act.get("place_id"), **(act.get("call") or {}), "when": act.get("when"),
             "party": act.get("party"), "trip_item_id": act.get("trip_item_id")}
     dialled = await dial(account, res, held)
     return {"status": "calling", "say": res.get("say") or "", "dial": dialled.get("status"), "call_id": (res.get("call_plan") or {}).get("call_id"),
             "approval": res.get("approval")}
 
 
-__all__ = ["dial", "after_call", "again", "act_of", "brief_of", "due_at", "outcome_of", "tell", "card_of", "row_id", "ACT_KEY", "PLAN_KEY"]
+__all__ = ["dial", "after_call", "again", "number_now", "place_ref", "act_of", "brief_of", "due_at", "outcome_of", "tell", "card_of", "row_id", "ACT_KEY", "PLAN_KEY"]

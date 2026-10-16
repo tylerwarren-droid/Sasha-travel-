@@ -19,6 +19,7 @@ from agapi import v0 as API, venue_submit as VS, venues as VN
 from app.agent import s2 as S2, sasha as AG, voice as V
 
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
+FRONT = BACKEND.parent / "frontend"
 ACCT = "00000000-0000-4000-8000-000000002760"
 run = asyncio.run
 
@@ -81,8 +82,6 @@ class Discover(unittest.TestCase):
         self.assertNotIn("place_id", shown["web_1"])                                         # its ref is AgAPI's option id, never a listing
         self.assertEqual(VN.card_of(ACCT, None, "The Walking Dog")["website"], "https://the-walking-dog.example.test")   # its tap: by name
         self.assertNotIn("mkt_rover", shown)                                                 # a marketplace is never a booking card
-        fe = (BACKEND.parent / "frontend" / "app" / "s2" / "S2App.tsx").read_text(encoding="utf-8")
-        self.assertIn("onBook={o.kind === 'independent' ? (n: string) => choose(n, '') : choose}", fe)   # never sends the ref as place_id
 
     def test_refused_is_its_line_and_nothing_else(self):
         out, _ = self._search(DRUGS, {"what": "cocaine", "where": "Madrid"})
@@ -91,8 +90,14 @@ class Discover(unittest.TestCase):
         self.assertEqual((out["discover"]["groups"], out["discover"]["options"]), ([], []))
         ev = AG.render("search_venues", out, {})
         self.assertEqual(ev["kind"], "discover"); self.assertEqual(ev["options"], [])
-        self.assertIn("ev.kind === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length",
-                      (BACKEND.parent / "frontend" / "app" / "s2" / "S2App.tsx").read_text(encoding="utf-8"))   # no cards drawn
+
+    @unittest.skipUnless(FRONT.exists(), "the frontend isn't beside the backend here (Railway's image)")
+    def test_the_screen(self):
+        fe = (FRONT / "app" / "s2" / "S2App.tsx").read_text(encoding="utf-8")
+        self.assertIn("ev.kind === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length", fe)   # refused: no cards
+        self.assertIn("onBook={o.kind === 'independent' ? (n: string) => choose(n, '') : choose}", fe)   # an independent's ref never sent as place_id
+        self.assertIn("data-hand-over-link", fe); self.assertIn("data-copy", fe)                              # a marketplace: their link + copy, no send
+        self.assertNotIn("contacts", fe.split("function DiscoverCards", 1)[1].split("\nfunction ", 1)[0])    # unconfirmed contacts never drawn
 
     def test_checks_ask_first(self):
         out, _ = self._search(WINE, {"what": "wine delivery", "where": "Madrid", "open_at": "2026-10-16T21:00"})

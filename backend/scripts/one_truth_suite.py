@@ -205,6 +205,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "release at a safe moment; a place card is never empty; the mic's icon, label and ring agree; a tap that starts a "
             "conversation starts listening",
             ["tests.test_s274"]),
+    "T57": ("S1 measure (observation only): every turn and every booking measured one way — ids only, never content; how far a "
+            "booking got and why it stopped; duplicates and actions after a cancel counted; the store never read by behaviour",
+            ["tests.test_s275"]),
 }
 
 _RUNNER = """

@@ -1469,6 +1469,8 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
     ctx.calls.append({"tool": name, "ok": res["ok"], "agent": t["agent"], "ms": int((time.perf_counter() - t_call) * 1000),
                       **({"status": out.get("status")} if isinstance(out, dict) and out.get("status") else {}),
                       **({"code": res["error"]["code"]} if not res["ok"] else {})})
+    from agapi import measure as MS   # Sasha 275 · S1 measure — observation only: how far a booking got, and why it stopped
+    MS.tool(ctx, name, args, res, ctx.calls[-1]["ms"])
     if key and res["ok"]:
         _IDEM[key] = res
         try:

@@ -37,6 +37,15 @@ USER_AGENT = "SashaConcierge/1.0 (+https://project.kanoe.ai; reads a venue's pub
 MAX_BYTES = 2_000_000
 MAX_EXTRA_PAGES = 2
 PLACES_URL = "https://places.googleapis.com/v1/places:searchText"
+
+
+def _places_read() -> None:
+    """Sasha 275 · cost per booking counts every Places read (agapi.measure) — observation only, never in the read's way."""
+    try:
+        from agapi import measure as MS
+        MS.places_read()
+    except Exception:
+        pass
 PLACES_FIELDS = ("places.id,places.displayName,places.formattedAddress,places.internationalPhoneNumber,"
                  "places.nationalPhoneNumber,places.websiteUri,places.addressComponents,places.regularOpeningHours")
 
@@ -533,6 +542,7 @@ async def read_places(http: Http, key: str, name: str, city: str, now: datetime)
     """The venue's Google business listing: its phone and website. Returns (facts, sources, listing, country, website)."""
     body = {"textQuery": f"{name}, {city}", "maxResultCount": 1}
     try:
+        _places_read()   # Sasha 275 · S1 measure: a Places read, counted (observation only)
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": PLACES_FIELDS,
                                                     "content-type": "application/json"}, json=body)
         data = r.json()
@@ -553,6 +563,7 @@ async def read_place_id(http: Http, key: str, place_id: str, now: datetime) -> T
     """S-65 · the EXACT listing the guest picked from "Find venues" — never a fresh search that could land elsewhere."""
     url = PLACE_URL.format(id=place_id)
     try:
+        _places_read()   # Sasha 275 · S1 measure: a Places read, counted (observation only)
         r = await http("GET", url, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": PLACE_FIELDS})
         data = r.json()
     except Exception as e:
@@ -645,6 +656,7 @@ async def locate(http: Http, key: str, near: str, where: str, country: Optional[
         return out
     body = {"textQuery": f"{near.strip()}, {where.strip()}", "maxResultCount": 1, **({"regionCode": country} if country else {})}
     try:
+        _places_read()   # Sasha 275 · S1 measure: a Places read, counted (observation only)
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": NEAR_FIELDS,
                                                     "content-type": "application/json"}, json=body)
         data = r.json()
@@ -753,6 +765,7 @@ async def find_venues(http: Http, *, what: str, where: Optional[str], country: O
         except ValueError:
             pass
     try:
+        _places_read()   # Sasha 275 · S1 measure: a Places read, counted (observation only)
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": FIND_FIELDS,
                                                     "content-type": "application/json"}, json=body)
         data = r.json()
@@ -845,6 +858,7 @@ async def google_photo_uri(http: Http, name: str, width: int = 480) -> Optional[
         return None
     url = f"https://places.googleapis.com/v1/{name}/media?maxWidthPx={max(100, min(int(width), 1200))}&skipHttpRedirect=true"
     try:
+        _places_read()   # Sasha 275 · S1 measure: a Places read, counted (observation only)
         r = await http("GET", url, headers={"X-Goog-Api-Key": key})
         j = r.json() if r.status_code == 200 else {}
     except Exception as e:

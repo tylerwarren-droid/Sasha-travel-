@@ -30,6 +30,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from agapi import v0 as API
+from agapi import measure as _MS   # Sasha 275 · S1 measure (observation only)
 from app.agent import spoken as SP
 from app.agent import voice as _V   # Sasha 251 · honest results: which tools show something, and her line when one failed
 from agapi import agapi_health as _AH   # Sasha 261 · an AgAPI outage met by a tool's calls (said as voice.outage_line)
@@ -877,6 +878,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                     yield {"type": "tool_start", "name": ev.content_block.name}
             final = await s.get_final_message()
         u_ = getattr(final, "usage", None)
+        _MS.usage(model, u_)   # Sasha 275 · S1 measure: this step's tokens, on the turn (observation only)
         step_ms.append({"model": model, "first_token": ttft, "ms": int((time.perf_counter() - t_step) * 1000),
                         "cached": getattr(u_, "cache_read_input_tokens", None)})
         for e in await flush():
@@ -992,6 +994,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                      + (f" You have ALREADY said aloud: “{spoken}”. Reply with ONLY what you say next, carrying on from it (nothing "
                         "it already says) — or an empty reply if that's enough." if spoken else " Reply with the rewritten text only.")})
         r = await client.messages.create(model=FAST_MODEL, max_tokens=400, system=system_now(), messages=msgs)
+        _MS.usage(FAST_MODEL, getattr(r, "usage", None))   # Sasha 275
         new = drop_internal("".join(b.text for b in r.content if b.type == "text").strip())
         bad2 = guard_check(new, allowed, await _anything_booked(ctx), figures or None)
         new = new if not bad2 else guard_strip(new, bad2)
@@ -1269,6 +1272,8 @@ async def _start_restore() -> None:
     import asyncio
     if os.getenv("DATABASE_URL", "").strip():   # Sasha 249 · no table without a database (tests, local runs)
         asyncio.create_task(_restore_outcomes())
+        # Sasha 275 · S1 measure: the daily summary (+ the 90-day deletion), once a day after 07:00 Madrid — observation only
+        asyncio.create_task(_MS.daily_forever())
 
 
 #: Sasha 259 · while a turn works past its holding line, a "working" event at least this often (the page's stall is 75 s)
@@ -1389,6 +1394,34 @@ async def agent_events(request: Request):
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@router.get("/measures")
+async def measures(request: Request, days: int = 7):
+    """Sasha 275 · S1 measure — the founder's week: by day, by venue type, by stop reason, p50/p95/p99. Founder only. Read from the
+    derived store (agapi.measure), which no code that decides her behaviour ever reads."""
+    from app.services.chat_account import chat_account
+    from booking_signer import guest_accounts as GA
+    if not GA.founder(await chat_account(request)):
+        return JSONResponse({"ok": False, "rule": "founder_only"}, status_code=403)
+    try:
+        return {"ok": True, **(await _MS.read_week(max(1, min(int(days), 31)))), "writer": _MS.stats()}
+    except Exception as e:
+        return JSONResponse({"ok": False, "rule": "store_unreadable", "message": type(e).__name__}, status_code=503)
+
+
+@router.post("/measures/daily")
+async def measures_daily(request: Request):
+    """Sasha 275 · the daily summary now (the gate; the founder): {day?} — yesterday by default. Founder only."""
+    from app.services.chat_account import chat_account
+    from booking_signer import guest_accounts as GA
+    if not GA.founder(await chat_account(request)):
+        return JSONResponse({"ok": False, "rule": "founder_only"}, status_code=403)
+    b = await request.json() if (request.headers.get("content-type") or "").startswith("application/json") else {}
+    try:
+        return await _MS.daily(str(b.get("day"))[:10] if b.get("day") else None)
+    except Exception as e:
+        return JSONResponse({"ok": False, "rule": "daily_failed", "message": type(e).__name__}, status_code=503)
+
+
 @router.post("/timing")
 async def agent_timing(request: Request):
     """Sasha 204 · the page's own measure of a voice turn: end of speech → first sound, → the full answer spoken."""
@@ -1396,6 +1429,9 @@ async def agent_timing(request: Request):
     if not signed_in(await chat_account(request)):
         return JSONResponse({"ok": False}, status_code=403)
     b = await request.json()
+    if b.get("tid"):   # Sasha 275 · S1 measure: the page's own clock for one turn (ids only, no words)
+        _MS.client(str(b.get("tid")), b, await chat_account(request))
+        return {"ok": True}
     row = {k: b.get(k) for k in ("session", "first_sound_ms", "full_answer_ms", "first_sound_kind", "engine_first_text_ms", "tools")}
     row["at"] = datetime.now(timezone.utc).isoformat()
     TIMINGS.append(row)
@@ -1723,7 +1759,7 @@ async def agent_turn(request: Request):
                 except Exception as e:
                     log.warning("[memory] closing not kept: %s: %s", type(e).__name__, e)
                 yield f"data: {json.dumps({'type': 'done', 'text': bye, 'dormant': True, 'guard': [], 'tools': []})}\n\n"
-            return StreamingResponse(dormant(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+            return StreamingResponse(_MS.observe(dormant(), account, session_id, surface, body.get("channel")), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         pick = body.get("pick") if isinstance(body.get("pick"), dict) else {}
         pid = str(pick.get("place_id") or "")[:200]
         if pid:   # Sasha 231 · a Choose tap carries THAT card's place_id — matched to the cards on their screen, never a name guess
@@ -1741,7 +1777,7 @@ async def agent_turn(request: Request):
             return
         lap("ready")
         log.info("[agent] before the turn ms %s", pre)
-        timing = f"data: {json.dumps({'type': 'timing', 'pre': pre})}\n\n"   # Sasha 257 · the pages ignore it; measurements read it
+        timing = f"data: {json.dumps({'type': 'timing', 'pre': pre, **({'tid': (_MS.current() or {}).get('tid')} if remembers else {})})}\n\n"   # Sasha 257 · the pages ignore it; measurements read it · 275: /s2's turn id (old S1: as before)
         if not remembers:   # old S1 (parity off): exactly as before
             yield timing
             timing = ""
@@ -1787,7 +1823,7 @@ async def agent_turn(request: Request):
                 await MEM.remember(account, session_id, str(body.get("message") or "").strip()[:4000], reply, seen)
             except Exception as e:
                 log.warning("[memory] turn not kept: %s: %s", type(e).__name__, e)
-    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return StreamingResponse(_MS.observe(events(), account, session_id, surface, body.get("channel")), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.get("/voice/note/{token}.mp3")

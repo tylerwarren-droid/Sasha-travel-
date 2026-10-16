@@ -245,11 +245,16 @@ async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str],
     import time
     import httpx
     from agapi import agapi_health as AH
-    t0, status = time.perf_counter(), None
+    t0, status, version = time.perf_counter(), None, None
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as c:
             r = await c.post(f"{url}/v1/{op}", headers=headers, content=json.dumps(body))
         status = r.status_code
+        try:   # Sasha 275 · which AgAPI served it, when it says — read apart, so it can never change the answer
+            hv = getattr(r, "headers", None) or {}
+            version = hv.get("agapi-version") or hv.get("x-agapi-version")
+        except Exception:
+            version = None
         try:
             env = r.json()
         except Exception:   # not AgAPI's envelope (a proxy's error page): AgAPI didn't answer
@@ -264,6 +269,8 @@ async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str],
     kind = AH.kind_of(env)
     if kind:
         await AH.note(kind, op, url, key)
+    from agapi import measure as MS   # Sasha 275 · S1 measure — observation only (an act's events, as Sasha received them)
+    MS.agapi_op(op, body, env, int((time.perf_counter() - t0) * 1000), url, version)
     return env
 
 

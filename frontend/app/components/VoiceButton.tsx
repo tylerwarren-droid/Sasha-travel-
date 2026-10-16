@@ -48,7 +48,7 @@ interface VoiceButtonProps {
 }
 
 /** Sasha 273 · what /s2 may ask of its mic: on return, resume what was live; on a tap, listen (start or resume — never stop). */
-export type VoiceCtl = { resume: () => void; tap: () => void; granted: () => boolean }
+export type VoiceCtl = { resume: () => void; tap: () => void; granted: () => boolean; speechEndAt: () => number | null }
 /** Sasha 273 · strict: no frame for this long and the mic is not hearing (the screen stops saying "Voice on"). */
 const LIVE_FRAME_MS = 1500
 
@@ -229,6 +229,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   useEffect(() => { strictRef.current = strict }, [strict])
   const wasLiveRef = useRef(false)   // Sasha 273 · it was live when the page went to the background: resume it on return
   const listenRef = useRef<(() => void) | null>(null)
+  const speechEndRef = useRef<number | null>(null)   // Sasha 275 · S1 measure: when the person's speech ended (the page's clock)
   // Sasha 274 · item 4: the browser's own answer for the microphone, known BEFORE a tap — so a tap that starts a conversation (New
   // chat, a chip) can start listening inside it, synchronously, when it is already granted (never a permission prompt from it)
   const permRef = useRef<string | null>(null)
@@ -709,6 +710,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
                   : fragment
               }
               if (data.speech_final === true && transcriptRef.current.length >= 3) {
+                speechEndRef.current = Date.now()   // Sasha 275
                 scheduleFire()
               }
             } else if (fragment) {
@@ -719,6 +721,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
           // UtteranceEnd fallback — fires if speech_final never came
           if (data.type === 'UtteranceEnd') micLog('utterance_end', { pending: transcriptRef.current.length })
           if (data.type === 'UtteranceEnd' && transcriptRef.current.length >= 3) {
+            speechEndRef.current = speechEndRef.current && Date.now() - speechEndRef.current < 3000 ? speechEndRef.current : Date.now()   // Sasha 275
             scheduleFire()
           }
         } catch(e) {}
@@ -882,7 +885,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   }
   useEffect(() => {
     if (!ctlRef) return
-    ctlRef.current = { resume: resumeMic, tap: listenNow, granted: () => permRef.current === 'granted' }
+    ctlRef.current = { resume: resumeMic, tap: listenNow, granted: () => permRef.current === 'granted', speechEndAt: () => speechEndRef.current }
     return () => { ctlRef.current = null }
   })
   useEffect(() => { listenRef.current = listenNow })

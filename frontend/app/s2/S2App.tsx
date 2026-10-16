@@ -140,6 +140,7 @@ function useSpeaker() {
   const route = useRef<((t: string) => Promise<void>) | null>(null)   // Sasha 225 · her face, while it's up
   const subs = useRef(new Set<(b: boolean) => void>())
   const blockSubs = useRef(new Set<(b: boolean) => void>())
+  const audibleSubs = useRef(new Set<() => void>())   // Sasha 275 · S1 measure: her audio actually started (the page's clock)
   const lastBlocked = useRef<string | null>(null)
   const epoch = useRef(0)   // Sasha 233 · bumped by interrupt(): a line fetched before it is never played
   const asleep = useRef(false)   // Sasha 246 item 2 · asleep: nothing is said aloud
@@ -158,7 +159,7 @@ function useSpeaker() {
       const a = audio()
       const url = URL.createObjectURL(await r.blob())
       a.src = url
-      const got = await new Promise<'played' | 'blocked' | 'failed'>(res => { a.onended = () => res('played'); a.onpause = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })   // Sasha 233 · paused (interrupted) ends it too
+      const got = await new Promise<'played' | 'blocked' | 'failed'>(res => { a.onplaying = () => audibleSubs.current.forEach(f => f()); a.onended = () => res('played'); a.onpause = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })   // Sasha 233 · paused (interrupted) ends it too
       URL.revokeObjectURL(url)
       if (got === 'blocked') setBlocked(text); else if (got === 'played') setBlocked(null)
       return got
@@ -170,7 +171,7 @@ function useSpeaker() {
     while (q.current.length) {
       emit(true)
       const text = q.current.shift() as string
-      if (route.current) await route.current(text).catch(() => {})
+      if (route.current) { audibleSubs.current.forEach(f => f()); await route.current(text).catch(() => {}) }   // her face speaks it
       else await mp3(text)
       emit(false)
     }
@@ -192,6 +193,8 @@ function useSpeaker() {
     /** Sasha 233 · "Thanks!" mid read-back: what she's saying stops now, and nothing queued is said. */
     interrupt: () => { epoch.current++; q.current = []; try { if (el.current && !el.current.paused) el.current.pause() } catch { /* nothing playing */ } },
     onSpeaking: (fn: (b: boolean) => void) => { subs.current.add(fn); return () => { subs.current.delete(fn) } },
+    /** Sasha 275 · her voice became audible (an element started playing) — for the measure only */
+    onAudible: (fn: () => void) => { audibleSubs.current.add(fn); return () => { audibleSubs.current.delete(fn) } },
     /** Sasha 232 · a reply the phone refused to play: the toggle says so (never "Voice on" while she's silent); a tap replays it. */
     onBlocked: (fn: (b: boolean) => void) => { blockSubs.current.add(fn); return () => { blockSubs.current.delete(fn) } },
     replayBlocked: () => { const t = lastBlocked.current; setBlocked(null); if (t && !muted.current && !asleep.current) { q.current.unshift(t); next() } },
@@ -436,6 +439,7 @@ export default function S2App() {
   useEffect(() => { msgsRef.current = msgs }, [msgs])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const voiceNext = useRef<number | null>(null)   // Sasha 275 · the next send came from her mic: when their speech ended
   const queued = useRef<string[]>([])   // Sasha 257 · messages sent while she was answering: sent next, in order
   const session = useRef('')
   useEffect(() => { session.current = `s2-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}` }, [])
@@ -604,6 +608,15 @@ export default function S2App() {
   const send = useCallback(async (text: string, pick?: { place_id: string }, tap?: { read_back_id?: string; act_id?: string; choice: string }) => {
     const t = text.trim()
     if (!t) return
+    // Sasha 275 · S1 MEASURE (observation only): this turn on the page's own clock — how it started, its first visible line, her first
+    // audible sound, the reply done — posted once with the turn's id (the stream's timing event); numbers only, never the words
+    const spokenAt = voiceNext.current; voiceNext.current = null
+    const m = { tid: '' as string, channel: spokenAt ? 'voice' : pick || tap ? 'tap' : CHIPS.includes(t) ? 'chip' : 'text', t0: spokenAt || Date.now(),
+                visible: null as number | null, audible: null as number | null, done: null as number | null, sent: false }
+    const offAudible = speaker.onAudible(() => { if (m.audible === null) m.audible = Date.now() - m.t0 })
+    const postM = () => { if (m.sent || !m.tid) return; m.sent = true; offAudible()
+      void fetch('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
+        body: JSON.stringify({ tid: m.tid, channel: m.channel, surface: 's2', first_visible_ms: m.visible, first_audible_ms: m.audible, done_ms: m.done }) }).catch(() => {}) }
     // Sasha 257 · Jon (row 861): "she can't hear me or just doesn't respond — tried 5 times". One turn reached her; the rest were
     // DROPPED here while a reply was still open (busy). A message sent while she's answering is kept and sent next — never lost.
     if (busy) { queued.current = [...queued.current, t]; setInput(''); return }
@@ -634,7 +647,7 @@ export default function S2App() {
     try {
       arm()
       const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
-        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, ...(pick ? { pick } : {}), ...(tap ? { tap } : {}), ...(said1 && !leaving ? { said_first: said1 } : {}) }) })   // Sasha 265 · the card's tap
+        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, channel: m.channel, ...(pick ? { pick } : {}), ...(tap ? { tap } : {}), ...(said1 && !leaving ? { said_first: said1 } : {}) }) })   // Sasha 265 · the card's tap
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const rd = r.body?.getReader()
       const dec = new TextDecoder()
@@ -650,6 +663,8 @@ export default function S2App() {
           let ev: Ev
           try { ev = JSON.parse(line) } catch { continue }
           if (ev.type === 'render' || ev.type === 'state') ev = untagDeep(ev)
+          if (ev.type === 'timing' && typeof ev.tid === 'string') m.tid = ev.tid   // Sasha 275
+          if (m.visible === null && ['hold', 'text', 'replace', 'render', 'say'].includes(String(ev.type))) m.visible = Date.now() - m.t0
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
           else if (ev.type === 'tool_start' && helloCtl.current?.big()) {   // Sasha 268 · a request the rule missed: the first tool it starts
@@ -696,6 +711,8 @@ export default function S2App() {
     } finally {
       if (stall) clearTimeout(stall)
       histRef.current = [...histRef.current, { role: 'user', content: t }, { role: 'assistant', content: reply }]
+      m.done = Date.now() - m.t0   // Sasha 275 · then posted once her first sound came (or 8 s on)
+      setTimeout(postM, m.audible !== null ? 0 : 8000)
       touch()   // Sasha 273 · activity: her answer
       setBusy(false)
       busyRef.current = false
@@ -893,7 +910,7 @@ export default function S2App() {
                 on the mic itself — "Voice on" and its green ring only while it hears; otherwise "Tap to talk" (the tap starts or resumes it) */}
             {(() => { const vo = voiceOf({ asleep, dormant, micLive }); return (
             <div className="s2-mic" data-live={vo.live ? '1' : '0'} data-cue={!vo.live && !asleep && !!micNote ? '1' : '0'} onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-              {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={send} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
+              {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={t => { voiceNext.current = voiceCtl.current?.speechEndAt() ?? Date.now(); void send(t) }} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
                 strict ctlRef={voiceCtl} onConnectedChange={setMicLive} />}{/* Sasha 273 · item 3: "on" only while it hears */}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
               <span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-live="polite"
                 style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{vo.words}</span>

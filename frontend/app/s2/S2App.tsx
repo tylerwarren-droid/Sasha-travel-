@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import VoiceButton, { type VoiceCtl } from '@/app/components/VoiceButton'
 import { reappear, voiceOf } from '@/lib/presence-rule.mjs'
 import { midFlow } from '@/lib/greeting-rule.mjs'   // Sasha 274 · mid-booking, from the screen   // Sasha 273 · rule 4 and the mic's truth: the ONE presence rule
-import { WhoLine } from '@/app/components/SignedInLine'   // Sasha 257 · who is signed in, quietly in the header
+import { AccountControl, SIGN_IN_CARRY } from '@/app/components/SignedInLine'   // Sasha 257 · who is signed in, quietly in the header
 import { PayHere } from '@/app/components/PayHere'
 import S2Hello, { type HelloCtl } from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
@@ -55,6 +55,7 @@ type Card =
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
+  | { k: 'sign_in' }   // Sasha 274 · a guest's booking: sign in to book for real (this conversation kept)
   | { k: 'no_answer'; act_id: string; ask?: string; choices: { id: string; label: string; page?: string }[]; page?: string }   // Sasha 269 · AgAPI's
 const NOT_CLEARED = 'I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'   // Sasha 265 · item 3
 type Msg = { role: 'user' | 'sasha'; text: string; cards: Card[]; hold?: string; restored?: boolean }   // Sasha 257 · hold: the holding line, until her words come
@@ -83,14 +84,16 @@ const BUILD = process.env.NEXT_PUBLIC_BUILD || 'dev'
 const CARRY = 's2_carry'
 type Carry = { msgs: Msg[]; hist: { role: string; content: string }[] }
 /** The conversation, across a reload for a new release — this tab only, read once, never a payment card. */
-function putCarry(msgs: Msg[], hist: { role: string; content: string }[]): void {
-  try { sessionStorage.setItem(CARRY, JSON.stringify({ at: Date.now(), msgs: msgs.slice(-40).map(m => ({ ...m, hold: undefined, cards: m.cards.filter(c => c.k !== 'pay') })), hist: hist.slice(-30) })) } catch { /* private mode: recall restores what it can */ }
+function putCarry(msgs: Msg[], hist: { role: string; content: string }[], key: string = CARRY): void {
+  try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), msgs: msgs.slice(-40).map(m => ({ ...m, hold: undefined, cards: m.cards.filter(c => c.k !== 'pay') })), hist: hist.slice(-30) })) } catch { /* private mode: recall restores what it can */ }
 }
 function takeCarry(): Carry | null {
   try {
-    const raw = sessionStorage.getItem(CARRY); sessionStorage.removeItem(CARRY)
+    // Sasha 274 · rows 1063/1064: a guest's own sign-in carries their conversation too (20 min: the code can take a while to arrive)
+    const signIn = sessionStorage.getItem(SIGN_IN_CARRY); sessionStorage.removeItem(SIGN_IN_CARRY)
+    const raw = sessionStorage.getItem(CARRY) || signIn; sessionStorage.removeItem(CARRY)
     const j = raw ? JSON.parse(raw) : null
-    return j && Date.now() - Number(j.at) < 120000 && Array.isArray(j.msgs) ? { msgs: j.msgs.map((m: Msg) => ({ ...m, restored: true })), hist: Array.isArray(j.hist) ? j.hist : [] } : null
+    return j && Date.now() - Number(j.at) < (raw === signIn ? 20 * 60000 : 120000) && Array.isArray(j.msgs) ? { msgs: j.msgs.map((m: Msg) => ({ ...m, restored: true })), hist: Array.isArray(j.hist) ? j.hist : [] } : null
   } catch { return null }
 }
 const tzNow = (): string | undefined => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return undefined } }
@@ -110,11 +113,13 @@ function shownCards(preset: Ev): Extract<Card, { k: 'venues' }>['cards'] {
 
 /** Sasha 249 · ONE IDENTITY: signed in = whoami names someone ACTING (the same answer the badge renders) — not a second
  *  decision from an activity ping that could fail for other reasons. */
+/** Sasha 274 · who is acting (whoami's own answer) — a guest's booking offers sign-in in the conversation */
+let ACTING: 'user' | 'founder' | 'guest' | null = null
 function useSignedIn(): boolean | null {
   const [ok, setOk] = useState<boolean | null>(null)
   useEffect(() => {
     fetch('/api/auth/whoami', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null).then(w => setOk(actingOf(w) !== null)).catch(() => setOk(false))
+      .then(r => r.ok ? r.json() : null).then(w => { ACTING = actingOf(w); setOk(ACTING !== null) }).catch(() => setOk(false))
   }, [])
   return ok
 }
@@ -334,6 +339,11 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
   tap: (title: string, readBackId: string, route: string) => void }) {
   if (c.k === 'read_back' && c.choices && c.choices.length && c.read_back_id) return <CallCard c={c} tap={tap} />
   if (c.k === 'no_answer') return <NoAnswerCard c={c} tap={tap} />
+  if (c.k === 'sign_in') return (   /* Sasha 274 · rows 1063/1064 — the same sign-in as the header's, this conversation carried */
+    <Box k="Booking as a guest" h="Sign in to book for real — this conversation comes with you">
+      <button type="button" data-sign-in-card onClick={() => window.dispatchEvent(new Event('s2-sign-in'))}
+        style={{ marginTop: 6, padding: '10px 18px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700 }}>Sign in</button>
+    </Box>)
   if (c.k === 'counter_card') return <CounterCard card={c.card} />
   if (c.k === 'my_cards') return <MyCards cards={c.cards} choose={choose} />
   if (c.k === 'accident') return <AccidentCard view={c.view} send={send} />
@@ -652,7 +662,9 @@ export default function S2App() {
           else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(() => {}) }
           else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line }] })) }
           else if (ev.type === 'render') {
-            const add = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
+            const add0 = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
+            // Sasha 274 · rows 1063/1064: a booking tried as a GUEST offers sign-in, in the conversation, under its card
+            const add = (c: Card) => { add0(c); if (ACTING === 'guest' && ['read_back', 'prepared', 'wa_open', 'handover', 'pay'].includes(c.k)) add0({ k: 'sign_in' }) }
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
               ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) })
@@ -755,6 +767,11 @@ export default function S2App() {
     }).catch(() => { /* asked again at the next return or turn */ })
   }, [safeReload])
   useEffect(() => { checkReleaseRef.current = checkRelease }, [checkRelease])
+  useEffect(() => {   // Sasha 274 · the conversation's sign-in card: the same carry and sign-in as the header's account control
+    const go = () => { putCarry(msgsRef.current, histRef.current, SIGN_IN_CARRY); window.location.href = '/sign-in?next=%2Fs2' }
+    window.addEventListener('s2-sign-in', go)
+    return () => window.removeEventListener('s2-sign-in', go)
+  }, [])
   useEffect(() => speaker.onSpeaking(b => { speakingRef.current = b; if (!b) setTimeout(() => safeReload(), 0) }), [speaker, safeReload])
   const comeBack = useCallback(() => {
     voiceCtl.current?.resume()
@@ -811,7 +828,7 @@ export default function S2App() {
               {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : t === 'trip' ? 'Trip' : 'Activity'}</button>))}
         </nav>
       </header>
-      <WhoLine style={{ padding: '0 16px 8px', textAlign: 'right' }} />{/* one quiet line, under the tabs — never over content */}
+      <AccountControl style={{ padding: '0 16px 8px', textAlign: 'right' }} onSignIn={() => putCarry(msgsRef.current, histRef.current, SIGN_IN_CARRY)} />{/* Sasha 274 · rows 1063/1064 */}{/* one quiet line, under the tabs — never over content */}
       {tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
         <section className="s2-trip" style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
           <style>{TRIP_BOARD_CSS}</style>

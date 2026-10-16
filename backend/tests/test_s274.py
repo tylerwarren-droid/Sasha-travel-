@@ -71,6 +71,23 @@ class MicAgrees(unittest.TestCase):
         self.assertIn("data-cue={!vo.live && !asleep && !!micNote ? '1' : '0'}", app)
         self.assertIn("granted: () => permRef.current === 'granted'", _front(self, "app/components/VoiceButton.tsx"))
 
+    def test_one_account_control(self):
+        # rows 1063/1064: tapping "Signed in as …" → Sign out / Switch account; a guest → "Guest — Sign in to book for real"; a guest's
+        # booking offers sign-in in the conversation; signing in keeps the conversation (the guest's own, read once)
+        sil = _front(self, "app/components/SignedInLine.tsx")
+        self.assertIn("export function AccountControl(", sil)
+        self.assertIn(">Guest — Sign in to book for real</button>", sil)
+        self.assertIn(">Sign out</button>", sil)
+        self.assertIn("Switch account</button>", sil)
+        self.assertIn("await ensureGuest()   // back to a private guest", sil)
+        self.assertIn("if (carry) sessionStorage.setItem(SIGN_IN_CARRY, carry)", sil)          # the one hand-off survives the change of person
+        app = _front(self, "app/s2/S2App.tsx")
+        self.assertIn("<AccountControl style={{ padding: '0 16px 8px', textAlign: 'right' }} onSignIn={() => putCarry(msgsRef.current, histRef.current, SIGN_IN_CARRY)} />", app)
+        self.assertNotIn("<WhoLine", app)
+        self.assertIn("if (ACTING === 'guest' && ['read_back', 'prepared', 'wa_open', 'handover', 'pay'].includes(c.k)) add0({ k: 'sign_in' })", app)
+        self.assertIn("const signIn = sessionStorage.getItem(SIGN_IN_CARRY)", app)
+        self.assertIn("onClick={() => { setOpen(false); if (acting === 'user') void signOut('sign_in'); else signIn(false) }}", sil)   # switching never carries
+
     def test_in_the_gate(self):
         self.assertIn('["tests.test_s274"]', (BACKEND / "scripts" / "one_truth_suite.py").read_text(encoding="utf-8"))
 

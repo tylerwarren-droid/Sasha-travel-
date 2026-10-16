@@ -26,7 +26,7 @@ test('Jon: a message while she answers is queued, never dropped; a stalled reply
 test('a calm screen: identity quietly in the header (whoami), no floating pill on the S2 shell, no "Type instead"', () => {
   assert.match(who, /const S2_SHELL = \/\^\\\/\(s2\|next\)/)
   assert.match(who, /if \(S2_SHELL\.test\(path\)\) return null/)
-  assert.match(app, /<WhoLine /)
+  assert.match(app, /<AccountControl /)   // Sasha 274 · moved: the same quiet line, now the one account control (rows 1063/1064)
   assert.doesNotMatch(app, /Type instead/)
 })
 

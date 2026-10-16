@@ -34,8 +34,14 @@ function useWho(): Who | null | 'unknown' {
  *  it goes (lib/acting-rule.mjs). Found by EU's walk (row 730): a new account saw trips it never made. */
 export function forgetPerson(): void {
   try { for (const k of PER_PERSON_LOCAL) localStorage.removeItem(k) } catch { /* private window */ }
-  try { sessionStorage.clear() } catch { /* private window */ }
+  // Sasha 274 · rows 1063/1064: the ONE thing that crosses a change of person — the guest's own conversation, handed to the account
+  // they chose to sign in as (SIGN_IN_CARRY, set only by that tap, read once by /s2). Everything else of this tab goes.
+  let carry: string | null = null
+  try { carry = sessionStorage.getItem(SIGN_IN_CARRY) } catch { /* private window */ }
+  try { sessionStorage.clear(); if (carry) sessionStorage.setItem(SIGN_IN_CARRY, carry) } catch { /* private window */ }
 }
+/** Sasha 274 · the guest's conversation, carried through their own sign-in (S2App puts it; it reads it once). */
+export const SIGN_IN_CARRY = 's2_carry_sign_in'
 function forgetIfSomeoneElse(j: Who): void {
   try {
     const now = whoKey(actingOf(j), j.email)   // Sasha 249 · whoami's acting, never re-derived here
@@ -90,6 +96,50 @@ export function WhoLine({ style }: { style?: CSSProperties }) {
   return (
     <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...style }}>
       {badgeFor(who)}{guest && <> · <a href="/sign-in" style={{ textDecoration: 'underline', color: 'inherit' }}>Sign in</a></>}
+    </div>
+  )
+}
+
+/** Sasha 274 · rows 1063/1064 · /s2's ONE ACCOUNT CONTROL, where "Signed in as …" was only text (no sign-out, no switch, no sign-in):
+ *   a signed-in account → tap it: Sign out (back to a private guest) · Switch account (sign-in, nothing carried — another person)
+ *   the founder        → tap it: Switch account (a real sign-in outranks the founder's cookie: lib/acting-rule.mjs)
+ *   a guest            → "Guest — Sign in to book for real": sign-in, THIS conversation carried (onSignIn)
+ *  From whoami's acting alone (lib/acting-rule.mjs), never re-derived. */
+export function AccountControl({ style, onSignIn }: { style?: CSSProperties; onSignIn?: () => void }) {
+  const who = useWho()
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  if (who === null || who === 'unknown') return null
+  const acting = actingOf(who)
+  const next = '/sign-in?next=%2Fs2'
+  const signIn = (carry: boolean) => { if (carry) onSignIn?.(); window.location.href = next }
+  async function signOut(then: 'guest' | 'sign_in') {
+    setNote(null)
+    try {
+      const r = await fetch('/api/auth/sign-out', { method: 'POST' })
+      const j = await r.json().catch(() => ({})) as { message?: string }
+      if (!r.ok) { setNote(`Not signed out — ${j.message ?? `HTTP ${r.status}`}`); return }
+      forgetPerson(); try { localStorage.removeItem(WHO_KEY) } catch { /* fine */ }
+      if (then === 'sign_in') { window.location.href = next; return }
+      await ensureGuest()   // back to a private guest (Sasha 153: no sign-in wall)
+      window.location.href = '/s2'
+    } catch (e) { setNote(`Not signed out — ${(e as Error).message}`) }
+  }
+  const link = { background: 'none', border: 0, padding: 0, color: 'inherit', textDecoration: 'underline', font: 'inherit', cursor: 'pointer' } as const
+  const item = { display: 'block', width: '100%', textAlign: 'left', padding: '11px 14px', background: 'transparent', border: 0, color: '#fff', fontSize: 14.5 } as const
+  return (
+    <div data-account={acting || 'none'} style={{ position: 'relative', fontSize: 11.5, color: 'rgba(255,255,255,.55)', ...style }}>
+      {acting === 'guest' || acting === null
+        ? <button type="button" onClick={() => signIn(true)} style={{ ...link, color: '#e8b931', textDecoration: 'none', fontWeight: 600 }}>Guest — Sign in to book for real</button>
+        : <button type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(o => !o)} style={{ ...link, textDecoration: 'none', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {badgeFor(who)} ▾</button>}
+      {open && acting !== 'guest' ? (
+        <div role="menu" style={{ position: 'absolute', right: 0, top: 22, minWidth: 190, zIndex: 30, background: '#16161f', border: '1px solid rgba(255,255,255,.12)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}>
+          {acting === 'user' ? <button type="button" role="menuitem" style={item} onClick={() => { setOpen(false); void signOut('guest') }}>Sign out</button> : null}
+          <button type="button" role="menuitem" style={{ ...item, borderTop: acting === 'user' ? '1px solid rgba(255,255,255,.1)' : 0 }}
+            onClick={() => { setOpen(false); if (acting === 'user') void signOut('sign_in'); else signIn(false) }}>Switch account</button>
+        </div>) : null}
+      {note ? <div role="status" style={{ color: '#f19999', marginTop: 4 }}>{note}</div> : null}
     </div>
   )
 }

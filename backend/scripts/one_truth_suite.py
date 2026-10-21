@@ -218,6 +218,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T60": ("One thing on its own (Tyler's 18 Oct decision, no packages): a flight or a hotel is bookable by itself; it joins a trip only "
             "when it is part of it; propose_trip only when they ask for a trip; old S1 (parity off) as before",
             ["tests.test_s280"]),
+    "T61": ("Every line she says while her face is on screen moves her lips (Face.say, through one speak()); without her live face the "
+            "line is said with her in the corner, never over a still or a frozen face; the camera line only when there is a camera",
+            ["tests.test_s281"]),
 }
 
 _RUNNER = """

@@ -5,6 +5,7 @@
  * backend/app/agent/voice.py — nothing here decides them.
  */
 import { apiUrl } from '@/lib/api'
+import { withCamera } from '@/lib/presence-rule.mjs'
 
 let rule: { line: string; re: RegExp; cameraOff: string; trip: RegExp | null; tryLine: string; hello: string; helloBack: string; acks: string[] } | null = null
 let loading: Promise<void> | null = null
@@ -30,20 +31,20 @@ export function cameraOffLine(): string {
 
 /** Sasha 271 · B (row 1008) · her ARRIVAL in one breath (voice.arrival_line): "Hey there." — a return: "Hey <first name>." — then
  *  voice.CAMERA_OFF. Read once from the backend (waits for it); '' when it couldn't be read (she then just goes to the corner). */
-export async function arrivalLine(name: string | null | undefined, back: boolean): Promise<string> {
+export async function arrivalLine(name: string | null | undefined, back: boolean, live = true): Promise<string> {
   await loadFirstLine()
   if (!rule?.hello || !rule.cameraOff) return ''
   const first = String(name || '').trim().split(' ')[0].slice(0, 40)
-  return `${back && first ? rule.helloBack.replace('{name}', first) : rule.hello}. ${rule.cameraOff}`
+  return withCamera(back && first ? rule.helloBack.replace('{name}', first) : rule.hello, rule.cameraOff, live)   // Sasha 281 · the camera words only when her live face says them
 }
 
 /** Sasha 273 · item 4 (c): her reappearance with NEWS leads with it — the news in its own words (the event's `say`, from the backend),
  *  then voice.CAMERA_OFF, exactly as her arrival. '' when the rule hasn't been read (she then just goes to the corner). */
-export async function newsLine(news: string): Promise<string> {
+export async function newsLine(news: string, live = true): Promise<string> {
   await loadFirstLine()
   const said = String(news || '').trim()
   if (!said || !rule?.cameraOff) return ''
-  return `${/[.!?]$/.test(said) ? said : `${said}.`} ${rule.cameraOff}`
+  return withCamera(said, rule.cameraOff, live)   // Sasha 281
 }
 
 /** The first line for this message, when it is a request for work (and the rule has been read); else null. Sasha 268 · item 7: a

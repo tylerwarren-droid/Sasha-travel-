@@ -176,7 +176,7 @@ function useSpeaker() {
     while (q.current.length) {
       emit(true)
       const text = q.current.shift() as string
-      if (route.current) { audibleSubs.current.forEach(f => f()); await route.current(text).catch(() => {}) }   // her face speaks it
+      if (route.current) await route.current(text).catch(() => {})   // Sasha 281 · S2Hello's speak(): her lips, or her voice from the corner
       else await mp3(text)
       emit(false)
     }
@@ -194,6 +194,7 @@ function useSpeaker() {
     say: (t: string) => { if (on.current && !muted.current && !asleep.current && t.trim()) { q.current.push(t); next() } },
     sayNow: async (t: string) => { emit(true); const r = muted.current || asleep.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
     setRoute: (fn: ((t: string) => Promise<void>) | null) => { route.current = fn },
+    heard: () => { audibleSubs.current.forEach(f => f()) },   // Sasha 281 · her face started a line (its audio isn't the page's element)
     setMuted: (m: boolean) => { muted.current = m; if (m) { q.current = []; setBlocked(null) } },
     /** Sasha 233 · "Thanks!" mid read-back: what she's saying stops now, and nothing queued is said. */
     interrupt: () => { epoch.current++; q.current = []; try { if (el.current && !el.current.paused) el.current.pause() } catch { /* nothing playing */ } },
@@ -698,12 +699,17 @@ export default function S2App() {
     // work; small talk never) → her line by code (voice.CAMERA_OFF), said by her (bye), then the corner circle and the work
     const isRequest = !!(pick || tap || isWork(t))
     const leaving = isRequest && !!helloCtl.current?.big()
-    const said1 = leaving ? (cameraOffLine() || null) : pick || tap ? null : takeFirstLine(t)   // Sasha 273 · item 8: once per request, then the quiver
-    if (leaving) {
+    // Sasha 281 · the camera line only when her LIVE face says it; her still alone → no camera words, the corner, the usual first line
+    const onCamera = leaving && !!helloCtl.current?.live()
+    const said1 = onCamera ? (cameraOffLine() || null) : pick || tap ? null : takeFirstLine(t)   // Sasha 273 · item 8: once per request, then the quiver
+    if (onCamera) {
       if (said1) patch(m => ({ ...m, hold: said1 }))
       byeUntil.current = Date.now() + 9000   // her line first: the stream's lines are shown, not spoken over it
       void helloCtl.current?.bye(said1 || '', !muted)
-    } else if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }
+    } else {
+      if (leaving) void helloCtl.current?.bye('', false)   // to the corner, before a word is said (S2Hello speak)
+      if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }
+    }
     let reply = ''
     // Sasha 257 · a reply stream that goes quiet (a phone's network, a connection held open) never leaves the page "busy" — the
     // mic stays off and every message is refused while it is. STALL_MS of silence → it's stopped and said; `done` ends it.
@@ -735,7 +741,9 @@ export default function S2App() {
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
           else if (ev.type === 'tool_start' && helloCtl.current?.big()) {   // Sasha 268 · a request the rule missed: the first tool it starts
-            const l = cameraOffLine(); if (l) patch(m => ({ ...m, hold: l })); byeUntil.current = Date.now() + 9000; void helloCtl.current.bye(l, !muted) }
+            const l = helloCtl.current.live() ? cameraOffLine() : ''   // Sasha 281 · the camera line only on her live lips
+            if (l) { patch(m => ({ ...m, hold: l })); byeUntil.current = Date.now() + 9000 }
+            void helloCtl.current.bye(l, !muted) }
           else if (ev.type === 'hold') { if (ev.first && said1) continue; patch(m => ({ ...m, hold: ev.text })); if (Date.now() > byeUntil.current) speaker.say(ev.say || ev.text) }   // 265 · never twice   // Sasha 257 · the holding line (row 863)
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }

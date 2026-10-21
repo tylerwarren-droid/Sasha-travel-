@@ -3,13 +3,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { presence, ring, GREEN, reappear, voiceOf, inView, dayOf, HOLD_MS, IDLE_MS, VOICE_ON, TAP_TO_TALK, PAUSED, WORK_PULSE, WORK_PULSE_CSS } from '../lib/presence-rule.mjs'
-import { OPENING } from '../lib/greeting-rule.mjs'
+import { presence, ring, GREEN, reappear, voiceOf, inView, dayOf, HOLD_MS, IDLE_MS, VOICE_ON, TAP_TO_TALK, PAUSED, WORK_PULSE, WORK_PULSE_CSS, speakVia, withCamera } from '../lib/presence-rule.mjs'
+import { OPENING, openingShown } from '../lib/greeting-rule.mjs'
 
 const P = (o) => presence({ phase: 'bubble', signedIn: true, ...o })
 
 test('the arrival is full size; after it she is ALWAYS the corner — never nothing', () => {
-  for (const phase of OPENING) assert.equal(P({ phase }).where, 'full', phase)
+  for (const phase of OPENING) assert.equal(P({ phase }).where, phase === 'voice' ? 'corner' : 'full', phase)   // Sasha 281 · MOVED: her voice alone, from the corner
   assert.equal(P({ phase: 'off' }).where, 'full')                                     // signed in, before its first step: no flip
   assert.equal(P({ phase: 'off', signedIn: null, soon: true }).where, 'full')          // the cookie says signed in: her frame at once
   for (const o of [{}, { asleep: true }, { dormant: true }, { started: true }, { asleep: true, dormant: true }])
@@ -57,7 +57,7 @@ test('/s2 draws her from it: one element, measured to the corner, no portal, no 
   assert.match(hello, /c\.dataset\.drawn = '0'/)                                      // letting her live face go shows her still
   assert.match(hello, /SESSION_DISCONNECTED/)                                         // its session ending by itself, too
   assert.match(hello, /\(corner \|\| \(big && !live\)\) && <div aria-hidden data-sasha-still/)
-  assert.match(hello, /await arrivalLine\(nameRef\.current \?\? null, back\.current\)/)   // her lines: voice.py's, never the page's own
+  assert.match(hello, /arrivalLine\(nameRef\.current \?\? null, !!back\.current, live\)/)   // her lines: voice.py's, never the page's own · Sasha 281 MOVED: + live
   assert.doesNotMatch(hello, /WELCOME_BACK|Hey, welcome back!|I'm going to head behind the scenes/)
   const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
   assert.match(app, /<span id="s2-face-slot"/)
@@ -148,4 +148,52 @@ test('279 · A: while she works the ring she has pulses (slowly), and stops when
   assert.match(WORK_PULSE_CSS, new RegExp(`@keyframes ${WORK_PULSE}`))
   const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
   assert.match(app, /if \(ev\.type === 'working' && typeof ev\.on === 'boolean'\) setWorking\(ev\.on\)/)   // the stream's one state
+})
+
+// ── Sasha 281 (Tyler, 21 Oct 17:58: on his return "I'm turning off my camera" — her mouth didn't move) ─────────────────────────
+const code = (t) => t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+test('281 · the rule: a line is on her live lips, or said with her in the corner — never over a big still or a frozen face', () => {
+  assert.equal(speakVia({ live: true }), 'face')
+  assert.equal(speakVia({ live: false }), 'corner')
+  assert.equal(openingShown('voice', 'voice', false), null)                       // her voice alone is not drawn full size
+  assert.equal(P({ phase: 'voice' }).where, 'corner')
+  assert.equal(P({ phase: 'voice' }).tap, null)                                    // no face brought back under a line it isn't saying
+  for (const phase of OPENING.filter(x => x !== 'voice')) assert.equal(P({ phase }).where, 'full', phase)
+})
+
+test('281 · the camera words only when there is a camera: her live face says them; her voice alone never does', () => {
+  const CAM = "I'm turning my camera off — just talk, or tap to see me."
+  assert.equal(withCamera('Hey Tyler', CAM, true), `Hey Tyler. ${CAM}`)
+  assert.equal(withCamera('Hey Tyler', CAM, false), 'Hey Tyler.')
+  assert.equal(withCamera('Your payment went through.', CAM, true), `Your payment went through. ${CAM}`)
+  assert.equal(withCamera('Your payment went through.', CAM, false), 'Your payment went through.')
+  assert.equal(withCamera('', CAM, false), '')
+})
+
+test('281 · ONE way S2Hello speaks: Face.say (her lips) and the voice are reached only from speak(); the page\'s speaker routes there', () => {
+  const hello = code(readFileSync(new URL('../app/s2/S2Hello.tsx', import.meta.url), 'utf8'))
+  const body = hello.slice(hello.indexOf('const speak = async'), hello.indexOf('const speakRef'))
+  assert.ok(body.length > 100, 'speak() is there')
+  assert.equal((hello.match(/talker\.sayNow\(/g) || []).length, 1, 'one talker.sayNow')              // her voice: only inside speak()
+  assert.ok(body.includes('talker.sayNow(plain)'))
+  assert.equal((hello.match(/\bf\.say\(|face\.current\.say\(|\.say\(t\)/g) || []).length, 1, 'one face say')   // her lips: only inside speak()
+  assert.ok(body.includes('await f.say(t)'))
+  assert.match(body, /if \(bigNow\(\)\) await collapse\(\)/)                                       // the corner before her voice
+  assert.match(hello, /talker\.setRoute\(async t => \{ await speakRef\.current\(t\) \}\)/)          // every page line, her whole visit
+  assert.equal((hello.match(/talker\.setRoute\(/g) || []).length, 3)                                  // set once; cleared on leaving (2)
+  assert.doesNotMatch(hello, /setPhase\('faceLate'\)|to\('faceLate'\)/)                              // a late face never shown mid-line
+  assert.match(hello, /return new Promise<boolean>\(res => \{ speaking = \(\) => res\(true\)/)        // Face.say says whether it reached her lips
+  assert.match(hello, /if \(!a \|\| gone\) return false/)
+  assert.match(hello, /idle\.current = setTimeout\(\(\) => \{ if \(phaseRef\.current === 'faceAgain'\) void collapse\(\) \}/)   // her face let go → the corner
+  assert.match(hello, /const ended = \(\) => \{ if \(mine && face\.current === mine\) void collapse\(\) \}/)
+  assert.match(hello, /if \(loud && lineToSay && !asleepRef\.current\) await speak\(lineToSay, ''\)/)   // bye: no camera words without a camera
+})
+
+test('281 · the page asks for the camera line only while her live face is up', () => {
+  const app = code(readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8'))
+  assert.match(app, /const onCamera = leaving && !!helloCtl\.current\?\.live\(\)/)
+  assert.match(app, /const said1 = onCamera \? \(cameraOffLine\(\) \|\| null\)/)
+  assert.match(app, /const l = helloCtl\.current\.live\(\) \? cameraOffLine\(\) : ''/)
+  const fl = code(readFileSync(new URL('../lib/first-line.ts', import.meta.url), 'utf8'))
+  assert.equal((fl.match(/withCamera\(/g) || []).length, 2)                                             // arrival and news
 })

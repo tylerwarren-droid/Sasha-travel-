@@ -26,7 +26,7 @@ test('a restored conversation with their turns has already started (as a convers
 
 test('on arrival the card ("Hey <name>…" + "Tap to hear Sasha") and her face are shown', () => {
   assert.equal(openingShown('tap', 'voice', false), 'card')
-  assert.equal(openingShown('voice', 'voice', false), 'card')
+  assert.equal(openingShown('voice', 'voice', false), null)   // Sasha 281 · MOVED: her voice alone is said from the corner — never over her big still
   assert.equal(openingShown('tap', 'face', false), 'face')
   assert.equal(openingShown('face', 'voice', false), 'face')
   assert.equal(openingShown('faceLate', 'voice', false), 'face')

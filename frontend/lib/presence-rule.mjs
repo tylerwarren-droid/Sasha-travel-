@@ -3,8 +3,8 @@
 // mic may listen — comes from presence(). Its inputs are the one state there is: her arrival's phase (S2Hello), the Pause/Wake state
 // (lib/sleep-rule.mjs) and her rest (Sasha 231). No second timer or flag decides where she is or how she looks.
 //
-//   the arrival   half-body, full size: "Hey there" (a return: "Hey <name>"), then at once "I'm turning off my camera, but just speak to
-//                 me naturally. You can always tap to get me back." (backend voice.py) — then the corner. Tap the corner: full size.
+//   the arrival   half-body, full size: "Hey there" (a return: "Hey <name>"), then at once "I'm turning my camera off — just talk, or
+//                 tap to see me." (backend voice.CAMERA_OFF, Sasha 281: only on her live lips) — then the corner. Tap the corner: full size.
 //   the corner    ALWAYS drawn once she has arrived (signed in): her still, in the voice row's corner on her own tab, else the
 //                 screen's bottom-right corner. Never nothing: no tab, no rest, no released live face takes her off the screen.
 //   the ring      green ONLY while the mic is actually live (Sasha 273) · awake but not hearing: no green, "Tap to talk" · a calm,
@@ -62,7 +62,8 @@ export function presence(s) {
              tap: s.phase === 'faceAgain' ? 'collapse' : null, listening, label, voice }
   }
   if (s.signedIn !== true && s.phase === 'off') return { where: 'none', look: 'resting', card: false, tap: null, listening: false, label, voice }
-  return { where: 'corner', look: asleep ? 'paused' : dormant ? 'resting' : live ? 'listening' : 'idle', card: false, tap: asleep ? 'wake' : 'face_back',
+  // Sasha 281 · her voice alone ('voice') is said from the corner; a tap mid-line would bring her face back under a line it isn't saying
+  return { where: 'corner', look: asleep ? 'paused' : dormant ? 'resting' : live ? 'listening' : 'idle', card: false, tap: s.phase === 'voice' ? null : asleep ? 'wake' : 'face_back',
            listening, label, voice }
 }
 
@@ -110,6 +111,24 @@ export function dayOf(ms, tz) {
  *  @param {{ top: number, bottom: number, width: number }} r  @param {{ top: number, height: number }} vv  the visual viewport */
 export function inView(r, vv, size = 40) {
   return !!r && r.width > 0 && r.top >= vv.top && r.top + size <= vv.top + vv.height
+}
+
+/** Sasha 281 (Tyler, 21 Oct 17:58: "Hey Tyler, I'm turning off my camera" — her mouth didn't move) · HOW A LINE IS SAID, the ONE
+ *  rule S2Hello's speak() reads. Only audio handed to her live face (Face.say → repeatAudio) moves her lips, so:
+ *    her live face is on screen → 'face' (lip-synced);
+ *    otherwise → 'corner': she goes to the corner and the line is her voice alone — NEVER a line over a big still or a frozen face.
+ *  @param {{ live: boolean }} s  live: her live face is up and drawing
+ *  @returns {'face' | 'corner'} */
+export function speakVia(s) {
+  return s && s.live ? 'face' : 'corner'
+}
+/** Sasha 281 · THE CAMERA LINE ONLY WHEN THERE IS A CAMERA: her arrival / news / bye line carries voice.CAMERA_OFF only when her
+ *  live face is the one saying it; else the line alone ("Hey Tyler."), never "turning off my camera" with no camera on.
+ *  @param {string} lead  @param {string} cameraOff  @param {boolean} live */
+export function withCamera(lead, cameraOff, live) {
+  const l = String(lead || '').trim()
+  const said = l && !/[.!?]$/.test(l) ? `${l}.` : l
+  return live && cameraOff ? (said ? `${said} ${cameraOff}` : cameraOff) : said
 }
 
 /** Is this phase her arrival (the opening)? Re-exported so S2Hello asks one module. */

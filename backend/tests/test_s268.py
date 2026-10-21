@@ -96,13 +96,13 @@ class OneFraming(unittest.TestCase):
 class LeavesOnHisFirstRequest(unittest.TestCase):
     def test_gate_said_by_code_then_the_circle_and_back_on_a_tap(self):
         hello = _src(self, "app/s2/S2Hello.tsx")
-        self.assertIn("export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void>; again: (news?: string | null) => boolean }", hello)   # Sasha 273 · moved: + again (rule 4)
+        self.assertIn("export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void>; again: (news?: string | null) => boolean; live: () => boolean }", hello)   # Sasha 273 · moved: + again (rule 4) · Sasha 281 MOVED: + live
         # Sasha 271 · MOVED (row 1008): her arrival goes to the corner as its own lines end; bye is for a tap that brought her back
         self.assertIn("if (phaseRef.current !== 'faceAgain' || byeing.current) return", hello)
         self.assertIn("await collapse()\n  }", hello)
         app = _src(self, "app/s2/S2App.tsx")
         self.assertIn("const leaving = isRequest && !!helloCtl.current?.big()", app)
-        self.assertIn("const said1 = leaving ? (cameraOffLine() || null)", app)
+        self.assertIn("const said1 = onCamera ? (cameraOffLine() || null)", app)   # Sasha 281 · MOVED: the camera line only on her live lips
         self.assertIn("ev.type === 'tool_start' && helloCtl.current?.big()", app)            # a request only the server saw
         self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", app)                       # small talk never ends her arrival
         self.assertNotIn("arrivalStarted", app)

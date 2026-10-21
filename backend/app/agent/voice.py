@@ -415,7 +415,9 @@ FIRST_LINE = "Great — let me pull something together, it might take a few seco
 # sends her to the corner again.
 HELLO = "Hey there"
 HELLO_BACK = "Hey {name}"
-CAMERA_OFF = "I'm turning off my camera, but just speak to me naturally. You can always tap to get me back."
+# Sasha 281 (Tyler, 21 Oct 17:58 — her lips didn't move on it) · ONE short line, and said ONLY by her live face (the page's speak(),
+# presence-rule withCamera): with no live face there is no camera to turn off — her line is the hello alone, from the corner.
+CAMERA_OFF = "I'm turning my camera off — just talk, or tap to see me."
 
 
 def arrival_line(name: Optional[str] = None, back: bool = False) -> str:

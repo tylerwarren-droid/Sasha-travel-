@@ -17,7 +17,8 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { openingEnds, OPENING } from '@/lib/greeting-rule.mjs'
-import { presence, ring, HOLD_MS, inView, WORK_PULSE_CSS, WORK_PULSE_S } from '@/lib/presence-rule.mjs'
+import { presence, ring, HOLD_MS, inView, WORK_PULSE_CSS, WORK_PULSE_S, speakVia } from '@/lib/presence-rule.mjs'
+import { openingShown } from '@/lib/greeting-rule.mjs'
 import { arrivalLine, newsLine } from '@/lib/first-line'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · her face shares the page's one audio session
 
@@ -26,11 +27,14 @@ export type Talker = {
   sayNow: (t: string) => Promise<'played' | 'blocked' | 'failed'>
   setRoute: (fn: ((t: string) => Promise<void>) | null) => void
   onSpeaking: (fn: (speaking: boolean) => void) => () => void
+  heard?: () => void   // Sasha 281 · her face started a line (the page's audible measure)
 }
 
 /** Sasha 273 · item 1: `say` resolves when her face has FINISHED saying it — LiveAvatar's own AVATAR_SPEAK_ENDED (or the session ending),
- *  never a duration guessed from the audio's size (that guess ended her arrival before the avatar, which starts late, had finished). */
-type Face = { video: HTMLVideoElement; say: (text: string) => Promise<void>; stop: () => Promise<void> }
+ *  never a duration guessed from the audio's size (that guess ended her arrival before the avatar, which starts late, had finished).
+ *  Sasha 281 · THE ONE PLACE A LINE REACHES HER LIPS (repeatAudio). It says whether the line went to them (false: no audio, the
+ *  session gone, or repeatAudio refused) — never a silent "said" — and lines are said one after another, never cut by the next. */
+type Face = { video: HTMLVideoElement; say: (text: string) => Promise<boolean>; stop: () => Promise<void> }
 
 const GOLD = '#e8b931'
 /** Sasha 230 · a LATER visit (she's said hello in this browser before) · Sasha 271: then she says "Hey <name>" (voice.HELLO_BACK). */
@@ -57,20 +61,26 @@ async function startFace(video: HTMLVideoElement, onEnd?: () => void): Promise<F
     s.on(SessionEvent.SESSION_START_FAILED, () => rej(new Error('start failed')))
   })
   let speaking: (() => void) | null = null   // Sasha 273 · the line being said: settled by her own speech-ended event
+  let gone = false   // Sasha 281 · the session ended (stopped, or by itself): no line reaches her lips any more
+  let chain: Promise<unknown> = Promise.resolve()   // Sasha 281 · one line at a time
   const finished = (why: string) => { const f = speaking; speaking = null; if (f) { console.log(`[s2-hello] her face finished speaking (${why})`); f() } }
   if (AgentEventsEnum?.AVATAR_SPEAK_ENDED) s.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => finished('speech ended'))
-  if (SessionEvent.SESSION_DISCONNECTED) s.on(SessionEvent.SESSION_DISCONNECTED, () => { console.log('[s2-hello] her live face ended'); finished('session ended'); onEnd?.() })
-  const stop = async () => { finished('stopped'); try { await s.stop() } catch { /* already stopped */ } }
+  if (SessionEvent.SESSION_DISCONNECTED) s.on(SessionEvent.SESSION_DISCONNECTED, () => { console.log('[s2-hello] her live face ended'); gone = true; finished('session ended'); onEnd?.() })
+  const stop = async () => { gone = true; finished('stopped'); try { await s.stop() } catch { /* already stopped */ } }
   try { await s.start(); await ready } catch (e) { await stop(); throw e }
   holdPlayAndRecord('her face connected')   // Sasha 267 · re-asserted after the avatar connects (its media may have set its own)
   return {
     video,
     stop,
-    say: async (text: string) => {   // her voice, lip-synced — resolves when she has said it (her speech-ended event)
-      const a = await pcm(text)
-      if (!a) return
-      finished('a new line')
-      await new Promise<void>(res => { speaking = res; try { s.repeatAudio(a) } catch { finished('not sent') } })
+    say: (text: string) => {   // her voice, lip-synced — resolves when she has said it (her speech-ended event): true, on her lips
+      const run = chain.then(async () => {
+        if (gone) return false
+        const a = await pcm(text)
+        if (!a || gone) return false
+        return new Promise<boolean>(res => { speaking = () => res(true); try { s.repeatAudio(a) } catch { speaking = null; res(false) } })
+      })
+      chain = run.catch(() => {})
+      return run.catch(() => false)
     },
   }
 }
@@ -130,7 +140,7 @@ const held = () => new Promise(r => setTimeout(r, HOLD_MS))   // Sasha 273 · it
 /** Sasha 268 · what the page asks of her: is she full size, and — on his next request after a tap brought her back — say this, then
  *  the corner. Sasha 271: during her arrival she is already saying it; she goes to the corner as it ends. Sasha 273 · again: rule 4
  *  (lib/presence-rule.mjs reappear) said she reappears — the arrival once more ("Hey <name>", or her news first), then the corner. */
-export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void>; again: (news?: string | null) => boolean }
+export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void>; again: (news?: string | null) => boolean; live: () => boolean }
 
 export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false, ctlRef, arrive, micLive = false, lead = null, working = false }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
   asleep?: boolean; onWake?: () => void
@@ -141,6 +151,8 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
   const phaseRef = useRef<Phase>('off')
   useEffect(() => { phaseRef.current = phase }, [phase])
+  // Sasha 281 · the phase, set now (the ref at once — the next line asks it before React renders)
+  const to = (ph: Phase) => { phaseRef.current = ph; setPhase(ph) }
   const tapForRef = useRef<'face' | 'voice'>('voice')
   useEffect(() => { tapForRef.current = tapFor }, [tapFor])
   const img = FACE_STILL   // Sasha 268 · the ONE still (her half-body frame) — never a kept snapshot or a close-up
@@ -167,6 +179,41 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     setLive(false)
     if (f) void f.stop()
   }
+  const collapse = async () => {
+    if (idle.current) clearTimeout(idle.current)
+    const f = face.current
+    if (f) letGo(f)
+    to('bubble')
+  }
+  // Sasha 266 · row 943 (b) · Sasha 281: a tap's live face is let go after FACE_IDLE_S quiet (it bills by the minute) — and she goes to the
+  // corner with it (271 left her still full size: the next line was said over it, a frozen face)
+  const arm = () => {
+    if (phaseRef.current !== 'faceAgain') return
+    if (idle.current) clearTimeout(idle.current)
+    idle.current = setTimeout(() => { if (phaseRef.current === 'faceAgain') void collapse() }, FACE_IDLE_S * 1000)
+  }
+  // Sasha 281 · her live face is up AND heard (a face still muted — its tap card waiting — is not her lips yet)
+  const faceUp = () => !!face.current && !face.current.video.muted
+  // Sasha 281 · THE ONE WAY SHE SAYS ANYTHING on /s2 while she is drawn — her arrival, a return, bye, and (the route, below) every line
+  // the page speaks. Her live face up → its lips (Face.say); it missed them, or there is no live face → the corner first, then her
+  // voice (`plain`: the line without the camera words). NEVER a line over a big still or a frozen face (presence-rule speakVia).
+  const bigNow = () => phaseRef.current === 'faceAgain' || openingShown(phaseRef.current, tapForRef.current, false) !== null   // an opening phase still drawn (started or not: it is going)
+  const speak = async (t: string, plain: string = t): Promise<'face' | 'played' | 'blocked' | 'failed' | 'none'> => {
+    const f = face.current
+    if (t && f && speakVia({ live: faceUp() }) === 'face') {
+      arm()
+      talker.heard?.()   // Sasha 275's measure: her voice starts (as the page's own audio element reports it)
+      if (await f.say(t)) return 'face'
+      console.log('[s2-hello] a line missed her lips — the corner, then her voice')
+    }
+    if (bigNow()) await collapse()   // no live face, or it missed her lips: the corner before a word
+    if (!plain) return 'none'
+    return talker.sayNow(plain)
+  }
+  const speakRef = useRef(speak)
+  useEffect(() => { speakRef.current = speak })
+  // every line the page says (its speaker's queue) comes here — set for her whole time on the page, not only while a tap holds her face
+  useEffect(() => { talker.setRoute(async t => { await speakRef.current(t) }); return () => talker.setRoute(null) }, [talker])
   const text = useRef('')
   const [line, setLine] = useState('')
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -187,53 +234,55 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     const f = face.current
     if (f) letGo(f)   // the session ENDS after the hello — her still, in the corner
     try { sessionStorage.setItem('s2_hello', '1'); localStorage.setItem('s2_met', '1') } catch { /* private mode */ }
-    setPhase('bubble')
+    to('bubble')
   }
   const back = useRef<boolean | null>(null)   // Sasha 230 · decided once per visit, before the hello is said
   const news = useRef<string | null>(null)    // Sasha 273 · item 4 (c): her reappearance leads with this (again's, or the load's `lead`)
   const leadRef = useRef<string | null>(lead)   // the load's news (rule 4 at load), said once
   const leadSaid = useRef<string | null>(null)
   useEffect(() => { leadRef.current = lead }, [lead])
-  const words = async () => {   // Sasha 271 · B: voice.arrival_line — "Hey there." / "Hey <name>." + voice.CAMERA_OFF, from the backend
+  // Sasha 271 · B: voice.arrival_line — "Hey there." / "Hey <name>." + voice.CAMERA_OFF, from the backend. Sasha 281: `cam` carries the
+  // camera words (said only by her live face), `plain` is the line alone (her voice from the corner: no camera was on).
+  const words = async () => {
     if (back.current === null) back.current = metBefore() || !!backRef.current
     const fresh = leadRef.current && leadRef.current !== leadSaid.current ? leadRef.current : null
     if (fresh) leadSaid.current = fresh
     const n = news.current || fresh
-    text.current = n ? await newsLine(n) : await arrivalLine(nameRef.current ?? null, back.current)
-    setLine(text.current)
-    return text.current
+    const say = (live: boolean) => (n ? newsLine(n, live) : arrivalLine(nameRef.current ?? null, !!back.current, live))
+    const [cam, plain] = await Promise.all([say(true), say(false)])
+    text.current = plain
+    setLine(plain)
+    return { cam, plain }
   }
   // Sasha 271 · B (row 1008): her lines, then the corner — no wait for his first request (Sasha 266/268's stay is gone).
   // Sasha 273 · item 1: "then" is her line's OWN speech-ended event, then HOLD_MS — never a guessed duration, so she never leaves mid-line.
   const toCorner = async () => { if (OPENING.includes(phaseRef.current)) { await held(); if (OPENING.includes(phaseRef.current)) await handoff() } }
   const speakFace = async () => {
     if (asleepRef.current || startedRef.current) return handoff()   // Sasha 246 · asleep: no hello — straight to the (dimmed) bubble · Sasha 251: or already talking
-    const t = await words()
-    const f = face.current
-    if (!f || !t) return handoff()
-    await f.say(t)   // her live face says it, lip-synced — and it is over when SHE says it is (AVATAR_SPEAK_ENDED)
-    await toCorner()
+    const { cam, plain } = await words()
+    if (!face.current || !cam) return handoff()
+    const how = await speak(cam, plain)   // her live face says it, lip-synced — over when SHE says it is (AVATAR_SPEAK_ENDED)
+    if (how === 'face') await toCorner()   // Sasha 281 · else it missed her lips: speak() already took her to the corner and said it
+    else await handoff()
   }
   const speakVoice = async () => {
     if (asleepRef.current || startedRef.current) return handoff()   // Sasha 246 · Sasha 251: they already started — no hello over them
-    const t = await words()
-    if (!t) return handoff()
-    const r = await talker.sayNow(t)   // resolves on the audio's own `ended`
+    const { plain } = await words()
+    if (!plain) return handoff()
+    const r = await speak(plain)   // Sasha 281 · no live face: from the corner (phase 'voice' is drawn there), the line alone
     if (r === 'blocked' && startedRef.current) return handoff()   // Sasha 251 · they started talking meanwhile: no tap card over the chat
-    if (r === 'blocked') { setTapFor(face.current ? 'face' : 'voice'); setPhase('tap'); return }   // Sasha 232 · her face, if it came, with the tap
+    if (r === 'blocked') { setTapFor(face.current ? 'face' : 'voice'); to('tap'); return }   // Sasha 232 · her face, if it came, with the tap
     await toCorner()   // said — then the corner
   }
 
   const lateFace = (f: Face, v: HTMLVideoElement) => {
     const now = phaseRef.current
     console.log(`[s2-hello] face on screen late (${now})`)
-    face.current = f
-    keyOn()
-    v.muted = true
-    v.play().catch(() => {})
-    if (now === 'voice') setPhase('faceLate')
-    else if (now === 'tap' && tapForRef.current === 'voice') setTapFor('face')
-    else if (now === 'bubble' || now === 'off') letGo(f)   // Sasha 257 · 268: no snapshot · 271: she's in the corner — her still
+    // Sasha 281 · a face that comes while her voice is mid-line ('voice', Tyler's 17:58 return) is NEVER shown: that line isn't on its
+    // lips, so it would be a frozen face (it was: phase faceLate, her live face full size, muted, lips still). Only a tap card waiting
+    // to be tapped takes it — the tap then says the line through it.
+    if (now === 'tap' && tapForRef.current === 'voice') { face.current = f; keyOn(); v.muted = true; v.play().catch(() => {}); setTapFor('face') }
+    else letGo(f)   // Sasha 257 · 268: no snapshot · 271: she's in the corner — her still
   }
 
   // the opening: as soon as the page is signed in and the name is known (or ~0.9 s has passed) — Sasha 273 · and rule 4 has answered:
@@ -246,8 +295,8 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     // Sasha 265 · item 2 (row 936, Tyler: "when he logs back in he never sees her"): a return skipped this — sessionStorage
     // 's2_hello' sent every later arrival straight to the bubble. ONE arrival sequence now, every arrival: her face full size, the
     // hello (a return: "welcome back"), then the circle. Only reduced motion skips the motion — the circle at once, her face in it.
-    if (skip || reducedMotion() || startedRef.current) { setPhase('bubble'); return }   // Sasha 251 · already talking (this visit): no opening over it · 273: rule 4 said no
-    setPhase('starting')
+    if (skip || reducedMotion() || startedRef.current) { to('bubble'); return }   // Sasha 251 · already talking (this visit): no opening over it · 273: rule 4 said no
+    to('starting')
     const v = video.current as HTMLVideoElement
     const t0 = early.current?.t0 ?? performance.now()
     const starting = early.current?.p ?? startFace(v)
@@ -256,29 +305,32 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     const timer = timers.current.timer = setTimeout(() => {   // not on screen in 5 s (from its start): her voice alone, never a spinner
       if (settled) return
       settled = true
+      if (phaseRef.current !== 'starting') { starting.then(f => letGo(f)).catch(() => {}); return }   // Sasha 281 · a line already sent her to the corner
       console.log('[s2-hello] not on screen in 5 s — her voice alone')
       // Sasha 232 · her face, when it comes LATE, is SHOWN — never stopped (iPhone: the face starts in 4.7–11.6 s, measured on
       // WebKit; at > 5 s it was stopped, so on the phone her face never appeared). Still speaking → her face, big; waiting for a
       // tap → her face with "Tap to hear Sasha" (the tap then speaks through it); already done → her face becomes the bubble.
+      to('voice')
       starting.then(f => lateFace(f, v)).catch(() => {})
-      setPhase('voice')
       speakVoice()
     }, Math.max(0, 5000 - (performance.now() - t0)))
     starting.then(async f => {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      if (phaseRef.current !== 'starting') { letGo(f); return }   // Sasha 281 · a line already sent her to the corner
       if (asleepRef.current || startedRef.current) { face.current = f; handoff(); return }   // Sasha 246 · fell asleep before her face came: it never speaks · Sasha 251 · or they started talking
       face.current = f
       keyOn()
-      setPhase('face')
+      to('face')
       v.muted = false
-      try { await v.play(); talker.unlock(); speakFace() } catch { v.muted = true; v.play().catch(() => {}); setTapFor('face'); setPhase('tap') }   // Sasha 230 · played → her voice stays on
+      try { await v.play(); talker.unlock(); speakFace() } catch { v.muted = true; v.play().catch(() => {}); setTapFor('face'); to('tap') }   // Sasha 230 · played → her voice stays on
     }).catch(() => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      setPhase('voice')
+      if (phaseRef.current !== 'starting') return   // Sasha 281
+      to('voice')
       speakVoice()
     })
     }, 0)
@@ -297,45 +349,37 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     if (phaseRef.current !== 'bubble' || asleepRef.current || startedRef.current || byeing.current) return false
     back.current = true
     news.current = lead || null
-    phaseRef.current = 'off'
-    setPhase('off')
+    to('off')
     arriveNow(false)
     return true
   }
 
   useEffect(() => () => { keyOff(); face.current?.stop(); talker.setRoute(null) }, [talker])   // leaving the page ends any session
 
+
   const tapToHear = () => {
     talker.unlock()
-    if (tapFor === 'face' && face.current) { const v = face.current.video; v.muted = false; v.play().catch(() => {}); setPhase('face'); speakFace() }
-    else { setPhase('voice'); speakVoice() }
+    if (tapFor === 'face' && face.current) { const v = face.current.video; v.muted = false; v.play().catch(() => {}); to('face'); speakFace() }
+    else { to('voice'); speakVoice() }
   }
 
-  const collapse = async () => {
-    if (idle.current) clearTimeout(idle.current)
-    talker.setRoute(null)
-    const f = face.current
-    if (f) letGo(f)
-    setPhase('bubble')
-  }
   const faceBack = async () => {
     talker.unlock()
-    setPhase('faceAgain')
+    to('faceAgain')
     try {
       let mine: Face | null = null
-      const ended = () => { if (mine && face.current === mine) { talker.setRoute(null); letGo(mine) } }   // Sasha 271 · its session ended by itself
+      const ended = () => { if (mine && face.current === mine) void collapse() }   // Sasha 271 · its session ended by itself · 281: to the corner
       const f = await startFace(video.current as HTMLVideoElement, ended)
+      if (phaseRef.current !== 'faceAgain') { letGo(f); return }   // Sasha 281 · a line sent her to the corner while her face connected
       mine = f
       face.current = f
       keyOn()
       f.video.muted = false
       f.video.play().catch(() => {})
-      // Sasha 268 · item 6: no timer sends her back to the circle — only his next request (bye) or a tap does; after FACE_IDLE_S quiet
-      // her live face is let go (it bills by the minute) and — Sasha 271 — her still stays, full size (letGo: never an empty frame)
-      const arm = () => { if (idle.current) clearTimeout(idle.current); idle.current = setTimeout(() => { if (face.current === f) { talker.setRoute(null); letGo(f) } }, FACE_IDLE_S * 1000) }
-      talker.setRoute(async t => { arm(); await f.say(t) })   // Sasha 273 · each reply over on her speech-ended event
+      // Sasha 268 · item 6: no timer sends her back to the circle but her quiet (arm, FACE_IDLE_S) — his next request (bye) or a tap.
+      // Her replies reach her lips through the page's route (speak), each over on her speech-ended event (Sasha 273).
       arm()
-    } catch { setPhase('bubble') }
+    } catch { to('bubble') }
   }
 
   // Sasha 268 · item 4: when a tap brought her back (faceAgain), his next REAL request (the page decides: voice.py's rule, a card's tap,
@@ -343,19 +387,16 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   // else her voice), then the corner. Sasha 271 · B: during her ARRIVAL she is already saying it — the corner follows as it ends.
   const byeing = useRef(false)
   const isBig = () => OPENING.includes(phaseRef.current) || phaseRef.current === 'faceAgain'
-  const bye = async (lineToSay: string, speak: boolean) => {
+  const bye = async (lineToSay: string, loud: boolean) => {
     if (phaseRef.current !== 'faceAgain' || byeing.current) return
     byeing.current = true
     try {
-      if (speak && lineToSay && !asleepRef.current) {
-        const f = face.current
-        if (f) await f.say(lineToSay)   // Sasha 273 · over when her speech-ended event says so
-        else await talker.sayNow(lineToSay)
-      }
+      // Sasha 281 · the camera line only on her live lips; no live face → no camera words, the corner at once (speak, plain '')
+      if (loud && lineToSay && !asleepRef.current) await speak(lineToSay, '')   // Sasha 273 · over when her speech-ended event says so
     } catch { /* said or not, she goes to work */ } finally { byeing.current = false }
     await collapse()
   }
-  useEffect(() => { if (ctlRef) ctlRef.current = { big: isBig, bye, again } })
+  useEffect(() => { if (ctlRef) ctlRef.current = { big: isBig, bye, again, live: faceUp } })
 
   // Sasha 246 item 2 · fall asleep: her face, if it is up (the hello or "her face back"), stops NOW — mid-word — and becomes the
   // dimmed bubble; no hello is said later in this visit. Waking is the parent's (the bubble's tap → onWake).

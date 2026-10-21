@@ -116,7 +116,7 @@ class NoSecondCopy(unittest.TestCase):
 
 class HerArrivalsWords(unittest.TestCase):
     def test_hey_there_then_the_camera_off_line(self):
-        self.assertEqual(V.CAMERA_OFF, "I'm turning off my camera, but just speak to me naturally. You can always tap to get me back.")
+        self.assertEqual(V.CAMERA_OFF, "I'm turning my camera off — just talk, or tap to see me.")   # Sasha 281 · MOVED: one short line
         self.assertEqual(V.arrival_line(), f"Hey there. {V.CAMERA_OFF}")
         self.assertEqual(V.arrival_line("Tyler Warren", back=True), f"Hey Tyler. {V.CAMERA_OFF}")
         self.assertEqual(V.arrival_line("Tyler", back=False), f"Hey there. {V.CAMERA_OFF}")   # a first visit: "Hey there"
@@ -127,9 +127,10 @@ class HerArrivalsWords(unittest.TestCase):
         got = run(S.first_line_rule())
         self.assertEqual((got["hello"], got["hello_back"], got["camera_off"]), (V.HELLO, V.HELLO_BACK, V.CAMERA_OFF))
         fl = _front(self, "lib/first-line.ts")
-        self.assertIn("rule.helloBack.replace('{name}', first) : rule.hello}. ${rule.cameraOff}", fl)
+        # Sasha 281 · MOVED: the camera words join the hello only when her live face says it (presence-rule withCamera)
+        self.assertIn("return withCamera(back && first ? rule.helloBack.replace('{name}', first) : rule.hello, rule.cameraOff, live)", fl)
         hello = _front(self, "app/s2/S2Hello.tsx")
-        self.assertIn("await arrivalLine(nameRef.current ?? null, back.current)", hello)
+        self.assertIn("arrivalLine(nameRef.current ?? null, !!back.current, live)", hello)
         self.assertNotIn("helloLine", hello)
 
 

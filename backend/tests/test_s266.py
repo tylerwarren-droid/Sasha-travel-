@@ -87,8 +87,9 @@ class SheStaysThroughTheFirstExchange(unittest.TestCase):
         self.assertIn("await toCorner()", voice)
         self.assertNotIn("idleLive", hello)
         idle = hello[hello.index("idle.current = setTimeout("):hello.index("}, FACE_IDLE_S * 1000)")]
-        self.assertNotIn("setPhase", idle)                                                 # the live face let go — never a move
-        self.assertIn("letGo(f)", idle)
+        # Sasha 281 · MOVED (Tyler 21 Oct 17:58): her live face let go while full size takes her to the corner with it — her still
+        # left full size had the next line said over it (a frozen face)
+        self.assertIn("void collapse()", idle)
         self.assertIn("if (!openingEnds(phaseRef.current, started)) return", hello)      # his first reply: then the circle
         self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", _tsx(self, "app/s2/S2App.tsx"))   # 268: small talk keeps her; his first request (bye) ends it
 

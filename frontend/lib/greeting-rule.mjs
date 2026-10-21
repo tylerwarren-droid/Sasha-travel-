@@ -31,7 +31,9 @@ export function arrivalStarted(msgs) {
 export function openingShown(phase, tapFor, started) {
   if (phase === 'faceAgain') return 'face'   // their own tap on the bubble: her face back, by their choice
   if (started || !OPENING.includes(phase)) return null
-  if (phase === 'voice' || (phase === 'tap' && tapFor === 'voice')) return 'card'
+  // Sasha 281 · her voice alone ('voice') is said from the CORNER (presence-rule speakVia): never her big still while she speaks
+  if (phase === 'voice') return null
+  if (phase === 'tap' && tapFor === 'voice') return 'card'
   return 'face'   // starting (still invisible), face, faceLate, tap on her face
 }
 

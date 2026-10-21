@@ -269,7 +269,8 @@ class FrontHeld(unittest.TestCase):
         hello = _front(self, "app/s2/S2Hello.tsx")
         self.assertNotIn("secs * 1000", hello)
         self.assertIn("s.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => finished('speech ended'))", hello)
-        self.assertIn("await f.say(t)   // her live face says it", hello)
+        self.assertIn("const how = await speak(cam, plain)   // her live face says it", hello)   # Sasha 281 · MOVED: through the one speak()
+        self.assertIn("if (how === 'face') await toCorner()", hello)
 
     def test_page(self):
         app = _front(self, "app/s2/S2App.tsx")

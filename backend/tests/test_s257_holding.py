@@ -49,7 +49,9 @@ class OnS2AndNext(unittest.TestCase):
         self.assertIn(evs[0]["text"], V.HOLDING)
         self.assertEqual(evs[0]["say"], evs[0]["text"])
         self.assertEqual([e["type"] for e in evs].count("hold"), 1)
-        self.assertEqual([e["type"] for e in evs[1:]], ["render", "text", "done"])
+        # Sasha 279 · A: + the one "working" state the screen shows (on with the holding line, off when her words begin)
+        self.assertEqual([e["type"] for e in evs[1:]], ["working", "render", "working", "text", "done"])
+        self.assertEqual([e["on"] for e in evs if e["type"] == "working"], [True, False])
 
     def test_a_fast_reply_gets_none(self):
         evs = run(collect(S.with_holding(gen(0.0, [{"type": "text", "delta": "Hi"}, {"type": "done", "text": "Hi"}]), "a", after_s=0.2)))

@@ -1450,6 +1450,14 @@ async def _finish(ctx, held: dict, how: Optional[dict] = None) -> dict:
         raise
     if out.get("status") != "waiting_for_their_tap":   # Sasha 254 · nothing has gone yet: recorded when it does
         await OC.booked(ctx.account, held, venue, area_of(card) if card else None, result=out)
+    if out.get("status") == "confirmed" and out.get("line"):   # Sasha 279 · C: a completed booking — the closing line, once, in the
+        from booking_signer import live_events as LE           # line both doors say word for word (the email sent and read first)
+        done = await LE.completed(ctx.account, f"venue:{held.get('trip_item_id') or held.get('id') or venue}:{held.get('when')}",
+                                  lines=[f"{venue} — {held.get('summary') or held.get('when') or ''}"
+                                         + (f" · reference {out['reference']}" if out.get("reference") else "")],
+                                  title=venue, push=False)
+        if done.get("text"):
+            out = {**out, "line": f"{out['line']} {done['text']}", "emailed": done.get("emailed")}
     return _with_card(card, out)
 
 

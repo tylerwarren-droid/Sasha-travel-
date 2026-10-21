@@ -66,13 +66,22 @@ export function presence(s) {
            listening, label, voice }
 }
 
-/** The corner's ring, from presence's look: green only while the mic hears (brighter while she speaks); idle, paused and resting have none. */
-export function ring(look, talking = false) {
-  if (look === 'listening') return { border: `2.5px solid ${GREEN}`, glow: `0 0 0 ${talking ? 6 : 4}px rgba(52,211,153,${talking ? 0.4 : 0.25})` }
-  if (look === 'paused') return { border: '2px solid rgba(255,255,255,.22)', glow: 'none' }
-  if (look === 'idle') return { border: '2px solid rgba(255,255,255,.35)', glow: 'none' }
-  return { border: '2px solid rgba(255,255,255,.18)', glow: 'none' }
+/** The corner's ring, from presence's look: green only while the mic hears (brighter while she speaks); idle, paused and resting have none.
+ *  Sasha 279 · A · `working` (the stream's {"type": "working", "on"} — the SAME state that stops her "working on it" lines, backend
+ *  voice.progress_due): while she works, the ring she has glows brighter and softer in a slow pulse (`pulse`: the keyframes'
+ *  name, WORK_PULSE), and stops when she answers. Never while paused or resting. The green stays the mic's truth (Sasha 273).
+ *  @returns {{ border: string, glow: string, pulse: string | null }} */
+export const WORK_PULSE = 's2-work-pulse'
+export const WORK_PULSE_S = 2.4
+export function ring(look, talking = false, working = false) {
+  const pulse = working && (look === 'listening' || look === 'idle') ? WORK_PULSE : null
+  if (look === 'listening') return { border: `2.5px solid ${GREEN}`, glow: `0 0 0 ${talking ? 6 : 4}px rgba(52,211,153,${talking ? 0.4 : 0.25})`, pulse }
+  if (look === 'paused') return { border: '2px solid rgba(255,255,255,.22)', glow: 'none', pulse: null }
+  if (look === 'idle') return { border: '2px solid rgba(255,255,255,.35)', glow: 'none', pulse }
+  return { border: '2px solid rgba(255,255,255,.18)', glow: 'none', pulse: null }
 }
+/** The pulse's keyframes (one place): the ring's glow brighter, then softer, slowly. */
+export const WORK_PULSE_CSS = `@keyframes ${WORK_PULSE}{0%,100%{box-shadow:0 0 0 3px rgba(52,211,153,.18)}50%{box-shadow:0 0 0 9px rgba(52,211,153,.5)}}`
 
 /** Sasha 273 · item 4 · WHEN SHE REAPPEARS — rule 4, the ONE place it is decided (an arrival at load, and a return to the page).
  *  She reappears and greets only when (a) IDLE_MS have passed with no activity, (b) it is a new day in the person's time zone, or

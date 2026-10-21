@@ -49,17 +49,20 @@ class NoSilence(unittest.TestCase):
         return turn()
 
     def test_gate_a_long_tool_gets_progress_lines_from_that_step(self):
-        """THE GATE (Tyler's /s2 and /next: 44 s, one line at 3 s, then nothing)."""
-        with mock.patch.object(V, "PROGRESS_S", 0.2):
+        """THE GATE (Tyler's /s2 and /next: 44 s, one line at 3 s, then nothing). Sasha 279 · A (Tyler, 21 Oct: "too often"): the
+        holding line, then ONE more on a long wait (voice.LONG_WAIT_S) from the step running — never a line every PROGRESS_S."""
+        with mock.patch.object(V, "LONG_WAIT_S", 0.2):
             evs = run(collect(S.with_holding(self.slow_tool_turn(), ACCT, after_s=0.05)))
         holds = [e["text"] for e in evs if e["type"] == "hold"]
         self.assertIn(holds[0], V.HOLDING)                                   # the holding line first, as before
-        self.assertGreaterEqual(len(holds), 3)                               # then a line every PROGRESS_S while the tool ran
+        self.assertEqual(len(holds), V.PROGRESS_MAX)                         # Sasha 279: twice at most, however long the tool runs
         self.assertTrue(set(holds[1:]) <= set(V._STEP["flights"]), holds)   # from the step actually running
         self.assertEqual([e["type"] for e in evs][-2:], ["text", "done"])
 
     def test_never_more_than_progress_s_of_silence(self):
-        with mock.patch.object(V, "PROGRESS_S", 0.2):
+        """Sasha 279 · A replaces "never more than PROGRESS_S of silence": after the second line she is quiet (the ring shows she
+        works) — a long tool hears exactly PROGRESS_MAX lines, the second LONG_WAIT_S after the first."""
+        with mock.patch.object(V, "LONG_WAIT_S", 0.2):
             async def timed():
                 loop, out, last = asyncio.get_running_loop(), [], None
                 t0 = loop.time()
@@ -70,7 +73,8 @@ class NoSilence(unittest.TestCase):
                         last = now
                 return out
             gaps = run(timed())
-        self.assertLess(max(gaps), 0.2 + 0.12, gaps)
+        self.assertEqual(len(gaps), V.PROGRESS_MAX + 2, gaps)   # two lines, her text, done — nothing more while the tool ran 1 s
+        self.assertGreaterEqual(gaps[1], 0.2 - 0.02, gaps)     # the second only after the long wait
 
     def test_the_lines_are_short_varied_and_never_a_claim(self):
         for step, lines in V._STEP.items():
@@ -99,10 +103,11 @@ class NoSilence(unittest.TestCase):
             await asyncio.sleep(0.45)
             yield {"type": "tool", "name": "search_stays", "ok": True}
             yield {"type": "done", "text": "Let me look. Three places."}
-        with mock.patch.object(V, "PROGRESS_S", 0.2):
+        with mock.patch.object(V, "LONG_WAIT_S", 0.2):   # Sasha 279 · its one line comes on the long wait
             evs = run(collect(S.with_holding(turn(), ACCT, after_s=0.05)))
         holds = [e["text"] for e in evs if e["type"] == "hold"]
         self.assertTrue(holds and set(holds) <= set(V._STEP["stays"]), holds)
+        self.assertLessEqual(len(holds), V.PROGRESS_MAX, holds)
 
     def test_steps_follow_tool_start_and_its_result(self):
         st = V.Steps()
@@ -126,12 +131,12 @@ class NoSilenceOnWhatsApp(TG.Base):
             await asyncio.sleep(0.75)
             out.text("Here are three places near Sol.")
             return "x"
-        with mock.patch.object(WA, "agent_turn", agent), mock.patch.object(V, "HOLD_AFTER_S", 0.05), mock.patch.object(V, "PROGRESS_S", 0.2):
+        with mock.patch.object(WA, "agent_turn", agent), mock.patch.object(V, "HOLD_AFTER_S", 0.05), mock.patch.object(V, "LONG_WAIT_S", 0.2):
             n = len(self.bodies())
             self.say("a table for two tonight near Sol")
             said = self.bodies()[n:]
         self.assertEqual(said[0], V.FIRST_LINE)   # Sasha 265 · item 5: a request for work — the first line at once (was the holding line)
-        self.assertGreaterEqual(len(said), 4, said)
+        self.assertEqual(len(said), V.PROGRESS_MAX + 1, said)   # Sasha 279 · A: the first line, ONE more on the long wait, her answer
         self.assertTrue(set(said[1:-1]) <= set(V._STEP["places"]), said)
         self.assertEqual(said[-1], "Here are three places near Sol.")
 

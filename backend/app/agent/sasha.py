@@ -1295,6 +1295,8 @@ async def _start_restore() -> None:
 
 #: Sasha 259 · while a turn works past its holding line, a "working" event at least this often (the page's stall is 75 s)
 KEEPALIVE_S = 15.0
+#: Sasha 279 · progress_due's "past the long wait" when asked only whether a line is still allowed at all
+LONG_WAIT_FAR = 1e9
 #: Sasha 257 · what counts as her reply having started (the holding line is never said after it)
 _SPOKEN = ("text", "replace", "done", "error", "say")
 
@@ -1305,7 +1307,10 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
     answer. Never for a fast reply, never a claim, never twice in a turn. Sasha 264 · item 1: then, while a tool runs (or before her
     words), a progress line from that step every voice.PROGRESS_S — never silence longer than that. Sasha 265 · item 5: `first`
     (voice.first_line — a request for work) is said AT ONCE, before anything else of the turn; then the progress lines carry the
-    silence, and the quiver's own "filler" lines are not said on top of them."""
+    silence, and the quiver's own "filler" lines are not said on top of them.
+    Sasha 279 · A: those lines are said ONCE — a second only on a long wait, never a third (voice.progress_due) — then quiet; the
+    stream says the one state the screen shows instead: {"type": "working", "on": true} while her answer hasn't begun, "on": false
+    when it has (or the turn ends). /s2's ring pulses on it."""
     import asyncio
     q: asyncio.Queue = asyncio.Queue()
     end = object()
@@ -1324,19 +1329,21 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
     wait = _V.HOLD_AFTER_S if after_s is None else after_s
     steps = _V.Steps()   # Sasha 264 · item 1: the step running now (tool_start in, its tool result out)
     said_at = last_at = t0   # the last thing she said (her words, the holding line, a progress line) / the last event of any kind
+    held_n, held_at = 0, t0   # Sasha 279 · A: "working on it" lines said this turn, and when the first was
+    working = False
     if first:   # Sasha 265 · item 5: the first line, now — the stream's first event
         started = True
-        # the page said it up to ~1 s before this event arrived (lib/first-line.ts): the first progress line comes 1 s sooner, so
-        # the quiet after the page's own line stays within PROGRESS_S (measured live: 0.8 s → 7.1 s on /next at phone size)
-        said_at = last_at = t0 - _V.FIRST_GAP_EARLY_S
+        said_at = last_at = held_at = t0
+        held_n, working = 1, True
         yield {"type": "hold", "text": first, "say": first, "first": True}
+        yield {"type": "working", "on": True}
     try:
         while True:
             now = loop.time()
             if not started:
                 timeout = max(0.0, wait - (now - t0))
-            else:   # Sasha 264 · the next progress line is due PROGRESS_S after the last thing said (while a step runs, or before her
-                due = said_at + _V.PROGRESS_S if (steps.now or not words) else float("inf")   # words); the keepalive after any quiet
+            else:   # Sasha 279 · the second line is due LONG_WAIT_S after the first (while a step runs, or before her words) — then none
+                due = (held_at + _V.LONG_WAIT_S if (steps.now or not words) and _V.progress_due(held_n, LONG_WAIT_FAR) else float("inf"))
                 timeout = max(0.0, min(due, last_at + KEEPALIVE_S) - now)
             try:
                 item = await asyncio.wait_for(q.get(), timeout)
@@ -1345,13 +1352,18 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
                 if not started:
                     started = True
                     line = _V.holding_line(account)
-                    said_at = last_at = now
+                    said_at = last_at = held_at = now
+                    held_n, working = 1, True
                     yield {"type": "hold", "text": line, "say": line}
+                    yield {"type": "working", "on": True}
                     continue
-                # Sasha 264 · NO SILENCE: a tool still running, or her words not begun → a line from the step actually running
-                if now - said_at >= _V.PROGRESS_S - 0.01 and (steps.now or not words):
+                # Sasha 279 · A: a tool still running, or her words not begun, on a LONG wait → ONE more line (voice.progress_due)
+                if (steps.now or not words) and _V.progress_due(held_n, now - held_at):
                     line = _V.progress_line(steps.now, account)
                     said_at = last_at = now
+                    if held_n == 0:
+                        held_at = now
+                    held_n += 1
                     yield {"type": "hold", "text": line, "say": line}
                     continue
                 if now - last_at >= KEEPALIVE_S - 0.01:   # Sasha 259 · a long job (a Gmail scan, a plan): the stream says it's still
@@ -1369,7 +1381,12 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
             if isinstance(item, dict) and item.get("type") in _SPOKEN:
                 started = words = True
                 said_at = last_at
+                if working:   # Sasha 279 · her answer has begun: the screen stops showing "working" — the same moment the lines stop
+                    working = False
+                    yield {"type": "working", "on": False}
             yield item
+        if working:
+            yield {"type": "working", "on": False}
     finally:
         if not task.done():
             task.cancel()
@@ -1944,8 +1961,11 @@ async def s2_memory(request: Request, session: str = ""):
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     from agapi import s2_memory as MEM
+    from booking_signer import live_events as LE
     try:
-        return {"ok": True, **(await MEM.recall(account, session[:64] or None, surface="s2"))}
+        out = {"ok": True, **(await MEM.recall(account, session[:64] or None, surface="s2"))}
+        news = await LE.take_news(account)   # Sasha 279 · B: a booking finished while they were away — her return leads with it, once
+        return {**out, **({"news": {"key": news.get("key"), "text": news["text"]}} if news else {})}
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}

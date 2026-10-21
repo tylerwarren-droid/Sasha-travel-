@@ -198,8 +198,10 @@ class TheConfirmationIsTwoSentencesSaidByCode(unittest.TestCase):
     def test_booked_and_the_one_question(self):
         w, out = play(ITEM_7[:1] + [("Handle it", "book_venue", booking("21:15")), ("Yes, send it.", "book_venue", {})])
         line = V.yes_line("book_venue", {"ok": True, "result": out[2]})
-        self.assertEqual(line, "✅ Booked: Sasha Test Venue, 2026-10-22 at 21:15 — reference TV-263. Shall I put it in your calendar?")
-        self.assertEqual(len(re.split(r"(?<=[.?!])\s+", line)), 2)
+        # Sasha 279 · C: a completed booking — + the closing line (voice.closing_line; no email in the test → "it will follow")
+        self.assertEqual(line, "✅ Booked: Sasha Test Venue, 2026-10-22 at 21:15 — reference TV-263. " + V.CLOSING_LATER
+                         + " Shall I put it in your calendar?")
+        self.assertEqual(len(re.split(r"(?<=[.?!])\s+", line)), 4)
 
     def test_not_in_the_app_she_says_it_as_before(self):
         self.assertEqual(V.yes_line("book_venue", {"ok": True, "result": {"status": "confirmed", "line": "✅ Booked: X."}}), "")

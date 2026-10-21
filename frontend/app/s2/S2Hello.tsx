@@ -17,7 +17,7 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { openingEnds, OPENING } from '@/lib/greeting-rule.mjs'
-import { presence, ring, HOLD_MS, inView } from '@/lib/presence-rule.mjs'
+import { presence, ring, HOLD_MS, inView, WORK_PULSE_CSS, WORK_PULSE_S } from '@/lib/presence-rule.mjs'
 import { arrivalLine, newsLine } from '@/lib/first-line'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · her face shares the page's one audio session
 
@@ -132,10 +132,10 @@ const held = () => new Promise(r => setTimeout(r, HOLD_MS))   // Sasha 273 · it
  *  (lib/presence-rule.mjs reappear) said she reappears — the arrival once more ("Hey <name>", or her news first), then the corner. */
 export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void>; again: (news?: string | null) => boolean }
 
-export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false, ctlRef, arrive, micLive = false, lead = null }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
+export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false, ctlRef, arrive, micLive = false, lead = null, working = false }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
   asleep?: boolean; onWake?: () => void
   started?: boolean; ctlRef?: { current: HelloCtl | null }
-  arrive?: boolean; micLive?: boolean; lead?: string | null }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her · Sasha 251 · started: the conversation has begun — the opening ends · Sasha 273 · arrive: rule 4's answer at load (undefined: not known yet) · micLive: the mic is hearing
+  arrive?: boolean; micLive?: boolean; lead?: string | null; working?: boolean }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her · Sasha 251 · started: the conversation has begun — the opening ends · Sasha 273 · arrive: rule 4's answer at load (undefined: not known yet) · micLive: the mic is hearing
   type Phase = 'off' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
@@ -415,12 +415,13 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const p = presence({ phase, tapFor, started, signedIn, soon, asleep, dormant, reduced: reducedMotion(), micLive, arrive })
   const big = p.where === 'full'
   useEffect(() => { if (!big) return; const t = setInterval(() => setLive(drawn(canvas.current)), 50); return () => clearInterval(t) }, [big])   // 268: within 50 ms
-  const r = ring(p.look, talking)
+  const r = ring(p.look, talking, working)   // Sasha 279 · A · she works: the ring pulses (lib/presence-rule.mjs)
   const tap = p.tap === 'collapse' ? collapse : p.tap === 'wake' ? () => onWake?.() : p.tap === 'face_back' ? faceBack : undefined
   const corner = p.where === 'corner'
   return (
     <>
-      <div data-sasha-face={big ? 'full' : corner ? 'circle' : undefined} data-sasha-look={p.look} onClick={tap}
+      {r.pulse ? <style>{WORK_PULSE_CSS}</style> : null}
+      <div data-sasha-face={big ? 'full' : corner ? 'circle' : undefined} data-sasha-look={p.look} data-sasha-working={r.pulse ? 'pulse' : undefined} onClick={tap}
         role={corner ? 'button' : undefined} tabIndex={corner ? 0 : undefined} onKeyDown={corner ? e => { if (e.key === 'Enter' || e.key === ' ') tap?.() } : undefined}
         aria-label={corner ? (p.look === 'paused' ? 'Sasha is paused — tap Wake, or her face, to wake her' : 'Sasha — tap to see her') : undefined}
         aria-hidden={p.where === 'none' ? true : undefined} style={{
@@ -431,7 +432,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
         overflow: 'hidden', boxSizing: 'border-box', background: 'radial-gradient(120% 90% at 50% 20%, #2a2440 0%, #14141c 70%)',
         ...(big ? { left: '50%', top: 'calc(env(safe-area-inset-top) + 96px)', width: 'min(86vw, 420px)', aspectRatio: '3 / 4', transform: 'translateX(-50%)', borderRadius: 24, boxShadow: '0 20px 60px rgba(0,0,0,.6)', opacity: 1 }
           : corner ? { ...(spot ? { left: spot.x, top: spot.y } : CORNER_FALLBACK), width: CORNER, height: CORNER, aspectRatio: 'auto', transform: 'none', borderRadius: '50%',
-                       border: r.border, boxShadow: r.glow, opacity: p.look === 'resting' ? 0.45 : p.look === 'paused' ? 0.6 : 1,
+                       border: r.border, boxShadow: r.glow, ...(r.pulse && !reducedMotion() ? { animation: `${r.pulse} ${WORK_PULSE_S}s ease-in-out infinite` } : {}), opacity: p.look === 'resting' ? 0.45 : p.look === 'paused' ? 0.6 : 1,
                        filter: p.look === 'paused' ? 'grayscale(.85) brightness(.75)' : 'none' }
           : { ...CORNER_FALLBACK, width: 0, height: 0, borderRadius: '50%', opacity: 0 }) }}>
         {(corner || (big && !live)) && <div aria-hidden data-sasha-still style={{ position: 'absolute', inset: 0, background: `${FRAMING} url(${img})` }} />}

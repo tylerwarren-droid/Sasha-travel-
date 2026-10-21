@@ -959,18 +959,20 @@ async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: 
     # it still works, a line every voice.PROGRESS_S from the step actually running — never silence longer than that.
     # Sasha 265 · item 5 (row 935): a request for work hears voice.first_line AT ONCE (the same words as /s2 and /next), then a
     # progress line every voice.PROGRESS_S; anything else keeps the holding line after voice.HOLD_AFTER_S, only if it's slow
+    # Sasha 279 · A: said ONCE — a second line only on a long wait (voice.progress_due), never a third; then quiet until her answer
     at_once = V.first_line(body) if body else None
     done, _ = await asyncio.wait({task}, timeout=0 if at_once else V.HOLD_AFTER_S)
-    first = True
-    while not done and body:
+    said = 0
+    while not done and body and V.progress_due(said, V.LONG_WAIT_S):
         hold = Out()
-        hold.text((at_once or V.holding_line(ch.get("account_id") or "")) if first else V.progress_line(steps.now, ch.get("account_id") or ""))
-        first = False
+        hold.text((at_once or V.holding_line(ch.get("account_id") or "")) if not said else V.progress_line(steps.now, ch.get("account_id") or ""))
+        said += 1
         try:
             await deliver(ch, frm, hold, now)
         except Exception as e:
             log.warning("[guest_whatsapp] holding line not sent: %s", type(e).__name__)
-        done, _ = await asyncio.wait({task}, timeout=V.PROGRESS_S)
+        if V.progress_due(said, V.LONG_WAIT_S):
+            done, _ = await asyncio.wait({task}, timeout=V.LONG_WAIT_S)
     await task
     await _brain_tail(ch, out)
     await _save_keeping_their_question(key, st, loaded)

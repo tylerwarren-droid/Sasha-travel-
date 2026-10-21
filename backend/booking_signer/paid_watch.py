@@ -186,14 +186,21 @@ async def settle(sid: str) -> Optional[dict]:
         await _release(row["id"], payload)   # the next look tries again
         return {"status": "booking"}
     TD.note(sid, r.get("status") == "booked", str(r.get("say") or "")[:300])
-    await _tell(payload["account"], r)
-    try:   # Sasha 212 · the open /next page hears it at once, and the confirmation email goes (booked only)
+    if r.get("status") != "booked":   # Sasha 279 · booked: live_events.completed tells BOTH doors, once (its words, the closing line)
+        await _tell(payload["account"], r)
+    try:   # Sasha 212 · the open page hears it at once, and the confirmation email goes (booked only)
         from . import live_events as LE, plan_store as PS
         p = await PS.latest(payload["account"]) if payload.get("kind") == "trip" else None
-        await LE.on_settled(payload["account"], r, (p or {}).get("title"))
+        await LE.on_settled(payload["account"], r, (p or {}).get("title"), key=sid, wa_extra=_extras(r))
     except Exception as e:
         log.error("[paid_watch] the page was not told: %s: %s", type(e).__name__, e)
     return r
+
+
+def _extras(r: dict) -> list:
+    """What only this payment knows, said on WhatsApp beside her line: a fare that changed, a loyalty number it carried."""
+    extra = [m.group(0) for m in [re.search(r"\(the offer priced had expired;[^)]*\)", str(r.get("say") or ""))] if m]
+    return extra + [str(x) for x in (r.get("loyalty") or []) if x]
 
 
 async def _tell(account: str, r: dict) -> None:

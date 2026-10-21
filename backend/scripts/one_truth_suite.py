@@ -211,6 +211,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T58": ("/s2 shows AgAPI venue.discover's answer as it is (CR 106): its groups in order, its ONE pick and reason, refused → its "
             "line only, checks → their question first, a marketplace handed over (never a send); no rule of her own in her prompt",
             ["tests.test_s276"]),
+    "T59": ("While she works she says so ONCE (twice at most, the second on a long wait), then the ring shows it; a payment confirmed "
+            "is said first on both doors; every completed booking ends with the closing line, once, \"sent to your email\" only when "
+            "it went",
+            ["tests.test_s279"]),
 }
 
 _RUNNER = """

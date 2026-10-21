@@ -3,7 +3,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { presence, ring, GREEN, reappear, voiceOf, inView, dayOf, HOLD_MS, IDLE_MS, VOICE_ON, TAP_TO_TALK, PAUSED } from '../lib/presence-rule.mjs'
+import { presence, ring, GREEN, reappear, voiceOf, inView, dayOf, HOLD_MS, IDLE_MS, VOICE_ON, TAP_TO_TALK, PAUSED, WORK_PULSE, WORK_PULSE_CSS } from '../lib/presence-rule.mjs'
 import { OPENING } from '../lib/greeting-rule.mjs'
 
 const P = (o) => presence({ phase: 'bubble', signedIn: true, ...o })
@@ -136,4 +136,16 @@ test('274 · 1: rule 4 never greets under her own unanswered booking question �
   assert.equal(midFlow([{ role: 'sasha', text: 'Booked: Trebbiano, 21:00.', cards: [] }]), false)
   assert.equal(midFlow([{ role: 'user', text: 'what about 22:00?' }]), false)
   assert.equal(midFlow([]), false)
+})
+
+test('279 · A: while she works the ring she has pulses (slowly), and stops when she answers — never paused or at rest', () => {
+  assert.equal(ring('listening', false, true).pulse, WORK_PULSE)
+  assert.equal(ring('idle', false, true).pulse, WORK_PULSE)
+  assert.equal(ring('listening', false, false).pulse, null)   // her answer has begun: no pulse
+  assert.equal(ring('paused', false, true).pulse, null)
+  assert.equal(ring('resting', false, true).pulse, null)
+  assert.equal(ring('listening', false, true).border, ring('listening').border)   // the green stays the mic's truth (273)
+  assert.match(WORK_PULSE_CSS, new RegExp(`@keyframes ${WORK_PULSE}`))
+  const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
+  assert.match(app, /if \(ev\.type === 'working' && typeof ev\.on === 'boolean'\) setWorking\(ev\.on\)/)   // the stream's one state
 })

@@ -347,14 +347,15 @@ class TheFirstLineAtOnce(unittest.TestCase):
         async def go():
             loop = asyncio.get_running_loop()
             t0, out = loop.time(), []
-            with mock.patch.object(V, "PROGRESS_S", 0.3), mock.patch.object(V, "FIRST_GAP_EARLY_S", 0.1):
+            with mock.patch.object(V, "LONG_WAIT_S", 0.3):
                 async for e in S.with_holding(turn(), ACCT, first=V.FIRST_LINE):
                     if e.get("type") == "hold":
                         out.append(round(loop.time() - t0, 2))
             return out
         at = run(go())
-        self.assertLess(at[1], 0.25)                 # 0.3 − 0.1: sooner by FIRST_GAP_EARLY_S
-        self.assertGreaterEqual(at[2] - at[1], 0.28)  # then every PROGRESS_S
+        # Sasha 279 · A (Tyler, 21 Oct: "too often"): after the first line, ONE more on the long wait — never a line every PROGRESS_S
+        self.assertEqual(len(at), V.PROGRESS_MAX, at)
+        self.assertGreaterEqual(at[1] - at[0], 0.28, at)
 
     def test_gate_whatsapp_says_it_first(self):
         src = inspect.getsource(__import__("booking_signer.guest_whatsapp", fromlist=["x"])._brain_turn)

@@ -78,6 +78,10 @@ const GREETING = 'Hey there — what can I do for you?'
  *  own sends and taps since. This browser keeps its own last one so a reload can answer rule 4 before the server does — only ever to
  *  say "recent" (the server's is never older than it), never to skip the server's answer. */
 const LAST_KEY = 's2_last_at'
+// Sasha 279 · B · a finished booking is said ONCE on this device — its key, whether it came live, replayed, or kept for the return
+const NEWS_KEY = 's2_news_said'
+const newsSaid = (k?: unknown): boolean => { if (!k) return false; try { return (JSON.parse(localStorage.getItem(NEWS_KEY) || '[]') as string[]).includes(String(k)) } catch { return false } }
+const markNews = (k?: unknown): void => { if (!k) return; try { const a = (JSON.parse(localStorage.getItem(NEWS_KEY) || '[]') as string[]).filter(x => x !== String(k)); localStorage.setItem(NEWS_KEY, JSON.stringify([...a, String(k)].slice(-40))) } catch { /* private mode */ } }
 const localLastAt = (): number | null => { try { const v = Number(localStorage.getItem(LAST_KEY)); return v > 0 ? v : null } catch { return null } }
 const noSub = () => () => {}
 /** Sasha 274 · item 1: the build this page was made from (next.config env) — compared with /api/version's. */
@@ -534,6 +538,7 @@ export default function S2App() {
   // a reload while this browser's own last activity is recent: no arrival, from the first paint (never a one-tick full-size flip)
   const quick = useSyncExternalStore(noSub, () => { const l = localLastAt(); return l && !reappear({ lastAt: l, now: Date.now(), tz: tzNow() }).greet ? false : undefined }, () => undefined)
   const newsRef = useRef<string | null>(null)   // Sasha 273 · item 4 (c): news that came while they were away
+  const [working, setWorking] = useState(false)   // Sasha 279 · A · the stream's {"type": "working", "on"} — her ring pulses on it
   const [lead, setLead] = useState<string | null>(null)   // …and the arrival that leads with it
   const loadedAt = useRef(0)
   const comeBackRef = useRef<(() => void) | null>(null)   // Sasha 273 · the one return handler (below), for the events' replay
@@ -582,6 +587,13 @@ export default function S2App() {
       // Sasha 274 · mid-booking at load: the record says a question or a read-back waits, or her last restored line asks one
       const mid = !!(j?.pending && (j.pending.kind === 'question' || j.pending.kind === 'hold')) ||
         midFlow(recent.map(m => ({ role: m.role === 'user' ? 'user' : 'sasha', text: m.content })))
+      // Sasha 279 · B · a booking that finished while they were away (kept by the server past the live replay): her return leads with it
+      if (j?.news?.text && !newsSaid(j.news.key)) {
+        markNews(j.news.key)
+        const nt = untag(String(j.news.text))
+        newsRef.current = nt
+        setTimeout(() => setMsgs(ms => [...ms, { role: 'sasha', text: nt, cards: [] }]), 0)
+      }
       const r = rule4(mid)
       const greet = r.greet && r.lead === 'hello'
       if (r.lead === 'news') { setLead(newsRef.current); newsRef.current = null }   // she leads with it (her arrival's first words)
@@ -620,6 +632,8 @@ export default function S2App() {
       // Sasha 273 · item 4 (c): NEWS — her line about something that happened after their last activity, heard while the page was
       // away (hidden) or replayed as it loads: rule 4's (c). Her return leads with it; a person here and talking just hears it.
       const said = String(ev.say || ev.text || '').trim()
+      if (ev.type === 'booked' && ev.key && newsSaid(ev.key)) return   // Sasha 279 · B · already said on this device (a replay, a reload)
+      if (ev.type === 'booked' && ev.key) markNews(ev.key)
       const at = Number(ev.at) > 0 ? Number(ev.at) * 1000 : Date.now()
       let held = false   // news kept for her return: her reappearance says it — once, never also here
       if (said && ['proactive', 'venue_notice', 'booked', 'booking_failed'].includes(String(ev.type)) && (!lastAt.current || at > lastAt.current)
@@ -649,7 +663,10 @@ export default function S2App() {
       if (ev.type !== 'booked' && ev.type !== 'booking_failed') return
       const line = ev.type === 'booked' ? bookedLine(ev) : null   // Sasha 249 · the card from the `booked` event, the server's one status
       setMsgs(ms => [...ms.map(x => ({ ...x, cards: x.cards.map(c => (c.k === 'pay' ? { ...c, already_paid: ev.type === 'booked' } : c)) })),
-                     { role: 'sasha', text: String(ev.say || ev.text || ''), cards: line ? [{ k: 'booked', line }] : [] }])
+                     { role: 'sasha', text: untag(String(ev.text || ev.say || '')), cards: line ? [{ k: 'booked', line }] : [] }])
+      // Sasha 279 · B · SHE SAYS SO FIRST: here now → spoken at once (it was only written — Tyler, 21 Oct, had to ask); away → her
+      // return leads with it (rule 4's news, held above)
+      if (!held && said) speaker.say(String(ev.spoken || said))
     }
     return () => es.close()
   }, [signedIn, speaker])
@@ -713,6 +730,7 @@ export default function S2App() {
           try { ev = JSON.parse(line) } catch { continue }
           if (ev.type === 'render' || ev.type === 'state') ev = untagDeep(ev)
           if (ev.type === 'timing' && typeof ev.tid === 'string') m.tid = ev.tid   // Sasha 275
+          if (ev.type === 'working' && typeof ev.on === 'boolean') setWorking(ev.on)   // Sasha 279 · A · the one state: her ring pulses while she works
           if (m.visible === null && ['hold', 'text', 'replace', 'render', 'say'].includes(String(ev.type))) m.visible = Date.now() - m.t0
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
@@ -765,6 +783,7 @@ export default function S2App() {
       m.done = Date.now() - m.t0   // Sasha 275 · then posted once her first sound came (or 8 s on)
       setTimeout(postM, m.audible !== null ? 0 : 8000)
       touch()   // Sasha 273 · activity: her answer
+      setWorking(false)
       setBusy(false)
       busyRef.current = false
       setTimeout(() => checkReleaseRef.current?.(), 0)   // Sasha 274 · a turn ended: a new release? (reloads only at a safe moment)
@@ -872,7 +891,7 @@ export default function S2App() {
   }
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
-    started={tab !== 'sasha'} ctlRef={helloCtl} arrive={arrive !== undefined ? arrive : quick} micLive={micLive} lead={lead} />   // Sasha 273 · rule 4's answer, the mic's truth, her news · Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
+    started={tab !== 'sasha'} ctlRef={helloCtl} arrive={arrive !== undefined ? arrive : quick} micLive={micLive} lead={lead} working={working} />   // Sasha 273 · rule 4's answer, the mic's truth, her news · Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>

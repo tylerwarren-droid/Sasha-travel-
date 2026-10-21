@@ -261,6 +261,12 @@ async def after_call(call: dict, reading) -> Dict[str, Any]:
     no_answer = o["outcome"] == "no_answer"
     said = V.no_answer_words(res) if no_answer else str(res.get("say") or "")
     card = card_of(act_id, res) if no_answer else None
+    if said and o["outcome"] == "confirmed" and res.get("state") == "confirmed":   # Sasha 279 · C: the venue said yes on the call —
+        from booking_signer import live_events as LE                             # a completed booking: the closing line, once
+        done = await LE.completed(account, f"act:{act_id}", lines=[f"{call.get('venue') or 'Your booking'}: {said}"],
+                                  title=str(call.get("venue") or "") or None, push=False)
+        if done.get("text"):
+            said = f"{said} {done['text']}"
     told = await tell(account, said, card, V.no_answer_words(res, "whatsapp") if no_answer else None) if said else "nothing to say"
     log.info("[venue_calls] act %s: %s → %s (no answers %s); told: %s", act_id[-8:], o["outcome"], res.get("state"), res.get("no_answers"), told)
     return {"reported": True, "state": res.get("state"), "say": said, "told": told, "card": card}

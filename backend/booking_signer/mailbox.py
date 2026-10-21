@@ -554,6 +554,12 @@ async def _told_auto(account: str, action: str, facts: dict, row: dict) -> None:
     ref = f" (ref {facts['reference']})" if facts.get("reference") else ""
     text = (f"✅ {via} confirms {venue}, {when}{ref} — it's in your itinerary. No need to tell me." if action == "confirm"
             else f"Cancelled at {via}: {venue}, {when} — I've updated your itinerary.")
+    if action == "confirm":   # Sasha 279 · C: a completed booking — the closing line, once, on BOTH doors (live_events.completed)
+        from . import live_events as LE
+        done = await LE.completed(account, f"venue:{row.get('id') or venue}:{at or row.get('date') or ''}",
+                                  lead=f"✅ {via} confirms {venue}, {when}{ref}.", lines=[f"{venue} — {when}{ref}"], title=venue)
+        if done.get("said") or done.get("already"):
+            return
     try:
         await GW._tell(ch, text)
     except Exception as e:

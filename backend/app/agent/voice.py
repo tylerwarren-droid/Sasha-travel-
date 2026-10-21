@@ -13,6 +13,8 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
   TOLD / told_line() / told_prefix() → Sasha 254 · the booking rules' refusals and stops, said in the rules' words (sasha.turn)
   OUTAGE / outage_line() → Sasha 261 · an AgAPI outage (its budget spent, rate-limited, not answering), one plain line (sasha.turn)
   PROGRESS_S / progress_line() / Steps → Sasha 264 · no silence: a line from the step running, every PROGRESS_S (stream + WhatsApp)
+  progress_due() → Sasha 279 · A: that line ONCE (twice at most, the second on a long wait), then quiet; the ring shows she works
+  PAID / CLOSING / paid_line() / closing_line() → Sasha 279 · B + C: a finished booking, said once (live_events.completed only)
   BRIEF_MAX / brief()  → Sasha 264 · short, never twice: her own sentences capped, never last reply's or a card's (sasha.turn)
   NOT_FILLED / PAGE_HERE / phone_line() / platform_line() / page_line() → Sasha 264 · a form or a platform's page, said as it is
 """
@@ -509,6 +511,43 @@ def progress_line(tool: Optional[str], account: str = "") -> str:
     return lines[n % len(lines)]
 
 
+# ── Sasha 279 · A — SAY IT ONCE (Tyler, 21 Oct 12:53: "she repeats that she's working on it too often"; the logs: a line every 5 s,
+# seven in one 25-second trip). Replaces Sasha 264's "a line every PROGRESS_S". While she works: ONE line (the first line, or the
+# holding line); a SECOND only on a long wait (LONG_WAIT_S after the first); never a third. Then quiet — and the screen shows it: the
+# same state (her answer not begun) is the stream's {"type": "working", "on": …}, which /s2's ring pulses on (lib/presence-rule.mjs).
+# Every surface reads this rule: sasha.with_holding (/s2, /next) and WhatsApp's loop (guest_whatsapp._brain_turn).
+PROGRESS_MAX = 2
+LONG_WAIT_S = 15.0
+
+
+def progress_due(said: int, since_first_s: float) -> bool:
+    """May she say another "working on it" line now? `said`: lines of that kind already said this turn; `since_first_s`: seconds since
+    the first of them. None said → yes; one said → only past LONG_WAIT_S; PROGRESS_MAX said → never."""
+    if said <= 0:
+        return True
+    return said < PROGRESS_MAX and since_first_s >= LONG_WAIT_S - 0.01
+
+
+# ── Sasha 279 · B + C — A FINISHED BOOKING, SAID ONCE (live_events.completed is the only caller) ─────────────────────────────────────
+#: B · the payment is confirmed: she says so first, unasked
+PAID = "Your payment for {item} went through — you're booked."
+#: C · after every completed booking (past "book it" — never a quote, a hold, a request sent or a page prepared)
+CLOSING = ("You'll find your itinerary here, and I've sent it to your email. "
+           "If you want to change anything, I'm here 24 hours a day, 7 days a week.")
+#: …when the itinerary email did NOT go (its send result read): never "I've sent it"
+CLOSING_LATER = ("You'll find your itinerary here, and it will follow by email. "
+                 "If you want to change anything, I'm here 24 hours a day, 7 days a week.")
+
+
+def paid_line(item: Optional[str]) -> str:
+    it = " ".join(str(item or "").split()).rstrip(".") or "your booking"
+    return PAID.format(item=it)
+
+
+def closing_line(emailed: bool) -> str:
+    return CLOSING if emailed else CLOSING_LATER
+
+
 class Steps:
     """Sasha 264 · the tools running now, in the order they started: a turn's {"type": "tool_start", "name"} puts one in, its
     {"type": "tool", "name"} takes it out. `now` is the step a progress line speaks for."""
@@ -690,7 +729,8 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
     return " ".join(p for p in parts if p)
 
 
-__all__ = ["PROGRESS_S", "progress_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
+__all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
+           "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
            "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",

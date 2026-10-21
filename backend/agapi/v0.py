@@ -221,6 +221,9 @@ async def _latest(ctx: Ctx) -> Optional[dict]:
 async def _plan(ctx: Ctx) -> dict:
     from booking_signer import plan_store as PS
     p = await _latest(ctx)
+    if not p and _standalone(ctx):   # Sasha 280 · nothing yet: what they asked for, on its own — never "plan a trip first"
+        raise ToolError("no_trip", "nothing is on this account to book yet — search what they asked for (search_flights for a flight, "
+                                   "search_stays then swap_stay for a hotel); propose_trip only when they ask for a whole trip")
     if not p:
         raise ToolError("no_trip", "there is no trip on this account yet — propose_trip first")
     return p
@@ -375,8 +378,13 @@ def _in_eur(cards: List[dict]) -> List[dict]:
 async def _offer_flights(ctx: Ctx, a: dict, cards: List[dict], leg: str, party: int) -> dict:
     """Sasha 249 · OFFERED == BOOKABLE — the ONE way a flight search (Sasha's own, or /s2's AgAPI source) reaches her: the offers
     STORED in the trip's basket first (the leg's earlier options marked superseded, never deleted in this turn), THEN shown, each
-    with its option_id. No trip yet → shown, and said: none can be booked until propose_trip."""
+    with its option_id. No trip yet → shown, and said: none can be booked until propose_trip.
+    Sasha 280 · ONE THING ON ITS OWN (/s2, and /next with parity): a flight is bookable by itself — it goes into the trip it belongs to
+    (its route touches that trip and its day is within it), else into a record of its own (plan_store.single); never into a trip it
+    isn't part of, and never needing propose_trip. Old S1 (parity off): as before."""
     p = await _latest(ctx)
+    if _standalone(ctx):
+        p, leg = await _flight_record(ctx, p, a, cards, leg, party)
     stored: Optional[Dict[str, str]] = None
     if p:   # the flights shown are the trip's suggestions (the basket), so choose_offer can take any of them
         ids = await _suggest_flights(ctx, p["trip_id"], cards, a["origin"], a["destination"], a["date"], party, leg)
@@ -384,6 +392,62 @@ async def _offer_flights(ctx: Ctx, a: dict, cards: List[dict], leg: str, party: 
     shown = [{**_flight_out(c), **({"option_id": stored[c["id"]]} if stored and c.get("id") in stored else {})} for c in cards]
     return {"leg": leg, "date": a["date"], "flights": shown, "note": "Duffel TEST fares — nothing is held until book",
             "stored": bool(p), **({} if p else {"how": "No trip yet, so none of these can be booked: propose_trip first, then pick one."})}
+
+
+def _standalone(ctx: Ctx) -> bool:
+    """Sasha 280 · one thing on its own is bookable: /s2 (WhatsApp's brain too) and /next with parity — the beta. Old S1: as before."""
+    from app.agent.sasha import s1_parity
+    return ctx.surface == "s2" or s1_parity()
+
+
+def _place_words(*xs: Any) -> set:
+    return {w for x in xs for w in re.findall(r"[a-zà-ÿ]{3,}", str(x or "").lower())}
+
+
+def flight_fits(p: Optional[dict], frm: set, to: set, day: str) -> Optional[str]:
+    """Sasha 280 · THE RULE — does this flight belong to the record `p`? A proposal: its route touches the trip's cities and its day
+    is within the trip (a day either side). A flight of its own: the same route (its way back is the "back" leg). → "out" / "back"
+    (the leg it is in that record), or None: it isn't part of that record, so it is booked on its own."""
+    if not p:
+        return None
+    plan, kind = p.get("plan") or {}, (p.get("plan") or {}).get("single")
+    if kind == "stay":
+        return None
+    if kind == "flight":
+        r = plan.get("route") or {}
+        a, b = set(r.get("from") or []), set(r.get("to") or [])
+        return "out" if (frm & a and to & b) else "back" if (frm & b and to & a) else None
+    cities = _place_words(*(p.get("cities") or []))
+    if not cities or not (frm & cities or to & cities):
+        return None
+    try:
+        d = date.fromisoformat(str(day)[:10])
+        s = p.get("start") if isinstance(p.get("start"), date) else date.fromisoformat(str(p.get("start"))[:10])
+        e = p.get("end") if isinstance(p.get("end"), date) else date.fromisoformat(str(p.get("end") or p.get("start"))[:10])
+    except (TypeError, ValueError):
+        return None
+    if not (s - timedelta(days=1) <= d <= e + timedelta(days=1)):
+        return None
+    return "back" if (frm & cities and not to & cities) else "out"
+
+
+async def _flight_record(ctx: Ctx, p: Optional[dict], a: dict, cards: List[dict], leg: str, party: int) -> tuple:
+    """The record this flight search goes into (flight_fits), made when it has none — and made current. → (record, leg)."""
+    from booking_signer import plan_store as PS
+    c0 = cards[0] if cards else {}
+    frm, to = _place_words(a.get("origin"), c0.get("from"), c0.get("from_city")), _place_words(a.get("destination"), c0.get("to"), c0.get("to_city"))
+    fit = flight_fits(p, frm, to, a["date"])
+    if p and fit:
+        await PS.touch(ctx.account, p["trip_id"])
+        return p, (leg if a.get("leg") or leg_said(ctx.user_said) else fit)
+    d = date.fromisoformat(str(a["date"])[:10])
+    name = lambda city, code: str(city or code or "").split(",")[0].strip()
+    title = f"Flight {name(c0.get('from_city'), a.get('origin'))} → {name(c0.get('to_city'), a.get('destination'))}"
+    tid = await PS.single(ctx.account, "flight", title, [name(c0.get("to_city"), a.get("destination"))], d, d, party=party,
+                          extra={"route": {"from": sorted(frm), "to": sorted(to)}})
+    if not tid:
+        return p, leg
+    return (await PS.by_id(ctx.account, tid)) or p, "out"
 
 
 async def _suggest_flights(ctx: Ctx, trip_id: str, cards: List[dict], origin: str, dest: str, day: str, party: int,
@@ -834,6 +898,11 @@ async def _swap_world(ctx: Ctx, p: dict, city: str, name: str) -> dict:
 async def swap_stay(ctx: Ctx, a: dict) -> dict:
     from app.services.itinerary_agent import build_itinerary
     from booking_signer import plan_store as PS
+    if _standalone(ctx):   # Sasha 280 · a hotel on its own: not a city of the trip they're working on → a stay record of its own
+        p0 = await _latest(ctx)
+        if not (p0 and not PS.is_single(p0) and any((d.get("city") or "").lower().startswith(a["city"].lower())
+                                                    for d in (p0.get("plan") or {}).get("days") or [])):
+            return await _stay_alone(ctx, a)
     p = await _plan(ctx)
     plan = p.get("plan") or {}
     city = a["city"]
@@ -851,6 +920,36 @@ async def swap_stay(ctx: Ctx, a: dict) -> dict:
     await BB.store_prices(ctx.account)   # Sasha 249 · the new stay priced once, as it arrives
     p = await _plan(ctx)
     return {"city": city, "stay": a["stay_name"], **(await _total(ctx, p))}
+
+
+async def _stay_alone(ctx: Ctx, a: dict) -> dict:
+    """Sasha 280 · ONE THING ON ITS OWN: a hotel stay booked by itself — one of the stays search_stays just showed, for the nights they
+    asked, in a record of its own (plan_store.single); its estimate said as one, as a trip's stays are. Nothing else is added."""
+    from booking_signer import basket as BK, basket_book as BB, fx as FX, plan_store as PS
+    city, name = a["city"].strip(), a["stay_name"].strip()
+    if not a.get("check_in") or not a.get("nights"):
+        raise ToolError("stay_dates_needed", "ask once when they check in and for how many nights, then call swap_stay again with check_in and nights")
+    shown = (_STAYS.get(ctx.account) or {}).get(city.lower()) or []
+    h = next((x for x in shown if x["name"].lower() == name.lower()), None) or next((x for x in shown if name.lower() in x["name"].lower()), None)
+    if not h:
+        raise ToolError("stay_not_shown", f"search_stays for {city} first, then pick one of the stays it shows")
+    try:
+        ci = date.fromisoformat(str(a["check_in"])[:10])
+    except ValueError:
+        raise ToolError("check_in_invalid", "check_in is YYYY-MM-DD")
+    nights = max(1, min(30, int(a["nights"])))
+    usd_eur = FX.rate("USD") or 0.0
+    hotel = {"name": h["name"], "est": True, **({"price_from": round(float(h["est_eur"]) / usd_eur, 2)} if usd_eur and h.get("est_eur") else {})}
+    days = [{"city": city, "date": (ci + timedelta(days=i)).isoformat(), "hotel": hotel} for i in range(nights)] + \
+           [{"city": city, "date": (ci + timedelta(days=nights)).isoformat()}]   # the last day is the way home: no night
+    party = a.get("party")
+    tid = await PS.single(ctx.account, "stay", f"{h['name']} · {city}", [city], ci, ci + timedelta(days=nights), days=days, party=party)
+    if not tid:
+        raise ToolError("plan_not_saved", "the stay couldn't be saved on the account")
+    await BK.sync_stays(ctx.account, tid, days, ci, party)
+    await BB.store_prices(ctx.account)
+    p = await _plan(ctx)
+    return {"city": city, "stay": h["name"], "check_in": ci.isoformat(), "nights": nights, "on_its_own": True, **(await _total(ctx, p))}
 
 
 # ── Sherlock ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

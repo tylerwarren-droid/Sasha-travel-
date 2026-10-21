@@ -165,6 +165,45 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
         return None
 
 
+async def single(account: Optional[str], kind: str, title: str, cities: List[str], start: Optional[date], end: Optional[date],
+                 days: Optional[List[dict]] = None, party: Optional[int] = None, extra: Optional[dict] = None) -> Optional[str]:
+    """Sasha 280 · ONE THING ON ITS OWN (Tyler's 18 Oct decision: standalone flights and hotels, no packages): a trip record that holds
+    only what the person asked for — a flight (no days, no stays) or a hotel stay (its nights only) — so it is bookable without a
+    proposal. Always its own row: never merged into a plan that shares a city (save() revises a recent plan; this never does).
+    → its trip id, or None (no account, no store)."""
+    run = _run()
+    if not account or run is None or kind not in ("flight", "stay"):
+        return None
+    plan = {"title": title[:200], "single": kind, "days": list(days or []), **({"party": party} if party else {}), **(extra or {}),
+            **({"dates": {"start": start.isoformat(), "end": (end or start).isoformat()}} if start else {})}
+    dest = {"cities": [c for c in cities if c], "plan": plan, "kanoe": "plan/1"}
+    try:
+        tid = await run(lambda c: c.fetchval(
+            "insert into trips (owner_id, title, status, destinations, depart_date, return_date) values ($1,$2,'draft',$3::jsonb,$4,$5) returning id",
+            uuid.UUID(account), title[:200], _jsonable(dest), start, end or start))
+        log.info("[plan_store] a %s on its own: trip %s", kind, tid)
+        return str(tid)
+    except Exception as e:
+        log.warning("[plan_store] the %s's own record was not saved: %s: %s", kind, type(e).__name__, e)
+        return None
+
+
+async def touch(account: Optional[str], trip_id: str) -> None:
+    """Sasha 280 · the record the person is working on now is the current one (latest() reads the most recently touched)."""
+    run = _run()
+    if not account or run is None:
+        return
+    try:
+        await run(lambda c: c.execute("update trips set updated_at = now() where id = $1 and owner_id = $2", uuid.UUID(trip_id), uuid.UUID(account)))
+    except Exception as e:
+        log.info("[plan_store] not touched: %s", type(e).__name__)
+
+
+def is_single(p: Optional[dict]) -> Optional[str]:
+    """ "flight" / "stay" for a record that holds one thing on its own, else None (a proposal)."""
+    return ((p or {}).get("plan") or {}).get("single")
+
+
 def _names(r, d: dict) -> List[str]:
     words = [w for w in re.findall(r"[A-Za-zÀ-ÿ]{4,}", r["title"] or "") if w.lower() not in ("days", "trip", "your", "plan", "move")]
     return [c for c in (d.get("cities") or []) if c] + words

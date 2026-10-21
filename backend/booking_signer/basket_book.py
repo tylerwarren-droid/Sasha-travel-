@@ -177,8 +177,11 @@ async def _plan_dates(account: str):
     """The plan, its merged days and its start date — or {why}."""
     from . import plan_store as PS
     p = await PS.latest(account)
+    if p and PS.is_single(p) == "flight":   # Sasha 280 · a flight on its own: bookable with no itinerary (its day is the record's)
+        start = p.get("start") if isinstance(p.get("start"), date) else (date.fromisoformat(str(p["start"])[:10]) if p.get("start") else None)
+        return (p, [], start) if start else {"why": "the flight has no day yet — tell me when you fly"}
     if not p or not (p.get("plan") or {}).get("days"):
-        return {"why": "there's no trip plan on your account to book yet — ask me to plan one"}
+        return {"why": "there's no trip plan on your account to book yet — ask me to plan one"}   # (old S1's words; /s2: v0._plan answers first)
     days = PS.merge(p, [])["days"]
     start = date.fromisoformat(str(days[0].get("date") or p.get("start") or "")[:10]) if (days[0].get("date") or p.get("start")) else None
     if start is None:
@@ -220,6 +223,7 @@ async def refresh(account: str, origin: str) -> Dict[str, Any]:
     flight chosen → the cheapest bookable out and back chosen, every chosen flight re-checked at the airline (gone or repriced → the
     same flight re-found, the difference said). Then the read-back from the rows as they now stand (price()). Only hold_booking
     (and trip_book's prepare, the same read-back on the older path) calls it — never get_total, the guard or the Trip tab."""
+    from . import plan_store as PS
     got = await _plan_dates(account)
     if isinstance(got, dict):
         return got
@@ -234,8 +238,16 @@ async def refresh(account: str, origin: str) -> Dict[str, Any]:
     notes: Dict[str, str] = {}
     chosen_fl = [r for r in await BK.items(account, trip, ("chosen",)) if r["kind"] == "flight"]
     picked_by_guest = bool(chosen_fl)
-    if not chosen_fl:   # nothing chosen: out and back, the cheapest bookable (said in the read-back)
-        from . import plan_store as PS
+    if not chosen_fl and not days:   # Sasha 280 · a flight on its own, none picked: the cheapest of what was SHOWN, on each leg shown —
+        legs: Dict[str, List[dict]] = {}   # never a way back they didn't ask for
+        for r in [r for r in await BK.items(account, trip, ("suggested",)) if r["kind"] == "flight"]:
+            legs.setdefault(r.get("slice_key") or "out:", []).append(r)
+        if not legs:
+            return {"why": "there's no flight on it yet — search one, then pick it"}
+        for rows in legs.values():
+            await BK.choose(account, min(rows, key=lambda r: float(r.get("price_amount") or 0))["id"])
+    elif not chosen_fl and not PS.is_single(p):   # nothing chosen: out and back, the cheapest bookable (said in the read-back) —
+        # Sasha 280 · never for a hotel booked on its own (no flight was asked for)
         out_day, back_day = PS.leg_days(p)   # Sasha 251 · the trip record's own days (before: the day before it, and the day after its last)
         out_day = out_day or start.isoformat()
         back_day = back_day or str(days[-1].get("date"))[:10]

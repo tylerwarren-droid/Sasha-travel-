@@ -48,7 +48,7 @@ class Parity(unittest.TestCase):
         from app.agent import s2 as S2
         from app.services import persona as P
         sysm = seen_by_model("s1")["system"]
-        self.assertTrue(sysm[0]["text"].startswith(P.AGENT_SYSTEM))                             # S1's own persona, first
+        self.assertTrue(sysm[0]["text"].startswith(S2.standalone(P.AGENT_SYSTEM)))              # S1's own persona, first (Sasha 280: one thing on its own)
         self.assertIn(S2.S1_CAN, sysm[0]["text"])
         self.assertEqual(sysm[0].get("cache_control"), {"type": "ephemeral"})                   # in the CACHED part: S1's speed kept
         self.assertNotIn("cancelling a subscription", S2.S1_CAN)

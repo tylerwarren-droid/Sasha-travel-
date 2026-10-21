@@ -716,6 +716,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from agapi import s2_fine_print as FP   # CR 74 · fine print: /s2's own four card tools, run here
         tools = tools + [dict(t) for t in FP.TOOLS]
         run = FP.wrap(run)
+    if surface == "s2" or s1_parity():   # Sasha 280 · the travel tools as one thing on its own (S1 with parity off: its own words)
+        from app.agent import s2 as _S2s
+        tools = [_S2s.standalone_tool(t) for t in tools]
     if surface == "s2" or s1_parity():   # Sasha 249 · keep_list without a fixed example (S1 with parity off: its own words, untouched)
         from agapi import s2_keep as _K
         tools = [{**t, "description": _K.KEEP_LIST_DESC} if t["name"] == "keep_list" else t for t in tools]
@@ -754,7 +757,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         base = P.AGENT_SYSTEM
         if surface != "s2" and s1_parity():   # Sasha 241 · S2's capability lines on /next, in the CACHED part (S1 keeps its "Who she is")
             from app.agent import s2 as S2
-            base = P.AGENT_SYSTEM + "\n\n" + S2.S1_CAN
+            base = S2.standalone(P.AGENT_SYSTEM) + "\n\n" + S2.S1_CAN   # Sasha 280 · one thing on its own (parity on only)
         if surface == "s2":   # Sasha 221 · her own opening lines on /s2; S1's text from "How she talks" on, shared
             from app.agent import s2 as S2
             base = S2.s2_system() + (S2.WA_NOTE if wa else "")   # Sasha 237 · on WhatsApp: cards arrive as messages, photos sent here

@@ -215,6 +215,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "is said first on both doors; every completed booking ends with the closing line, once, \"sent to your email\" only when "
             "it went",
             ["tests.test_s279"]),
+    "T60": ("One thing on its own (Tyler's 18 Oct decision, no packages): a flight or a hotel is bookable by itself; it joins a trip only "
+            "when it is part of it; propose_trip only when they ask for a trip; old S1 (parity off) as before",
+            ["tests.test_s280"]),
 }
 
 _RUNNER = """

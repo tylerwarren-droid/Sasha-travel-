@@ -115,11 +115,77 @@ S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TE
            "they ask. Nothing is booked until it is paid — get_status says when.")
 
 
+# ── Sasha 280 · ONE THING ON ITS OWN (Tyler's demo, 21 Oct 13:44: a flight only → she kept bundling hotels and said she couldn't do
+# flights alone; his 18 Oct decision: standalone flights and hotels, NO packages). The rule was in the shared text below ("once she
+# knows enough, she puts a proposal together", "the moment she knows… prepare_trip", "flights and hotels are one trip") and in the
+# code (no trip → "propose_trip first"). /s2 and /next with parity read these words instead; old S1 (parity off): its own, untouched.
+STANDALONE_TEXT = (
+    ("- **She does the work.** Once she knows enough, she puts a proposal together. Somewhere to stay each night, the flights\n"
+     "  there and back already chosen, and the whole-trip total.",
+     "- **She does the work.** What they ask for, and only that: a flight, a hotel, a table or an activity, each on its own. A whole\n"
+     "  trip when they ask for one: somewhere to stay each night, the flights there and back already chosen, and the whole-trip total."),
+    ("- **The moment she knows** the destination, dates and party, she calls `prepare_trip`.",
+     "- **One thing, or a trip — as they ask.** A flight on its own is `search_flights`, booked straight from its cards; a hotel on its\n"
+     "  own is `search_stays`, then `swap_stay` with the check-in day and nights. She never adds a hotel to a flight, or a flight to a\n"
+     "  hotel, unless they ask, and she never says she can't book one alone.\n"
+     "- **When they ask for a trip,** the moment she knows the destination, dates and party, she calls `prepare_trip`."),
+    ("- **When she has who, what, when and from where,** she calls `propose_trip`",
+     "- **When it's a trip and she has who, what, when and from where,** she calls `propose_trip`"),
+    ("- **ONE TOTAL.** Flights and hotels are one trip: she says one all-in figure",
+     "- **ONE TOTAL.** What they're booking has one figure (a trip's flights and hotels together): she says one all-in figure"),
+    ("(how many hotels, the flight out and home by airline and day, the\n     total)",
+     "(what's in it — the flight by airline and day, any hotels — and the\n     total)"),
+)
+
+
+def standalone(text: str) -> str:
+    """The shared text with Sasha 280's words — each one must be there (a drift in the shared text fails here, never silently)."""
+    for old, new in STANDALONE_TEXT:
+        if old in text:
+            text = text.replace(old, new, 1)
+        elif not old.startswith("- **She does the work.**"):   # that line is S1's own "Who she is" (not in /s2's)
+            raise AssertionError(f"Sasha 280: the shared text changed — {old[:60]!r} not found")
+    return text
+
+
+#: Sasha 280 · the travel tools as /s2 (and /next with parity) describe them — S1's own descriptions (v0.TOOLS) untouched
+STANDALONE_TOOLS = {
+    "search_flights": "Flights between two places on a day, cheapest first (TEST fares). A flight is bookable ON ITS OWN straight from "
+                      "these cards (choose_offer → hold_booking → book) — no trip and no hotel needed. When the flight is part of the trip "
+                      "they're working on (its route and its days), the cards are that trip's options for that leg.",
+    "propose_trip": "ONLY when they ask for a whole trip (a holiday, an itinerary, \"plan me…\"): a day-by-day itinerary with somewhere to "
+                    "stay each night, a flight on each leg already chosen, and the whole trip's total. Never for a flight or a hotel on its "
+                    "own. Replaces the account's current proposal. Nothing is booked.",
+    "prepare_trip": "ONLY when they've asked for a whole trip (never for a flight or a hotel on its own): start getting it ready in the "
+                    "background once its destination, dates and party are known (and again once the origin is): the itinerary, then "
+                    "both legs' flights. Returns at once — keep chatting; propose_trip with the same details picks it up.",
+    "swap_stay": "A hotel, one of the stays search_stays just showed. In the trip they're working on: where they stay in that city. On its "
+                 "own (a hotel only, no trip): give check_in and nights (and the party if known) — it is then bookable by itself "
+                 "(hold_booking → book), nothing else added. Returns the total.",
+}
+
+
+def standalone_tool(t: dict) -> dict:
+    d = STANDALONE_TOOLS.get(t.get("name"))
+    if not d:
+        return t
+    tag = str(t.get("description") or "").split("] ", 1)[0] + "] " if str(t.get("description") or "").startswith("[") else ""
+    out = {**t, "description": tag + d}   # the agent's tag ("[Magellan] ") kept, as every tool carries it
+    if t["name"] == "swap_stay":
+        sch = dict(t.get("input_schema") or {})
+        sch["properties"] = {**(sch.get("properties") or {}),
+                             "check_in": {"type": "string", "format": "date", "description": "a hotel on its own: the check-in day"},
+                             "nights": {"type": "integer", "minimum": 1, "maximum": 30, "description": "a hotel on its own: how many nights"},
+                             "party": {"type": "integer", "minimum": 1, "maximum": 9}}
+        out["input_schema"] = sch
+    return out
+
+
 def s2_system() -> str:
     """S2's whole system text: her own "Who she is", then S1's own text from "## How she talks" on (shared, unchanged)."""
     rest = P.AGENT_SYSTEM.split("## How she talks", 1)
     who = S2_WHO + "\n" + CAN   # Sasha 249 · + the one capability list's section
-    return (who + "\n## How she talks" + rest[1] if len(rest) == 2 else who + "\n" + P.AGENT_SYSTEM) + V.RULES   # Sasha 249 · her voice
+    return standalone(who + "\n## How she talks" + rest[1] if len(rest) == 2 else who + "\n" + P.AGENT_SYSTEM) + V.RULES   # Sasha 249 · her voice · 280: one thing on its own
 
 
 def demo(account: Optional[str]) -> bool:

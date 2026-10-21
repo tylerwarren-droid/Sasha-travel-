@@ -31,7 +31,7 @@ CAPABILITIES: List[Dict] = [
     {"group": "Book", "say": "book tables, spas and trips", "chip": ("Book dinner", "search_venues"),
      "more_chips": [("A table for two tonight", "search_venues"), ("A spa on Saturday", "search_venues")],
      "items": [("A table at a restaurant", "search_venues"), ("Any place or service — a spa, a dog walker, a plumber…", "search_venues"),
-               ("Flights and hotels for a trip", "book")]},
+               ("A flight or a hotel on its own — or a whole trip", "book")]},   # Sasha 280 · no packages: each on its own
     {"group": "Plan", "say": "plan a trip day by day", "chip": ("Plan a weekend", "propose_trip"),
      "items": [("A weekend or a longer trip, day by day", "propose_trip"),
                ("Swap a hotel or a flight in it", "swap_stay"),

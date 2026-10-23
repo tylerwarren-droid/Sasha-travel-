@@ -499,9 +499,29 @@ async def plan_view(request: Request):
         return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     rows = PS.truthful((j or {}).get("reservations") or [] if s == 200 else [])
-    return {"plan": await PS.view(account, p, JN.for_journey(rows, p.get("trip_id"))), "plans": await PS.plans(account),
-            **({"trip_total": tt} if (tt := await trip_total(account, p.get("trip_id"), p)) else {}),
-            **({"trip_status": ts} if (ts := await trip_status(account, p.get("trip_id"))) else {})}
+    view = await PS.view(account, p, JN.for_journey(rows, p.get("trip_id")))
+    tt = await trip_total(account, p.get("trip_id"), p)
+    return {"plan": view, "plans": await PS.plans(account), **({"trip_total": tt} if tt else {}),
+            **({"trip_status": ts} if (ts := await trip_status(account, p.get("trip_id"))) else {}),
+            "card": PS.card(view, tt)}   # Sasha 283 · item 1 · the conversation's trip card: THIS view, said as what the trip is
+
+
+@router.get("/handover/word")
+async def handover_word(request: Request):
+    """Sasha 283 · item 4c · THE WAY BACK: on his return to the app, a page he was handed (and hasn't answered for) → her ONE question,
+    or what the confirmation watcher already knows. Asked once. {} when nothing waits."""
+    from agapi import venues as VN
+    return (await VN.awaiting_word(account_for(request))) or {}
+
+
+@router.post("/handover/word")
+async def handover_word_answer(request: Request):
+    """Sasha 283 · item 4c · his answer ({key, booked: bool, how}) → on the ONE record (the hand-over's row; a platform link's own)."""
+    from agapi import venues as VN
+    body = await _json(request) or {}
+    if not isinstance(body.get("key"), str) or not isinstance(body.get("booked"), bool):
+        return _refuse(400, "word_malformed", "send {key, booked} as a JSON object")
+    return await VN.answer_word(account_for(request), body["key"][:300], body["booked"], str(body.get("how") or "button"))
 
 
 async def trip_status(account: str, trip_id: Optional[str]) -> Optional[dict]:

@@ -224,6 +224,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T62": ("A paid thing is booked ONLY by paid_watch.settle, from the record written before paying (it goes with its owner): no "
             "watcher books by itself, no payment is offered without its record — a trip is never written for an owner that is gone",
             ["tests.test_s282"]),
+    "T63": ("The trip card says what the trip is, from the Trip view's own record; she asks whether they need flights (none assumed, "
+            "none added); a page handed over is never left hanging — one question on his return, answered on its one record",
+            ["tests.test_s283"]),
 }
 
 _RUNNER = """

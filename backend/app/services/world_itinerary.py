@@ -171,8 +171,9 @@ async def build_world(a: dict, account: Optional[str] = None) -> Optional[dict]:
     start = date.fromisoformat(a["start_date"])
     who = (f"This trip is for EXACTLY {party} traveller{'s' if party != 1 else ''}"
            + (" — one person travelling alone: no couples' framing." if party == 1 else "."))
-    ask = (f"Plan {n_days} days in {a['destination']} from {start.day} {start.strftime('%B %Y')} for {party}, flying from "
-           f"{a.get('origin') or 'Madrid'}." + (f" They love: {a['interests']}." if a.get("interests") else ""))
+    ask = (f"Plan {n_days} days in {a['destination']} from {start.day} {start.strftime('%B %Y')} for {party}"
+           + ("." if a.get("flights") is False else f", flying from {a.get('origin') or 'Madrid'}.")   # Sasha 283 · item 2: no flights, no home city
+           + (f" They love: {a['interests']}." if a.get("interests") else ""))
     import time as _t
     t0, laps = _t.perf_counter(), {}   # Sasha 257 · where the itinerary's 13–24 s goes (row 863)
     def lap(k: str) -> None:

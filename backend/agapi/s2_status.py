@@ -36,7 +36,9 @@ WORDS = {"nothing": "Nothing is booked yet.",
          "chosen": "Chosen, not booked yet",
          # Sasha 265 · item 4 (CR 99 §4e): a call act — being called (and when the next call may be), or no one picked up (its next step)
          "calling": "Not booked yet — I'm calling them",
-         "no_answer": "Not booked — no one picked up"}
+         "no_answer": "Not booked — no one picked up",
+         # Sasha 283 · item 4c: his answer to "Did it go through?" on a page he finished himself — on his word (or its confirmation email)
+         "by_you": "Booked by you on their page"}
 ON_IT = ("booked", "partly_booked", "awaiting_payment")   # a Trip banner shows; the Book button goes
 
 
@@ -92,6 +94,10 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
         if rows:
             said = f"{WORDS[key]}: " + "; ".join(rows) + "."
             state, line = (key, said) if state == "nothing" else (state, f"{line} {said}")
+    by_you = list(st.get("by_you") or [])   # Sasha 283 · item 4c: his answer, on the same row
+    if by_you:
+        said = f"{WORDS['by_you']}: " + "; ".join(by_you) + "."
+        state, line = ("by_you", said) if state == "nothing" else (state, f"{line} {said}")
     prepared = list(st.get("prepared") or [])   # Sasha 254 · ONE TRUTH: a page prepared for them is never "nothing"
     if prepared:
         said = f"{WORDS['prepared']}: " + "; ".join(prepared) + "."
@@ -131,10 +137,14 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
             logging.getLogger("agapi.s2_status").warning("[status] chosen items not read: %s", type(e).__name__)
     # Sasha 254 · ONE TRUTH: the pages hold_venue prepared (its "It's in your bookings"), unless that booking is already on the record
     on_record = {(VN._base(b.get("venue") or ""), str(b.get("date") or "")) for b in vb}
-    prep = [f"{x['venue']} — {x.get('date') or ''} {x.get('time') or ''}".strip() for x in await VN.prepared_pages(account)
-            if (VN._base(x.get("venue") or ""), str(x.get("date") or "")) not in on_record]
+    pages = [x for x in await VN.prepared_pages(account) if (VN._base(x.get("venue") or ""), str(x.get("date") or "")) not in on_record]
+    line_of = lambda x: f"{x['venue']} — {x.get('date') or ''} {x.get('time') or ''}".strip()
+    prep = [line_of(x) for x in pages if x.get("outcome") not in VN.WORD_BOOKED]
     if prep:
         st["prepared"] = prep
+    by_you = [line_of(x) for x in pages if x.get("outcome") in VN.WORD_BOOKED]   # Sasha 283 · item 4c: his "yes, it went through"
+    if by_you:
+        st["by_you"] = by_you
     open_n = len(OC._OPEN.get(account) or ())
     d = decide(st, held=account in API._HELD, ledger_open=open_n)
     # Sasha 258 · the TRIP's own state (its basket rows only): the Trip tab's banner reads it — a table booked elsewhere on the

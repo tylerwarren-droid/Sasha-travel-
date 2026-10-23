@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import VoiceButton, { type VoiceCtl } from '@/app/components/VoiceButton'
-import { reappear, voiceOf } from '@/lib/presence-rule.mjs'
+import { reappear, voiceOf, wordOf } from '@/lib/presence-rule.mjs'
 import { midFlow } from '@/lib/greeting-rule.mjs'   // Sasha 274 · mid-booking, from the screen   // Sasha 273 · rule 4 and the mic's truth: the ONE presence rule
 import { AccountControl, SIGN_IN_CARRY } from '@/app/components/SignedInLine'   // Sasha 257 · who is signed in, quietly in the header
 import { PayHere } from '@/app/components/PayHere'
@@ -25,6 +25,7 @@ export { KeepCapture }   // Sasha 228's handoff page imports it from here
 import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
 import { TRIP_BOARD_CSS } from './tripBoardCss'
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
+import { bookingReq } from '@/lib/booking-client'   // Sasha 283 · the trip card reads the Trip view's own record
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
@@ -51,7 +52,8 @@ type Card =
   | { k: 'accident'; view: Ev }
   | { k: 'claim_status'; claim: Ev }
   | { k: 'handover'; url: string; external: boolean }   // Sasha 236 · Tap to finish (their page / our hand-over), over her
-  | { k: 'trip'; what: string }                          // Sasha 236 · the trip changed: one tap to the Trip board
+  | { k: 'trip' }                                        // Sasha 236 · the trip changed: one tap to the Trip board · 283: it says what the trip is
+  | { k: 'did_it'; key: string; venue: string; done?: boolean }   // Sasha 283 · item 4c · the way back: her ONE question, its two answers
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
@@ -391,6 +393,28 @@ function NoAnswerCard({ c, tap }: { c: Extract<Card, { k: 'no_answer' }>; tap: (
     </Box>)
 }
 
+/** Sasha 283 · item 1 · THE TRIP CARD: what the trip IS — read from the Trip view's own record (/api/booking/plan → plan_store.card:
+ *  the place and nights, where they stay, the flights if any, the one total she said). Its header is its own title; one button. */
+type TripSay = { title: string; lines: string[]; total_eur: number | null }
+function TripCard() {
+  const [t, setT] = useState<TripSay | null | undefined>(undefined)
+  useEffect(() => {
+    let off = false
+    const pull = () => { bookingReq('/api/booking/plan').then(r => { if (!off && r.ok) setT((untagDeep(r.json.card ?? null) as TripSay | null)) }).catch(() => {}) }
+    pull()
+    window.addEventListener('sasha-plan-refresh', pull)
+    return () => { off = true; window.removeEventListener('sasha-plan-refresh', pull) }
+  }, [])
+  const eur = (n: number) => `€${n.toLocaleString('en-GB', { maximumFractionDigits: 0 })}`
+  return (
+    <Box k="Your trip" h={t ? untag(t.title) : t === null ? 'Your trip' : '…'}>
+      {(t?.lines || []).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
+      {t && t.total_eur !== null ? <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{eur(t.total_eur)} all in</div> : null}
+      <button type="button" onClick={() => window.dispatchEvent(new Event('s2-open-trip'))}
+        style={{ marginTop: 6, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600 }}>See the whole trip</button>
+    </Box>)
+}
+
 function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void
   tap: (title: string, readBackId: string, route: string) => void }) {
   if (c.k === 'read_back' && c.choices && c.choices.length && c.read_back_id) return <CallCard c={c} tap={tap} />
@@ -416,10 +440,14 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
       <button type="button" onClick={() => { if (c.external) window.open(c.url, '_blank', 'noopener'); else window.dispatchEvent(new CustomEvent('s2-handover', { detail: c.url })) }}
         style={{ marginTop: 6, padding: '10px 18px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700 }}>Tap to finish</button>
     </Box>)
-  if (c.k === 'trip') return (
-    <Box k="Your trip" h={c.what}>
-      <button type="button" onClick={() => window.dispatchEvent(new Event('s2-open-trip'))}
-        style={{ marginTop: 6, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600 }}>See the whole trip</button>
+  if (c.k === 'trip') return <TripCard />
+  if (c.k === 'did_it') return (   // Sasha 283 · item 4c · the tap IS his answer (on the hand-over's one record)
+    <Box k="Your booking" h={untag(c.venue)}>
+      {c.done ? null : <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        {([['Yes, it’s booked', true], ['Not yet', false]] as const).map(([w, b]) => (
+          <button key={w} type="button" onClick={() => window.dispatchEvent(new CustomEvent('s2-did-it', { detail: { key: c.key, booked: b, how: 'button' } }))}
+            style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: b ? C.gold : 'transparent', color: b ? '#111' : C.gold, fontWeight: 700 }}>{w}</button>))}
+      </div>}
     </Box>)
   if (c.k === 'plans') return <Plans items={c.items} on={c.on} />
   if (c.k === 'notice') return (
@@ -543,6 +571,9 @@ export default function S2App() {
   const [lead, setLead] = useState<string | null>(null)   // …and the arrival that leads with it
   const loadedAt = useRef(0)
   const comeBackRef = useRef<(() => void) | null>(null)   // Sasha 273 · the one return handler (below), for the events' replay
+  const wordKey = useRef<string | null>(null)   // Sasha 283 · item 4c · the hand-over her ONE question waits on (askWord, below)
+  const askWordRef = useRef<(() => void) | null>(null)
+  const answerWordRef = useRef<((key: string, booked: boolean, how: string) => void) | null>(null)
   const checkReleaseRef = useRef<(() => void) | null>(null)   // Sasha 274 · the release check (below), for a turn's end
   const sleepEvent = useCallback((ev: 'tap_pause' | 'tap_face' | 'press_mic' | 'typed') => {
     const r = sleepStep(asleepRef.current ? ASLEEP : AWAKE, ev)
@@ -575,7 +606,7 @@ export default function S2App() {
     if (carried) { histRef.current = carried.hist; setTimeout(() => setMsgs(ms => (ms.length ? ms : carried.msgs)), 0) }   // out of the effect's own pass
     const l = localLastAt()
     if (l) lastAt.current = l
-    const t = setTimeout(() => { setBackLine(b => (b === undefined ? null : b)); setArrive(a => (a === undefined ? rule4().greet : a)) }, 2500)
+    const t = setTimeout(() => { setBackLine(b => (b === undefined ? null : b)); setArrive(a => (a === undefined ? rule4().greet : a)); askWordRef.current?.() }, 2500)   // Sasha 283 · item 4c · a page that came back reloaded: the one question too
     fetch(`/api/s2-memory?session=${encodeURIComponent(session.current)}`, { cache: 'no-store' }).then(r => r.json()).then((j: Ev) => {
       if (!live) return
       const line = typeof j?.line === 'string' && j.line ? untag(j.line) : null
@@ -686,6 +717,13 @@ export default function S2App() {
         body: JSON.stringify({ tid: m.tid, channel: m.channel, surface: 's2', first_visible_ms: m.visible, first_audible_ms: m.audible, done_ms: m.done }) }).catch(() => {}) }
     // Sasha 257 · Jon (row 861): "she can't hear me or just doesn't respond — tried 5 times". One turn reached her; the rest were
     // DROPPED here while a reply was still open (busy). A message sent while she's answering is kept and sent next — never lost.
+    // Sasha 283 · item 4c · her ONE question waits ("Did it go through?"): a plain yes / no answers it, on its record — never a turn
+    const word = wordKey.current ? wordOf(t) : null
+    if (word !== null && wordKey.current) {
+      offAudible(); setInput(''); setMsgs(ms => [...ms, { role: 'user', text: t, cards: [] }])
+      answerWordRef.current?.(wordKey.current, word, spokenAt ? 'voice' : 'chat')
+      return
+    }
     if (busy) { queued.current = [...queued.current, t]; setInput(''); return }
     if (dormant) setDormant(false)   // Sasha 231 · a message wakes her, with no re-introduction
     if (asleepRef.current) sleepEvent('typed')   // Sasha 246 item 2 · a message wakes her
@@ -774,8 +812,7 @@ export default function S2App() {
             else if (ev.kind === 'handover' && typeof ev.url === 'string' && ev.url.startsWith('https://')) add({ k: 'handover', url: ev.url, external: !!ev.external })   // Sasha 236
             else if (['flights', 'stays', 'flight_chosen', 'total', 'trip', 'trip_changed'].includes(String(ev.kind))) {   // Sasha 236 · the trip board refreshes; one card says so
               window.dispatchEvent(new Event('sasha-plan-refresh'))
-              const what = ev.kind === 'flights' ? 'Flights to choose from' : ev.kind === 'stays' ? 'Places to stay' : ev.kind === 'total' ? 'The total, all in' : 'Your trip, updated'
-              add({ k: 'trip', what })
+              add({ k: 'trip' })   // Sasha 283 · item 1 · what it says comes from the trip record (TripCard), never from the event's kind
             }
             else if (ev.kind === 'prepared' && typeof ev.url === 'string') add({ k: 'prepared', ev })   // Sasha 248
             else if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) add({ k: 'subscriptions', items: ev.items, total: ev.total, source: ev.source })   // CR 84
@@ -868,9 +905,45 @@ export default function S2App() {
     return () => window.removeEventListener('s2-sign-in', go)
   }, [])
   useEffect(() => speaker.onSpeaking(b => { speakingRef.current = b; if (!b) setTimeout(() => safeReload(), 0) }), [speaker, safeReload])
+  // Sasha 283 · item 4c · THE WAY BACK: a page he was handed (their booking page, a platform's) — back in the app, she asks the ONE
+  // question from its record (/api/booking/handover/word: agapi.venues.awaiting_word, asked once), or says what the confirmation
+  // watcher already knows. His tap, or a plain yes / no (presence-rule wordOf), goes on that record; anything else is a normal turn.
+  const askingWord = useRef(false)
+  const askWord = useCallback(() => {
+    if (askingWord.current || wordKey.current) return
+    askingWord.current = true
+    bookingReq('/api/booking/handover/word').then(r => {
+      const j = r.ok ? r.json : {}
+      const text = typeof j.ask === 'string' ? j.ask : typeof j.said === 'string' ? j.said : ''
+      if (!text) return
+      if (typeof j.ask === 'string') wordKey.current = String(j.key)
+      setMsgs(ms => [...ms, { role: 'sasha', text, cards: typeof j.ask === 'string' ? [{ k: 'did_it', key: String(j.key), venue: String(j.venue || '') }] : [] }])
+      histRef.current = [...histRef.current, { role: 'assistant', content: text }]
+      speaker.say(text)
+    }).catch(() => { /* asked again at the next return */ }).finally(() => { askingWord.current = false })
+  }, [speaker])
+  const answerWord = useCallback((key: string, booked: boolean, how: string) => {
+    if (wordKey.current !== key) return
+    wordKey.current = null
+    setMsgs(ms => ms.map(m => ({ ...m, cards: m.cards.map(c => (c.k === 'did_it' && c.key === key ? { ...c, done: true } : c)) })))
+    bookingReq('/api/booking/handover/word', { key, booked, how }).then(r => {
+      const say = r.ok && typeof r.json.say === 'string' ? r.json.say : 'I couldn’t note that just now — tell me again in a moment.'
+      setMsgs(ms => [...ms, { role: 'sasha', text: say, cards: [] }])
+      histRef.current = [...histRef.current, { role: 'assistant', content: say }]
+      speaker.say(say)
+      window.dispatchEvent(new Event('sasha-plan-refresh'))
+    }).catch(() => { wordKey.current = key })
+  }, [speaker])
+  useEffect(() => {
+    const h = (e: Event) => { const d = (e as CustomEvent).detail || {}; answerWord(String(d.key), !!d.booked, String(d.how || 'button')) }
+    window.addEventListener('s2-did-it', h)
+    return () => window.removeEventListener('s2-did-it', h)
+  }, [answerWord])
+  useEffect(() => { askWordRef.current = askWord; answerWordRef.current = answerWord }, [askWord, answerWord])
   const comeBack = useCallback(() => {
     voiceCtl.current?.resume()
     checkRelease()
+    askWord()   // Sasha 283 · item 4c · back from their page: the one question, whatever else her return does
     if (arrive === undefined && Date.now() - loadedAt.current < 3000) return   // the load's own rule 4 hasn't answered yet: it will
     const r = rule4()
     if (!r.greet || tabRef.current !== 'sasha') return
@@ -882,7 +955,7 @@ export default function S2App() {
       histRef.current = [...histRef.current, { role: 'assistant', content: line }]
     }
     touch()
-  }, [arrive, rule4, touch, checkRelease])
+  }, [arrive, rule4, touch, checkRelease, askWord])
   useEffect(() => { comeBackRef.current = comeBack }, [comeBack])
   useEffect(() => {
     if (!signedIn) return
@@ -938,7 +1011,6 @@ export default function S2App() {
           </div>
         </section>
       ) : tab === 'activity' ? <section style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0 }}><Activity /></section> : (
-        <>
           <section style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, padding: '0 16px 12px' }}>
             {msgs.length === 0 ? (
               <div style={{ textAlign: 'center', paddingTop: '18vh' }}>
@@ -960,6 +1032,11 @@ export default function S2App() {
               </div>))}
             <div ref={end} />
           </section>
+      )}
+          {/* Sasha 283 · item 3 · THE ONE AUDIO SESSION is the SHELL's, never a tab's (Tyler's iPhone, 23 Oct: on the Trip tab her voice went
+              very quiet, and back on Sasha the mic was off): the tab switch above swaps only the body. Everything below — the mic
+              (VoiceButton), her sound, the pause, her corner (#s2-face-slot), the box — is drawn under EVERY tab, so a tab change can never
+              unmount the mic (its cleanup stopped the capture, and iOS then played her through the call-volume route) */}
           {asleep ? (   /* Sasha 268 · item 8: paused, said plainly — the mic off, her voice stopped, her live face let go (S2Hello) */
             <div role="status" data-sasha-paused style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: `1px solid ${C.gold}`, background: 'rgba(232,185,49,.08)', fontSize: 14, lineHeight: 1.4, fontWeight: 600 }}>{ASLEEP_LINE}</div>) : null}
           {micNote ? (   /* Sasha 266 · the mic is "on" only when it hears; otherwise this, plainly, with how to allow it */
@@ -1007,8 +1084,6 @@ export default function S2App() {
             + `.s2-mic[data-cue="1"] button{animation:s2cue 1.6s ease-in-out infinite}.s2-mic[data-cue="1"] [data-voice-state]{font-size:12px}`
             + `@keyframes s2cue{0%,100%{box-shadow:0 0 0 0 rgba(232,185,49,.55)}50%{box-shadow:0 0 0 9px rgba(232,185,49,0)}}`
             + `@media (prefers-reduced-motion: reduce){.s2-mic[data-cue="1"] button{animation:none;box-shadow:0 0 0 3px #e8b931}}`}</style>
-        </>
-      )}
     </main>{hello}
     {handover ? (   /* Sasha 236 · Tap to finish in a sheet over her (the CAPTCHA, terms, their button) — then back to her, as /next */
       <div role="dialog" aria-label="Finish the booking" style={{ position: 'fixed', inset: 0, zIndex: 60, background: C.bg, display: 'flex', flexDirection: 'column' }}>

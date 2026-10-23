@@ -54,16 +54,109 @@ async def prepared_pages(account: Optional[str]) -> List[dict]:
     return [r for r in rows if str(r.get("date") or today) >= today]
 
 
-async def note_prepared(account: str, venue: str, when: str, party: Any, url: Optional[str]) -> None:
-    """A prepared page drawn for them: on the record (the same booking prepared again replaces its line, never a second one)."""
+async def note_prepared(account: str, venue: str, when: str, party: Any, url: Optional[str], link_id: Optional[str] = None) -> None:
+    """A prepared page drawn for them: on the record (the same booking prepared again replaces its line, never a second one).
+    Sasha 283 · item 4c: EVERY page hand-over writes this row (the copy card, and a platform's page with its booking_links id) — the
+    one place the way back reads."""
     row = {"venue": venue, "date": str(when or "")[:10], "time": str(when or "")[11:16], "party": int(party or 0),
-           **({"url": url} if url else {}), "at": datetime.now(timezone.utc).isoformat()}
+           **({"url": url} if url else {}), **({"link_id": link_id} if link_id else {}), "at": datetime.now(timezone.utc).isoformat()}
     same = lambda r: _base(r.get("venue") or "") == _base(venue) and r.get("date") == row["date"] and r.get("time") == row["time"]
     rows = ([r for r in await prepared_pages(account) if not same(r)] + [row])[-10:]
     _PREPARED[account] = rows
     from agapi import s2_memory as M
     if not await M.put_kind(account, PREPARED_KIND, rows):
         log.info("[venues] prepared page kept in this process only (no memory table)")
+
+
+# ── Sasha 283 · item 4c · THE WAY BACK: a page handed over is never left hanging ───────────────────────────────────────────────────
+# Tyler, 23 Oct (The India – Fleet Street): he finished on their page and had no way back, and nothing asked how it went. On his return
+# to the app she asks ONE question — "Did it go through?" — unless what watches for the confirmation already knows (a platform link's
+# record confirmed by its email; a confirmation found in their Gmail since): then she just says it. The answer goes on THIS row (and a
+# platform link's own record: /links/{id}/booked, its word). Asked once; a hand-over older than WORD_HOURS is never asked about.
+WORD_HOURS = 6
+WORD_BOOKED = ("booked_by_you", "confirmed")   # the row's outcomes get_status says as booked (by him, or by its confirmation)
+
+
+def _word_key(r: dict) -> str:
+    return "|".join(str(r.get(k) or "") for k in ("venue", "date", "time"))
+
+
+async def _put_row(account: str, key: str, **fields: Any) -> Optional[dict]:
+    rows = await prepared_pages(account)
+    hit = next((r for r in rows if _word_key(r) == key), None)
+    if hit is None:
+        return None
+    hit.update(fields)
+    _PREPARED[account] = rows
+    from agapi import s2_memory as M
+    if not await M.put_kind(account, PREPARED_KIND, rows):
+        log.info("[venues] the hand-over's answer kept in this process only (no memory table)")
+    return hit
+
+
+async def _known(account: str, r: dict) -> Optional[str]:
+    """What watches for the confirmation already knows: "confirmed" (their platform's email, on the link's record) or None."""
+    try:
+        if r.get("link_id"):
+            from booking_signer import ladder_routes as LR
+            l = await LR.LADDER_STORE.get_link(account, str(r["link_id"])) if LR.LADDER_STORE is not None else None
+            if l and l.get("status") == "confirmed":
+                return "confirmed"
+            return None
+        from booking_signer import mailbox as MB
+        if MB.STORE is None:
+            return None
+        since = str(r.get("at") or "")
+        for f in await MB.STORE.list_finds(account):
+            fx = f.get("facts") or {}
+            if f.get("kind") == "confirmation" and _base(str(fx.get("venue") or "")) == _base(r.get("venue") or "") \
+                    and str(f.get("found_at") or "") >= since:
+                return "confirmed"
+    except Exception as e:   # the watcher unreadable: she asks instead (never a guess)
+        log.info("[venues] confirmation not read for the way back: %s", type(e).__name__)
+    return None
+
+
+async def awaiting_word(account: Optional[str]) -> Optional[dict]:
+    """The newest page handed over in the last WORD_HOURS with no answer yet → {key, venue, when, ask | said}; marked asked (once)."""
+    if not account:
+        return None
+    from app.agent import voice as V
+    now = datetime.now(timezone.utc)
+    for r in reversed(await prepared_pages(account)):
+        if r.get("asked") or r.get("outcome"):
+            continue
+        try:
+            at = datetime.fromisoformat(str(r.get("at")))
+        except ValueError:
+            continue
+        if now - at > timedelta(hours=WORD_HOURS):
+            continue
+        key = _word_key(r)
+        when = " ".join(x for x in (r.get("date"), r.get("time")) if x)
+        if await _known(account, r) == "confirmed":
+            await _put_row(account, key, asked=now.isoformat(), outcome="confirmed")
+            return {"key": key, "venue": r["venue"], "when": when, "said": V.went_through(r["venue"])}
+        await _put_row(account, key, asked=now.isoformat())
+        return {"key": key, "venue": r["venue"], "when": when, "ask": V.DID_IT}
+    return None
+
+
+async def answer_word(account: str, key: str, booked: bool, how: str = "button") -> dict:
+    """His answer, on the ONE record: this row's outcome — and a platform link's own record (its /booked: on his word, never as the
+    platform's confirmation). → {ok, say}."""
+    from app.agent import voice as V
+    rows = await prepared_pages(account)
+    r = next((x for x in rows if _word_key(x) == key), None)
+    if r is None:
+        return {"ok": False, "say": V.WORD_GONE}
+    if booked and r.get("link_id"):
+        GW = _API()
+        status, _j = await GW.api(account, "POST", f"/api/booking/links/{r['link_id']}/booked", {"how": how if how in ("button", "voice", "chat") else "button"})
+        if status != 200:
+            log.warning("[venues] the link's own record didn't take his word (%s)", status)
+    await _put_row(account, key, outcome="booked_by_you" if booked else "not_yet", said_at=datetime.now(timezone.utc).isoformat(), how=how)
+    return {"ok": True, "say": V.BOOKED_BY_YOU if booked else V.NOT_YET}
 
 
 def _API():
@@ -1504,6 +1597,10 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         text = (f"📝 {venue} — your booking, ready to copy into their page:\n" + "\n".join(f"{x['label']}: {x['value']}" for x in phone_fields)
                 + f"\n\nTheir page: {held['url']}\n" + (prep.get("human_step") if prep and prep.get("human_step") else
                                                            "Press confirm there — it's booked only when their page says so."))
+        if one_path(ctx):   # Sasha 283 · item 4c: the hand-over's way back (old S1: its own message, untouched)
+            from app.agent import voice as _V
+            from booking_signer import wa_agent as WA
+            text = f"{text}\n\n{_V.way_back(WA.s2_link())}"
         sent = False
         try:
             ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
@@ -1542,7 +1639,13 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         url = j.get("url") or held.get("url")
         text = held.get("hotel_text") or SL.platform_message(venue, held.get("platform") or "their booking page", dt.date(), dt.time(),
                                                              held["party"], bool(held.get("slot_filled")), url)   # Sasha 253 · G8 — the stay
+        if one_path(ctx):   # Sasha 283 · item 4c: the hand-over's way back (old S1: its own message, untouched)
+            from app.agent import voice as _V
+            from booking_signer import wa_agent as WA
+            text = f"{text}\n\n{_V.way_back(WA.s2_link())}"
         out = await GW.tap_platform(ctx.account, text, url, held["id"], venue, held["when"])
+        if one_path(ctx):   # Sasha 283 · item 4c: on the one row the way back reads, with its link's own record
+            await note_prepared(ctx.account, venue, held["when"], held["party"], url, link_id=held["id"])
         sent = "sent" in out and "not" not in out
         if not sent:   # Sasha 264 · item 3: the reason was dropped — Tyler's tattoo link "never arrived" and nothing said why
             log.warning("[venues] %s's page not sent to the phone: %s", venue, out)

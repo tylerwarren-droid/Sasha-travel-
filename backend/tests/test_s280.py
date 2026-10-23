@@ -176,7 +176,7 @@ class HotelOnItsOwn(unittest.TestCase):
 
     def test_a_hotel_on_its_own_never_gets_flights_chosen(self):
         src = __import__("inspect").getsource(BB.refresh)
-        self.assertIn("elif not chosen_fl and not PS.is_single(p):", src)
+        self.assertIn("elif not chosen_fl and not PS.is_single(p) and", src)   # Sasha 283 · moved: + "and the trip needs flights"
 
 
 class HerWords(unittest.TestCase):

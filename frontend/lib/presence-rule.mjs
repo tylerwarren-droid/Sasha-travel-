@@ -133,3 +133,14 @@ export function withCamera(lead, cameraOff, live) {
 
 /** Is this phase her arrival (the opening)? Re-exported so S2Hello asks one module. */
 export const arriving = (phase) => OPENING.includes(phase)
+
+/** Sasha 283 · item 4c · THE WAY BACK: is this his plain answer to her ONE question ("Did it go through?")? A short yes → true, a
+ *  short no / not yet → false, anything else (a new request, a question) → null: it goes to her as a turn, never taken as an answer.
+ *  @param {string} text  @returns {boolean | null} */
+export function wordOf(text) {
+  const t = String(text || '').trim().toLowerCase().replace(/[.!,]+$/g, '')
+  if (!t || t.split(/\s+/).length > 6 || t.includes('?')) return null
+  if (/^(no|nope|nah|not yet|not really|it didn'?t|didn'?t|it did not|no it didn'?t|not booked)\b/.test(t)) return false
+  if (/^(yes|yeah|yep|yup|it did|it went through|all booked|booked|done|all done|sure did|i did)\b/.test(t)) return true
+  return null
+}

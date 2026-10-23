@@ -234,7 +234,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         cards = [flight_card({"flights": opts[leg], "leg": leg}, {"origin": (opts[leg][0] or {}).get("from"),
                                                                   "destination": (opts[leg][0] or {}).get("to"), "passengers": res.get("party")})
                  for leg in ("out", "back") if opts.get(leg)]
-        return {"type": "render", "kind": kind, "cards": cards, **({"total": res["breakdown"]} if res.get("breakdown") else {})} if cards else None
+        return {"type": "render", "kind": kind, "cards": cards, **({"total": res["breakdown"]} if res.get("breakdown") else {})} \
+            if cards or res.get("flights_needed") is False else None   # Sasha 283 · item 2: a trip with no flights still has its card
     if kind == "total":   # Sasha 212 · one figure, its parts marked quoted / estimated — on the card
         return {"type": "render", "kind": kind, "total": res["breakdown"]} if res.get("breakdown") else None
     if kind == "flight_chosen":

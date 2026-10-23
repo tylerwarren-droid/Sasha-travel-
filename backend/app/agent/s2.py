@@ -129,8 +129,16 @@ STANDALONE_TEXT = (
      "  own is `search_stays`, then `swap_stay` with the check-in day and nights. She never adds a hotel to a flight, or a flight to a\n"
      "  hotel, unless they ask, and she never says she can't book one alone.\n"
      "- **When they ask for a trip,** the moment she knows the destination, dates and party, she calls `prepare_trip`."),
+    # Sasha 283 · item 2 (Tyler, 23 Oct: she chose Rio and asked "How many people are flying from Ottawa?"): she ASKS whether they need
+    # flights too — once, in her normal planning — and only on a yes asks where from. Supersedes 7 Oct's "ask where they fly from".
+    ("She calls it again once she knows\n  where they fly from. It starts the itinerary and the flight searches in the background",
+     "While planning she asks, once and in her own words, whether they also need flights; only on a\n"
+     "  yes does she ask where they fly from, and then calls it again with that origin. She never assumes flights or a home city;\n"
+     "  if they've already said it (\"flying from Madrid\", \"no flights, we're driving\"), that is their answer and she doesn't ask.\n"
+     "  It starts the itinerary (and, with an origin, the flight searches) in the background"),
     ("- **When she has who, what, when and from where,** she calls `propose_trip`",
-     "- **When it's a trip and she has who, what, when and from where,** she calls `propose_trip`"),
+     "- **When it's a trip and she has who, what and when, and whether they need flights (on a yes, from where),** she calls\n"
+     "  `propose_trip` (`flights` true with the origin, or false: stays and plans only — the total says so)"),
     ("- **ONE TOTAL.** Flights and hotels are one trip: she says one all-in figure",
      "- **ONE TOTAL.** What they're booking has one figure (a trip's flights and hotels together): she says one all-in figure"),
     ("(how many hotels, the flight out and home by airline and day, the\n     total)",
@@ -154,11 +162,13 @@ STANDALONE_TOOLS = {
                       "these cards (choose_offer → hold_booking → book) — no trip and no hotel needed. When the flight is part of the trip "
                       "they're working on (its route and its days), the cards are that trip's options for that leg.",
     "propose_trip": "ONLY when they ask for a whole trip (a holiday, an itinerary, \"plan me…\"): a day-by-day itinerary with somewhere to "
-                    "stay each night, a flight on each leg already chosen, and the whole trip's total. Never for a flight or a hotel on its "
-                    "own. Replaces the account's current proposal. Nothing is booked.",
+                    "stay each night, and the whole trip's total. `flights` is THEIR answer to whether they also need flights: true → a "
+                    "flight on each leg from `origin`, already chosen, in the total; false → stays and plans only, no flight searched, and "
+                    "the total says so. Never for a flight or a hotel on its own. Replaces the account's current proposal. Nothing is booked.",
     "prepare_trip": "ONLY when they've asked for a whole trip (never for a flight or a hotel on its own): start getting it ready in the "
-                    "background once its destination, dates and party are known (and again once the origin is): the itinerary, then "
-                    "both legs' flights. Returns at once — keep chatting; propose_trip with the same details picks it up.",
+                    "background once its destination, dates and party are known: the itinerary — and, only once they've said they need "
+                    "flights and from where (origin), both legs' flights. Returns at once — keep chatting; propose_trip with the same "
+                    "details picks it up.",
     "swap_stay": "A hotel, one of the stays search_stays just showed. In the trip they're working on: where they stay in that city. On its "
                  "own (a hotel only, no trip): give check_in and nights (and the party if known) — it is then bookable by itself "
                  "(hold_booking → book), nothing else added. Returns the total.",
@@ -177,6 +187,13 @@ def standalone_tool(t: dict) -> dict:
                              "check_in": {"type": "string", "format": "date", "description": "a hotel on its own: the check-in day"},
                              "nights": {"type": "integer", "minimum": 1, "maximum": 30, "description": "a hotel on its own: how many nights"},
                              "party": {"type": "integer", "minimum": 1, "maximum": 9}}
+        out["input_schema"] = sch
+    if t["name"] == "propose_trip":   # Sasha 283 · item 2: whether they need flights is asked, never assumed — origin only on a yes
+        sch = dict(t.get("input_schema") or {})
+        sch["properties"] = {**(sch.get("properties") or {}),
+                             "flights": {"type": "boolean", "description": "their answer: do they also need flights? (asked once, never assumed)"},
+                             "origin": {"type": "string", "description": "where they fly from — only when flights is true"}}
+        sch["required"] = [r for r in (sch.get("required") or []) if r != "origin"] + ["flights"]
         out["input_schema"] = sch
     return out
 

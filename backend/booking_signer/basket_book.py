@@ -246,8 +246,9 @@ async def refresh(account: str, origin: str) -> Dict[str, Any]:
             return {"why": "there's no flight on it yet — search one, then pick it"}
         for rows in legs.values():
             await BK.choose(account, min(rows, key=lambda r: float(r.get("price_amount") or 0))["id"])
-    elif not chosen_fl and not PS.is_single(p):   # nothing chosen: out and back, the cheapest bookable (said in the read-back) —
-        # Sasha 280 · never for a hotel booked on its own (no flight was asked for)
+    elif not chosen_fl and not PS.is_single(p) and (p.get("plan") or {}).get("flights") is not False:   # nothing chosen: out and back,
+        # the cheapest bookable (said in the read-back) — Sasha 280 · never for a hotel booked on its own (no flight was asked for);
+        # Sasha 283 · item 2: never for a trip they said needs no flights (the record says so)
         out_day, back_day = PS.leg_days(p)   # Sasha 251 · the trip record's own days (before: the day before it, and the day after its last)
         out_day = out_day or start.isoformat()
         back_day = back_day or str(days[-1].get("date"))[:10]

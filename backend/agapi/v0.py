@@ -711,7 +711,9 @@ async def prepare_trip(ctx: Ctx, a: dict) -> dict:
     key = _prep_key(a)
     p = _PREP.get(ctx.account)
     if not p or p["key"] != key:
-        p = _PREP[ctx.account] = {"key": key, "itin": _aio.create_task(_build(a, ctx.account)), "flights": {}, "args": dict(a)}
+        # Sasha 283 · item 2: on /s2 no home city is assumed while planning — the itinerary is asked for without one until they say
+        built_a = {**a, "flights": False} if _standalone(ctx) and not (a.get("origin") or "").strip() else a
+        p = _PREP[ctx.account] = {"key": key, "itin": _aio.create_task(_build(built_a, ctx.account)), "flights": {}, "args": dict(a)}
     origin = (a.get("origin") or "").strip()
     if origin and origin.lower() not in p["flights"]:
         async def legs(itin_task=p["itin"], o=origin):
@@ -736,6 +738,11 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     nights, party = int(a.get("nights") or 7), int(a.get("party") or 2)
     if not 1 <= nights <= 30 or not 1 <= party <= 9:
         raise ToolError("size_invalid", "nights 1–30, party 1–9")
+    # Sasha 283 · item 2 · whether they need flights is THEIR answer (/s2 and /next with parity): false → stays and plans only, no flight
+    # searched; true → from the origin they said (never assumed). Old S1 (no `flights`): as before.
+    no_flights = _standalone(ctx) and a.get("flights") is False
+    if _standalone(ctx) and a.get("flights") is True and not str(a.get("origin") or "").strip():
+        raise ToolError("origin_needed", "they need flights: ask where they fly from (one short question), then propose_trip with origin")
     origin = a.get("origin") or "Madrid"
     t_pt, laps = time.perf_counter(), {}   # Sasha 257 · where propose_trip's 14–17 s goes (row 863), logged per phase
     def lap(k: str) -> None:
@@ -747,9 +754,10 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
         try:
             built = await prep["itin"]
             used_prefetch["itinerary"] = True
-            if origin.lower() not in prep["flights"]:
-                await prepare_trip(ctx, {**prep["args"], "origin": origin})
-            legs_task = prep["flights"][origin.lower()]
+            if not no_flights:
+                if origin.lower() not in prep["flights"]:
+                    await prepare_trip(ctx, {**prep["args"], "origin": origin})
+                legs_task = prep["flights"][origin.lower()]
         except Exception as e:   # a prepared task failed: build it now instead
             log.info("[agapi] prefetch unusable (%s) — building now", type(e).__name__)
             _PREP.pop(ctx.account, None)
@@ -761,6 +769,8 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     if not itin or not itin.get("days"):
         raise ToolError("plan_failed", "the itinerary couldn't be built just now — try again")
     itin["party"] = party
+    if no_flights:   # Sasha 283 · on the trip record: no flights wanted (its card and total say so)
+        itin["flights"] = False
     # Sasha 251 · RIGHT DATES: decided once (plan_store.dates_for), carried by the plan, written on the trip record as they are;
     # each day of the plan dated from the first (the stays check in and out on them)
     itin["dates"] = PS.dates_for(a["start_date"], nights)
@@ -787,6 +797,8 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
     if searched is not None and searched.get("asked") != want:   # Sasha 251 · prefetched on other days than the record's: searched again
         log.info("[agapi] prefetched flights were for %s, the trip is %s — searching now", searched.get("asked"), want)
         searched, used_prefetch["flights"] = None, False
+    if no_flights:   # Sasha 283 · no flight searched, none chosen
+        searched = {"legs": [], "found": []}
     if searched is None:
         searched = await _search_legs(origin, days, out_day, back_day, party, itin.get("airports"))
     lap("save+flight_search")
@@ -822,6 +834,8 @@ async def propose_trip(ctx: Ctx, a: dict) -> dict:
             "days": [{"day": d.get("day"), "city": d.get("city"), "stay": hotel(d), "title": d.get("title")} for d in days],
             "flight_out": flights.get("out"), "flight_back": flights.get("back"), **({"flight_note": "; ".join(why)} if why else {}),
             "flight_options": options, "party": party,
+            **({"flights_needed": False, "total_is": "stays and plans only — no flights (they said they don't need them); say so with the total"}
+               if no_flights else {}),   # Sasha 283 · item 2
             "dates": {"start": out_day, "end": back_day, "nights": nights},   # Sasha 251 · the trip record's days, as she should say them
             "total_eur": q.get("eur") if "eur" in q else None, **({"total_note": q.get("why")} if "why" in q else {}),
             **({"how_total": TOTAL_HOW} if "eur" in q else {}),

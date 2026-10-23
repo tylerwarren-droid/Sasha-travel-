@@ -3,7 +3,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { presence, ring, GREEN, reappear, voiceOf, inView, dayOf, HOLD_MS, IDLE_MS, VOICE_ON, TAP_TO_TALK, PAUSED, WORK_PULSE, WORK_PULSE_CSS, speakVia, withCamera } from '../lib/presence-rule.mjs'
+import { presence, ring, GREEN, reappear, voiceOf, inView, dayOf, HOLD_MS, IDLE_MS, VOICE_ON, TAP_TO_TALK, PAUSED, WORK_PULSE, WORK_PULSE_CSS, speakVia, withCamera, wordOf } from '../lib/presence-rule.mjs'
 import { OPENING, openingShown } from '../lib/greeting-rule.mjs'
 
 const P = (o) => presence({ phase: 'bubble', signedIn: true, ...o })
@@ -196,4 +196,29 @@ test('281 · the page asks for the camera line only while her live face is up', 
   assert.match(app, /const l = helloCtl\.current\.live\(\) \? cameraOffLine\(\) : ''/)
   const fl = code(readFileSync(new URL('../lib/first-line.ts', import.meta.url), 'utf8'))
   assert.equal((fl.match(/withCamera\(/g) || []).length, 2)                                             // arrival and news
+})
+
+test('283 · item 4c · his plain answer to "Did it go through?" — and only a plain one', () => {
+  assert.equal(wordOf('Yes'), true)
+  assert.equal(wordOf('yep, all booked'), true)
+  assert.equal(wordOf('It went through!'), true)
+  assert.equal(wordOf('no'), false)
+  assert.equal(wordOf('Not yet'), false)
+  assert.equal(wordOf("it didn't"), false)
+  assert.equal(wordOf('yes can you also book a spa on Saturday at ten'), null)   // a new request is a turn
+  assert.equal(wordOf('did it?'), null)
+  assert.equal(wordOf('book me a table'), null)
+})
+
+test('283 · item 3 · the mic, her sound and her corner are the shell\'s — no tab can unmount them', () => {
+  const app = code(readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8'))
+  const tabs = app.indexOf("{tab === 'trip' ? (")
+  const body = app.indexOf("<div ref={end} />", tabs)
+  const close = app.indexOf(')}', body)
+  assert.ok(tabs > 0 && body > tabs && close > body)
+  for (const owner of ['<VoiceButton', 'id="s2-face-slot"', '<SleepButton', 'aria-label="Message Sasha"']) {
+    const at = app.indexOf(owner)
+    assert.ok(at > close, `${owner} sits after the tab switch closes (drawn under every tab)`)
+  }
+  assert.equal((app.match(/<VoiceButton /g) || []).length, 1)   // one mic
 })

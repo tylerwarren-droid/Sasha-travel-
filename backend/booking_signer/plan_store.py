@@ -478,6 +478,47 @@ async def view(account: Optional[str], p: dict, bookings: List[dict]) -> dict:
     return m
 
 
+NO_FLIGHTS = "Stays and plans only — no flights"   # Sasha 283 · item 2: a trip they need no flights for, said on its card and total
+
+
+def card(view: Optional[dict], total: Optional[dict]) -> Optional[dict]:
+    """Sasha 283 · item 1 · THE TRIP CARD under her reply, from THE VIEW the Trip tab shows (view() + the basket's one total — the
+    figure she says): what the trip IS — the place and nights, where they stay, the flights if any, the one total. Its title is made
+    from what it shows (found live, Tyler 23 Oct: six nights in Rio at the Copacabana Palace, and the card said "Flights to choose
+    from" — its title came from the event's kind). Pure. → {title, lines, total_eur} or None (no trip)."""
+    if not view:
+        return None
+    days = view.get("days") or []
+    places = list(dict.fromkeys(str(d.get("city") or "").split(",")[0].strip() for d in days if d.get("city")))
+    flights = (view.get("basket") or {}).get("flights") or []
+    single = view.get("single")
+    try:
+        nights = (date.fromisoformat(str(view["end"])[:10]) - date.fromisoformat(str(view["start"])[:10])).days
+    except (KeyError, TypeError, ValueError):
+        nights = 0
+    if single == "flight":
+        legs = [f"{f.get('from') or ''} → {f.get('to') or ''}".strip(" →") for f in flights]
+        title = (legs[0] if legs else str(view.get("title") or "Your flight")) or "Your flight"
+    else:
+        title = " · ".join(places[:2]) or str(view.get("title") or "Your trip")
+        if nights > 0:
+            title += f" · {nights} night{'s' if nights != 1 else ''}"
+    lines: List[str] = []
+    stays = list(dict.fromkeys(str(d["stay"]["name"]) for d in days if isinstance(d.get("stay"), dict) and d["stay"].get("name")))
+    if not stays:
+        stays = list(dict.fromkeys(str(h.get("name") if isinstance(h, dict) else h) for d in days if (h := d.get("hotel"))))
+    if stays:
+        lines.append("Staying at " + ", ".join(stays[:3]) + (f" and {len(stays) - 3} more" if len(stays) > 3 else ""))
+    if flights:
+        lines.append("Flights: " + "; ".join(f"{f.get('owner') or ''} {f.get('from') or ''} → {f.get('to') or ''}".strip() for f in flights[:2]))
+    elif view.get("flights") is False:
+        lines.append(NO_FLIGHTS)
+    elif single == "flight":
+        lines.append("Flights to choose from")   # the card IS the flight list's: nothing chosen yet
+    t = (total or {}).get("total_eur")
+    return {"title": title, "lines": lines, "total_eur": t if isinstance(t, (int, float)) else None}
+
+
 def text(plan: dict) -> List[str]:
     """Compact, for WhatsApp and the voice: one block per day — the place, the bookings with their status, what's planned."""
     from .sentences import day_words

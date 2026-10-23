@@ -419,6 +419,22 @@ HELLO_BACK = "Hey {name}"
 # presence-rule withCamera): with no live face there is no camera to turn off — her line is the hello alone, from the corner.
 CAMERA_OFF = "I'm turning my camera off — just talk, or tap to see me."
 
+# Sasha 283 · item 4c · THE WAY BACK (agapi.venues.awaiting_word / answer_word): the one question on his return, and its answers
+DID_IT = "Did it go through?"
+BOOKED_BY_YOU = "Noted — it's in your bookings as booked by you."
+NOT_YET = "OK — it's not booked yet. It stays on your list."
+WORD_GONE = "That one isn't waiting any more."
+
+
+def went_through(venue: str) -> str:
+    """The watcher already knows (their confirmation came in): said, never asked."""
+    return f"Their confirmation came in — {venue} is booked."
+
+
+def way_back(link: str) -> str:
+    """The last line of every page hand-over sent to his phone: one tap back to her."""
+    return f"Done? Back to Sasha: {link}"
+
 
 def arrival_line(name: Optional[str] = None, back: bool = False) -> str:
     """Her arrival, in one breath: "Hey there." / (a return) "Hey <first name>." — then CAMERA_OFF."""

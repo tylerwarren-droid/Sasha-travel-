@@ -101,7 +101,10 @@ def _from_profile(res: dict) -> dict:
             # engine classified (site / person), each with its owner — Sasha reads these, never decides "has a form" herself
             **({"reservable": res["reservable"]} if isinstance(res.get("reservable"), dict) else {}),
             **({"sources": [c for c in res["channels"] if isinstance(c, dict)]} if isinstance(res.get("channels"), list) else {}),
-            "venue_id": res.get("venue_id"), "cant_read": _said(res.get("cant_read"))}
+            "venue_id": res.get("venue_id"), "cant_read": _said(res.get("cant_read")),
+            # Sasha 284 · AgAPI's ONE booking decision (CR 107 handoff.decide: route · say_text · button · options) — kept whole, never
+            # re-decided here: S2 says its say_text and shows its button (venues.follow / read_booking_route)
+            **({"decision": res["decision"]} if isinstance(res.get("decision"), dict) and res["decision"].get("route") else {})}
 
 
 def _from_engine(res: dict) -> dict:
@@ -171,7 +174,8 @@ async def prepare(place: dict, person: dict, date: str, time_: str, party: int) 
     if not r.get("ok") or res.get("submitted") or not str(res.get("link") or "").startswith("https://"):
         return None   # never a booking that went out by itself; never a link that isn't one
     return {"link": res["link"], "say": res.get("say"), "human_step": res.get("human_step"), "missing": res.get("missing") or [],
-            "expires_at": res.get("expires_at")}
+            "expires_at": res.get("expires_at"),
+            **({"decision": res["decision"]} if isinstance(res.get("decision"), dict) else {})}   # Sasha 284 · its ONE decision, whole
 
 
 def _key_of(place: dict) -> str:
@@ -312,6 +316,13 @@ def channel(site: Optional[dict]) -> Optional[dict]:
             "confirm": ((site or {}).get("confirm") or {}).get("type"), "has_form": bool((site or {}).get("form"))}
 
 
+def decision(place: Optional[dict]) -> Optional[dict]:
+    """Sasha 284 · AgAPI's ONE booking decision for this place (venue.profile's `decision`, read once and cached with its profile):
+    {route, how_far, say_text, button {label, link, sends}, options?, sender?}. None: not read, or no decision in the answer."""
+    d = ((cached(place) or {}) if place else {}).get("decision")
+    return d if isinstance(d, dict) and d.get("route") else None
+
+
 def text(p: dict) -> str:
     """WhatsApp: the same detail as the sheet, as text + its link."""
     lines = [f"*{p.get('name')}*"]
@@ -345,4 +356,4 @@ def reservable_say(place: Optional[dict]) -> Optional[str]:
 
 
 __all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "ASK_FILL", "ENGINE_OP", "CALL",
-           "link_profile", "person_channel", "reservable_say"]
+           "link_profile", "person_channel", "reservable_say", "decision"]

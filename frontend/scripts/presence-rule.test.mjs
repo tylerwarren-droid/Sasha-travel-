@@ -229,3 +229,8 @@ test('283 · item 3 · the mic, her sound and her corner are the shell\'s — no
   }
   assert.equal((app.match(/<VoiceButton /g) || []).length, 1)   // one mic
 })
+
+test('284 · the hand-over card draws AgAPI\'s button, word for word', () => {
+  const cards = readFileSync(new URL('../app/components/cards/S2Cards.tsx', import.meta.url), 'utf8')
+  assert.ok(cards.includes("{untag(String(ev.button || 'Open their booking page'))}"))
+})

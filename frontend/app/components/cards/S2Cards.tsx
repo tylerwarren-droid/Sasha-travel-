@@ -271,8 +271,8 @@ export function PreparedCard({ ev }: { ev: Ev }) {
           <button type="button" onClick={() => copy(f.label, String(f.value))} style={{ padding: '5px 12px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 }}>
             {copied === f.label ? 'Copied' : 'Copy'}</button>
         </div>))}
-      <a href={ev.url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, padding: '10px 18px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 800, textDecoration: 'none' }}>Open their booking page</a>
-      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 8 }}>{ev.on_phone ? 'Also sent to your phone. ' : ''}You press confirm there — it&apos;s booked only when their page says so.</div>
+      <a href={ev.url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, padding: '10px 18px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 800, textDecoration: 'none' }}>{untag(String(ev.button || 'Open their booking page'))}</a>{/* Sasha 284 · AgAPI's button, word for word */}
+      <div style={{ fontSize: 12.5, color: C.dim, marginTop: 8 }}>{ev.on_phone ? 'Also sent to your phone. ' : ''}{ev.button && ev.human_step ? `You ${untag(String(ev.human_step))} there — it's booked only when they confirm.` : <>You press confirm there — it&apos;s booked only when their page says so.</>}</div>
     </Box>)
 }
 

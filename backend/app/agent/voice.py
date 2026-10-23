@@ -424,6 +424,9 @@ DID_IT = "Did it go through?"
 BOOKED_BY_YOU = "Noted — it's in your bookings as booked by you."
 NOT_YET = "OK — it's not booked yet. It stays on your list."
 WORD_GONE = "That one isn't waiting any more."
+# Sasha 284 · Kanoe may not act here (the booking rules' refusal) but AgAPI's decision found a route: their page, theirs to finish
+FINISH_IT = "Here's their page with your booking ready — you finish it there, and I'll ask how it went when you're back."
+OPEN_THEIR_PAGE = "Open their page"
 
 
 def went_through(venue: str) -> str:

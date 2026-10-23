@@ -221,6 +221,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T61": ("Every line she says while her face is on screen moves her lips (Face.say, through one speak()); without her live face the "
             "line is said with her in the corner, never over a still or a frozen face; the camera line only when there is a camera",
             ["tests.test_s281"]),
+    "T62": ("A paid thing is booked ONLY by paid_watch.settle, from the record written before paying (it goes with its owner): no "
+            "watcher books by itself, no payment is offered without its record — a trip is never written for an owner that is gone",
+            ["tests.test_s282"]),
 }
 
 _RUNNER = """

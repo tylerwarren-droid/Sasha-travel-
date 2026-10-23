@@ -123,9 +123,14 @@ async def paid_cases(a: str, yes: dict) -> None:
     while not q.empty():
         evs.append(q.get_nowait())
     ev = evs[0] if evs else {}
+    from app.agent import voice as V
+    # Sasha 282 · MOVED to Sasha 279's words: "Your payment for <item> went through — you're booked." + the closing line, which says
+    # it was SENT TO YOUR EMAIL (the send result) — not the address; the email itself goes to gate@example.com. No figure (a price)
+    # spoken: the closing line's own hours (Tyler's words, voice.CLOSING) and the trip's title ("8 days in Vietnam") are words.
     ok("AGENT 8 (Sasha 212): paid → booked by Pacioli → ONE event to the open page → she says it (no figures spoken) → the email queued",
        (r or {}).get("status") == "booked" and len(evs) == 1 and ev.get("type") == "booked" and "you're booked" in ev.get("text", "")
-       and "gate@example.com" in ev.get("text", "") and not _re.search(r"\d", ev.get("spoken", "").replace("gate at example dot com", ""))
+       and ev.get("emailed") is True and ev.get("text", "").endswith(V.closing_line(True))
+       and not _re.search(r"[€$£]\s?\d|\d\s?(?:€|EUR|euros?)\b|\b\d+[.,]\d{2}\b", ev.get("spoken", ""), _re.I)
        and (ev.get("card") or {}).get("url", "").endswith("/next?tab=trip") and len(mails) == 1 and mails[0]["to"] == "gate@example.com"
        and "TEST" in mails[0]["subject"] and ev["card"]["url"] in mails[0]["text"],
        f"settle {(r or {}).get('status')} · events {[e.get('type') for e in evs]} · mails {len(mails)} · {ev.get('text', '')[:120]}")

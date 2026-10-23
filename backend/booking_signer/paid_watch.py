@@ -133,6 +133,21 @@ async def fulfil(row_id, payload: dict) -> dict:
                                       "where id = $1", row_id, "Whole-trip TEST payment (booked as its own items)",
                                       DONE + json.dumps({"sid": sid, "status": r.get("status")})))
         return r
+    if payload["kind"] == "hotel":   # Sasha 282 · the WhatsApp TEST hotel: booked here, from its record, like every paid thing
+        from . import hotel_test as HT
+        h = payload["stay"]
+        ref = HT.new_ref()
+        tid = await HT.RECORD(account, h["hotel"], h["city"], HT.tz_of(h.get("country")), h["checkin"], h["nights"], h["party"], ref)
+        nights = f"{h['nights']} night{'s' if h['nights'] != 1 else ''}"
+        if not tid:
+            await run(lambda x: x.execute("update trip_items set status = 'failed', escalation_notes = $2, updated_at = now() where id = $1",
+                                          row_id, DONE + json.dumps({"sid": sid, "why": "not recorded"})))
+            return {"status": "failed", "say": "Your TEST payment went through, but the test stay wasn't added to your list."}
+        await run(lambda x: x.execute("update trip_items set status = 'cancelled', provider_name = $2, escalation_notes = $3, updated_at = now() "
+                                      "where id = $1", row_id, f"TEST hotel payment — {h['hotel']} (booked as its own item)"[:200],
+                                      DONE + json.dumps({"sid": sid, "status": "booked", "ref": ref})))
+        return {"status": "booked", "booking_reference": ref, "title": f"{h['hotel']}, {h['checkin']}, {nights} ({HT.LABEL})",
+                "say": f"🧪 {HT.LABEL}: {h['hotel']}, {h['checkin']}, {nights}. Reference {ref} — in your itinerary and calendar, marked TEST."}
     return {"status": "failed", "say": "unknown payment kind"}
 
 
@@ -191,7 +206,7 @@ async def settle(sid: str) -> Optional[dict]:
     try:   # Sasha 212 · the open page hears it at once, and the confirmation email goes (booked only)
         from . import live_events as LE, plan_store as PS
         p = await PS.latest(payload["account"]) if payload.get("kind") == "trip" else None
-        await LE.on_settled(payload["account"], r, (p or {}).get("title"), key=sid, wa_extra=_extras(r))
+        await LE.on_settled(payload["account"], r, (p or {}).get("title") or r.get("title"), key=sid, wa_extra=_extras(r))
     except Exception as e:
         log.error("[paid_watch] the page was not told: %s: %s", type(e).__name__, e)
     return r

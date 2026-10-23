@@ -1343,30 +1343,32 @@ async def _hotel_test_pay(ctx: dict, pend: dict) -> None:
     if "why" in got:
         ctx["out"].text(f"I can't take the test payment yet — {got['why']}. No test booking was made.")
         return
+    # Sasha 282 · written down BEFORE the payment is offered (as a flight, Sasha 183): settle books it from this record, and only from it
+    from . import paid_watch as PWT
+    stay = {k: pend.get(k) for k in ("hotel", "city", "country", "checkin", "nights", "party")}
+    if not await PWT.remember(ctx["account"], "hotel", got["id"], {"stay": stay}, f"{HT.LABEL} — {pend['hotel']}", None, HT.tz_of(pend.get("country"))):
+        ctx["out"].text("I can't take the test payment right now — I couldn't note it down first. No test booking was made; ask me again in a moment.")
+        return
     ctx["out"].text(f"One touch: pay the TEST price (€{pend['eur']:.2f}) on Stripe's test page — Apple Pay or your phone's saved card; nothing "
                     f"is charged and no hotel is contacted.\n{got['url']}\nI'll add the TEST booking the moment it's paid.")
-    _spawn(watch_hotel_payment(ctx["ch"], ctx["frm"], ctx["account"], pend, got["id"]))
+    _spawn(watch_payment(ctx["ch"], ctx["frm"], got["id"], "The test payment wasn't completed within 10 minutes, so no test booking was made."))
 
 
-async def watch_hotel_payment(ch: dict, frm: str, account: str, p: dict, session_id: str) -> None:
-    from . import hotel_test as HT, test_deposit as TD
+async def watch_payment(ch: Optional[dict], frm: str, session_id: str, unpaid: str) -> None:
+    """Sasha 282 · a paid thing is booked by paid_watch.settle ONLY, from the record written before paying — which goes with its owner
+    (trips.owner_id → auth.users, on delete cascade). This only asks settle sooner than its own loop; it never books. No record any
+    more (the account was deleted) → it stops: there is no one to book for."""
+    from . import paid_watch as PWT
     every, times = WATCH_PAY
     for _ in range(times):
         await asyncio.sleep(every)
-        if not await TD.session_paid(session_id):
-            continue
-        ref = HT.new_ref()
-        await HT.RECORD(account, p["hotel"], p["city"], HT.tz_of(p.get("country")), p["checkin"], p["nights"], p["party"], ref)
-        TD.note(session_id, True, f"🧪 {HT.LABEL}: {p['hotel']}, {p['checkin']}, {p['nights']} night{'s' if p['nights'] != 1 else ''}. "
-                                  f"Reference {ref} — in your itinerary and calendar, marked TEST.")
-        st = await STORE.get_state(ch["wa_id_sha256"])
-        await deliver(ch, frm, Out().text(f"🧪 {HT.LABEL}: {p['hotel']}, {SN.day_words(p['checkin'])}, {p['nights']} night"
-                                          f"{'s' if p['nights'] != 1 else ''}. Reference {ref}. It's in your itinerary and calendar marked TEST — "
-                                          f"nothing was reserved or charged. For a real room, ask for the hotel again and choose “Request from hotel”."),
-                      st.get("last_inbound_at"))
-        return
-    st = await STORE.get_state(ch["wa_id_sha256"])
-    await deliver(ch, frm, Out().text("The test payment wasn't completed within 10 minutes, so no test booking was made."), st.get("last_inbound_at"))
+        r = await PWT.settle(session_id)   # booked once, by whoever sees the payment first — and said by it (live_events.completed)
+        if r is not None and r.get("status") in ("booked", "failed"):
+            return
+        if r is None and not await _remembered(session_id):
+            log.info("[guest_whatsapp] payment watch stopped: no record for the session (its account is gone)")
+            return
+    await _tell_if_linked(ch, frm, unpaid)
 
 
 async def _flights(ctx: dict, body: str) -> None:
@@ -1418,12 +1420,14 @@ async def _flight_approve(ctx: dict, pend: dict) -> None:
     if "why" in got:
         ctx["out"].text(f"I can't take the test payment yet — {got['why']}. Nothing was booked.")
         return
+    from . import paid_watch as PWT   # Sasha 183 · written down BEFORE paying: a restart can never lose the booking
+    if not await PWT.remember(ctx["account"], "flight", got["id"], {"card": c, "name": pend["name"], "email": pend["email"], "phone": pend.get("phone")},
+                              f"Flight {c['flights']} {c['from']} → {c['to']}", c.get("departs"), c.get("from_tz") or "Europe/Madrid"):
+        ctx["out"].text("I can't take the test payment right now — I couldn't note it down first. Nothing was booked; ask me again in a moment.")
+        return   # Sasha 282 · no record, no payment: settle books only from its record
     ctx["out"].text(f"One touch: pay the TEST fare ({c['currency']} {c['amount']}) on Stripe's test page — Apple Pay or your phone's saved card; "
                     f"nothing is charged, and I never see your card.\n{got['url']}\nI'll book the test flight the moment it's paid, and tell you here.")
-    from . import paid_watch as PWT   # Sasha 183 · written down BEFORE paying: a restart can never lose the booking
-    await PWT.remember(ctx["account"], "flight", got["id"], {"card": c, "name": pend["name"], "email": pend["email"], "phone": pend.get("phone")},
-                       f"Flight {c['flights']} {c['from']} → {c['to']}", c.get("departs"), c.get("from_tz") or "Europe/Madrid")
-    _spawn(watch_flight_payment(ctx["ch"], ctx["frm"], ctx["account"], c, got["id"], pend["name"], pend["email"], pend.get("phone")))
+    _spawn(watch_payment(ctx["ch"], ctx["frm"], got["id"], "The test payment wasn't completed within 10 minutes, so nothing was booked. Ask me again any time."))
 
 
 WATCH_PAY = (10, 60)   # every 10 s for 10 minutes
@@ -1440,32 +1444,6 @@ async def _remembered(session_id: str) -> bool:
                                                    f"Sasha 183 · %\"sid\": \"{session_id}\"%")))
     except Exception:
         return False
-
-
-async def watch_flight_payment(ch: dict, frm: str, account: str, c: dict, session_id: str, name: str, email: str, phone: Optional[str]) -> None:
-    from . import test_deposit as TD, travel as TR
-    every, times = WATCH_PAY
-    for _ in range(times):
-        await asyncio.sleep(every)
-        from . import paid_watch as PWT   # Sasha 183 · booked once, by whoever sees the payment first (and said by it)
-        r = await PWT.settle(session_id)
-        if r is not None:
-            if r.get("status") in ("booked", "failed", "booking"):
-                return
-        paid = await TD.session_paid(session_id) if r is None and not await _remembered(session_id) else None
-        if not paid:
-            continue
-        o = await TR.order(c, name, email, phone)
-        if "why" in o:
-            TD.note(session_id, False, f"Your test payment went through, but the test flight wasn't booked: {o['why']}.")
-            await _tell_if_linked(ch, frm, f"Your test payment went through, but the test flight wasn't booked: {o['why']}.")
-            return
-        await TR.RECORD(account, c, o["booking_reference"] or "")
-        TD.note(session_id, True, f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. In your itinerary and calendar.")
-        await _tell_if_linked(ch, frm, f"✅ Booked (TEST): {TR.card_line(c)}. Reference {o['booking_reference']}. "
-                                       f"It's in your itinerary and on your calendar — {TR.LABEL}.")
-        return
-    await _tell_if_linked(ch, frm, "The test payment wasn't completed within 10 minutes, so nothing was booked. Ask me again any time.")
 
 
 async def _tell_if_linked(ch: Optional[dict], frm: str, text: str) -> None:

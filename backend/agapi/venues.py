@@ -320,10 +320,13 @@ async def read_booking_route(ctx, a: dict) -> dict:
         from agapi import venue_truth as VT
         dec = VT.decision(card or listing_card(rd))
         # Sasha 284 · AgAPI's ONE decision: its words, whatever the route (never NO_LINK over it) — but a call: AgAPI's call lines
-        # ("only takes bookings by phone") limit the channel (rule 15, Tyler 16 Oct) — her own line (voice.BOOK_IT) below, until CR words it
-        if dec and dec["route"] != "none" and dec.get("how_far") != "call":
+        # ("only takes bookings by phone") limit the channel (rule 15, Tyler 16 Oct), so a call is her own offer (voice.CALL_IT) until
+        # CR words it. Sasha 284b (live, 8 phone-only venues): the call fell through to NO_LINK — every route AgAPI found returns here.
+        if dec and dec["route"] != "none":
+            from app.agent import voice as V
             return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of_channel(eng) or [dec["route"]],
-                    "how": dec["say_text"], "decision": {k: dec.get(k) for k in ("route", "say_text", "button")},
+                    "how": V.CALL_IT if dec.get("how_far") == "call" else dec["say_text"],
+                    "decision": {k: dec.get(k) for k in ("route", "say_text", "button")},
                     "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
         if not eng or eng.get("kind") not in OWN_FORM:   # Sasha 269 · no own form found: never "no online booking form" (voice.py)
             from agapi import venue_truth as VT

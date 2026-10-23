@@ -115,15 +115,16 @@ class SheSaysAgAPIsWords(unittest.TestCase):
                 mock.patch.object(VT, "decision", lambda p: dec), mock.patch.object(VT, "reservable_say", lambda c: None):
             return run(VN.read_booking_route(Ctx(), {"name": "Spa & Massage", "city": "London"}))
 
-    def test_every_route_but_a_call_is_said_in_agapis_words(self):
+    def test_every_route_is_said_and_never_no_link(self):
         for name in DECISIONS:
             dec = dec_of(name)
             got = self._route(dec)
             if dec["route"] == "none":
                 self.assertEqual(got["how"], V.NO_LINK)   # nothing found: as before ("send me their link")
-            elif dec["how_far"] == "call":
-                self.assertNotEqual(got["how"], dec["say_text"])   # rule 15: AgAPI's call line limits the channel — CR words it
+            elif dec["how_far"] == "call":   # rule 15: AgAPI's call line limits the channel — her offer (284b: it was NO_LINK on live)
+                self.assertEqual(got["how"], V.CALL_IT)
                 self.assertFalse(V.limits_channel(got["how"]))
+                self.assertFalse(CANT.search(got["how"]))
             else:
                 self.assertEqual(got["how"], dec["say_text"], name)
                 self.assertEqual(got["decision"]["button"], dec["button"])
@@ -261,7 +262,7 @@ class NeverCantWhileAgAPIFoundARoute(unittest.TestCase):
             self.assertTrue(key == "no_channel" or CANT.search(BR.PHRASES.get(key, "can't")) or "won't" in BR.PHRASES.get(key, ""), key)
 
     def test_her_follow_lines_never_say_cant(self):
-        for line in (V.FINISH_IT, V.OPEN_THEIR_PAGE):
+        for line in (V.FINISH_IT, V.OPEN_THEIR_PAGE, V.CALL_IT):
             self.assertFalse(CANT.search(line), line)
             self.assertFalse(V.limits_channel(line), line)
         for name in DECISIONS:

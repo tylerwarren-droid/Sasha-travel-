@@ -427,6 +427,8 @@ WORD_GONE = "That one isn't waiting any more."
 # Sasha 284 · Kanoe may not act here (the booking rules' refusal) but AgAPI's decision found a route: their page, theirs to finish
 FINISH_IT = "Here's their page with your booking ready — you finish it there, and I'll ask how it went when you're back."
 OPEN_THEIR_PAGE = "Open their page"
+#: Sasha 284b · AgAPI's decision is a call (a phone-only venue): her offer — never NO_LINK, never "only by phone" (rule 15)
+CALL_IT = "I'll make the booking — I can call them for you."
 
 
 def went_through(venue: str) -> str:

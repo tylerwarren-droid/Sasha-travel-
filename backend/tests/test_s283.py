@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import pathlib
+import re
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -26,7 +27,6 @@ from booking_signer import basket as BK, basket_book as BB, plan_store as PS
 
 run = asyncio.run
 ACCT = "00000000-0000-4000-8000-000000000283"
-ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 RIO = {"title": "Six nights in Rio", "start": "2026-11-07", "end": "2026-11-13",
        "days": [{"day": 1, "date": "2026-11-07", "city": "Rio de Janeiro, Brazil",
@@ -53,13 +53,40 @@ class TheTripCardIsTheTrip(unittest.TestCase):
         self.assertEqual(c["lines"], ["Flights to choose from"])
         self.assertIsNone(PS.card(None, None))
 
-    def test_the_card_reads_the_trip_views_record_never_the_events_kind(self):
-        app = (ROOT / "frontend" / "app" / "s2" / "S2App.tsx").read_text()
-        self.assertNotIn("'Flights to choose from'", app)
-        self.assertIn("bookingReq('/api/booking/plan')", app)
-        self.assertIn("r.json.card", app)
+    def test_the_trip_views_record_carries_the_card(self):
+        # Sasha 283b · the page's half (S2App reads r.json.card, never the event's kind) is frontend/scripts/presence-rule.test.mjs
+        # "283 · item 1" — npm test; the backend gate never reads frontend source (Railway's image has none)
         src = inspect.getsource(__import__("booking_signer.ladder_routes", fromlist=["x"]).plan_view)
         self.assertIn('"card": PS.card(view, tt)', src)
+
+
+class NoGateTestReachesIntoTheFrontend(unittest.TestCase):
+    """Sasha 283b · a pin on frontend source belongs to the frontend's own run (npm test). Railway's backend image has no
+    frontend/ folder, so a gate test that reads one either fails the deploy (a26a188, T63) or skips — and a skip proves nothing.
+    LEGACY is the closed list of gate modules that already reach in (each behind a skip); it may only shrink."""
+    REACH = re.compile(r"""["'](?:\.\./|/)*frontend["'/]""")
+    LEGACY = {"test_s249_status_keep_caps", "test_s252_activities", "test_s253_gaps", "test_s264", "test_s265", "test_s266",
+              "test_s267", "test_s268", "test_s269", "test_s271", "test_s273", "test_s274", "test_s276", "test_s279", "test_s281"}
+
+    def _gate_files(self):
+        from scripts import one_truth_suite as OT
+        back = pathlib.Path(__file__).resolve().parents[1]   # backend/ here, the image root on Railway
+        mods = {n.split(".")[1] for _, ns in OT.T.values() for n in ns}
+        files = {m: back / "tests" / f"{m}.py" for m in mods}
+        files.update({p.stem: p for p in (back / "scripts").glob("*_suite.py")})
+        files["gate"] = back / "scripts" / "gate.py"
+        return files
+
+    def test_no_new_gate_module_reads_frontend_source(self):
+        reach = {m for m, f in self._gate_files().items() if self.REACH.search(f.read_text())}
+        self.assertEqual(reach - self.LEGACY, set(), "a gate test reads frontend/ — pin it in frontend/scripts (npm test)")
+        self.assertEqual(self.LEGACY - reach, set(), "moved out — take it off LEGACY so the list only shrinks")
+
+    def test_the_ratchet_sees_the_shape_that_broke_the_deploy(self):
+        fe = "front" + "end"   # spelled apart, so this file is not itself a reach
+        self.assertTrue(self.REACH.search(f'(ROOT / "{fe}" / "app" / "s2" / "S2App.tsx").read_text()'))
+        self.assertTrue(self.REACH.search(f'os.path.join(here, "..", "..", "{fe}", "lib")'))
+        self.assertFalse(self.REACH.search("is held by frontend/scripts/presence-rule.test.mjs"))   # a mention is not a read
 
 
 class SheAsksAboutFlights(unittest.TestCase):

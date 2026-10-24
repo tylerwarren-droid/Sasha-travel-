@@ -158,8 +158,8 @@ class TheirListingSays(unittest.TestCase):
         self.addCleanup(VT._CACHE.pop, "place:fixture_place_no_site", None)
         said = VT.reservable_say({"place_id": "fixture_place_no_site"})
         self.assertEqual(said, "They take reservations.")
-        self.assertEqual(V.no_link_line(said), "I can't see their booking link from here — if you can, send it to me and I'll fill it in. "
-                                               "They take reservations.")
+        # Sasha 286 · MOVED: no own form is THE FLOOR (their website handed over), never "send me their link" (NO_LINK retired)
+        self.assertFalse(V.asks_for_link(V.FLOOR))
         self.assertIsNone(VT.reservable_say({"place_id": "unknown"}))
 
     def test_a_listing_with_no_website_is_read_by_the_engine_on_the_one_path_only(self):

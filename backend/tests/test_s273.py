@@ -76,7 +76,7 @@ class ChannelNeverLimited(unittest.TestCase):
             self.assertNotIn("By a message", how)
             self.assertFalse(V.limits_channel(how), how)
         self.assertNotIn(V.BOOK_IT, self._route({"kind": "own_engine"})["how"])   # their own form: as before (the form question)
-        self.assertEqual(self._route(None)["how"], V.NO_LINK)                    # no way seen: as before
+        self.assertTrue(self._route(None)["how"].startswith("Here's their "))   # Sasha 286 · no way seen: THE FLOOR (never a link ask)
 
     def test_old_s1_unchanged(self):
         self.assertEqual(self._route({"kind": "phone"}, one=False)["how"], "By phone.")   # parity off: Sasha's own read, as it was

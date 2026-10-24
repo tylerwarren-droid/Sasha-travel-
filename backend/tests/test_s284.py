@@ -120,7 +120,7 @@ class SheSaysAgAPIsWords(unittest.TestCase):
             dec = dec_of(name)
             got = self._route(dec)
             if dec["route"] == "none":
-                self.assertEqual(got["how"], V.NO_LINK)   # nothing found: as before ("send me their link")
+                self.assertEqual(got["how"], dec["say_text"])   # Sasha 286 · nothing found: AgAPI's own floor, its button
             elif dec["how_far"] == "call":   # rule 15: AgAPI's call line limits the channel — her offer (284b: it was NO_LINK on live)
                 self.assertEqual(got["how"], V.CALL_IT)
                 self.assertFalse(V.limits_channel(got["how"]))
@@ -128,11 +128,11 @@ class SheSaysAgAPIsWords(unittest.TestCase):
             else:
                 self.assertEqual(got["how"], dec["say_text"], name)
                 self.assertEqual(got["decision"]["button"], dec["button"])
-                self.assertNotIn(V.NO_LINK, got["how"])
+                self.assertFalse(V.asks_for_link(got["how"]))
 
     def test_the_chiswick_spa_is_no_longer_no_link(self):
-        # row 1259: no OWN_FORM channel (a platform page) → voice.NO_LINK, AgAPI's route ignored
-        self.assertEqual(self._route(None)["how"], V.NO_LINK)
+        # row 1259: no OWN_FORM channel (a platform page) → voice.NO_LINK, AgAPI's route ignored; 286: no decision → THE FLOOR
+        self.assertTrue(self._route(None)["how"].startswith("Here's their "))
         self.assertEqual(self._route(dec_of("platform"))["how"], DECISIONS["platform"]["say_text"])
 
     def test_old_s1_unchanged(self):
@@ -269,7 +269,7 @@ class NeverCantWhileAgAPIFoundARoute(unittest.TestCase):
             self.assertTrue(key == "no_channel" or CANT.search(BR.PHRASES.get(key, "can't")) or "won't" in BR.PHRASES.get(key, ""), key)
 
     def test_her_follow_lines_never_say_cant(self):
-        for line in (V.FINISH_IT, V.OPEN_THEIR_PAGE, V.CALL_IT, V.REACH_THEM, V.NO_WAY_YET):
+        for line in (V.FINISH_IT, V.OPEN_THEIR_PAGE, V.CALL_IT, V.REACH_THEM, V.FLOOR):
             self.assertFalse(CANT.search(line), line)
             self.assertFalse(V.limits_channel(line), line)
         for name in DECISIONS:

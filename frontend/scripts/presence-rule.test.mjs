@@ -234,3 +234,31 @@ test('284 · the hand-over card draws AgAPI\'s button, word for word', () => {
   const cards = readFileSync(new URL('../app/components/cards/S2Cards.tsx', import.meta.url), 'utf8')
   assert.ok(cards.includes("{untag(String(ev.button || 'Open their booking page'))}"))
 })
+
+test('286 · the floor: no line the page shows asks for a link (frontend half of T66)', async () => {
+  const { readdirSync, statSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const W = String.raw`(?:booking )?(?:links?|urls?|web ?sites?|web ?pages?|booking pages?)`
+  const ASK = new RegExp(String.raw`\b(?:send|paste|share|give|drop|forward|text|pass)\s+(?:me|us)\b[^.?!\n]{0,40}\b${W}\b` +
+    String.raw`|\b(?:paste|drop|share|send|put|forward)\b[^.?!\n]{0,40}\b${W}\b[^.?!\n]{0,20}\b(?:here|to me|with me)\b` +
+    String.raw`|\bif you (?:can|have|find|know|get)\b[^.?!\n]{0,40}\b${W}\b` +
+    String.raw`|\b(?:can|could|would) you\b[^.?!\n]{0,30}\b(?:send|paste|share|give|find|get|forward)\b[^.?!\n]{0,40}\b${W}\b`, 'i')
+  const root = new URL('..', import.meta.url).pathname
+  const bad = []
+  const walk = (d) => {
+    for (const n of readdirSync(d)) {
+      if (n === 'node_modules' || n.startsWith('.')) continue
+      const p = join(d, n)
+      if (statSync(p).isDirectory()) walk(p)
+      else if (/\.(tsx?|mjs)$/.test(n) && !/\.test\./.test(n)) {
+        for (const m of readFileSync(p, 'utf8').matchAll(/(["'`])((?:(?!\1)[^\\\n]|\\.){12,})\1/g))
+          if (ASK.test(m[2])) bad.push(`${p.slice(root.length)}: ${m[2].slice(0, 70)}`)
+      }
+    }
+  }
+  for (const d of ['app', 'lib']) walk(join(root, d))
+  // the sign-up page's own button and label: the PERSON asks us for a confirmation link — never Sasha asking them for one
+  const ALLOWED = new Set(['app/work-with-sasha/copy.ts: Your email: we send the confirmation link here',
+                           'app/work-with-sasha/copy.ts: Send me the confirmation link'])
+  assert.deepEqual(bad.filter(b => !ALLOWED.has(b)), [])
+})

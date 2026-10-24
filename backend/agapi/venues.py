@@ -322,19 +322,22 @@ async def read_booking_route(ctx, a: dict) -> dict:
         # Sasha 284 · AgAPI's ONE decision: its words, whatever the route (never NO_LINK over it) — but a call: AgAPI's call lines
         # ("only takes bookings by phone") limit the channel (rule 15, Tyler 16 Oct), so a call is her own offer (voice.CALL_IT) until
         # CR words it. Sasha 284b (live, 8 phone-only venues): the call fell through to NO_LINK — every route AgAPI found returns here.
-        if dec and dec["route"] != "none":
-            from app.agent import voice as V
+        from app.agent import voice as V
+        if dec and dec["route"] != "none" and not V.asks_for_link(dec.get("say_text") or ""):   # 286: never AgAPI's words asking for a link
             return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of_channel(eng) or [dec["route"]],
                     "how": V.CALL_IT if dec.get("how_far") == "call" else dec["say_text"],
                     "decision": {k: dec.get(k) for k in ("route", "say_text", "button")},
                     "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
         if not eng or eng.get("kind") not in OWN_FORM:   # Sasha 269 · no own form found: never "no online booking form" (voice.py)
-            from agapi import venue_truth as VT
             from app.agent import voice as V
-            # Sasha 270 · CR 101: their listing's reservable, said as fact in the engine's words (venue.profile reservable.say)
-            # Sasha 273 · rule 15 (Tyler's demo, Periplo): never "By phone." / "By a message they answer." — the model said it as "Periplo
-            # takes bookings by phone only". How they book is hers to do: voice.BOOK_IT, then the one question (the card).
-            how = " ".join(x for x in (V.no_link_line(VT.reservable_say(card or listing_card(rd))), V.BOOK_IT if eng else "") if x)
+            # Sasha 273 · rule 15 (Tyler's demo, Periplo): never "By phone." / "By a message they answer." — how they book is hers to do:
+            # voice.BOOK_IT, then the one question (the card). Sasha 286 · nothing at all (AgAPI's none, unreadable, AgAPI down): THE FLOOR
+            # — their website handed over, never "send me their link"
+            if not eng:
+                f = await floor_out(ctx, a, rd, None, card, dec)
+                return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": [], "how": f["floor"]["say"], "floor": f["floor"],
+                        **_link_out(f["floor"]["button"]["link"]), "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
+            how = V.BOOK_IT
         return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of_channel(eng),
                 "how": how, "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
     return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),
@@ -380,7 +383,7 @@ READ_KIND = {"form": "form", "own_page": "own_engine", "link": "widget", "whatsa
 def read_channel(rd: dict, card: Optional[dict] = None, one_path: bool = False) -> Optional[dict]:
     """Sasha 251 · the venue's ONE channel when the engine has none — from what Sasha's read found, in the engine's shape.
     Sasha 270 · one_path: never a FORM of Sasha's own reading (a form, their own page, a widget link that isn't a known platform) —
-    whether a place has a booking form is the venue engine's to say (venue.profile, CR 101), else "send me the link" (voice.NO_LINK)."""
+    whether a place has a booking form is the venue engine's to say (venue.profile, CR 101), else THE FLOOR (Sasha 286 · venues.floor)."""
     from agapi import venue_truth as VT
     rungs = rd.get("rungs") or {}
     kinds = []
@@ -813,12 +816,51 @@ async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card
             out["how"] = "Say `say` exactly — never that it's booked."
             return out
     from app.agent import voice as V
+    if not link:   # Sasha 286 · nothing of AgAPI's to hand over: THE FLOOR (never "send me their link")
+        return await floor_out(ctx, a, rd, res, card, None, at)
     await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], res["how_many"]["count"], link)
     return {"status": "page_link", "venue": venue, "booked": False, "route": dec["route"], **_link_out(link),
-            **({"button": {"label": V.OPEN_THEIR_PAGE if refused else (dec.get("button") or {}).get("label"), "link": link}} if link else {}),
+            "button": {"label": V.OPEN_THEIR_PAGE if refused else (dec.get("button") or {}).get("label"), "link": link},
             # Sasha 284b (live, Boys Don't Cry — a quote, no slot): nothing was prepared here, so neither AgAPI's words ("I've written it")
             # nor FINISH_IT ("your booking ready") — the plain hand-over: their way in, and the way back
-            "say": (V.REACH_THEM if link else V.NO_WAY_YET) + " Say exactly that — never that it's booked."}
+            "say": V.REACH_THEM + " Say exactly that — never that it's booked."}
+
+
+def floor(card: Optional[dict], rd: dict, dec: Optional[dict] = None) -> dict:
+    """Sasha 286 · THE FLOOR — S2's ONE last resort (Tyler, 24 Oct 08:06: she never asks for a link; the worst case is ALWAYS a
+    hand-over). AgAPI's own floor when its decision gives one (route none: its say_text and its button — CR 118c), unless it asks for a
+    link; else THEIR WEBSITE as the button (the place card S2 holds: venue.discover's link / Places' website), else their listing; the
+    listing's WhatsApp and number beside it. Never empty: a listing link is built from the name and place_id."""
+    from urllib.parse import quote as _q
+    from app.agent import voice as V
+    c, rungs = card or {}, rd.get("rungs") or {}
+    phone = str(c.get("phone") or (rungs.get("phone") or {}).get("value") or "").strip()
+    wa = re.sub(r"\D", "", str((rungs.get("whatsapp") or {}).get("value") or ""))
+    alts = ([{"label": "WhatsApp", "link": f"https://wa.me/{wa}"}] if wa else []) + \
+        ([{"label": "Their number", "link": "tel:" + re.sub(r"[^\d+]", "", phone)}] if re.sub(r"\D", "", phone) else [])
+    b = (dec or {}).get("button") or {}
+    if dec and dec.get("route") == "none" and dec.get("say_text") and not V.asks_for_link(dec["say_text"]) \
+            and str(b.get("link") or "").startswith("http"):
+        return {"say": dec["say_text"], "button": {"label": b.get("label") or V.OPEN_LISTING, "link": b["link"]}, "alternatives": alts,
+                "from": "agapi"}
+    site = next((u for u in (c.get("website"), c.get("link")) if str(u or "").startswith("http")), None)
+    if site:
+        return {"say": V.floor_line("website"), "button": {"label": V.OPEN_WEBSITE, "link": site}, "alternatives": alts, "from": "sasha"}
+    name, pid = c.get("name") or rd.get("venue") or "", c.get("place_id") or rd.get("place_id")
+    listing = c.get("listing_url") if str(c.get("listing_url") or "").startswith("http") else \
+        f"https://www.google.com/maps/search/?api=1&query={_q(str(name))}" + (f"&query_place_id={_q(str(pid))}" if pid else "")
+    return {"say": V.floor_line("listing"), "button": {"label": V.OPEN_LISTING, "link": listing}, "alternatives": alts, "from": "sasha"}
+
+
+async def floor_out(ctx, a: dict, rd: dict, res: Optional[dict], card: Optional[dict], dec: Optional[dict] = None,
+                    at: Optional[str] = None) -> dict:
+    """Sasha 286 · the floor, handed over: the button on their screen (the hand-over card) and the row 283's way back reads."""
+    f = floor(card, rd, dec)
+    venue = _API().plain_venue(rd["venue"])
+    party = ((res or {}).get("how_many") or {}).get("count") or a.get("party") or 0
+    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, f["button"]["link"])
+    return {"status": "page_link", "venue": venue, "booked": False, "floor": f, **_link_out(f["button"]["link"]),
+            "button": f["button"], "say": f["say"] + " Say exactly that — never that it's booked."}
 
 
 _URL = re.compile(r"https?://[^\s<>\"'`]+", re.I)
@@ -1250,13 +1292,19 @@ async def _prepared_now(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: Op
             out["how"] = "Say `say` exactly — never that it's booked."
             return out
     link = d["takeover"].get("link")
-    out = _said({"status": "not_contacted", "venue": GW.plain_venue(rd["venue"]), "booked": False, **_link_out(link)}, d)
-    if one_path(ctx) and d.get("say") == "no_channel":   # Sasha 270 · no way found: "send me their link" (+ reservable), never "no form"
-        from app.agent import voice as V
-        line = V.no_link_line(VT.reservable_say(card or listing_card(rd)))
-        out["rules"] = {**out["rules"], "say": line}
-        out["say"] = f"{line} {d['takeover']['say']}"
-    return out
+    if one_path(ctx) and d.get("say") == "no_channel":   # Sasha 286 · no way found: THE FLOOR (was "send me their link")
+        out = await floor_out(ctx, a, rd, res, card, VT.decision(card or listing_card(rd)), at)
+        out["rules"] = {**_rules(d), "say": out["say"]}
+        out["takeover"] = d["takeover"]
+        return out
+    f = None
+    if one_path(ctx) and not link:   # Sasha 286 · the rules' own words ("…Here's their page…") with the floor's button as that page
+        f = floor(card, rd, VT.decision(card or listing_card(rd)))
+        link = f["button"]["link"]
+        await note_prepared(ctx.account, GW.plain_venue(rd["venue"]), at or str(a.get("day") or "")[:10],
+                            ((res or {}).get("how_many") or {}).get("count") or 0, link)
+    return _said({"status": "not_contacted", "venue": GW.plain_venue(rd["venue"]), "booked": False, **_link_out(link),
+                  **({"floor": f, "button": f["button"]} if f else {})}, d)
 
 
 def _link_out(link: Optional[str]) -> dict:
@@ -1680,7 +1728,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                     "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": True, "button": label,
                                  **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},
                     **({"in_app": True} if VS.TAP.get() is not None else {}),
-                    "say": (prep.get("say") if fw["refused"] else dec.get("say_text")) or V.done_form(getattr(ctx, "surface", "s2"))}
+                    "say": next((x for x in ((prep.get("say") if fw["refused"] else dec.get("say_text")),)
+                                 if x and not V.asks_for_link(x)), None) or V.done_form(getattr(ctx, "surface", "s2"))}   # 286: never a link ask
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
                 "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": filled,
                              **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},

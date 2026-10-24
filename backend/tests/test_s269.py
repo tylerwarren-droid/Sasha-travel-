@@ -256,11 +256,10 @@ class NeverNoOnlineForm(unittest.TestCase):
     when the listing says reservable). Taking the link from the person is wired after CR 101 reports."""
 
     def test_gate_the_line_by_code(self):
-        self.assertEqual(V.no_link_line(), "I can't see their booking link from here — if you can, send it to me and I'll fill it in.")
-        # Sasha 270 · moved: reservable is CR 101's fact, said in the engine's words (reservable.say) — "They take reservations."
-        self.assertEqual(V.no_link_line(True), V.NO_LINK + " They take reservations.")
-        self.assertEqual(V.no_link_line("They take reservations."), V.NO_LINK + " They take reservations.")
-        self.assertIn(V.NO_LINK, V.RULES)
+        # Sasha 286 · MOVED (Tyler, 24 Oct: she never asks for a link): THE FLOOR — their website handed over, by code
+        self.assertEqual(V.FLOOR, "Here's their website — book there, and I'll check how it went when you're back.")
+        self.assertIn(V.FLOOR, V.RULES)
+        self.assertFalse(V.asks_for_link(V.RULES))
         self.assertIn('Never say a place has "no online booking form"', V.RULES)
 
     def _route(self, eng, card=None):
@@ -274,11 +273,12 @@ class NeverNoOnlineForm(unittest.TestCase):
 
     def test_gate_no_own_form_says_it_never_no_form(self):
         got = self._route({"kind": "phone"})
-        self.assertTrue(got["how"].startswith(V.NO_LINK))
+        self.assertEqual(got["how"], V.BOOK_IT)                                            # Sasha 286 · a way of hers: she does it
         self.assertNotIn("no online booking form", got["how"].lower())
-        self.assertEqual(self._route(None)["how"], V.NO_LINK)
-        self.assertTrue(self._route({"kind": "email"}, {"reservable": True})["how"].startswith(V.no_link_line(True)))
-        self.assertNotIn(V.NO_LINK, self._route({"kind": "own_engine"})["how"])           # their own form: as before
+        self.assertTrue(self._route(None)["how"].startswith("Here's their "))               # Sasha 286 · nothing: THE FLOOR
+        self.assertFalse(V.asks_for_link(self._route(None)["how"]))
+        self.assertEqual(self._route({"kind": "email"}, {"reservable": True})["how"], V.BOOK_IT)
+        self.assertNotIn("Here's their", self._route({"kind": "own_engine"})["how"])      # their own form: as before
 
 
 if __name__ == "__main__":

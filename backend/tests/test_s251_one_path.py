@@ -73,9 +73,12 @@ class OnePath(Base):
     def test_nothing_to_book_by_is_said_so(self):   # Sasha 254 · the rules' own words (no_channel) + the take-over, nothing sent
         from agapi.booking_rules import booking_rules as BR
         out = self.hold("s2", {})
-        self.assertEqual((out["status"], out["rules"]["say_key"]), ("not_contacted", "no_channel"))
-        # Sasha 270 · MOVED (Tyler, 15 Oct): no way found is "send me their link" (voice.NO_LINK) — never "no form"
-        self.assertEqual(out["say"], f"{V.NO_LINK} {BR.PHRASES['takeover']}")
+        self.assertEqual((out["status"], out["rules"]["say_key"]), ("page_link", "no_channel"))
+        # Sasha 270 · MOVED (Tyler, 15 Oct): never "no form". Sasha 286 · MOVED (Tyler, 24 Oct): never "send me their link" — THE FLOOR,
+        # their website (else their listing) handed over with the way back
+        self.assertTrue(out["say"].startswith("Here's their "))
+        self.assertFalse(V.asks_for_link(out["say"]))
+        self.assertTrue(out["page_url"].startswith("https://"))
         self.assertEqual(self.api.calls[-1][1], "/api/booking/contact")
 
 

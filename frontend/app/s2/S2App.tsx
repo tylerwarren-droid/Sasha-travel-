@@ -51,7 +51,7 @@ type Card =
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
   | { k: 'claim_status'; claim: Ev }
-  | { k: 'handover'; url: string; external: boolean }   // Sasha 236 · Tap to finish (their page / our hand-over), over her
+  | { k: 'handover'; url: string; external: boolean; label?: string; alts?: { label: string; link: string }[] }   // Sasha 236 · Tap to finish · 286: the floor's button + alternatives
   | { k: 'trip' }                                        // Sasha 236 · the trip changed: one tap to the Trip board · 283: it says what the trip is
   | { k: 'did_it'; key: string; venue: string; done?: boolean }   // Sasha 283 · item 4c · the way back: her ONE question, its two answers
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
@@ -438,7 +438,9 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
   if (c.k === 'handover') return (   // Sasha 236 · as /next's onHandover: our Tap to finish in a sheet over her; a platform's page in their browser
     <Box k="One tap left" h="Finish it on their page">
       <button type="button" onClick={() => { if (c.external) window.open(c.url, '_blank', 'noopener'); else window.dispatchEvent(new CustomEvent('s2-handover', { detail: c.url })) }}
-        style={{ marginTop: 6, padding: '10px 18px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700 }}>Tap to finish</button>
+        style={{ marginTop: 6, padding: '10px 18px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700 }}>{untag(c.label || 'Tap to finish')}</button>
+      {(c.alts || []).map(x => (   /* Sasha 286 · the floor: the listing's WhatsApp / number beside their website */
+        <a key={x.link} href={x.link} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, marginLeft: 8, padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 700, textDecoration: 'none' }}>{untag(x.label)}</a>))}
     </Box>)
   if (c.k === 'trip') return <TripCard />
   if (c.k === 'did_it') return (   // Sasha 283 · item 4c · the tap IS his answer (on the hand-over's one record)
@@ -809,7 +811,9 @@ export default function S2App() {
             else if (ev.kind === 'my_cards') add({ k: 'my_cards', cards: ev.cards || [] })
             else if (ev.kind === 'accident' && ev.view) add({ k: 'accident', view: ev.view })
             else if (ev.kind === 'claim_status' && ev.claim) add({ k: 'claim_status', claim: ev.claim })
-            else if (ev.kind === 'handover' && typeof ev.url === 'string' && ev.url.startsWith('https://')) add({ k: 'handover', url: ev.url, external: !!ev.external })   // Sasha 236
+            else if (ev.kind === 'handover' && typeof ev.url === 'string' && (ev.url.startsWith('https://') || (ev.external && ev.url.startsWith('http://'))))   // Sasha 286 · a venue's own site may be http
+              add({ k: 'handover', url: ev.url, external: !!ev.external, label: typeof ev.label === 'string' ? ev.label : undefined,
+                    alts: Array.isArray(ev.alternatives) ? ev.alternatives.filter((x: { link?: unknown }) => typeof x?.link === 'string' && /^(https:\/\/|tel:)/.test(String(x.link))) : undefined })   // Sasha 236
             else if (['flights', 'stays', 'flight_chosen', 'total', 'trip', 'trip_changed'].includes(String(ev.kind))) {   // Sasha 236 · the trip board refreshes; one card says so
               window.dispatchEvent(new Event('sasha-plan-refresh'))
               add({ k: 'trip' })   // Sasha 283 · item 1 · what it says comes from the trip record (TripCard), never from the event's kind

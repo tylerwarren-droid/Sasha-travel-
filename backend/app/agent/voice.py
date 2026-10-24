@@ -106,16 +106,36 @@ DETAILS = {
     "nationality": re.compile(r"\b(nationality|which passport|what passport)\b", re.I),
 }
 
-# Sasha 269 · Tyler (15 Oct): never "no online booking form" — when the venue engine (venue.profile) finds no form of their own, this
-NO_LINK = "I can't see their booking link from here — if you can, send it to me and I'll fill it in."
 RESERVABLE = "They take reservations."   # Sasha 270 · CR 101's reservable.say, word for word (their listing, via the Places API)
 
+# Sasha 286 · THE FLOOR (Tyler, 24 Oct 08:06, standing rule): she NEVER asks for a link — "you can paste the website here… that's
+# horrible". When nothing better exists (AgAPI's none, blocked, unreadable, AgAPI down) the worst case is ALWAYS a hand-over: their own
+# website as the button (else their listing), the listing's WhatsApp / number beside it, and the way back. ONE line, by what the button is.
+# (Retired: NO_LINK "…if you can, send it to me…" and 284b's NO_WAY_YET.)
+FLOOR_WHAT = {"website": "website", "listing": "listing"}
+OPEN_WEBSITE, OPEN_LISTING = "Open their website", "Open their listing"
 
-def no_link_line(reservable=None) -> str:
-    """No own booking form found: said this way, never "they have no online booking form" (it may well exist — we just can't see it).
-    Sasha 270 · + their listing's reservable, said as fact in the engine's own words (venue.profile reservable.say) when it said."""
-    said = reservable.strip() if isinstance(reservable, str) and reservable.strip() else (RESERVABLE if reservable is True else "")
-    return f"{NO_LINK} {said}" if said else NO_LINK
+
+def floor_line(what: str = "website") -> str:
+    return f"Here's their {FLOOR_WHAT.get(what, 'website')} — book there, and I'll check how it went when you're back."
+
+
+FLOOR = floor_line()
+_LINKW = r"(?:booking )?(?:links?|urls?|web ?sites?|web ?pages?|booking pages?)"
+_ASKS_LINK = re.compile(
+    r"\b(?:send|paste|share|give|drop|forward|text|pass)\s+(?:me|us)\b[^.?!\n]{0,40}\b" + _LINKW + r"\b"          # send me their link
+    r"|\b(?:paste|drop|share|send|put|forward)\b[^.?!\n]{0,40}\b" + _LINKW + r"\b[^.?!\n]{0,20}\b(?:here|to me|with me)\b"   # paste the website here
+    r"|\b" + _LINKW + r"\b[^.?!\n]{0,60}\b(?:send|paste|share|forward|pass)\s+(?:it|them|that)\s+(?:to me|here|over|along)\b"  # …link… send it to me
+    r"|\b(?:can|could|would) you\b[^.?!\n]{0,30}\b(?:send|paste|share|give|find|get|forward)\b[^.?!\n]{0,40}\b" + _LINKW + r"\b"
+    r"|\bif you (?:can|have|find|know|get)\b[^.?!\n]{0,40}\b" + _LINKW + r"\b"
+    r"|\b(?:env[ií]a|m[aá]nda|p[aá]sa|comp[aá]rte|p[eé]ga)(?:me|nos|lo|la)\b[^.?!\n]{0,40}\b(?:enlace|link|url|web|p[aá]gina)\b"
+    r"|\b(?:enlace|link|url|web|p[aá]gina)\b[^.?!\n]{0,40}\b(?:env[ií]amelo|m[aá]ndamelo|p[eé]galo aqu[ií]|p[aá]samelo)\b", re.I)
+
+
+def asks_for_link(text: str) -> bool:
+    """Sasha 286 · one thing she says ASKS the person for a link / URL / website ("send me their link", "paste the website here",
+    "if you have their booking page…", "envíame el enlace"). She never does: the floor hands one over instead."""
+    return bool(_ASKS_LINK.search(text or ""))
 
 
 # Sasha 270 · CR 101 · A LINK THE PERSON HANDED OVER, classified by the venue engine (venue.profile link) — said short.
@@ -158,8 +178,9 @@ RULES = f"""
   yourself; she does it: search for it, show the cards, find how they take bookings, ask
   the one question. "I can't" is never her first answer; she says it only after a tool actually tried and failed — and then with what
   she found and what she CAN do.
-- Never say a place has "no online booking form" or "no booking form": when read_booking_route's `how` gives it, say it word for word —
-  "{NO_LINK}"
+- Never say a place has "no online booking form" or "no booking form", and NEVER ask them for a link, a URL or a website: when
+  there's nothing better, read_booking_route's `how` hands over their own — say it word for word ("{FLOOR}"); the button is on
+  their screen.
 - Short: two or three sentences at most — the card or the list carries the detail. Never repeat what's already on their screen,
   what you said earlier in this reply, or what you said in your last reply.
 - A booking page is always on their screen as a card they tap; sending it to their phone is an extra. Never say it can only go to
@@ -306,6 +327,8 @@ def faults(transcript: Iterable[Tuple[str, str]]) -> List[str]:
             out.append(f"turn {i}: names the channel {w!r}")
         if limits_channel(text):   # Sasha 273 · rule 15: nor limits it
             out.append(f"turn {i}: limits the channel {_LIMIT.search(text).group(0)!r}")
+        if asks_for_link(text):   # Sasha 286 · the floor: she never asks for a link
+            out.append(f"turn {i}: asks for a link {_ASKS_LINK.search(text).group(0)!r}")
         for q in _questions(text):
             for d, rx in DETAILS.items():
                 if rx.search(q):
@@ -431,7 +454,6 @@ OPEN_THEIR_PAGE = "Open their page"
 CALL_IT = "I'll make the booking — I can call them for you."
 #: Sasha 284b · handed over with NOTHING prepared (no slot to fill): their way in, and the way back — never "your booking is ready"
 REACH_THEM = "Here's how to reach them — you take it from there, and I'll ask how it went when you're back."
-NO_WAY_YET = "It's on your list — if you have their booking link, send it to me and I'll fill it in."
 
 
 def went_through(venue: str) -> str:
@@ -757,7 +779,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
            "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "NO_LINK", "RESERVABLE", "no_link_line", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told"]

@@ -233,6 +233,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T65": ("One WhatsApp path: a third party's WhatsApp never leaves Kanoe's number from the one path but through AgAPI (their own "
             "WhatsApp until then); a reply from a number Kanoe wrote to goes to AgAPI's one inbound op first; the person rides on prepare",
             ["tests.test_s285"]),
+    "T66": ("The floor: she never asks for a link — the last resort is ONE hand-over (AgAPI's own floor, else their website, else their "
+            "listing, with the way back); no string, AgAPI say_text or model line on the one path asks for a link",
+            ["tests.test_s286"]),
 }
 
 _RUNNER = """

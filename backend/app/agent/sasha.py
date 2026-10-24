@@ -225,10 +225,19 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]]}               # draft's booking card too
     if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
         return {"type": "render", "kind": "prepared", **res["prepared"]}
+    # Sasha 286 · THE FLOOR on the read too: what she says ("Here's their website…") is on their screen as its button
+    if tool == "read_booking_route" and isinstance(res.get("floor"), dict) and res.get("page_url"):
+        f = res["floor"]
+        return {"type": "render", "kind": "handover", "url": res["page_url"], "external": True, "label": f["button"]["label"],
+                **({"alternatives": f["alternatives"]} if f.get("alternatives") else {}),
+                **({"focus": (res.get("card") or {}).get("place_id")} if res.get("card") else {})}
     # Sasha 254 · hold_venue too: the booking rules' take-over link (their page) when they hand it over or won't contact the venue
     if tool in ("book_venue", "hold_venue") and (res.get("view_url") or res.get("page_url")):
         return {"type": "render", "kind": "handover", "url": res.get("view_url") or res.get("page_url"),
-                "external": not res.get("view_url"), **({"focus": (res.get("card") or {}).get("place_id")} if res.get("card") else {})}
+                "external": not res.get("view_url"), **({"focus": (res.get("card") or {}).get("place_id")} if res.get("card") else {}),
+                # Sasha 286 · the button's own words (AgAPI's, or the floor's) and the listing's WhatsApp / number beside it
+                **({"label": res["button"]["label"]} if isinstance(res.get("button"), dict) and res["button"].get("label") else {}),
+                **({"alternatives": res["floor"]["alternatives"]} if isinstance(res.get("floor"), dict) and res["floor"].get("alternatives") else {})}
     if tool == "propose_trip":   # Sasha 210 · the proposal arrives WITH its flights: a card per leg, the chosen one marked
         opts = res.get("flight_options") or {}
         cards = [flight_card({"flights": opts[leg], "leg": leg}, {"origin": (opts[leg][0] or {}).get("from"),
@@ -820,6 +829,9 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 continue
             if honest and _V.limits_channel(x) and not _V.is_told(x, told):   # Sasha 273 · rule 15: never limits how a place books
                 internal_log.append(f"channel limited: {x[:60]}")
+                continue
+            if honest and _V.asks_for_link(x):   # Sasha 286 · THE FLOOR: she never asks for a link (the floor hands one over)
+                internal_log.append(f"asked for a link: {x[:60]}")
                 continue
             if honest:   # Sasha 264 · item 5 (voice.brief): short, never what she said last time or what a card already says
                 kept_, tstate["brief_n"], tstate["asked"] = _V.brief([x], [last_reply], tstate["seen"], tstate["brief_n"], tstate["asked"])

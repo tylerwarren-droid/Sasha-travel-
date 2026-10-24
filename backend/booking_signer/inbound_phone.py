@@ -234,6 +234,15 @@ async def sms(request: Request):
     body, sid = p.get("Body", ""), p.get("MessageSid") or p.get("SmsSid")
     if not sid:
         return Response("no message id", status_code=400)
+    if channel == "whatsapp" and sender:
+        # Sasha 285 · CR 118 (b) · ONE WHATSAPP PATH: from anyone who isn't a guest talking to Sasha, AgAPI's ONE inbound op FIRST — a
+        # venue's reply to Kanoe's number lands on ITS booking record there (before: filed against the last call to that number, on no
+        # booking). Matched → AgAPI has it; nothing here answers it. Unmatched → the paths below, as before.
+        from . import guest_whatsapp as GW
+        from agapi import venue_submit as VS
+        if not await GW.linked(sender) and await GW.first_time(f"agapi-in:{sid}"):
+            if (await VS.whatsapp_inbound(sender, body)).get("matched"):
+                return _twiml()
     if channel == "whatsapp":
         # S-75 · a GUEST on a guest number (the sandbox's, SASHA_GUEST_WHATSAPP_TO): linked → their booking turn; "LINK
         # 123456" → linking; anyone else → one fixed sentence. None (every other number, or a venue): the code below,

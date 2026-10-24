@@ -201,7 +201,7 @@ class TheHoldFollows(unittest.TestCase):
 
     def test_a_platform_is_prepared_by_agapi_and_handed_over_in_its_words(self):
         out = self._follow("platform")
-        self.assertEqual(self.calls, ["venue.prepare_booking"])   # the call S2 never made (row 1259)
+        self.assertEqual(self.calls, ["users.register", "venue.prepare_booking"])   # the call S2 never made (row 1259); 285: the person first
         self.assertEqual(out["say"], DECISIONS["platform"]["say_text"])
         self.assertEqual(out["prepared"]["button"], "Book on Fresha")
         self.assertEqual(out["prepared"]["url"], PREP)

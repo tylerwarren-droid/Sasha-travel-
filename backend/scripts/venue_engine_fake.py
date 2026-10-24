@@ -31,6 +31,8 @@ async def submit_answer(op: str, body: dict, approval=None, account=None) -> dic
     CALLS.append(op)
     if op == "users.register":
         return {"ok": True, "result": {"end_user_id": "eu_gate"}}
+    if op == "messages.whatsapp_inbound":   # Sasha 285 · CR 118 (b): a suite's numbers were never written to by Kanoe
+        return {"ok": True, "result": {"matched": False, "kept": False}}
     if op == "venue.prepare_booking":
         return {"ok": True, "result": {"venue_id": "v_gate", "venue": str((body.get("place") or {}).get("name") or "the venue"), "submitted": False,
                                        "prepared_id": "vpr_gate", "zero_touch_allowed": True, "link": "https://agapi.test/prepared/gate", "say": "ready"}}

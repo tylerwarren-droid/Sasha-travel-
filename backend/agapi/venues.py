@@ -1643,7 +1643,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         f = {x["label"]: x["value"] for x in held["fields"]}
         prep = await VT.prepare({"name": venue, "website": held.get("website"), "place_id": held.get("place_id")},
                                 {"name": f.get("Name"), "phone": f.get("Mobile"), "email": f.get("Email")},
-                                held["when"][:10], held["when"][11:16], int(held["party"]))   # CR 89 · ready to confirm; nothing submitted
+                                held["when"][:10], held["when"][11:16], int(held["party"]), account=ctx.account)   # CR 89 · nothing submitted
         if prep:
             held = {**held, "url": prep["link"], "human_step": prep.get("human_step"), "prep_say": prep.get("say")}
         phone_fields = await _with_loyalty(ctx, held)   # Sasha 253 · G14 — the value only here, on their phone

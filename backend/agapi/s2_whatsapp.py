@@ -80,6 +80,11 @@ async def send_whatsapp(ctx, a: dict) -> dict:
     c = await REC.contact(ctx.account, number)
     if c and c.get("opted_out_at"):
         raise ToolError("recipient_opted_out", "they replied STOP to Sasha — she never writes to them again. Nothing was sent.")
+    from agapi.venues import one_path
+    if one_path(ctx):   # Sasha 285 · CR 118 (c) · ONE WHATSAPP PATH: a WhatsApp to a third party leaves Kanoe's number only through AgAPI
+        # (messages.send_whatsapp / the send gate). Not wired here yet → OFF: the message in THEIR OWN WhatsApp, pre-filled — they send it.
+        # Old S1 (parity off) keeps its own path below, byte for byte.
+        return _in_their_whatsapp(number, to.get("name"), a.get("text"), "agapi_only")
     now = datetime.now(timezone.utc)
     live, frm = live_for(ctx.account), _from() or "Sasha's WhatsApp"
     free = bool(c) and P.window_open(c.get("last_inbound_at"), now.isoformat())
@@ -144,6 +149,8 @@ WHY_THEIRS = {
     "no_window": "WhatsApp only lets me write first to someone who's messaged my number in the last 24 hours — so it's ready in "
                  "your WhatsApp: press send.",
     "not_live": "In this beta I only send from my own number for a few accounts — so it's ready in your WhatsApp: press send.",
+    # Sasha 285 · CR 118: a third party is never written to from Kanoe's number except through AgAPI's one send path
+    "agapi_only": "I don't send WhatsApps to other people from my number — so it's ready in your WhatsApp: press send.",
 }
 
 

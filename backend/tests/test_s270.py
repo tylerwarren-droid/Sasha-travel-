@@ -74,7 +74,8 @@ class TheOneClassifier(unittest.TestCase):
         seen = []
 
         async def call(account, op, body, approval=None):
-            seen.append(body)
+            if op == "venue.prepare_booking":   # Sasha 285 · the person (users.register) is asked for first
+                seen.append(body)
             return {"ok": True, "result": {"prepared_id": "vpr_" + "a" * 32}}
         with mock.patch.object(VS, "_call", call):
             run(VS.prepare(ACCT, {"name": "Mandrake", "place_id": "p1"}, {"name": "Alex"}, "2026-10-20", "21:00", 2, link=FORM))

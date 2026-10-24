@@ -7,6 +7,7 @@ Sasha's number only inside the 24-hour window (and for the accounts it's live fo
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -34,19 +35,20 @@ class TheirOwnWhatsApp(unittest.TestCase):
         self.assertFalse(out["sent_by_sasha"])
         self.assertTrue(out["open"].startswith("https://wa.me/447700900123?text="))
         self.assertEqual(unquote(out["open"].split("text=", 1)[1]), TEXT)
-        self.assertEqual(out["why"], WA.WHY_THEIRS["not_live"])
+        self.assertEqual(out["why"], WA.WHY_THEIRS["agapi_only"])   # Sasha 285 · CR 118: never Kanoe's number but through AgAPI
 
     def test_s2_live_but_no_window_says_exactly_why(self):
         out = self.send("s2", live=True, window=False)
-        self.assertEqual((out["status"], out["why"]), ("open_in_their_whatsapp", WA.WHY_THEIRS["no_window"]))
-        self.assertIn("24 hours", out["why"])
+        self.assertEqual((out["status"], out["why"]), ("open_in_their_whatsapp", WA.WHY_THEIRS["agapi_only"]))   # Sasha 285
 
     def test_s2_inside_the_window_she_sends_as_today(self):
+        # Sasha 285 · CR 118 (c): moved — inside the window too, Sasha no longer posts it herself: their WhatsApp, pre-filled
         out = self.send("s2", live=True, window=True)
-        self.assertEqual(out["status"], "awaiting_yes")                    # read back first, then their yes — unchanged
+        self.assertEqual(out["status"], "open_in_their_whatsapp")
 
     def test_s1_unchanged(self):
-        out = self.send("s1", live=False, window=False)
+        with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"}):   # Sasha 285 · old S1 = parity off (its own path, byte for byte)
+            out = self.send("s1", live=False, window=False)
         self.assertNotEqual(out["status"], "open_in_their_whatsapp")
 
     def test_never_the_set_up_line(self):

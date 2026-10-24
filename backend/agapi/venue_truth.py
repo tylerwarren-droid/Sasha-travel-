@@ -158,13 +158,18 @@ async def _read_site(website: Optional[str], replay: bool = False, place: Option
         _INFLIGHT.pop(host, None)
 
 
-async def prepare(place: dict, person: dict, date: str, time_: str, party: int) -> Optional[dict]:
+async def prepare(place: dict, person: dict, date: str, time_: str, party: int, account: Optional[str] = None) -> Optional[dict]:
     """"Fill it now" (CR 89's venue.prepare_booking): a ready-to-confirm link for their phone — NOTHING is submitted; human_step is
     theirs. None when the engine doesn't prepare it (then their own page + the details to copy, as before)."""
     if ENGINE_OP != "venue.profile":
         return None
     body = {"place": {k: v for k, v in {"name": place.get("name"), "website": place.get("website"), "place_id": place.get("place_id")}.items() if v},
             "person": {k: v for k, v in person.items() if v}, "date": date, "time": time_, "party": int(party)}
+    if account:   # Sasha 285 · CR 118 (a): the person, registered on THIS transport's AgAPI — its gate reads their access record
+        from agapi import agapi_route as AR, venue_submit as VS
+        eu = await VS.end_user(account, on=await AR.target_for(FAMILY), via=CALL)
+        if eu:
+            body["end_user"] = eu
     try:
         r = await CALL("venue.prepare_booking", body)
     except Exception as e:

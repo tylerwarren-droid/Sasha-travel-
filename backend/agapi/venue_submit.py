@@ -69,16 +69,33 @@ async def target(account: str) -> str:
         return await AR.target_for(FAMILY, account)
 
 
-async def end_user(account: str) -> Optional[str]:
-    k = f"{await target(account)}|{account}"   # each AgAPI has its own end users
+async def end_user(account: str, on: Optional[str] = None, via: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None) -> Optional[str]:
+    """The person's AgAPI end user — ONE registry for every caller. Sasha 285 · `on`/`via`: a caller with its own transport (venue_truth's
+    venue.prepare_booking) registers on THAT AgAPI, so the end user it passes is one that AgAPI knows."""
+    k = f"{on or await target(account)}|{account}"   # each AgAPI has its own end users
     if k in _USERS:
         return _USERS[k]
-    r = await _call(account, "users.register", {"external_ref": f"sasha:{account}"})
-    if r.get("ok"):
-        _USERS[k] = r["result"]["end_user_id"]
-        return _USERS[k]
-    log.warning("[venue_submit] no end user: %s", (r.get("error") or {}).get("code"))
+    reg = {"external_ref": f"sasha:{account}"}
+    r = await (via("users.register", reg) if via else _call(account, "users.register", reg))
+    eid = (r.get("result") or {}).get("end_user_id") if r.get("ok") else None
+    if eid:
+        _USERS[k] = eid
+        return eid
+    log.warning("[venue_submit] no end user: %s", (r.get("error") or {}).get("code") or "no end_user_id")
     return None
+
+
+async def whatsapp_inbound(sender: str, text: str) -> Dict[str, Any]:
+    """Sasha 285 · CR 118 (b) · a WhatsApp that reached Kanoe's number from someone who is NOT a guest talking to Sasha → AgAPI's ONE
+    inbound op (messages.whatsapp_inbound), exactly as it arrived: from a number Kanoe wrote to, AgAPI keeps it, records a STOP and
+    files a venue's answer on ITS booking record → {"matched": True}. Anyone else → {"matched": False}: Sasha's own paths, as before.
+    AgAPI unreachable → {"matched": False, "why"} (never lost: Sasha's own path still files it)."""
+    r = await _call(None, "messages.whatsapp_inbound", {"from": str(sender)[:24], "text": str(text or "")[:4000]})
+    if not r.get("ok"):
+        log.warning("[venue_submit] whatsapp_inbound not handed over: %s", (r.get("error") or {}).get("code"))
+        return {"matched": False, "why": (r.get("error") or {}).get("code") or "unavailable"}
+    res = r.get("result") or {}
+    return {"matched": bool(res.get("matched")), **({k: res[k] for k in ("kept", "why") if k in res})}
 
 
 def _err(r: dict) -> dict:
@@ -98,6 +115,9 @@ async def prepare(account: str, place: dict, person: dict, date: str, time_: str
             "person": {k: v for k, v in person.items() if v}, "date": date, "time": time_, "party": int(party),
             **({"notes": notes[:500]} if notes else {}), **({"call": call} if call else {}), **({"link": {"url": link[:500]}} if link else {}),
             **({"stay": stay} if stay else {})}
+    eu = await end_user(account)   # Sasha 285 · CR 118 (a): whose access record decides "Kanoe sends it" (their kanoe_whatsapp switch)
+    if eu:
+        body["end_user"] = eu
     r = await _call(account, "venue.prepare_booking", body)
     if not r.get("ok"):
         return {"ok": False, "error": _err(r)}

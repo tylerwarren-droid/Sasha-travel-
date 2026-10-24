@@ -158,6 +158,10 @@ def standalone(text: str) -> str:
 
 #: Sasha 280 · the travel tools as /s2 (and /next with parity) describe them — S1's own descriptions (v0.TOOLS) untouched
 STANDALONE_TOOLS = {
+    # Sasha 285 · CR 118 (c): a third party's WhatsApp leaves Kanoe's number only through AgAPI — on the one path, it's THEIR WhatsApp
+    "send_whatsapp": "A WhatsApp to someone the person names: draft it (text), and it opens in THEIR OWN WhatsApp, pre-filled to that "
+                     "number — they press send. Sasha never sends it from her number. Nothing to read back and no yes to ask: the tap on "
+                     "Send is theirs. Never say it was sent.",
     "search_flights": "Flights between two places on a day, cheapest first (TEST fares). A flight is bookable ON ITS OWN straight from "
                       "these cards (choose_offer → hold_booking → book) — no trip and no hotel needed. When the flight is part of the trip "
                       "they're working on (its route and its days), the cards are that trip's options for that leg.",

@@ -106,7 +106,7 @@ class TheSend(HandleIt):
         out = self.handle_it()
         self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "fill_form_zero_touch"))
         self.assertEqual(out["read_back"][0], "I'll send Casa Gate's own booking form: 2 people, under Alex Gate.")   # AgAPI's read-back
-        self.assertEqual(self.agapi.ops(), ["venue.prepare_booking", "users.register", "venue.submit_booking"])   # nothing sent yet
+        self.assertEqual(self.agapi.ops(), ["users.register", "venue.prepare_booking", "venue.submit_booking"])   # nothing sent yet (285: the person first)
         prep = self.agapi.body("venue.prepare_booking")
         self.assertEqual((prep["person"]["name"], prep["person"]["phone"], prep["party"]), ("Alex Gate", "+447700900211", 2))
         self.assertEqual(prep["place"]["website"], "https://casagate.es")

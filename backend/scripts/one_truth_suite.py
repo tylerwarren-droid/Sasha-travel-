@@ -230,6 +230,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T64": ("S2 follows AgAPI's ONE booking decision (venue.profile): its say_text and its button, every route the person finishes handed "
             "over through the one hand-over path (venue.prepare_booking); never \"can't\" while AgAPI found a route",
             ["tests.test_s284"]),
+    "T65": ("One WhatsApp path: a third party's WhatsApp never leaves Kanoe's number from the one path but through AgAPI (their own "
+            "WhatsApp until then); a reply from a number Kanoe wrote to goes to AgAPI's one inbound op first; the person rides on prepare",
+            ["tests.test_s285"]),
 }
 
 _RUNNER = """

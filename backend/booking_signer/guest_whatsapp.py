@@ -570,6 +570,17 @@ def _twiml_message(text: str) -> str:
 _SEEN_SIDS: Dict[str, float] = {}   # the memory store's (tests); the Postgres store uses guest_inbound_sids (034)
 
 
+async def linked(number: str) -> bool:
+    """Sasha 285 · a guest talking to Sasha on WhatsApp (their number linked to an account) — their messages are hers, never AgAPI's."""
+    if STORE is None or not number:
+        return False
+    try:
+        return bool(await STORE.channel_for(wa_key(number)))
+    except Exception as e:
+        log.warning("[guest_whatsapp] linked() unreadable: %s", type(e).__name__)
+        return True   # unreadable: treated as a guest — the guest pipeline decides, nothing is handed to anyone
+
+
 async def first_time(sid: str) -> bool:
     """True the first time a MessageSid is seen (or when there is none to go by); False for a repeat — in guest_inbound_sids
     on the Postgres store (Sasha 207 · 034 applied: across restarts), in this process on the memory store."""

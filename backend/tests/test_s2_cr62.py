@@ -30,7 +30,8 @@ def run(c):
 
 
 def env(**over):
-    e = {"SASHA_S2_EMAIL_LIVE": "1", "FOUNDER_ACCOUNT_ID": FOUNDER, "SASHA_REAL_CONTACT_ACCOUNTS": JON, "SASHA_WA_ONBEHALF_SID": "HX" + "0" * 32,
+    e = {"SASHA_S1_PARITY": "off",   # Sasha 285 · CR 62's own sender is OLD S1's only now (the one path: their WhatsApp — test_s285)
+         "SASHA_S2_EMAIL_LIVE": "1", "FOUNDER_ACCOUNT_ID": FOUNDER, "SASHA_REAL_CONTACT_ACCOUNTS": JON, "SASHA_WA_ONBEHALF_SID": "HX" + "0" * 32,
          "SASHA_GUEST_WHATSAPP_TO": "+447700900000"}
     e.update(over)
     return mock.patch.dict(os.environ, e)

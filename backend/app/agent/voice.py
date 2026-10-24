@@ -429,6 +429,9 @@ FINISH_IT = "Here's their page with your booking ready — you finish it there, 
 OPEN_THEIR_PAGE = "Open their page"
 #: Sasha 284b · AgAPI's decision is a call (a phone-only venue): her offer — never NO_LINK, never "only by phone" (rule 15)
 CALL_IT = "I'll make the booking — I can call them for you."
+#: Sasha 284b · handed over with NOTHING prepared (no slot to fill): their way in, and the way back — never "your booking is ready"
+REACH_THEM = "Here's how to reach them — you take it from there, and I'll ask how it went when you're back."
+NO_WAY_YET = "It's on your list — if you have their booking link, send it to me and I'll fill it in."
 
 
 def went_through(venue: str) -> str:

@@ -219,8 +219,15 @@ class TheHoldFollows(unittest.TestCase):
         self.assertEqual(self.calls, [])   # no day and time to prepare: venue.profile's button as given
         self.assertEqual(out["button"], {"label": "Book on Fresha", "link": DECISIONS["platform"]["button"]["link"]})
         self.assertEqual(out["open"], DECISIONS["platform"]["button"]["link"])
-        self.assertTrue(out["say"].startswith(DECISIONS["platform"]["say_text"]))
+        self.assertTrue(out["say"].startswith(V.REACH_THEM))   # 284b: nothing prepared → never AgAPI's "on the card" / "I've written it"
         self.assertEqual(len(self.mem.kinds[VN.PREPARED_KIND]), 1)
+
+    def test_nothing_prepared_never_claims_a_ready_booking(self):   # 284b · live: Boys Don't Cry, a quote, a guest's access
+        out = self._follow("message_kanoe", at="", refused=True, a={"name": "Boys Don't Cry", "open_slot": "quote", "day": "2099-11-01"})
+        self.assertEqual(self.calls, [])
+        self.assertTrue(out["say"].startswith(V.REACH_THEM))   # the card's site: their way in
+        self.assertNotIn("ready", out["say"])
+        self.assertNotIn("written", out["say"])
 
     def test_a_refused_act_is_their_prepared_page_never_cant(self):
         out = self._follow("send_form", refused=True)
@@ -262,7 +269,7 @@ class NeverCantWhileAgAPIFoundARoute(unittest.TestCase):
             self.assertTrue(key == "no_channel" or CANT.search(BR.PHRASES.get(key, "can't")) or "won't" in BR.PHRASES.get(key, ""), key)
 
     def test_her_follow_lines_never_say_cant(self):
-        for line in (V.FINISH_IT, V.OPEN_THEIR_PAGE, V.CALL_IT):
+        for line in (V.FINISH_IT, V.OPEN_THEIR_PAGE, V.CALL_IT, V.REACH_THEM, V.NO_WAY_YET):
             self.assertFalse(CANT.search(line), line)
             self.assertFalse(V.limits_channel(line), line)
         for name in DECISIONS:

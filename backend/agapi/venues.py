@@ -816,7 +816,9 @@ async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card
     await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], res["how_many"]["count"], link)
     return {"status": "page_link", "venue": venue, "booked": False, "route": dec["route"], **_link_out(link),
             **({"button": {"label": V.OPEN_THEIR_PAGE if refused else (dec.get("button") or {}).get("label"), "link": link}} if link else {}),
-            "say": (V.FINISH_IT if refused else dec["say_text"]) + " Say exactly that — never that it's booked."}
+            # Sasha 284b (live, Boys Don't Cry — a quote, no slot): nothing was prepared here, so neither AgAPI's words ("I've written it")
+            # nor FINISH_IT ("your booking ready") — the plain hand-over: their way in, and the way back
+            "say": (V.REACH_THEM if link else V.NO_WAY_YET) + " Say exactly that — never that it's booked."}
 
 
 _URL = re.compile(r"https?://[^\s<>\"'`]+", re.I)

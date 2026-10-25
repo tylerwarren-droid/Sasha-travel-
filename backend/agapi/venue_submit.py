@@ -187,7 +187,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
                                       "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
                                       **({"country": held["country"]} if held.get("country") else {}),   # Sasha 259 · its calendar zone
                                       **({"route": "call"} if res.get("route") == "call" else {}),      # Sasha 265 · a phone booking
-                                      **_whatsapp_of(res),   # Sasha 287 · sent from Kanoe's WhatsApp (its reference: Twilio's message id)
+                                      **_whatsapp_of(res, held, said),   # Sasha 287 · Kanoe's WhatsApp: its consent, its reference (Twilio's id)
                                       **({"reference": res["reference"]} if res.get("reference") else {})})
         return {"ok": True, **res}
     if await target(account) == "sandbox":
@@ -210,14 +210,19 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     if res.get("act_id"):
         await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
                                   "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
-                                  **({"route": "call"} if res.get("route") == "call" else {}), **_whatsapp_of(res),
+                                  **({"route": "call"} if res.get("route") == "call" else {}), **_whatsapp_of(res, held, said),
                                   **({"reference": res["reference"]} if res.get("reference") else {})})
     return {"ok": True, **res}
 
 
-def _whatsapp_of(res: dict) -> dict:
-    """Sasha 287 · an act AgAPI sent from Kanoe's WhatsApp number (venue.submit_booking's how: whatsapp / whatsapp_template)."""
-    return {"channel": "whatsapp"} if str(res.get("how") or "").startswith("whatsapp") and res.get("status") == "sent" else {}
+def _whatsapp_of(res: dict, held: dict, said: str) -> dict:
+    """Sasha 287 · an act AgAPI sent from Kanoe's WhatsApp number (venue.submit_booking's how: whatsapp / whatsapp_template), with the
+    CONSENT it went on, on the booking record: their own words (the request was the yes), else their tap / their spoken yes."""
+    if not (str(res.get("how") or "").startswith("whatsapp") and res.get("status") == "sent"):
+        return {}
+    consent = held.get("consent") or {"kind": "in_app_tap" if TAP.get() is not None else "whatsapp_reply" if WA.get() is not None
+                                       else "their_yes", "said": str(said or "")[:300]}
+    return {"channel": "whatsapp", "consent": consent}
 
 
 def _follow_up_of(held: dict) -> dict:
@@ -359,12 +364,22 @@ async def bookings(account: str) -> List[dict]:
 
 
 def wa_line(a: dict, state: str) -> str:
-    """Sasha 287 · a WhatsApp sent from Kanoe's number, as the person sees it: "Sent at 21:04 · waiting for Casa", their reply when it
-    came (their words — data), or their STOP. The time is the venue's local clock (its country), as every booking time is."""
+    """Sasha 287 · a WhatsApp sent from Kanoe's number, in ONE line: "Asked at 21:04 · waiting for Casa"; their answer — "Casa said yes —
+    Friday 21:00 for 2" / "Casa offered 21:30 — shall I take it?" / "Casa said no." — or their STOP. Times are the venue's local clock."""
+    import re
+    from datetime import datetime, timezone
     from app.agent import voice as V
     venue = str(a.get("venue") or "the venue")
+    when = str(a.get("when") or "")
     if state == "stopped":
         return V.wa_stopped_line(venue)
+    if state == "confirmed" and len(when) >= 16:
+        return V.wa_yes_line(venue, V.day_words(when, datetime.now(timezone.utc).date()), when[11:16], a.get("party"))
+    if state == "proposed":   # the time THEY offered, from their words (data), else "another time"
+        m = re.search(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b", str(a.get("words") or ""))
+        return V.wa_offered_line(venue, f"{int(m.group(1)):02d}:{m.group(2)}" if m else None)
+    if state == "declined":
+        return V.wa_no_line(venue)
     if a.get("words"):
         return V.wa_replied_line(venue, a["words"])
     return V.wa_sent_line(local_hhmm(a.get("at"), a.get("country")), venue)

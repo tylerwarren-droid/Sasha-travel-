@@ -236,8 +236,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T66": ("The floor: she never asks for a link — the last resort is ONE hand-over (AgAPI's own floor, else their website, else their "
             "listing, with the way back); no string, AgAPI say_text or model line on the one path asks for a link",
             ["tests.test_s286"]),
-    "T67": ("Kanoe's WhatsApp on their yes (beta): only AgAPI's gate (decision.sender, the read-back) and the person's tap on the exact "
-            "read-back send it, once; any no is the same card as their own WhatsApp; S2 has no flag, list or sender of its own",
+    "T67": ("Kanoe's WhatsApp (beta), minimum involvement: only AgAPI's gate (decision.sender, the read-back) lets it leave Kanoe's "
+            "number; their own words giving venue, day, time and people are the yes (sent, one line), else ONE line asks — never a detail "
+            "they didn't say or confirm, never the message's text, once; any no is their own WhatsApp; no flag, list or sender of S2's own",
             ["tests.test_s287"]),
 }
 

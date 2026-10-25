@@ -61,7 +61,7 @@ def read_back_line(tool: str, r: dict) -> str:
     res = (r or {}).get("result") if (r or {}).get("ok") else None
     if tool not in ("hold_venue", "book_venue") or not isinstance(res, dict) or res.get("status") != "awaiting_yes":
         return ""
-    if res.get("choices") and res.get("ask") and res.get("read_back"):   # Sasha 265 · item 4: the ONE question that IS the call's card
+    if res.get("choices") and res.get("ask"):   # Sasha 265 · item 4: the ONE question that IS the call's card (287: Kanoe's, no text)
         return res["ask"]
     return res["ask"] if res.get("read_back") and res.get("ask") and res["ask"] == READ_BACK_ASK.format(venue=res.get("venue")) else ""
 
@@ -124,16 +124,45 @@ def floor_line(what: str = "website") -> str:
 
 FLOOR = floor_line()
 
-# Sasha 287 · KANOE'S WHATSAPP (beta): AgAPI's read-back of the exact message with ONE question over it — the tap is the yes. A "no"
-# from AgAPI's gate anywhere is the same card as their own WhatsApp, in AgAPI's words (handoff.SENDERS "person" — these, when it gives none).
-KANOE_ASK = "Shall I send this from Kanoe's WhatsApp?"
-KANOE_CHOICES = ({"title": "Yes, send it", "route": "send"}, {"title": "I'll send it from my WhatsApp", "route": "own"})
-SEND_ON_WHATSAPP = "Send on WhatsApp"
-OWN_WHATSAPP = "I've written it for you: tap “Send on WhatsApp” and it goes from your phone; they'll reply to you."
+# Sasha 287 · KANOE'S WHATSAPP (beta) · THE CONSENT RULE (Tyler, 25 Oct: "cut down on the user involvement"). Their own words giving the
+# venue, day, time and people ARE the yes: sent, ONE line said. S2 filled in any of the four: ONE line asks, never the message's text. A
+# "no" from AgAPI's gate is the same line as their own WhatsApp. Her voice names no channel here (AgAPI's "{venue} takes booking
+# requests by WhatsApp — …" names and limits it: her own line instead).
+KANOE_CHOICES = ({"title": "Yes, send it", "route": "send"},)
+SEND_ON_WHATSAPP = "Send on WhatsApp"   # the hand-over button's label (AgAPI's), never said
+OWN_WHATSAPP = "I've written it for you: tap the button and it goes from your phone; they'll reply to you."
+
+
+def day_words(at: str, today) -> str:
+    """The booking's day as she says it: today / tomorrow / the weekday within the week, else "Sun 1 Nov"."""
+    from datetime import date as _d
+    d = _d.fromisoformat(str(at)[:10])
+    gap = (d - today).days
+    return "today" if gap == 0 else "tomorrow" if gap == 1 else d.strftime("%A") if 0 < gap <= 6 else f"{d:%a} {d.day} {d:%b}"
+
+
+def kanoe_ask(venue: str, day: str, hhmm: str, n) -> str:
+    return f"{venue}, {day} {hhmm} for {n}. Shall I send?"
+
+
+def wa_done_line(venue: str, day: str, hhmm: str, n) -> str:
+    return f"Done — I've asked {venue} for {day} at {hhmm} for {n}. I'll tell you when they reply."
 
 
 def wa_sent_line(hhmm: str, venue: str) -> str:
-    return f"Sent at {hhmm} · waiting for {venue}."
+    return f"Asked at {hhmm} · waiting for {venue}."
+
+
+def wa_yes_line(venue: str, day: str, hhmm: str, n) -> str:
+    return f"{venue} said yes — {day} {hhmm} for {n}."
+
+
+def wa_offered_line(venue: str, hhmm: Optional[str]) -> str:
+    return f"{venue} offered {hhmm or 'another time'} — shall I take it?"
+
+
+def wa_no_line(venue: str) -> str:
+    return f"{venue} said no."
 
 
 def wa_replied_line(venue: str, words: str) -> str:
@@ -141,10 +170,10 @@ def wa_replied_line(venue: str, words: str) -> str:
 
 
 def wa_stopped_line(venue: str) -> str:
-    return f"{venue} replied STOP — nothing more goes to them from Kanoe's WhatsApp."
+    return f"{venue} replied STOP — nothing more goes to them from Kanoe."
 
 
-_LINKW =r"(?:booking )?(?:links?|urls?|web ?sites?|web ?pages?|booking pages?)"
+_LINKW = r"(?:booking )?(?:links?|urls?|web ?sites?|web ?pages?|booking pages?)"
 _ASKS_LINK = re.compile(
     r"\b(?:send|paste|share|give|drop|forward|text|pass)\s+(?:me|us)\b[^.?!\n]{0,40}\b" + _LINKW + r"\b"          # send me their link
     r"|\b(?:paste|drop|share|send|put|forward)\b[^.?!\n]{0,40}\b" + _LINKW + r"\b[^.?!\n]{0,20}\b(?:here|to me|with me)\b"   # paste the website here
@@ -805,5 +834,5 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
-           "TOLD", "told_line", "told_prefix", "is_told", "KANOE_ASK", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP",
-           "wa_sent_line", "wa_replied_line", "wa_stopped_line"]
+           "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
+           "wa_done_line", "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]

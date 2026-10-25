@@ -216,7 +216,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
     # Sasha 250 · the prefilled form now comes from hold_venue too (249: the form IS the go-ahead, no second yes) — found live: she
     # said "Done — it's on your screen" and the card was never drawn, because only book_venue's result rendered it
-    if tool in ("hold_venue", "book_venue") and res.get("status") == "awaiting_yes" and res.get("read_back") and res.get("ask"):   # 258: + a stale card's new read-back
+    if tool in ("hold_venue", "book_venue") and res.get("status") == "awaiting_yes" and (res.get("read_back") or res.get("choices")) \
+            and res.get("ask"):   # 258: + a stale card's new read-back · 287: Kanoe's one line has no text, only its question
         # Sasha 256 · demo path item 10: on a screen the venue read-back is a CARD (she says one line over it, venues.READ_BACK_ASK)
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]],
                 # Sasha 265 · item 4: the call's card IS the ONE question — its words and its buttons (the tap is the approval)
@@ -1694,10 +1695,9 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
             yield ev
         return
     rid = str(tap.get("read_back_id") or "")[:80]
-    # Sasha 287 · Kanoe's WhatsApp card: "send" (the tap IS the yes) / "own" (their own WhatsApp, nothing sent)
-    choice = tap.get("choice") if tap.get("choice") in ("page", "send", "own") else "call"
+    choice = tap.get("choice") if tap.get("choice") in ("page", "send") else "call"   # Sasha 287 · "send": Kanoe's one line, its yes
     ctx.idem = f"card_tap:{account}:{rid}:{choice}"
-    tool = "hold_venue" if choice in ("page", "own") else "book_venue"
+    tool = "hold_venue" if choice == "page" else "book_venue"
     try:
         res = await VN.answer_card(ctx, rid, choice)
         r = {"ok": True, "result": res}

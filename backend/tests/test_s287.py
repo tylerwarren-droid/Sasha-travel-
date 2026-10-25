@@ -1,21 +1,18 @@
-"""Sasha 287 · T67 — SASHA SENDS THE VENUE'S WHATSAPP HERSELF, FROM KANOE'S NUMBER, ON THE PERSON'S YES (beta: Tyler's and Jon's accounts,
-Tyler's decision 23–24 Oct; AgAPI v1.29.3 carries the gate with `beta` and AGAPI_KANOE_WHATSAPP=on; CR 119 writes the beta rows).
+"""Sasha 287 · T67 — SASHA SENDS THE VENUE'S WHATSAPP HERSELF, FROM KANOE'S NUMBER (beta: Tyler's and Jon's accounts, person_access
+kanoe_whatsapp = beta). MINIMUM INVOLVEMENT (Tyler, 25 Oct 06:34: "cut down on the user involvement" — no message read-back).
 
 ROOT TEST (written before the code):
   (1) ONE truth for "may this message leave Kanoe's number": AgAPI's gate — venue_messages.kanoe_send_allowed (agapi_service/
-      venue_messages.py), checked by AgAPI at venue.prepare_booking (decision.sender "kanoe" | "person", its person_send.kanoe_sends), again
-      at venue.submit_booking's read-back (status not_allowed) and again at the send (venue_submit._send_whatsapp → send_kanoe) — plus the
-      approval S2 records: approvals.in_app_tap on THAT read-back's sha256 (AgAPI writes it on the booking's ONE record, record_yes, before the
-      send; take_yes uses it up). S2 reads the gate's answer in ONE place: agapi/venues.py kanoe_whatsapp() — decision.sender from
-      venue_submit.prepare, then venue_submit.read_back's not_allowed. S2 keeps no flag, no list and no second sender.
-  (2) S2 deciding for itself whether Kanoe may send — its own flag or env switch, an allow-list of emails or accounts (the founder check),
-      its own booking rules choosing request_whatsapp over AgAPI's answer, or a second send path beside 285's (s2_whatsapp._twilio, a
-      messages.send_whatsapp of its own) = PATCH.
-  (3) After it, S2 can never send without (a) AgAPI's gate saying yes for this person and (b) the person's tap on the exact read-back text,
-      recorded before the send. The ratchet: the Kanoe card holds only on AgAPI's sender "kanoe" and a read-back; the send is only
-      venue_submit.submit on the held read-back (in_app_tap on its sha256), once — a retry is AgAPI's approval_consumed, never a second send;
-      no Kanoe flag / allow-list / Twilio post in S2's code; a "no" anywhere is the SAME card as their own WhatsApp (285's hand-over), never
-      "can't".
+      venue_messages.py), checked by AgAPI at venue.prepare_booking (decision.sender "kanoe" | "person"), at venue.submit_booking's
+      read-back (not_allowed) and at the send (_send_whatsapp → send_kanoe) — plus the consent S2 records: approvals.in_app_tap on THAT
+      read-back (AgAPI's record_yes before the send, take_yes uses it up) and, on S2's booking record (venue_acts), what the consent was:
+      their own words, or their tap / spoken yes. S2 reads the gate's answer in ONE place: agapi/venues.py kanoe_whatsapp().
+  (2) S2 deciding for itself whether Kanoe may send — its own flag or env switch, an allow-list of emails or accounts, its own booking
+      rules choosing request_whatsapp over AgAPI's answer, or a second send path beside 285's (s2_whatsapp._twilio, a send of its own) = PATCH.
+  (3) Can S2 ever send a detail (venue, day, time, people) the person neither said nor confirmed? The ratchet: it sends without asking ONLY
+      when agapi/said.which() reads all four in THIS turn's words, each matching the booking exactly (conservative: unread = not said);
+      any one S2 filled in → ONE line names all four and asks, and only their yes sends it. Consent is single-use (AgAPI's approval; a
+      durable claim on their words), so a retry never sends again.
 Offline: a fake AgAPI only — nothing reaches AgAPI, Twilio or a phone.
     cd backend && python -m unittest tests.test_s287 -v
 """
@@ -43,7 +40,7 @@ LINES = [f"Sasha writes to Casa Gate by WhatsApp from Kanoe's number, asking for
 CARD = {"name": "Casa Gate", "place_id": "ChIJ287", "ref": "casa", "website": "https://casagate.example/"}
 RD = {"venue": "Casa Gate", "place_id": "ChIJ287", "read_id": "r287", "rungs": {}, "country": "ES", "facts": []}
 RES = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+447700900287"}}, "how_many": {"count": 2},
-       "when": {"at": "2099-11-01T21:00", "mode": "slot"}, "what": {"category": "restaurant"}}
+       "when": {"at": "2099-10-30T21:00", "mode": "slot"}, "what": {"category": "restaurant"}}
 PROFILE_DEC = {"route": "message", "channel": "WhatsApp", "how_far": "request", "sender": "person",
                "say_text": "Casa Gate takes bookings by WhatsApp: I've written it for you: tap “Send on WhatsApp” and it goes from your phone; "
                            "they'll reply to you.", "button": {"label": "Send on WhatsApp", "link": WA, "sends": False}}
@@ -117,6 +114,9 @@ def ctx(said="", surface="s2"):
     return c
 
 
+FULL_DEFAULT = "Book Casa Gate for 2 on Friday at 9pm"
+
+
 class Base(unittest.TestCase):
     gate = True
     gate_at_read = None
@@ -140,7 +140,8 @@ class Base(unittest.TestCase):
                   mock.patch.object(GR, "address_of", mock.AsyncMock(return_value="alex.gate@example.com")),
                   mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value="")),
                   mock.patch.object(VS, "target", mock.AsyncMock(return_value="live")),
-                  mock.patch.object(VT, "decision", lambda p: PROFILE_DEC)]
+                  mock.patch.object(VT, "decision", lambda p: PROFILE_DEC),
+                  mock.patch.object(VN, "_today", lambda country: __import__("datetime").date(2099, 10, 27))]   # a Tuesday: Friday is this week
         for p in self.p:
             p.start()
         VN.remember_cards(ACCT, [CARD])
@@ -149,21 +150,21 @@ class Base(unittest.TestCase):
         for p in self.p:
             p.stop()
 
-    def hold(self):
+    def hold(self, words=FULL_DEFAULT):
         tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})   # an in-app turn (/s2): its own session, for the whole turn
         try:
-            return self._hold()
+            return self._hold(words)
         finally:
             VS.TAP.reset(tok)
 
-    def _hold(self):
+    def _hold(self, words):
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(RD))), \
                 mock.patch.object(VN, "_reservation", mock.AsyncMock(return_value=RES)), \
                 mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), \
                 mock.patch.object(VN, "rules_for", mock.AsyncMock(side_effect=AssertionError("S2's own rules never decide a Kanoe send"))):
-            out = run(VN.hold_venue(ctx("Book Casa Gate for 2 at 21:00 on 1 Nov"), {"name": "Casa Gate", "place_id": "ChIJ287",
-                                                                                    "day": "2099-11-01", "time": "21:00", "party": 2}))
+            out = run(VN.hold_venue(ctx(words), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
+                                                 "time": "21:00", "party": 2}))
         if ACCT in VN._HELD:
             VN._HELD[ACCT]["at"] -= timedelta(minutes=1)   # the yes comes in a later turn
         return out
@@ -185,43 +186,82 @@ def _said(evs):
     return next(e["delta"] for e in evs if e["type"] == "text")
 
 
-class GateYesOneSend(Base):
-    """Offline 1 · gate yes → the exact read-back with ONE question → the tap → ONE send."""
+FULL = "Book Casa Gate for 2 on Friday at 9pm"
 
-    def test_the_card_is_agapis_read_back_with_the_one_question(self):
-        out = self.hold()
+
+class FullRequestSendsNoQuestion(Base):
+    """Offline 1 · their words give venue, day, time and people → sent, no question, ONE line."""
+
+    def test_their_words_are_the_yes(self):
+        out = self.hold(FULL)
+        self.assertEqual(out["status"], "requested")
+        self.assertEqual(self.agapi.sends, ["rbk_287"])
+        self.assertEqual(out["line"], "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you when they reply.")
+        self.assertNotIn("ask", out)
+        act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_287")
+        self.assertEqual((act["channel"], act["reference"]), ("whatsapp", "SM" + "2" * 32))   # Twilio's message id, on the booking
+        self.assertEqual(act["consent"], {"kind": "their_words", "said": FULL})                # their words, kept as the consent
+        self.assertNotIn("approvals.request", self.agapi.ops)                                  # nothing for them to tap
+
+
+class OneDetailInferredAsksOnce(Base):
+    """Offline 2 · one detail S2 filled in (no party said: the default 2) → ONE line, no message text → sent on their yes."""
+
+    def test_asks_once_without_the_message(self):
+        out = self.hold("Book Casa Gate on Friday at 9pm")
         self.assertEqual(out["status"], "awaiting_yes")
-        self.assertEqual(out["read_back"], LINES)                       # AgAPI's words, the exact text, as read back
-        self.assertEqual(out["ask"], V.KANOE_ASK)                       # "Shall I send this from Kanoe's WhatsApp?"
-        self.assertEqual([c["route"] for c in out["choices"]], ["send", "own"])
+        self.assertEqual(out["ask"], "Casa Gate, Friday 21:00 for 2. Shall I send?")
+        self.assertEqual(out["read_back"], [])                                                 # never the template's text
+        self.assertEqual(out["filled_in"], ["people"])
+        self.assertEqual(out["message_if_asked"], LINES)                                       # only if they ask to see it
         ev = S.render("hold_venue", out, {})
-        self.assertEqual((ev["kind"], ev["read_back_id"], ev["ask"]), ("read_back", "rbk_287", V.KANOE_ASK))
-        self.assertEqual(V.read_back_line("hold_venue", {"ok": True, "result": out}), V.KANOE_ASK)
-        self.assertEqual(self.agapi.sends, [])                          # nothing sent on the hold
-        self.assertNotIn("approvals.request", self.agapi.ops)           # in the app: no SMS link, the tap is the yes
+        self.assertEqual((ev["kind"], ev["read_back"], ev["ask"], ev["read_back_id"]), ("read_back", [], out["ask"], "rbk_287"))
+        self.assertEqual(V.read_back_line("hold_venue", {"ok": True, "result": out}), out["ask"])
+        self.assertEqual(self.agapi.sends, [])
 
-    def test_the_tap_sends_once_and_says_sent_at(self):
-        self.hold()
+    def test_the_tap_sends(self):
+        self.hold("Book Casa Gate on Friday at 9pm")
         evs = self.tap()
         self.assertEqual(self.agapi.sends, ["rbk_287"], evs)
-        said = _said(evs)
-        self.assertRegex(said, r"^Sent at \d\d:\d\d · waiting for Casa Gate\.$")
+        self.assertEqual(_said(evs), "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you when they reply.")
         act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_287")
-        self.assertEqual((act["channel"], act["reference"]), ("whatsapp", "SM" + "2" * 32))   # the Twilio SID, on the booking
+        self.assertEqual(act["consent"]["kind"], "in_app_tap")
+
+    def test_the_spoken_yes_sends(self):
+        self.hold("Book Casa Gate on Friday at 9pm")
+        tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})
+        try:
+            out = run(VN.book_venue(ctx("yes, send it"), {"name": "Casa Gate", "approval": {"said": "yes, send it"}}))
+        finally:
+            VS.TAP.reset(tok)
+        self.assertEqual((out["status"], self.agapi.sends), ("requested", ["rbk_287"]))
+
+
+class NoYesNoSend(Base):
+    """Offline 3 · no yes → nothing sent."""
+
+    def test_no_yes_no_send(self):
+        self.hold("Book Casa Gate on Friday")
+        self.assertEqual(self.agapi.sends, [])
+        from agapi import v0 as API
+        with self.assertRaises(API.ToolError):   # words that aren't a yes never send it
+            run(VN.book_venue(ctx("hmm, maybe later"), {"name": "Casa Gate", "approval": {"said": "hmm, maybe later"}}))
+        self.assertEqual(_said(self.tap(rid="rbk_other")), V.NOTHING_WAITING)   # a tap on a card that isn't the held one
+        self.assertEqual(self.agapi.sends, [])
+        self.assertNotIn("approvals.in_app_tap", self.agapi.ops)
 
 
 class GateNoTheHandOver(Base):
-    """Offline 2 · gate no → the SAME card is their own WhatsApp (285's hand-over), AgAPI's words, nothing sent, never "can't"."""
+    """Offline 4 · gate no → the same line is their own WhatsApp (285's hand-over), nothing sent, never "can't" — even for a full request."""
     gate = False
 
     def test_not_in_beta_is_their_own_whatsapp(self):
-        out = self.hold()
-        self.assertEqual(out["status"], "page_link")
-        self.assertEqual(out["page_url"], WA)
+        out = self.hold(FULL)
+        self.assertEqual((out["status"], out["page_url"]), ("page_link", WA))
         self.assertEqual(out["button"], {"label": "Send on WhatsApp", "link": WA})
-        self.assertTrue(out["say"].startswith(PROFILE_DEC["say_text"]))   # AgAPI's words for the person's own send
+        self.assertTrue(out["say"].startswith(V.OWN_WHATSAPP))
         self.assertNotIn("can't", out["say"].lower())
-        self.assertNotIn("venue.submit_booking", self.agapi.ops)          # no read-back: nothing to say yes to
+        self.assertNotIn("venue.submit_booking", self.agapi.ops)
         self.assertEqual(self.agapi.sends, [])
         self.assertEqual(S.render("hold_venue", out, {})["kind"], "handover")
         self.assertEqual(self.mem.kinds[VN.PREPARED_KIND][-1]["url"], WA)  # the way back (283)
@@ -231,7 +271,7 @@ class GateNoAtTheReadBack(Base):
     gate, gate_at_read = True, False
 
     def test_refused_at_the_read_back_is_the_same_hand_over(self):
-        out = self.hold()
+        out = self.hold(FULL)
         self.assertEqual((out["status"], out["page_url"]), ("page_link", WA))
         self.assertEqual(out["say"], V.OWN_WHATSAPP + " Say exactly that — never that it's booked.")   # AgAPI's "I can't…" never said
         self.assertEqual(self.agapi.sends, [])
@@ -241,37 +281,24 @@ class GateNoAtTheSend(Base):
     gate, gate_at_read, gate_at_send = True, True, False
 
     def test_refused_at_the_send_is_the_same_hand_over(self):
-        self.hold()
-        evs = self.tap()
+        out = self.hold(FULL)
         self.assertEqual(self.agapi.sends, [])
-        self.assertEqual(_said(evs), V.OWN_WHATSAPP)
-        ev = next(e for e in evs if e["type"] == "render")
-        self.assertEqual((ev["kind"], ev["url"]), ("handover", WA))
-
-
-class NoTapNoSend(Base):
-    def test_no_tap_no_send(self):
-        self.hold()
-        self.assertEqual(self.agapi.sends, [])
-        from agapi import v0 as API
-        with self.assertRaises(API.ToolError):   # words that aren't a yes never send it
-            run(VN.book_venue(ctx("hmm, maybe later"), {"name": "Casa Gate", "approval": {"said": "hmm, maybe later"}}))
-        self.assertEqual(_said(self.tap(rid="rbk_other")), V.NOTHING_WAITING)   # a tap on a card that isn't the held one
-        self.assertEqual(self.agapi.sends, [])
-        self.assertNotIn("approvals.in_app_tap", self.agapi.ops)
-
-    def test_own_is_their_whatsapp_never_a_send(self):
-        self.hold()
-        evs = self.tap(choice="own")
-        self.assertEqual(self.agapi.sends, [])
-        self.assertEqual(next(e for e in evs if e["type"] == "render")["url"], WA)
+        self.assertEqual((out["status"], out["page_url"], out["line"]), ("page_link", WA, V.OWN_WHATSAPP))
 
 
 class RetryNoSecondSend(Base):
-    def test_a_retry_never_sends_twice(self):
-        self.hold()
+    """Offline 5 · consent is single-use: the same request again, a double tap, a retry at the send — never a second send."""
+
+    def test_the_same_request_again(self):
+        self.hold(FULL)
+        out = self.hold(FULL)
+        self.assertEqual(self.agapi.sends, ["rbk_287"])
+        self.assertEqual(out["status"], "already_sent")
+
+    def test_a_double_tap(self):
+        self.hold("Book Casa Gate on Friday at 9pm")
         self.tap()
-        self.tap()                                                        # the same tap again (a double tap, a retry)
+        self.tap()
         self.assertEqual(self.agapi.sends, ["rbk_287"])
         held = {"rung": "agapi", "kanoe": True, "read_back_id": "rbk_287", "prepared_id": PID, "end_user": "eu_287", "sha": "f" * 64}
         tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})
@@ -284,24 +311,27 @@ class RetryNoSecondSend(Base):
 
 
 class RepliesComeBackToTheBooking(Base):
-    def test_waiting_then_the_reply_then_stop(self):
-        self.hold()
-        self.tap()
-        with mock.patch.object(FakeAgAPI, "status", {"act_id": "act_287", "state": "sent", "venue_words": {"untrusted_text": ""}}):
-            VS._ACTS.pop(ACCT, None)
-            row = run(VS.bookings(ACCT))[0]
+    def _row(self, status):
+        with mock.patch.object(FakeAgAPI, "status", status):
+            for a in VS._ACTS.get(ACCT) or []:
+                a.update({"answered": None, "words": None, "state": "sent"})
+            return run(VS.bookings(ACCT))[0]
+
+    def test_one_line_for_each_answer_and_stop(self):
+        self.hold(FULL)
+        row = self._row({"act_id": "act_287", "state": "sent", "venue_words": {"untrusted_text": ""}})
         self.assertEqual(row["status"], "requested")
-        self.assertRegex(row["wa"], r"^Sent at \d\d:\d\d · waiting for Casa Gate\.$")
+        self.assertRegex(row["wa"], r"^Asked at \d\d:\d\d · waiting for Casa Gate\.$")
         from agapi import s2_status as SS
         self.assertIn(row["wa"], SS.decide({"venues": [row], "booked": [], "failed": []})["line"])
-        with mock.patch.object(FakeAgAPI, "status", {"act_id": "act_287", "state": "confirmed",
-                                                     "venue_words": {"untrusted_text": "Sí, confirmado para las 21:00"}}):
-            row = run(VS.bookings(ACCT))[0]
-        self.assertEqual((row["status"], row["venue_said"]["untrusted_text"]), ("confirmed", "Sí, confirmado para las 21:00"))
-        self.assertEqual(row["wa"], V.wa_replied_line("Casa Gate", "Sí, confirmado para las 21:00"))
-        VS._ACTS[ACCT][0].update({"state": "sent", "words": None, "answered": None})
-        with mock.patch.object(FakeAgAPI, "status", {"act_id": "act_287", "state": "sent", "opted_out": True, "venue_words": {"untrusted_text": "STOP"}}):
-            row = run(VS.bookings(ACCT))[0]
+        row = self._row({"act_id": "act_287", "state": "confirmed", "venue_words": {"untrusted_text": "Sí, confirmado"}})
+        self.assertEqual((row["status"], row["venue_said"]["untrusted_text"]), ("confirmed", "Sí, confirmado"))
+        self.assertRegex(row["wa"], r"^Casa Gate said yes — .+ 21:00 for 2\.$")
+        row = self._row({"act_id": "act_287", "state": "proposed", "venue_words": {"untrusted_text": "Lo sentimos, ¿podéis a las 21:30?"}})
+        self.assertEqual(row["wa"], "Casa Gate offered 21:30 — shall I take it?")
+        row = self._row({"act_id": "act_287", "state": "declined", "venue_words": {"untrusted_text": "Completo"}})
+        self.assertEqual(row["wa"], "Casa Gate said no.")
+        row = self._row({"act_id": "act_287", "state": "sent", "opted_out": True, "venue_words": {"untrusted_text": "STOP"}})
         self.assertEqual((row["status"], row["wa"]), ("stopped", V.wa_stopped_line("Casa Gate")))
 
     def test_a_stop_is_handed_to_agapi_and_kept(self):
@@ -310,6 +340,46 @@ class RepliesComeBackToTheBooking(Base):
         with mock.patch.object(VS, "CALL", call):
             got = run(VS.whatsapp_inbound("+34611222333", "STOP"))
         self.assertEqual((got["matched"], got["opted_out"]), (True, True))
+
+
+class TheirWords(unittest.TestCase):
+    """THE RATCHET (3) · said.which: a detail counts only when THEIR words give it, matching the booking."""
+    TODAY = __import__("datetime").date(2099, 10, 27)   # a Tuesday
+    AT = "2099-10-30T21:00"                           # Friday 21:00
+
+    def w(self, words, at=None, party=2, name="Casa Gate", today=None):
+        from agapi import said as SD
+        return SD.which(words, name, at or self.AT, party, today or self.TODAY)
+
+    def test_the_full_request(self):
+        for words in ("book Casa Gate for 2 on Friday at 9pm", "mesa para dos en Casa Gate el viernes a las 21:00",
+                      "Casa Gate, Friday 30 Oct, 21:00, 2 people", "Book Lamucca for 4 Tuesday at 9"):
+            lam = "Lamucca" in words   # Tyler's example: said on a Thursday, for the coming Tuesday
+            got = self.w(words, at="2099-11-03T21:00" if lam else None, party=4 if lam else 2, name="Lamucca" if lam else "Casa Gate",
+                         today=__import__("datetime").date(2099, 10, 29) if lam else None)
+            self.assertTrue(all(got.values()), (words, got))
+
+    def test_each_detail_s2_filled_in_is_not_said(self):
+        self.assertFalse(self.w("book Casa Gate on Friday at 9pm")["people"])          # the default party
+        self.assertFalse(self.w("book Casa Gate for 2 on Friday")["time"])             # a time she picked
+        self.assertFalse(self.w("book Casa Gate for 2 at 9pm")["day"])                 # a day she worked out
+        self.assertFalse(self.w("book it for 2 on Friday at 9pm")["venue"])            # a venue from earlier
+        self.assertFalse(self.w("book Casa Gate for 3 on Friday at 9pm")["people"])    # their 3 is not the booking's 2
+        self.assertFalse(self.w("book Casa Gate for 2 on Friday at 9:30pm")["time"])   # 21:30 is not 21:00
+        self.assertFalse(self.w("book Casa Gate for 2 on Thursday at 9pm")["day"])
+        self.assertFalse(self.w("book Casa Gate for 2 next week at 9pm")["day"])
+        self.assertFalse(self.w("book Casa Gate for 2 on Friday at 9pm", at="2099-11-06T21:00")["day"])   # a Friday a week on: not this one
+        self.assertFalse(self.w("book the restaurant for 2 on Friday at 9pm", name="The Restaurant")["venue"])   # only generic words
+
+    def test_the_card_they_tapped_is_their_venue(self):
+        self.assertTrue(self.w("This one: “Casa Gate” [their tap on the card on their screen: Casa Gate · place_id ChIJ287 — use this place_id]")["venue"])
+
+    def test_s2_sends_unasked_only_when_all_four_are_theirs(self):
+        src = inspect.getsource(VN.kanoe_card)
+        self.assertIn("if all(got.values()):", src)
+        self.assertLess(src.index("if all(got.values()):"), src.index("_kanoe_now("))
+        self.assertEqual(src.count("_kanoe_now("), 1)
+        self.assertIn("str(getattr(ctx, \"user_said\", \"\") or \"\")", src)   # THIS turn's own words — never the model's arguments
 
 
 class TheLane(unittest.TestCase):
@@ -381,10 +451,14 @@ class TheRatchet(unittest.TestCase):
                         bad.append(f"{rel}:{n.lineno} messages.send_whatsapp")
         self.assertEqual(bad, [])                                       # (Twilio's closed list: test_s285.NoSecondTwilioSender)
 
-    def test_never_cant(self):
-        for s in (V.KANOE_ASK, V.OWN_WHATSAPP, V.wa_sent_line("21:00", "X"), V.wa_stopped_line("X"), V.wa_replied_line("X", "ok")):
-            self.assertNotIn("can't", s.lower())
-            self.assertFalse(V.asks_for_link(s))
+    def test_her_voice_names_no_channel(self):
+        lines = [V.kanoe_ask("X", "Friday", "21:00", 2), V.wa_done_line("X", "Friday", "21:00", 2), V.OWN_WHATSAPP, V.wa_sent_line("21:00", "X"),
+                 V.wa_yes_line("X", "Friday", "21:00", 2), V.wa_offered_line("X", "21:30"), V.wa_no_line("X"), V.wa_stopped_line("X"),
+                 V.wa_replied_line("X", "ok")]
+        self.assertEqual(V.check(lines), [])
+        for x in lines:
+            self.assertNotIn("can't", x.lower())
+            self.assertFalse(V.asks_for_link(x))
 
 
 if __name__ == "__main__":

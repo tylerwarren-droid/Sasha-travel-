@@ -240,6 +240,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "number; their own words giving venue, day, time and people are the yes (sent, one line), else ONE line asks — never a detail "
             "they didn't say or confirm, never the message's text, once; any no is their own WhatsApp; no flag, list or sender of S2's own",
             ["tests.test_s287"]),
+    "T68": ("Email venues, the same rule: venue.submit_booking is the one send; 287's card for every message request (their words → sent, "
+            "one line; else ONE line asks); her words never name the channel; a reply that isn't clearly yes or no is never said as "
+            "confirmed; every fake guest store has the real store's shape",
+            ["tests.test_s288"]),
 }
 
 _RUNNER = """

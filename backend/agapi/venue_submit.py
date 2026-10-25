@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import secrets
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -187,7 +188,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
                                       "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
                                       **({"country": held["country"]} if held.get("country") else {}),   # Sasha 259 · its calendar zone
                                       **({"route": "call"} if res.get("route") == "call" else {}),      # Sasha 265 · a phone booking
-                                      **_whatsapp_of(res, held, said),   # Sasha 287 · Kanoe's WhatsApp: its consent, its reference (Twilio's id)
+                                      **_message_of(res, held, said),   # Sasha 287/288 · Kanoe's message: its channel, its consent, its reference
                                       **({"reference": res["reference"]} if res.get("reference") else {})})
         return {"ok": True, **res}
     if await target(account) == "sandbox":
@@ -210,19 +211,21 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     if res.get("act_id"):
         await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
                                   "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
-                                  **({"route": "call"} if res.get("route") == "call" else {}), **_whatsapp_of(res, held, said),
+                                  **({"route": "call"} if res.get("route") == "call" else {}), **_message_of(res, held, said),
                                   **({"reference": res["reference"]} if res.get("reference") else {})})
     return {"ok": True, **res}
 
 
-def _whatsapp_of(res: dict, held: dict, said: str) -> dict:
-    """Sasha 287 · an act AgAPI sent from Kanoe's WhatsApp number (venue.submit_booking's how: whatsapp / whatsapp_template), with the
-    CONSENT it went on, on the booking record: their own words (the request was the yes), else their tap / their spoken yes."""
-    if not (str(res.get("how") or "").startswith("whatsapp") and res.get("status") == "sent"):
+def _message_of(res: dict, held: dict, said: str) -> dict:
+    """Sasha 287 · an act AgAPI sent from Kanoe's channel — venue.submit_booking's how: whatsapp / whatsapp_template, or (Sasha 288) email
+    — with the CONSENT it went on, on the booking record: their own words (the request was the yes), else their tap / their spoken yes."""
+    how = str(res.get("how") or "")
+    channel = "whatsapp" if how.startswith("whatsapp") else "email" if how == "email" else None
+    if not (channel and res.get("status") == "sent"):
         return {}
     consent = held.get("consent") or {"kind": "in_app_tap" if TAP.get() is not None else "whatsapp_reply" if WA.get() is not None
                                        else "their_yes", "said": str(said or "")[:300]}
-    return {"channel": "whatsapp", "consent": consent}
+    return {"channel": channel, "consent": consent}
 
 
 def _follow_up_of(held: dict) -> dict:
@@ -343,6 +346,8 @@ async def bookings(account: str) -> List[dict]:
         if a.get("cancels"):
             continue   # the cancellation itself is said on the booking it cancels
         state = "cancelled" if a["act_id"] in cancelled else STATE.get(str(a.get("state") or "sent"), "requested")
+        if state == "confirmed" and a.get("channel") in MESSAGE_CHANNELS and unclear(a.get("words")):
+            state = "requested"   # Sasha 288 · "ok, we'll check" is never said as booked: what they wrote, and still a request
         pend = next((c for c in acts if c.get("cancels") == a["act_id"] and c["act_id"] not in cancelled), None)
         when = str(a.get("when") or "")
         out.append({"trip_item_id": None, "act_id": a["act_id"], "venue": a.get("venue"), "date": when[:10] or None, "time": when[11:16] or None,
@@ -358,13 +363,33 @@ async def bookings(account: str) -> List[dict]:
                     **({"calls": a["calls"]} if a.get("calls") else {}),
                     **({"stay": stay_of(a["booking"])} if (a.get("booking") or {}).get("kind") == "stay" else {}),   # Sasha 271 · CR 102
                     **({"route": "call"} if a.get("route") == "call" else {}),
-                    **({"wa": wa_line(a, state)} if a.get("channel") == "whatsapp" else {}),
+                    **({"wa": wa_line(a, state)} if a.get("channel") in MESSAGE_CHANNELS else {}),
                     **({"cancel": "asked — waiting for the venue"} if pend else {})})
     return out
 
 
+#: Sasha 288 · the channels Kanoe writes to a venue on (venue.submit_booking's request_reply): their replies are said the same way
+MESSAGE_CHANNELS = ("whatsapp", "email")
+#: Sasha 288 · a reply that only PROMISES an answer ("ok, we'll check", "vale, lo miramos y te decimos") — AgAPI's YES reads a leading
+#: "ok"/"vale" as a yes (CR 122 (a)); until it doesn't, such a reply is never said as confirmed here: she says what they wrote
+_UNCLEAR = re.compile(r"\b(?:we(?:'ll| will)|i(?:'ll| will)|let me|let us|we need to|need to|have to|going to)\s+(?:check|see|look|ask|confirm|"
+                      r"get back|come back|let you know|revert)|\bget back to you\b|\blet you know\b|\bcheck (?:and|availability|with)\b|"
+                      r"\b(?:to be|will be|be) confirmed\b|\b(?:tbc|tba)\b|\bpending\b|\bmaybe\b|\bperhaps\b|\bnot sure\b|"
+                      r"\b(?:lo|la|los) (?:miramos|mir[oa]|consulto|consultamos|compruebo|comprobamos|revisamos|reviso)\b|"
+                      r"\b(?:te|os|le|les) (?:digo|decimos|confirmo|confirmamos|aviso|avisamos|contesto|contestamos|respondemos)\b|"
+                      r"\b(?:comprobamos|consultamos|revisamos|miramos)\b|\bpendiente\b|\bquiz[aá]s?\b", re.I)
+#: the reply SAYS it is booked — then a question after it ("Any allergies?") doesn't make it unclear
+_SAYS_BOOKED = re.compile(r"\bconfirm(?:ed|ad[oa])\b|\bsee you\b|\blook forward\b|\b(?:te|os|le) esperamos\b|\bbooked\b|\breservad[oa]\b", re.I)
+
+
+def unclear(words: Optional[str]) -> bool:
+    """Their reply doesn't SAY it's booked — it promises to check, hedges, or only asks something back."""
+    w = str(words or "")
+    return bool(w) and (bool(_UNCLEAR.search(w)) or ("?" in w and not _SAYS_BOOKED.search(w)))
+
+
 def wa_line(a: dict, state: str) -> str:
-    """Sasha 287 · a WhatsApp sent from Kanoe's number, in ONE line: "Asked at 21:04 · waiting for Casa"; their answer — "Casa said yes —
+    """Sasha 287 · a message sent from Kanoe's channel (288: WhatsApp or email), in ONE line: "Asked at 21:04 · waiting for Casa"; their answer — "Casa said yes —
     Friday 21:00 for 2" / "Casa offered 21:30 — shall I take it?" / "Casa said no." — or their STOP. Times are the venue's local clock."""
     import re
     from datetime import datetime, timezone

@@ -50,8 +50,9 @@ class ContactApi(FormApi):
         return await super().__call__(account, method, path, body, timeout)
 
 
-class _Store:
+class _Store(GW.MemoryGuestStore):   # Sasha 288 · the real store's shape (get_state too): a fake never lacks a method it has
     def __init__(self, number=None):
+        super().__init__()
         self.number = number
 
     async def channel_of_account(self, account):

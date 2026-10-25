@@ -95,7 +95,7 @@ class Base(unittest.TestCase):
             self.told.append(text)
             return "sent (captured)"
 
-        class _Store:
+        class _Store(GW.MemoryGuestStore):   # Sasha 288 · the real store's shape: get_state too (the gate logged its absence)
             async def channel_of_account(self, acct):
                 return {"wa_id_sha256": "x" * 64}
         for p in (mock.patch.object(GW, "api", self.api), mock.patch.object(GA, "founder", lambda a: False),

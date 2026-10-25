@@ -1327,6 +1327,9 @@ async def answer_card(ctx, read_back_id: str, choice: str) -> dict:
 # the booking rules' action → what the outcomes ledger records for an AgAPI send (CR 87's rung + channel)
 AGAPI_RUNG = {"fill_form_zero_touch": ("zero_touch", "web_form"), "request_email": ("request_reply", "email"),
               "request_whatsapp": ("request_reply", "whatsapp")}
+#: Sasha 288 · the booking rules' MESSAGE requests (Kanoe writes to the venue, it's a request until they reply): one consent card for all
+#: of them (kanoe_card). A stay (check-in + nights) and R6's call_and_email keep their read-back — a call rides on that yes.
+MESSAGE_ACTIONS = ("request_whatsapp", "request_email")
 
 
 async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, card: Optional[dict], link: Optional[str] = None,
@@ -1373,8 +1376,9 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
                        "category": (res.get("what") or {}).get("category")})
     out["what_happens"] = ("on their yes, Sasha sends it to the venue; it's booked only when they confirm"
                            + (" — their own phone gets a tap to approve it first" if await VS.target(ctx.account) == "live" else ""))
-    if d["action"] == "request_whatsapp" and one_path(ctx) and getattr(ctx, "surface", "") in ("s2", "s1"):
-        # Sasha 287 · a WhatsApp AgAPI reads back is Kanoe's: its card asks the ONE question (the send is the same AgAPI send)
+    if d["action"] in MESSAGE_ACTIONS and not stay and one_path(ctx) and getattr(ctx, "surface", "") in ("s2", "s1"):
+        # Sasha 287 · a message AgAPI reads back is Kanoe's: its card asks the ONE question (the send is the same AgAPI send).
+        # Sasha 288 · ONE consent rule for every message channel — the booking rules' request_email gets the same card, the same line
         out = await kanoe_card(ctx, out, rb, own_link(p.get("decision") if isinstance(p.get("decision"), dict) else None, p))
         if out.get("status") != "awaiting_yes":   # their words were the yes: sent (or handed over) — said now, never "after the yes"
             return out
@@ -1994,10 +1998,11 @@ async def _kanoe_sent(ctx, held: dict, r: dict, venue: str, where) -> dict:
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False, "act_id": r.get("act_id"),
                 **({"reference": r["reference"]} if r.get("reference") else {}), "wa_sent": True, "line": line, **in_app,
                 "how": "Say `line` word for word — nothing else; it's a request until they reply."}
-    log.info("[venues] %s: Kanoe's WhatsApp not sent (%s) — their own WhatsApp", venue, r.get("status"))
+    log.info("[venues] %s: Kanoe's message not sent (%s) — handed over", venue, r.get("status"))
+    # Sasha 288 · the same hand-over for every channel: their own WhatsApp when AgAPI wrote one, else THE FLOOR (286) — never "can't"
     out = await own_whatsapp(ctx, held.get("booking") or {}, {"venue": held["venue"], "place_id": held.get("place_id")},
                              {"how_many": {"count": held.get("party")}}, held.get("when"), None, held.get("own"), None)
-    return {**out, **in_app, "line": out["page_says"]}
+    return {**out, **in_app, "line": out.get("page_says") or (out.get("floor") or {}).get("say") or ""}
 
 
 async def _agapi_call(ctx, held: dict, how: dict, venue: str, where) -> dict:

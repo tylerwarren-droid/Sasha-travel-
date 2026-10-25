@@ -136,7 +136,8 @@ class TheSend(HandleIt):
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=72)
         self.assertEqual((out["route"], out["rules"]["action"]), ("agapi", "request_email"))
         got = self.yes()
-        self.assertEqual(got["line"], f"{BR.PHRASES['request_wait']} {BR.PHRASES['takeover']}")
+        # Sasha 288 · an email request is 287's ONE line, as WhatsApp's (was: the rules' request_wait + take-over)
+        self.assertRegex(got["line"], r"^Done — I've asked Casa Gate for .+ at \d\d:\d\d for 2\. I'll tell you when they reply\.$")
         self.assertNotIn("/api/booking/emails", self.api.paths())
 
     def test_confirmed_at_once_is_booked_with_their_reference(self):

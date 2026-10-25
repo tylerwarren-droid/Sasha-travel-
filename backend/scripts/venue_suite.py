@@ -122,7 +122,7 @@ async def routes_offline(a: str) -> None:
         told.append(text)
         return "sent (captured)"
 
-    class _Store:
+    class _Store(GW.MemoryGuestStore):   # Sasha 288 · the real store's shape: get_state too (the gate logged its absence)
         async def channel_of_account(self, acct):
             return {"wa_id_sha256": "x" * 64}
     GW.api, GW.tap_platform, WB.trip_day_words = fake, tap, where

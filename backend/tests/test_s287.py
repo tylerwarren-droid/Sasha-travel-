@@ -428,7 +428,8 @@ class TheRatchet(unittest.TestCase):
         self.assertLess(src.index("kanoe_route(dec)"), src.index("follows(dec, at)"))
         self.assertLess(src.index("kanoe_route(dec)"), src.index("rules_for("))
         va = inspect.getsource(VN._via_agapi)   # S2's own read finding a WhatsApp (no AgAPI decision): AgAPI's send, the same question
-        self.assertIn('d["action"] == "request_whatsapp"', va)
+        self.assertIn('d["action"] in MESSAGE_ACTIONS', va)   # Sasha 288 · every message request, WhatsApp among them
+        self.assertIn("request_whatsapp", VN.MESSAGE_ACTIONS)
         self.assertIn("kanoe_card(", va)
 
     def test_the_send_is_only_the_held_read_back_once(self):

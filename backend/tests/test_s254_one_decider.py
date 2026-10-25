@@ -154,7 +154,7 @@ class Base(unittest.TestCase):
             self.taps.append(url)
             return "sent (captured)"
 
-        class _Store:
+        class _Store(GW.MemoryGuestStore):   # Sasha 288 · the real store's shape: get_state too (the gate logged its absence)
             async def channel_of_account(self, acct):
                 return {"wa_id_sha256": "x" * 64, "account_id": acct}
         self.calls_store = CS.MemoryCallStore()
@@ -482,7 +482,7 @@ class R8DepositAsked(unittest.TestCase):
             self.told.append(text)
             return "sent (captured)"
 
-        class _Store:
+        class _Store(GW.MemoryGuestStore):   # Sasha 288 · the real store's shape: get_state too (the gate logged its absence)
             async def channel_of_account(self, acct):
                 return {"wa_id_sha256": "x" * 64}
         for p in (mock.patch.object(GW, "_tell", tell), mock.patch.object(GW, "STORE", _Store()),

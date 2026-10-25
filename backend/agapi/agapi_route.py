@@ -169,6 +169,26 @@ class acting:
         return False
 
 
+# Sasha 287 · a run that is a TEST (a harness, a live proof) says so on every AgAPI call: `AgAPI-Lane: background` (CR 116 / CR 118c —
+# AgAPI charges it to the background lane, never the people's). Unset: no header (a person's own call: their key's lane).
+_LANE: contextvars.ContextVar = contextvars.ContextVar("agapi_lane", default=None)
+
+
+class lane:
+    """with lane("background"): … — every AgAPI call inside carries AgAPI-Lane: background."""
+
+    def __init__(self, name: str):
+        self.name, self.tok = name, None
+
+    def __enter__(self):
+        self.tok = _LANE.set(self.name)
+        return self.name
+
+    def __exit__(self, *exc):
+        _LANE.reset(self.tok)
+        return False
+
+
 async def person_mode(account: Optional[str]) -> str:
     """Sasha 253 · "test" | "live" for a person. Sasha 254 item 5: the person's record (agapi.person_access — AgAPI's person_access,
     through access.get; ≤ 60 s). No row (every guest our suites and scratch scripts make, every guest session) or a failed read →
@@ -246,6 +266,8 @@ async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str],
     import httpx
     from agapi import agapi_health as AH
     t0, status, version = time.perf_counter(), None, None
+    if _LANE.get():   # Sasha 287 · a test run's lane, said on every call
+        headers = {**headers, "AgAPI-Lane": _LANE.get()}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as c:
             r = await c.post(f"{url}/v1/{op}", headers=headers, content=json.dumps(body))
@@ -286,5 +308,5 @@ def ctx_mode() -> str:
     return "test"
 
 
-__all__ = ["acting", "person_mode", "FAMILIES", "PINNED", "ROUTED", "TEST_AIRLINES", "table", "route", "current", "using", "money_target", "endpoint", "target_for", "client_for",
+__all__ = ["acting", "lane", "person_mode", "FAMILIES", "PINNED", "ROUTED", "TEST_AIRLINES", "table", "route", "current", "using", "money_target", "endpoint", "target_for", "client_for",
            "post", "key_name", "ctx_mode"]

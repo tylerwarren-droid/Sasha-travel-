@@ -1694,9 +1694,10 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
             yield ev
         return
     rid = str(tap.get("read_back_id") or "")[:80]
-    choice = "page" if tap.get("choice") == "page" else "call"
+    # Sasha 287 · Kanoe's WhatsApp card: "send" (the tap IS the yes) / "own" (their own WhatsApp, nothing sent)
+    choice = tap.get("choice") if tap.get("choice") in ("page", "send", "own") else "call"
     ctx.idem = f"card_tap:{account}:{rid}:{choice}"
-    tool = "hold_venue" if choice == "page" else "book_venue"
+    tool = "hold_venue" if choice in ("page", "own") else "book_venue"
     try:
         res = await VN.answer_card(ctx, rid, choice)
         r = {"ok": True, "result": res}

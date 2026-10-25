@@ -95,7 +95,8 @@ async def whatsapp_inbound(sender: str, text: str) -> Dict[str, Any]:
         log.warning("[venue_submit] whatsapp_inbound not handed over: %s", (r.get("error") or {}).get("code"))
         return {"matched": False, "why": (r.get("error") or {}).get("code") or "unavailable"}
     res = r.get("result") or {}
-    return {"matched": bool(res.get("matched")), **({k: res[k] for k in ("kept", "why") if k in res})}
+    # Sasha 287 · a STOP is AgAPI's to honour (opted_out, at once: its gate refuses every later send) — kept here so it is said
+    return {"matched": bool(res.get("matched")), **({k: res[k] for k in ("kept", "why", "opted_out", "booking") if k in res})}
 
 
 def _err(r: dict) -> dict:
@@ -186,6 +187,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
                                       "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
                                       **({"country": held["country"]} if held.get("country") else {}),   # Sasha 259 · its calendar zone
                                       **({"route": "call"} if res.get("route") == "call" else {}),      # Sasha 265 · a phone booking
+                                      **_whatsapp_of(res),   # Sasha 287 · sent from Kanoe's WhatsApp (its reference: Twilio's message id)
                                       **({"reference": res["reference"]} if res.get("reference") else {})})
         return {"ok": True, **res}
     if await target(account) == "sandbox":
@@ -208,9 +210,14 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     if res.get("act_id"):
         await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
                                   "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
-                                  **({"route": "call"} if res.get("route") == "call" else {}),
+                                  **({"route": "call"} if res.get("route") == "call" else {}), **_whatsapp_of(res),
                                   **({"reference": res["reference"]} if res.get("reference") else {})})
     return {"ok": True, **res}
+
+
+def _whatsapp_of(res: dict) -> dict:
+    """Sasha 287 · an act AgAPI sent from Kanoe's WhatsApp number (venue.submit_booking's how: whatsapp / whatsapp_template)."""
+    return {"channel": "whatsapp"} if str(res.get("how") or "").startswith("whatsapp") and res.get("status") == "sent" else {}
 
 
 def _follow_up_of(held: dict) -> dict:
@@ -262,10 +269,11 @@ STATE = {"confirmed": "confirmed", "booked": "confirmed", "declined": "declined"
          "not_allowed": "failed", "cancelled": "cancelled",
          "proposed": "proposed",   # Sasha 256 · CR 94: another time offered — NOTHING is booked; the person decides
          "sent": "requested", "replied": "requested",
-         "calling": "calling", "no_answer": "no_answer"}   # Sasha 265 · item 4 (CR 99): a call act — being called / no one picked up
+         "calling": "calling", "no_answer": "no_answer",   # Sasha 265 · item 4 (CR 99): a call act — being called / no one picked up
+         "opted_out": "stopped"}   # Sasha 287 · the venue replied STOP to Kanoe's WhatsApp: nothing more goes to them
 #: Sasha 256 · an act in one of these states has its answer: venue.booking_status isn't asked again (a booking confirmed on the
 #: venue's own form has no sent act there — AgAPI answers not_found, every time it's asked)
-FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", "cancelled")   # Sasha 269 · booking-rules/2.1: a
+FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", "cancelled", "opted_out")   # Sasha 269 · booking-rules/2.1: a
 #: no-answer is NOT final (the person may still say "try once more", or fill in their form) — venue.booking_status is read again
 #: the venue.booking_status fields get_status shows as they are (Sasha 269 · CR 100 §C: never re-derived here)
 STATUS_KEYS = ("state", "words", "say_now", "answered", "next_call", "next_step", "ask", "choices", "calls",
@@ -305,7 +313,8 @@ async def bookings(account: str) -> List[dict]:
                 a["answered"] = True   # confirmed on their own form: nothing more to ask
                 changed = True
             continue
-        new = {"state": st.get("state"), "words": _words(st), "say_now": st.get("say"), "follow_up": st.get("follow_up"),
+        new = {"state": "opted_out" if st.get("opted_out") else st.get("state"), "words": _words(st), "say_now": st.get("say"),
+               "follow_up": st.get("follow_up"),
                **{k: st[k] for k in ("next_call", "ask", "choices", "calls", "booking") if st.get(k)},
                **({"next_step": unkept(st["next_step"])} if st.get("next_step") else {})}   # Sasha 269 · as AgAPI says them
         if any(new.get(k) != a.get(k) for k in new):
@@ -344,8 +353,32 @@ async def bookings(account: str) -> List[dict]:
                     **({"calls": a["calls"]} if a.get("calls") else {}),
                     **({"stay": stay_of(a["booking"])} if (a.get("booking") or {}).get("kind") == "stay" else {}),   # Sasha 271 · CR 102
                     **({"route": "call"} if a.get("route") == "call" else {}),
+                    **({"wa": wa_line(a, state)} if a.get("channel") == "whatsapp" else {}),
                     **({"cancel": "asked — waiting for the venue"} if pend else {})})
     return out
+
+
+def wa_line(a: dict, state: str) -> str:
+    """Sasha 287 · a WhatsApp sent from Kanoe's number, as the person sees it: "Sent at 21:04 · waiting for Casa", their reply when it
+    came (their words — data), or their STOP. The time is the venue's local clock (its country), as every booking time is."""
+    from app.agent import voice as V
+    venue = str(a.get("venue") or "the venue")
+    if state == "stopped":
+        return V.wa_stopped_line(venue)
+    if a.get("words"):
+        return V.wa_replied_line(venue, a["words"])
+    return V.wa_sent_line(local_hhmm(a.get("at"), a.get("country")), venue)
+
+
+def local_hhmm(at: Any, country: Optional[str]) -> str:
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    try:
+        from booking_signer import venue_read as VR
+        tz = (VR.COUNTRIES.get(str(country or "").upper()) or (None, None, None, "Europe/Madrid"))[3]
+        return datetime.fromtimestamp(float(at or time.time()), timezone.utc).astimezone(ZoneInfo(tz)).strftime("%H:%M")
+    except Exception:
+        return datetime.fromtimestamp(float(at or time.time()), timezone.utc).strftime("%H:%M")
 
 
 # ── Sasha 256 · item 3 — MANAGE: cancel a booking sent through AgAPI (venue.cancel_booking, CR 94) — the same one-yes rule ──────

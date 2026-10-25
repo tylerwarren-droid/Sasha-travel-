@@ -358,6 +358,9 @@ function After({ k }: { k: string }) {
 
 
 
+/** Sasha 287 · the card's yes button (gold): "Call them" (265) and Kanoe's WhatsApp "Yes, send it" — the tap IS the approval. */
+const YES = new Set(['call', 'send'])
+
 /** Sasha 265 · item 4 (CR 99): THE ONE QUESTION IS THE CARD — "Fill in their page" / "Call them" (or one "OK"). The tap goes to the server
  *  with the card's read_back_id: there it IS the approval (approvals.in_app_tap), no model between. One tap: the buttons go. */
 function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (title: string, readBackId: string, route: string) => void }) {
@@ -369,8 +372,8 @@ function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (titl
         {(c.choices || []).map(o => (
           <button key={o.route} type="button" disabled={!!tapped} data-card-choice={o.route}
             onClick={() => { setTapped(o.route); tap(o.title, c.read_back_id || '', o.route) }}
-            style={{ padding: '10px 18px', borderRadius: 999, border: o.route === 'call' ? 0 : `1px solid ${C.gold}`, background: o.route === 'call' ? C.gold : 'transparent',
-              color: o.route === 'call' ? '#111' : C.gold, fontWeight: 700, opacity: tapped && tapped !== o.route ? 0.4 : 1 }}>{o.title}</button>))}
+            style={{ padding: '10px 18px', borderRadius: 999, border: YES.has(o.route) ? 0 : `1px solid ${C.gold}`, background: YES.has(o.route) ? C.gold : 'transparent',
+              color: YES.has(o.route) ? '#111' : C.gold, fontWeight: 700, opacity: tapped && tapped !== o.route ? 0.4 : 1 }}>{o.title}</button>))}
       </div>
     </Box>)
 }

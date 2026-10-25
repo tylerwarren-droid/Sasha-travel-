@@ -43,7 +43,8 @@ ON_IT = ("booked", "partly_booked", "awaiting_payment")   # a Trip banner shows;
 
 
 def _venue_line(b: dict) -> str:
-    return f"{b['venue']} — {b.get('date') or ''} {b.get('time') or ''}".strip(" —") + (f" · ref {b['reference']}" if b.get("reference") else "")
+    return f"{b['venue']} — {b.get('date') or ''} {b.get('time') or ''}".strip(" —") + (f" · ref {b['reference']}" if b.get("reference") else "") \
+        + (f" · {b['wa']}" if b.get("wa") else "")   # Sasha 287 · Kanoe's WhatsApp: "Sent at 21:04 · waiting for …", their reply, their STOP
 
 
 def _call_line(b: dict) -> str:
@@ -69,11 +70,11 @@ def decide(st: Dict[str, Any], held: bool = False, ledger_open: int = 0) -> Dict
     conf = [_venue_line(b) for b in venues if b.get("status") in ("confirmed", "guest_booked")
             and not (b.get("reference") and f"ref {b['reference']}" in refs_seen)]   # a basket row already listed is not said twice
     asked = [_venue_line(b) for b in venues if b.get("status") not in ("confirmed", "guest_booked", "declined", "failed", "proposed",
-                                                                       "calling", "no_answer")]
+                                                                       "calling", "no_answer", "stopped")]
     calling = [_call_line(b) for b in venues if b.get("status") == "calling"]       # Sasha 265 · item 4 (e)
     no_answer = [_call_line(b) for b in venues if b.get("status") == "no_answer"]
     proposed = [_venue_line(b) for b in venues if b.get("status") == "proposed"]   # Sasha 256 · the venue's own answer
-    declined = [_venue_line(b) for b in venues if b.get("status") == "declined"]
+    declined = [_venue_line(b) for b in venues if b.get("status") in ("declined", "stopped")]   # 287 · a STOP: not booked, nothing more sent
     done, failed = booked + conf, list(st.get("failed") or [])
     if st.get("awaiting_payment"):
         state, line = "awaiting_payment", WORDS["awaiting_payment"]

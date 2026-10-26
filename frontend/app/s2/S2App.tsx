@@ -252,7 +252,7 @@ function DiscoverCards({ c, choose }: { c: Extract<Card, { k: 'discover' }>; cho
                   noDetails={o.kind === 'marketplace'}
                   action={o.kind === 'marketplace' && o.hand_over ? { label: 'Open it', onClick: () => setOver(o) } : undefined}
                   extra={{ feel: o.feel, price_level: o.price_level, distance_m: o.distance_m, availability_words: o.availability_words,
-                           how_far_words: o.how_far_words, photo_by: o.photo?.by, reason: o.pick ? (c.pick?.reason || o.reason) : null }} />))}
+                           how_far_words: o.how_far_words, photo_by: o.photo?.by, reason: o.pick ? (c.pick?.reason || o.reason) : null, label: o.label }} />))}
             </div>
           </div>)
       })}

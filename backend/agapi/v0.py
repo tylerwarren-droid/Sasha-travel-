@@ -583,13 +583,33 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
 # checks, hand-overs and say_text. Sasha keeps no rule of her own: no ranking, no category or platform list, no permission logic.
 #: what of each option reaches the screen — never `contacts` (unconfirmed: never shown as a way she writes)
 DISCOVER_CARD = ("ref", "group", "kind", "name", "feel", "type", "rating", "reviews", "price_level", "distance_m", "availability_words",
-                 "how_far", "how_far_words", "photo", "link", "place_id", "next", "hand_over", "reason", "rank", "address")
+                 "how_far", "how_far_words", "photo", "link", "place_id", "next", "hand_over", "reason", "rank", "address",
+                 "label")   # Sasha 291 · AgAPI's own label for the intent ("walk-in, no bookings")
+
+
+# Sasha 291 · WHAT THEY WANT TO DO, read from their OWN words this turn (never the model's `what`) — the ONE place S2 reads it; AgAPI's
+# discovery_rules.fits_intent is the ONE rule that keeps or leaves out a place for it. First match wins; unclear is browse, never book.
+INTENT_WORDS = (
+    ("delivery", re.compile(r"(?i)\b(?:deliver(?:y|ed)?|a domicilio)\b")),
+    ("takeaway", re.compile(r"(?i)\b(?:take ?away|take[- ]?out|to go|para llevar|pick[- ]?up)\b")),
+    ("book", re.compile(r"(?i)\b(?:book(?:ing)?|reserv(?:e|ation|ar|a)|table for|mesa)\b")),
+    ("eat_now", re.compile(r"(?i)\b(?:(?:eat|food|lunch|dinner|breakfast)\s+(?:right\s+)?now|right now|ahora(?: mismo)?|walk[- ]?in)\b")),
+)
+
+
+def intent_of(said: Optional[str]) -> str:
+    """book | takeaway | delivery | eat_now | browse — venue.discover's `intent` (AgAPI v1.34.0)."""
+    for intent, pat in INTENT_WORDS:
+        if pat.search(str(said or "")):
+            return intent
+    return "browse"
 
 
 async def _discover(ctx: Ctx, a: dict) -> dict:
     from agapi import venue_submit as VS, venues as VN
     dates = a.get("dates") if isinstance(a.get("dates"), dict) else None
     body = {"what": str(a["what"])[:120], "where": {"query": str(a["where"])[:120], **({"country": a["country"]} if a.get("country") else {})},
+            "intent": intent_of(ctx.user_said),
             **({"open_at": str(a["open_at"])[:16]} if a.get("open_at") else {}),
             **({"dates": {k: str(dates[k])[:10] for k in ("from", "to") if dates.get(k)}} if dates else {}),
             **({"when_words": str(a["when_words"])[:60]} if a.get("when_words") else {}),

@@ -68,7 +68,8 @@ class Discover(unittest.TestCase):
     def test_one_question_to_agapi(self):
         out, sent = self._search(DOG)
         self.assertEqual([op for op, _ in sent], ["venue.discover"])
-        self.assertEqual(sent[0][1], {"what": "dog walker", "where": {"query": "Madrid", "country": "ES"}, "dates": {"from": "2026-10-19", "to": "2026-10-23"},
+        self.assertEqual(sent[0][1], {"what": "dog walker", "where": {"query": "Madrid", "country": "ES"}, "intent": "browse",   # Sasha 291
+                                      "dates": {"from": "2026-10-19", "to": "2026-10-23"},
                                       "when_words": "next week"})
         d = out["discover"]
         self.assertEqual([g["id"] for g in d["groups"]], ["places", "platforms", "private"])   # AgAPI's order, as it is

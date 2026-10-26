@@ -248,6 +248,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "their own WhatsApp; sender kanoe → Kanoe's card); the link-less decision is said in one warning, and AgAPI's decision "
             "(no link, no number) is kept on the booking's measure row",
             ["tests.test_s289"]),
+    "T70": ("What they want to do (book · takeaway · delivery · eat now · browse) is read in ONE place from their own words and sent to "
+            "venue.discover; AgAPI's options are shown as given with its own label — S2 never filters, re-ranks or adds back a place",
+            ["tests.test_s291"]),
 }
 
 _RUNNER = """

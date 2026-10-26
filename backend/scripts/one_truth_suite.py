@@ -254,6 +254,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T71": ("A place's curated recognition is AgAPI's one sentence (credited, dated) as given — on its card and in her words — or nothing; "
             "S2 names no guide itself and never re-ranks a value ask",
             ["tests.test_s292"]),
+    "T72": ("Details has their website (AgAPI's own, else their Google listing — never a URL built by S2) in a new tab, a visible "
+            "Back to Sasha, and AgAPI's sources page when it gives one",
+            ["tests.test_s293"]),
 }
 
 _RUNNER = """

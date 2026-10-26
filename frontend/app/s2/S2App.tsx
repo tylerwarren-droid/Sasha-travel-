@@ -57,7 +57,7 @@ type Card =
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
-  | { k: 'discover'; groups: { id: string; label: string; refs: string[]; more?: number }[]; options: Ev[]; pick?: Ev | null }   // Sasha 276 · AgAPI venue.discover
+  | { k: 'discover'; groups: { id: string; label: string; refs: string[]; more?: number }[]; options: Ev[]; pick?: Ev | null; sources_url?: string | null }   // Sasha 276 · AgAPI venue.discover (293: + its sources page)
   | { k: 'sign_in' }   // Sasha 274 · a guest's booking: sign in to book for real (this conversation kept)
   | { k: 'no_answer'; act_id: string; ask?: string; choices: { id: string; label: string; page?: string }[]; page?: string }   // Sasha 269 · AgAPI's
 const NOT_CLEARED = 'I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'   // Sasha 265 · item 3
@@ -252,7 +252,7 @@ function DiscoverCards({ c, choose }: { c: Extract<Card, { k: 'discover' }>; cho
                   noDetails={o.kind === 'marketplace'}
                   action={o.kind === 'marketplace' && o.hand_over ? { label: 'Open it', onClick: () => setOver(o) } : undefined}
                   extra={{ feel: o.feel, price_level: o.price_level, distance_m: o.distance_m, availability_words: o.availability_words,
-                           how_far_words: o.how_far_words, photo_by: o.photo?.by, reason: o.pick ? (c.pick?.reason || o.reason) : null, label: o.label, recognition: o.recognition?.words }} />))}
+                           how_far_words: o.how_far_words, photo_by: o.photo?.by, reason: o.pick ? (c.pick?.reason || o.reason) : null, label: o.label, recognition: o.recognition?.words, sources_url: c.sources_url }} />))}
             </div>
           </div>)
       })}
@@ -800,7 +800,7 @@ export default function S2App() {
             const add = (c: Card) => { add0(c); if (ACTING === 'guest' && ['read_back', 'prepared', 'wa_open', 'handover', 'pay'].includes(c.k)) add0({ k: 'sign_in' }) }
             if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
             else if (ev.kind === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length)   // Sasha 276 · refused: no cards
-              add({ k: 'discover', groups: ev.groups, options: ev.options, pick: ev.pick || null })
+              add({ k: 'discover', groups: ev.groups, options: ev.options, pick: ev.pick || null, sources_url: ev.sources_url || null })
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
               ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) })
             else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })

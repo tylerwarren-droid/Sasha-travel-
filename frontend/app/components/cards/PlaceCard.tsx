@@ -22,7 +22,8 @@ let OPEN_SHEET: string | null = null
 export type CardExtra = { feel?: string | null; price_level?: number | null; distance_m?: number | null; availability_words?: string | null
   how_far_words?: string | null; reason?: string | null; photo_by?: string | null
   label?: string | null   // Sasha 291 · AgAPI's own label for what they want to do (a walk-in place, for takeaway or eat now)
-  recognition?: string | null }   // Sasha 292 · AgAPI's recognition sentence, as given (credited and dated) — none → nothing
+  recognition?: string | null   // Sasha 292 · AgAPI's recognition sentence, as given (credited and dated) — none → nothing
+  sources_url?: string | null }   // Sasha 293 · CR 125 · AgAPI's "Our sources" page, when its answer carries one
 
 export function PlaceCard({ card: shown, onBook, tone = 'dark', badge, extra, action, noDetails }: { card: Ev; onBook: (name: string, placeId: string) => void; tone?: 'dark' | 'light'; badge?: string | null
   extra?: CardExtra; action?: { label: string; onClick: () => void }; noDetails?: boolean }) {
@@ -85,13 +86,13 @@ export function PlaceCard({ card: shown, onBook, tone = 'dark', badge, extra, ac
         <button type="button" data-card-action={action ? 'hand_over' : 'book'} onClick={() => (action ? action.onClick() : onBook(untag(card.name), card.place_id))} style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${GOLD}`, background: GOLD, color: '#111', fontWeight: 700 }}>{action ? action.label : 'Book'}</button>
         {noDetails ? null : <button type="button" onClick={() => setOpen(true)} style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${GOLD}`, background: 'transparent', color: tone === 'dark' ? GOLD : '#7a5c00', fontWeight: 700 }}>Details</button>}
       </div>
-      {open ? <PlaceSheet card={card} onClose={() => setOpen(false)} onBook={() => { setOpen(false); onBook(untag(card.name), card.place_id) }} /> : null}
+      {open ? <PlaceSheet card={card} sourcesUrl={extra?.sources_url} onClose={() => setOpen(false)} onBook={() => { setOpen(false); onBook(untag(card.name), card.place_id) }} /> : null}
     </div>
   )
 }
 
 /** The detail sheet: photos, the venue's own site, hours, prices and what it is — each with its source — and Book. */
-export function PlaceSheet({ card, onClose, onBook }: { card: Ev; onClose: () => void; onBook: () => void }) {
+export function PlaceSheet({ card, onClose, onBook, sourcesUrl }: { card: Ev; onClose: () => void; onBook: () => void; sourcesUrl?: string | null }) {
   const [place, setPlace] = useState<Ev>(card.place || card)
   const [reading, setReading] = useState(true)
   useEffect(() => {
@@ -124,7 +125,8 @@ export function PlaceSheet({ card, onClose, onBook }: { card: Ev; onClose: () =>
         borderRadius: '18px 18px 0 0', padding: 16, boxShadow: '0 -8px 40px rgba(0,0,0,.5)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <div style={{ fontWeight: 800, fontSize: 18 }}>{untag(place.name || card.name)}</div>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'transparent', border: 0, color: '#fff', fontSize: 22, cursor: 'pointer' }}>×</button>
+          {/* Sasha 293 · the way back, named as the booking hand-off names it (Tyler, 26 Oct: "How do I get back to Sasha?") */}
+          <button type="button" data-back-to-sasha onClick={onClose} style={{ padding: '6px 14px', borderRadius: 999, border: `1px solid ${GOLD}`, background: 'transparent', color: GOLD, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Back to Sasha</button>
         </div>
         {photos.length ? (
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '10px 0' }}>
@@ -143,9 +145,11 @@ export function PlaceSheet({ card, onClose, onBook }: { card: Ev; onClose: () =>
         {cantRead(place) ? <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.55)', padding: '6px 0' }}>Their site couldn&apos;t be read: {untag(cantRead(place))}</div> : null}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           <button type="button" onClick={onBook} style={{ padding: '10px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111', fontWeight: 800 }}>Book</button>
-          {place.website ? <a href={place.website} target="_blank" rel="noreferrer" style={{ padding: '10px 16px', borderRadius: 999, border: `1px solid ${GOLD}`, color: GOLD, fontWeight: 700, textDecoration: 'none' }}>Their site ↗</a> : null}
-          {place.listing_url ? <a href={place.listing_url} target="_blank" rel="noreferrer" style={{ padding: '10px 16px', borderRadius: 999, border: '1px solid rgba(255,255,255,.25)', color: '#fff', textDecoration: 'none' }}>Google Maps ↗</a> : null}
+          {/* Sasha 293 · "Website": their own site (AgAPI's), else their Google listing — a new tab, so her conversation stays where it is */}
+          {place.website || place.listing_url ? <a data-website href={place.website || place.listing_url} target="_blank" rel="noopener noreferrer" style={{ padding: '10px 16px', borderRadius: 999, border: `1px solid ${GOLD}`, color: GOLD, fontWeight: 700, textDecoration: 'none' }}>{place.website ? 'Website ↗' : 'Their Google listing ↗'}</a> : null}
+          {place.website && place.listing_url ? <a href={place.listing_url} target="_blank" rel="noopener noreferrer" style={{ padding: '10px 16px', borderRadius: 999, border: '1px solid rgba(255,255,255,.25)', color: '#fff', textDecoration: 'none' }}>Google Maps ↗</a> : null}
         </div>
+        {sourcesUrl ? <div style={{ marginTop: 12, fontSize: 12 }}><a data-our-sources href={sourcesUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(255,255,255,.6)' }}>Our sources</a></div> : null}
       </div>
     </div>)
 }

@@ -632,7 +632,7 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
                                 **({"source_url": rec["source_url"]} if str(rec.get("source_url") or "").startswith("https://") else {})}
     # the cards a tap names (read_booking_route → card_of): a place by its listing; an independent by its own site ONLY — its ref is
     # AgAPI's option id, never a listing, so it never travels as a place_id (venue.profile reads place.place_id through Places)
-    VN.remember_cards(ctx.account, [{**({"place_id": o["place_id"]} if o.get("kind") == "place" and o.get("place_id") else
+    VN.remember_cards(ctx.account, [{**({"place_id": o["place_id"], **place_links(o)} if o.get("kind") == "place" and o.get("place_id") else
                                         {"ref": o["ref"], "website": o.get("link")}),
                                      "name": o.get("name"), "type": o.get("type"), "rating": o.get("rating"), "rating_count": o.get("reviews"),
                                      "address": o.get("address")}
@@ -646,7 +646,18 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
                     + "A tap on a card is their pick. A venue's recognition is said only as its `recognition` gives it (one short "
                       "clause, its guide and year) — never for a venue without one, never as a recommendation or a promise."),
             "discover": {"groups": [] if refused else (res.get("groups") or []), "options": options, "pick": None if refused else pick,
-                         "refused": refused, "checks": checks, "say_text": say, "agapi": r.get("agapi")}}
+                         "refused": refused, "checks": checks, "say_text": say, "agapi": r.get("agapi"),
+                         # Sasha 293 · CR 125 · AgAPI's public page crediting every source ("Our sources") — when its answer carries one
+                         **({"sources_url": res["sources_url"]} if str(res.get("sources_url") or "").startswith("https://") else {})}}
+
+
+def place_links(o: dict) -> dict:
+    """Sasha 293 · a place's way to see more, from AgAPI's own option: their website (the input AgAPI names for venue.profile — never an
+    affiliate page, AgAPI drops those), else their Google listing (the option's link). Never a URL built by S2."""
+    site = (((o.get("next") or {}).get("input") or {}).get("place") or {}).get("website")
+    site = site if str(site or "").startswith(("https://", "http://")) else None
+    link = o.get("link") if str(o.get("link") or "").startswith("https://") else None
+    return {**({"website": site} if site else {}), **({"listing_url": link} if link and link != site else {})}
 
 
 # ── Sasha 205 · the prefetch: the slow work starts while she's still chatting ──────────────────────────────────────────────

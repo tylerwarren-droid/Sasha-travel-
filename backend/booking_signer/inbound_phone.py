@@ -235,14 +235,19 @@ async def sms(request: Request):
     if not sid:
         return Response("no message id", status_code=400)
     if channel == "whatsapp" and sender:
-        # Sasha 285 · CR 118 (b) · ONE WHATSAPP PATH: from anyone who isn't a guest talking to Sasha, AgAPI's ONE inbound op FIRST — a
-        # venue's reply to Kanoe's number lands on ITS booking record there (before: filed against the last call to that number, on no
-        # booking). Matched → AgAPI has it; nothing here answers it. Unmatched → the paths below, as before.
+        # Sasha 285 · CR 118 (b) · ONE WHATSAPP PATH: AgAPI's ONE inbound op FIRST — a venue's reply to Kanoe's number lands on ITS booking
+        # record there. Sasha 294 · for EVERY sender, guests too (Tyler is one: his "investigate …" must reach AgAPI's classifier, CR 127's
+        # door to Applied Diligence), with Twilio's MessageSid. Matched → AgAPI has it; nothing here answers it. Unmatched → the guest flow
+        # and the paths below, exactly as before. A Twilio retry is decided ONCE: AgAPI is asked on the first delivery only, and its
+        # verdict is kept (agapi-took:<sid>) — a retry of a message AgAPI took stops here; any other retry goes on as before.
         from . import guest_whatsapp as GW
         from agapi import venue_submit as VS
-        if not await GW.linked(sender) and await GW.first_time(f"agapi-in:{sid}"):
-            if (await VS.whatsapp_inbound(sender, body)).get("matched"):
+        if await GW.first_time(f"agapi-in:{sid}"):
+            if (await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender))).get("matched"):
+                await GW.first_time(f"agapi-took:{sid}")
                 return _twiml()
+        elif await GW.seen(f"agapi-took:{sid}"):
+            return _twiml()
     if channel == "whatsapp":
         # S-75 · a GUEST on a guest number (the sandbox's, SASHA_GUEST_WHATSAPP_TO): linked → their booking turn; "LINK
         # 123456" → linking; anyone else → one fixed sentence. None (every other number, or a venue): the code below,

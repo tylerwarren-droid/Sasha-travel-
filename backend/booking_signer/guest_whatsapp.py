@@ -605,6 +605,20 @@ async def first_time(sid: str) -> bool:
     return True
 
 
+async def seen(sid: str) -> bool:
+    """Sasha 294 · was this key marked before? (read only — first_time() marks). The same store as first_time."""
+    if not sid:
+        return False
+    run = getattr(STORE, "_run", None)
+    if run is not None:
+        try:
+            return bool(await run(lambda c: c.fetchval("select 1 from guest_inbound_sids where message_sid = $1", sid)))
+        except Exception as e:
+            log.error("[guest_whatsapp] MessageSid not read: %s: %s", type(e).__name__, e)
+            return False
+    return sid in _SEEN_SIDS
+
+
 async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     """None: not ours — the venue path runs exactly as before. A string: the TwiML inside <Response> (often empty: the
     guest's turn runs in the background and answers through the API, a message every three seconds)."""

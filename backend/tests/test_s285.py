@@ -83,7 +83,7 @@ class VenueRepliesLandOnAgAPIsRecord(unittest.TestCase):
         p = {"From": f"whatsapp:{sender}", "To": "whatsapp:+447700900000", "Body": body, "MessageSid": sid}
         handed, called = [], []
 
-        async def inbound(s, t):
+        async def inbound(s, t, **kw):
             handed.append((s, t))
             return {"matched": matched}
 
@@ -113,9 +113,9 @@ class VenueRepliesLandOnAgAPIsRecord(unittest.TestCase):
         self.assertEqual(len(handed), 1)
         self.assertEqual(called[0], VENUE)   # then the call match, as before
 
-    def test_a_guest_talking_to_sasha_is_never_handed_over(self):
-        _, handed, _ = self._inbound("+447700900111", linked=True)
-        self.assertEqual(handed, [])
+    def test_a_guest_talking_to_sasha_is_handed_over_first_and_kept_when_unmatched(self):   # Sasha 294 reverses 285's skip
+        _, handed, called = self._inbound("+447700900111", linked=True, matched=False)
+        self.assertEqual(len(handed), 1)   # AgAPI's ONE classifier first, for every sender (CR 127: the AD door)
 
     def test_the_hand_off_calls_agapis_one_op(self):
         got = []
@@ -202,8 +202,8 @@ class NoSecondTwilioSender(unittest.TestCase):
 
     def test_the_hand_off_sits_before_the_call_match(self):
         src = inspect.getsource(IP.sms)
-        self.assertLess(src.index("VS.whatsapp_inbound(sender, body)"), src.index("GW.dispatch("))
-        self.assertLess(src.index("VS.whatsapp_inbound(sender, body)"), src.index("STORE.call_for_number(sender"))
+        self.assertLess(src.index("VS.whatsapp_inbound(sender, body"), src.index("GW.dispatch("))   # Sasha 294 · + message_id, guest
+        self.assertLess(src.index("VS.whatsapp_inbound(sender, body"), src.index("STORE.call_for_number(sender"))
 
 
 if __name__ == "__main__":

@@ -86,18 +86,20 @@ async def end_user(account: str, on: Optional[str] = None, via: Optional[Callabl
     return None
 
 
-async def whatsapp_inbound(sender: str, text: str) -> Dict[str, Any]:
+async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = None, guest: bool = False) -> Dict[str, Any]:
     """Sasha 285 · CR 118 (b) · a WhatsApp that reached Kanoe's number from someone who is NOT a guest talking to Sasha → AgAPI's ONE
     inbound op (messages.whatsapp_inbound), exactly as it arrived: from a number Kanoe wrote to, AgAPI keeps it, records a STOP and
     files a venue's answer on ITS booking record → {"matched": True}. Anyone else → {"matched": False}: Sasha's own paths, as before.
     AgAPI unreachable → {"matched": False, "why"} (never lost: Sasha's own path still files it)."""
-    r = await _call(None, "messages.whatsapp_inbound", {"from": str(sender)[:24], "text": str(text or "")[:4000]})
+    r = await _call(None, "messages.whatsapp_inbound", {"from": str(sender)[:24], "text": str(text or "")[:4000],
+                                                        **({"message_id": str(message_id)[:80]} if message_id else {}),   # Sasha 294 · CR 127
+                                                        **({"guest": True} if guest else {})})   # a guest: only AD's door may take it (CR 127b)
     if not r.get("ok"):
         log.warning("[venue_submit] whatsapp_inbound not handed over: %s", (r.get("error") or {}).get("code"))
         return {"matched": False, "why": (r.get("error") or {}).get("code") or "unavailable"}
     res = r.get("result") or {}
     # Sasha 287 · a STOP is AgAPI's to honour (opted_out, at once: its gate refuses every later send) — kept here so it is said
-    return {"matched": bool(res.get("matched")), **({k: res[k] for k in ("kept", "why", "opted_out", "booking") if k in res})}
+    return {"matched": bool(res.get("matched")), **({k: res[k] for k in ("kept", "why", "opted_out", "booking", "ad", "replied") if k in res})}
 
 
 def _err(r: dict) -> dict:

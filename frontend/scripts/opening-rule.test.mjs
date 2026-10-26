@@ -18,6 +18,9 @@ test('on load: the panel (one action, "or type", the starters) — for the signe
   assert.equal(opening({ phase: READY, signedIn: true, started: true }).panel, false)   // another tab: gone
   assert.equal(opening({ phase: READY, signedIn: true, asleep: true }).panel, false)
   for (const ph of ['off', 'face', 'voice', 'tap', 'bubble', 'faceAgain']) assert.equal(opening({ phase: ph, signedIn: true }).panel, false, ph)
+  assert.equal(opening({ phase: 'off', signedIn: true, full: true }).panel, true)    // her first full-size paint carries the action
+  assert.equal(opening({ phase: 'off', signedIn: null, full: true }).panel, false)   // not before the sign-in answer (no mic yet)
+  assert.equal(opening({ phase: 'bubble', signedIn: true, full: true }).panel, false)
   assert.equal(TALK, 'Tap to talk to Sasha')
   assert.equal(OR_TYPE, 'or type')
 })

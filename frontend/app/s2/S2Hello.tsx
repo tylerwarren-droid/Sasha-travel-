@@ -315,7 +315,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     // Sasha 265 · item 2 (row 936, Tyler: "when he logs back in he never sees her"): a return skipped this — sessionStorage
     // 's2_hello' sent every later arrival straight to the bubble. ONE arrival sequence now, every arrival: her face full size, the
     // hello (a return: "welcome back"), then the circle. Only reduced motion skips the motion — the circle at once, her face in it.
-    if (skip || reducedMotion() || startedRef.current || asleepRef.current) { to('bubble'); return }   // Sasha 251 · already talking (this visit): no opening over it · 273: rule 4 said no
+    if (skip || reducedMotion() || startedRef.current || asleepRef.current) { early1.current = false; to('bubble'); return }   // Sasha 251 · already talking (this visit): no opening over it · 273: rule 4 said no
     // Sasha 295 · THE OPENING (lib/opening-rule.mjs): her still, full size, with ONE action — and NOTHING said until his tap (a phone
     // won't play her before one: the stand-off Tyler saw was her waiting ~6 s to try). Her face keeps starting meanwhile (muted when it
     // comes); her lines are worked out now and their audio fetched, so the tap hears her within ~1 s. No timer decides anything here.
@@ -325,6 +325,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     early.current = null   // Sasha 273 · used: a later arrival (again) starts its own
     to(READY)
     lines.current = words()
+    if (early1.current) { early1.current = false; begin(); return }   // he tapped while she was still being decided: her hello now (her voice)
     lines.current.then(({ plain }) => { if (plain) talker.prefetch?.(plain) }).catch(() => {})
     starting.then(async f => {
       console.log(`[s2-hello] face on screen in ${Math.round(performance.now() - t0)} ms`)
@@ -342,7 +343,9 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   }
   /** Sasha 295 · THE TAP (TALK): inside it, in order — her sound, the mic (its prompt asked by this tap), then her hello: her live
    *  face says it when it is up (unmuted here, in the tap), else her voice from the corner. Never before it. */
+  const early1 = useRef(false)   // a tap before her arrival was decided ('off'): held, then the hello once it is
   const begin = () => {
+    if (phaseRef.current === 'off') { talker.unlock(); onBegin?.(); early1.current = true; return }
     if (phaseRef.current !== READY) return
     if (timers.current.timer) clearTimeout(timers.current.timer)
     talker.unlock()
@@ -352,7 +355,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     else { to('voice'); void speakVoice() }
   }
   /** OR_TYPE, or a starter: the box (or that first message) — the opening ends at once, with no hello over it. */
-  const skipTo = (then: () => void) => { if (phaseRef.current !== READY) return; talker.unlock(); lines.current = null; then(); void handoff() }
+  const skipTo = (then: () => void) => { if (phaseRef.current !== READY && phaseRef.current !== 'off') return; talker.unlock(); lines.current = null; then(); void handoff() }
   useEffect(() => {
     if (signedIn !== true || arrive === undefined || phaseRef.current !== 'off') return
     arriveNow(arrive === false)
@@ -415,9 +418,6 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     await collapse()
   }
   useEffect(() => { if (ctlRef) ctlRef.current = { big: isBig, bye, again, live: faceUp, waiting: () => phaseRef.current === READY } })
-  // Sasha 295 · the page draws no second welcome under the opening (its empty state waits while the panel is up)
-  const panel = opening({ phase, signedIn, started, asleep }).panel
-  useEffect(() => { onOpening?.(panel) }, [panel, onOpening])
 
   // Sasha 246 item 2 · fall asleep: her face, if it is up (the hello or "her face back"), stops NOW — mid-word — and becomes the
   // dimmed bubble; no hello is said later in this visit. Waking is the parent's (the bubble's tap → onWake).
@@ -476,6 +476,9 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const soon = useSyncExternalStore(never, signedInHere, () => false)   // 268 · hydration-safe: false on the server, the cookie on the client
   const p = presence({ phase, tapFor, started, signedIn, soon, asleep, dormant, reduced: reducedMotion(), micLive, arrive })
   const big = p.where === 'full'
+  // Sasha 295 · the page draws no second welcome under the opening (its empty state waits while the panel is up)
+  const panel = opening({ phase, signedIn, started, asleep, full: big }).panel
+  useEffect(() => { onOpening?.(panel) }, [panel, onOpening])
   useEffect(() => { if (!big) return; const t = setInterval(() => setLive(drawn(canvas.current)), 50); return () => clearInterval(t) }, [big])   // 268: within 50 ms
   const r = ring(p.look, talking, working)   // Sasha 279 · A · she works: the ring pulses (lib/presence-rule.mjs)
   const tap = p.tap === 'collapse' ? collapse : p.tap === 'wake' ? () => onWake?.() : p.tap === 'face_back' ? faceBack : undefined

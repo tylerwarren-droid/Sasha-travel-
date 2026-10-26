@@ -23,10 +23,13 @@ export const OR_TYPE = 'or type'
 /** Her one line when her voice can't be played here, after his tap (the mic's refusal has its own words: lib/mic-state). */
 export const NO_SOUND = 'My voice won’t play on this device — I’ll answer in writing. Type below.'
 
-/** What the opening draws: the panel (TALK · OR_TYPE · STARTERS) while her arrival waits for his tap — and only then.
- *  @param {{ phase: string, signedIn: boolean | null, started?: boolean, asleep?: boolean }} s */
+/** What the opening draws: the panel (TALK · OR_TYPE · STARTERS) while her arrival waits for his tap — and only then. `full`: she is
+ *  drawn full size now (presence) — before her arrival is decided ('off', rule 4 still asking, up to ~2.5 s) the panel is already
+ *  there with her, so the first paint never shows her without the action (a tap then is held until the arrival is decided).
+ *  @param {{ phase: string, signedIn: boolean | null, started?: boolean, asleep?: boolean, full?: boolean }} s */
 export function opening(s) {
-  const panel = s.signedIn === true && s.phase === READY && !s.started && !s.asleep
+  const waits = s.phase === READY || (s.phase === 'off' && !!s.full)
+  const panel = s.signedIn === true && waits && !s.started && !s.asleep
   return { panel, speaks: s.phase !== READY && s.phase !== 'off' }
 }
 

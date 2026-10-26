@@ -488,8 +488,10 @@ FIRST_LINE = "Great — let me pull something together, it might take a few seco
 # and she moves to the corner circle. Replaces Sasha 268's "full size until his first request". Said by code, never the model's; spoken
 # by her live face when it is up, else her voice. CAMERA_OFF is also what she says when a tap brought her back and his next request
 # sends her to the corner again.
-HELLO = "Hey there"
-HELLO_BACK = "Hey {name}"
+# Sasha 295 (Tyler, 26 Oct: "she sits and looks at you… a bit of a stand-off") · said only AFTER his tap on "Tap to talk to Sasha"
+# (frontend/lib/opening-rule.mjs): one short line that says what she does — never a bare "Hey there" that leaves him guessing.
+HELLO = "Hi — what shall I book for you?"
+HELLO_BACK = "Hi {name} — what shall I book for you?"
 # Sasha 281 (Tyler, 21 Oct 17:58 — her lips didn't move on it) · ONE short line, and said ONLY by her live face (the page's speak(),
 # presence-rule withCamera): with no live face there is no camera to turn off — her line is the hello alone, from the corner.
 CAMERA_OFF = "I'm turning my camera off — just talk, or tap to see me."
@@ -521,7 +523,8 @@ def way_back(link: str) -> str:
 def arrival_line(name: Optional[str] = None, back: bool = False) -> str:
     """Her arrival, in one breath: "Hey there." / (a return) "Hey <first name>." — then CAMERA_OFF."""
     first = str(name or "").strip().split(" ")[0][:40]
-    return f"{HELLO_BACK.format(name=first) if back and first else HELLO}. {CAMERA_OFF}"
+    lead = HELLO_BACK.format(name=first) if back and first else HELLO
+    return f"{lead if lead[-1:] in '.!?' else lead + '.'} {CAMERA_OFF}"   # Sasha 295 · as presence-rule withCamera: never "?."
 FIRST_GAP_EARLY_S = 1.0   # after the first line, the first progress line comes this much sooner (the page said it ~1 s earlier)
 _MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
 # Sasha 268 · item 7 (rows 954/955, Tyler 21:00: "Can you find a dog walker and schedule one?" → "I can't do that yet, but I've noted

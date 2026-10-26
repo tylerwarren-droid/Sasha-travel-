@@ -6,10 +6,11 @@
 // visit — it only went away on that tap.) Every way of starting already unlocks her voice itself (speaker.unlock on the tap),
 // so nothing is lost when the card goes.
 
-/** @typedef {'off' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'} HelloPhase */
+/** @typedef {'off' | 'ready' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'} HelloPhase */
 
-/** The opening's own phases: the ones that end when the conversation starts. ('faceAgain' is their own tap on the bubble.) */
-export const OPENING = ['starting', 'face', 'faceLate', 'voice', 'tap']
+/** The opening's own phases: the ones that end when the conversation starts. ('faceAgain' is their own tap on the bubble.)
+ *  Sasha 295 · 'ready': her still with ONE action, waiting for his tap (lib/opening-rule.mjs) — drawn full size, nothing said. */
+export const OPENING = ['ready', 'starting', 'face', 'faceLate', 'voice', 'tap']
 
 /** The conversation has started once there is a turn of THEIRS in it (sent, tapped, spoken, or restored from last time).
  *  Her own lines alone (the hello, "I'm here", a proactive note) do not start it.

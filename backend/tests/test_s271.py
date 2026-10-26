@@ -117,10 +117,11 @@ class NoSecondCopy(unittest.TestCase):
 class HerArrivalsWords(unittest.TestCase):
     def test_hey_there_then_the_camera_off_line(self):
         self.assertEqual(V.CAMERA_OFF, "I'm turning my camera off — just talk, or tap to see me.")   # Sasha 281 · MOVED: one short line
-        self.assertEqual(V.arrival_line(), f"Hey there. {V.CAMERA_OFF}")
-        self.assertEqual(V.arrival_line("Tyler Warren", back=True), f"Hey Tyler. {V.CAMERA_OFF}")
-        self.assertEqual(V.arrival_line("Tyler", back=False), f"Hey there. {V.CAMERA_OFF}")   # a first visit: "Hey there"
-        self.assertEqual(V.arrival_line(None, back=True), f"Hey there. {V.CAMERA_OFF}")
+        # Sasha 295 · MOVED: her hello says what she does ("Hey there" left him guessing), and is said only after his tap
+        self.assertEqual(V.arrival_line(), f"Hi — what shall I book for you? {V.CAMERA_OFF}")
+        self.assertEqual(V.arrival_line("Tyler Warren", back=True), f"Hi Tyler — what shall I book for you? {V.CAMERA_OFF}")
+        self.assertEqual(V.arrival_line("Tyler", back=False), f"Hi — what shall I book for you? {V.CAMERA_OFF}")   # a first visit: no name
+        self.assertEqual(V.arrival_line(None, back=True), f"Hi — what shall I book for you? {V.CAMERA_OFF}")
 
     def test_the_page_reads_them_from_voice_py(self):
         from app.agent import sasha as S

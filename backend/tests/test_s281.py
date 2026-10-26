@@ -59,7 +59,8 @@ class OneWayToHerLips(unittest.TestCase):
         self.assertEqual(self.hello.count("talker.sayNow("), 1)
         self.assertIn("return talker.sayNow(plain)", self.speak)
         self.assertEqual(len(re.findall(r"\bf\.say\(|face\.current\.say\(", self.hello)), 1)
-        self.assertIn("if (await f.say(t)) return 'face'", self.speak)
+        self.assertIn("const said = await f.say(t)", self.speak)   # Sasha 295 · MOVED: her face's line is the page's "speaking" too
+        self.assertIn("if (said) return 'face'", self.speak)
         self.assertIn("if (bigNow()) await collapse()", self.speak)   # the corner before her voice: never over her big still
 
     def test_the_page_speaks_through_it_her_whole_visit(self):

@@ -83,6 +83,10 @@ ASK_CHIP = ("What can you do?", "what_i_can_do")
 _CHIP_PAIRS = [c for g in CAPABILITIES if g.get("chip") for c in [g["chip"], *g.get("more_chips", [])]]
 CHIPS: List[str] = [ASK_CHIP[0]] + [c[0] for c in _CHIP_PAIRS]
 CHIP_TOOLS: Dict[str, str] = {ASK_CHIP[0]: ASK_CHIP[1], **{c[0]: c[1] for c in _CHIP_PAIRS}}
+# Sasha 295 · THE OPENING's one-tap starters (frontend/lib/opening-rule.mjs): three of the chips above — each a real tool today,
+# never a request she can't do. Chosen here, with the list they come from, so the page never writes its own.
+STARTERS: List[str] = ["A table for two tonight", "A spa on Saturday", "What can you do?"]
+assert all(s in CHIP_TOOLS for s in STARTERS), "a starter is always one of her chips"
 
 
 def prose() -> str:
@@ -115,6 +119,7 @@ def frontend_module() -> str:
     return ("// GENERATED from backend/agapi/s2_home.py CAPABILITIES (Sasha 249 · one capability list) — do not edit by hand.\n"
             "// Regenerate: cd backend && python -m scripts.capabilities_out\n"
             f"export const CHIPS = {json.dumps(CHIPS, ensure_ascii=False)}\n"
+            f"export const STARTERS = {json.dumps(STARTERS, ensure_ascii=False)}\n"   # Sasha 295
             f"export const SAY = {json.dumps(SAY, ensure_ascii=False)}\n"
             f"export const GROUPS = {json.dumps(groups, ensure_ascii=False)}\n")
 
@@ -256,5 +261,5 @@ async def not_yet_list(request: Request):
     return {"ok": True, "items": [{**r, "at": r["at"].isoformat() if hasattr(r["at"], "isoformat") else r["at"]} for r in rows]}
 
 
-__all__ = ["CAPABILITIES", "SAY", "CHIPS", "CHIP_TOOLS", "prose", "wa_help", "wa_linked", "wa_onboard", "frontend_module",   # Sasha 249
+__all__ = ["CAPABILITIES", "SAY", "CHIPS", "CHIP_TOOLS", "STARTERS", "prose", "wa_help", "wa_linked", "wa_onboard", "frontend_module",   # Sasha 249
            "mask", "note", "tools", "router", "what_i_can_do", "note_not_yet"]

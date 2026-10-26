@@ -34,6 +34,8 @@ import { BLOCKED, stepsFor } from '@/lib/mic-state'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
+import { NO_SOUND, STARTERS, cueOf } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING: its starters, her one cue, her no-sound line
+import { arrivalLine } from '@/lib/first-line'   // Sasha 295 · the empty conversation's line is her hello's own words
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -75,7 +77,6 @@ function firstSentences(t: string, n: number): string {
   return parts ? parts.slice(0, n).join('').trim() : t
 }
 
-const GREETING = 'Hey there — what can I do for you?'
 /** Sasha 273 · item 4 · LAST ACTIVITY: the conversation's last turn — the server's (s2-memory's last_at, every device) and this page's
  *  own sends and taps since. This browser keeps its own last one so a reload can answer rule 4 before the server does — only ever to
  *  say "recent" (the server's is never older than it), never to skip the server's answer. */
@@ -157,14 +158,19 @@ function useSpeaker() {
     if (!el.current) { el.current = new Audio(); el.current.setAttribute('playsinline', ''); el.current.preload = 'auto' }
     return el.current
   }
+  const early = useRef(new Map<string, Promise<Blob | null>>())   // Sasha 295 · her hello's audio, fetched before his tap
+  const tts = (text: string): Promise<Blob | null> =>
+    fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text }) })   // Sasha 225 · ONE content-type (two were merged → 422: /s2 was silent)
+      .then(r => (r.ok ? r.blob() : null)).catch(() => null)
   const mp3 = async (text: string): Promise<'played' | 'blocked' | 'failed'> => {
     const mine = epoch.current
     try {
-      const r = await fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text }) })   // Sasha 225 · ONE content-type (two were merged → 422: /s2 was silent)
-      if (!r.ok) return 'failed'
+      const got0 = early.current.get(text); early.current.delete(text)
+      const blob = await (got0 ?? tts(text))
+      if (!blob) return 'failed'
       if (mine !== epoch.current) return 'played'   // interrupted while it was being fetched
       const a = audio()
-      const url = URL.createObjectURL(await r.blob())
+      const url = URL.createObjectURL(blob)
       a.src = url
       const got = await new Promise<'played' | 'blocked' | 'failed'>(res => { a.onplaying = () => audibleSubs.current.forEach(f => f()); a.onended = () => res('played'); a.onpause = () => res('played'); a.onerror = () => res('failed'); a.play().catch(e => res(e?.name === 'NotAllowedError' ? 'blocked' : 'failed')) })   // Sasha 233 · paused (interrupted) ends it too
       URL.revokeObjectURL(url)
@@ -197,6 +203,8 @@ function useSpeaker() {
     sayNow: async (t: string) => { emit(true); const r = muted.current || asleep.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
     setRoute: (fn: ((t: string) => Promise<void>) | null) => { route.current = fn },
     heard: () => { audibleSubs.current.forEach(f => f()) },   // Sasha 281 · her face started a line (its audio isn't the page's element)
+    prefetch: (t: string) => { if (t && !early.current.has(t)) early.current.set(t, tts(t)) },   // Sasha 295 · fetched now, played on the tap
+    speaking: (b: boolean) => emit(b),   // Sasha 295 · her face is saying a line: the same "speaking" as her voice (the mic's gate, the cue)
     setMuted: (m: boolean) => { muted.current = m; if (m) { q.current = []; setBlocked(null) } },
     /** Sasha 233 · "Thanks!" mid read-back: what she's saying stops now, and nothing queued is said. */
     interrupt: () => { epoch.current++; q.current = []; try { if (el.current && !el.current.paused) el.current.pause() } catch { /* nothing playing */ } },
@@ -546,14 +554,19 @@ export default function S2App() {
     try { m = localStorage.getItem('s2_muted') === '1' } catch { /* private mode: voice on */ }
     if (m) { speaker.setMuted(true); const t = setTimeout(() => setMuted(true), 0); return () => clearTimeout(t) }
   }, [speaker])
-  const [chipAt, setChipAt] = useState(0)
+  // Sasha 295 · THE OPENING (lib/opening-rule.mjs): its panel is up (no second welcome under it) · her voice failed after the tap ·
+  // she is speaking (the cue) · the empty conversation's line, her hello's own words
+  const [openingUp, setOpeningUp] = useState(false)
+  const [soundNote, setSoundNote] = useState<string | null>(null)
+  const [speaking, setSpeaking] = useState(false)
+  const [greet, setGreet] = useState('')
   useEffect(() => {
     if (!signedIn) return
     const t = setTimeout(() => setName(n => (n === undefined ? null : n)), 900)
     fetch('/api/s2-me', { cache: 'no-store' }).then(r => r.json()).then(j => setName(j?.name || null)).catch(() => setName(null))
     return () => clearTimeout(t)
   }, [signedIn])
-  useEffect(() => { const t = setInterval(() => setChipAt(i => (i + 1) % CHIPS.length), 4000); return () => clearInterval(t) }, [])
+  useEffect(() => { if (name !== undefined) void arrivalLine(name, !!name, false).then(setGreet) }, [name])
   const histRef = useRef<{ role: string; content: string }[]>([])
   // Sasha 231 · "thanks / bye" → she rests: faded, the mic off (not listening) until a tap; a tap brings her back, no re-introduction
   const [dormant, setDormant] = useState(false)
@@ -729,6 +742,8 @@ export default function S2App() {
       answerWordRef.current?.(wordKey.current, word, spokenAt ? 'voice' : 'chat')
       return
     }
+    if (helloCtl.current?.waiting()) void helloCtl.current.bye('', false)   // Sasha 295 · he typed or spoke before the tap: the opening ends, no hello
+    setSoundNote(null)
     if (busy) { queued.current = [...queued.current, t]; setInput(''); return }
     if (dormant) setDormant(false)   // Sasha 231 · a message wakes her, with no re-introduction
     if (asleepRef.current) sleepEvent('typed')   // Sasha 246 item 2 · a message wakes her
@@ -858,6 +873,7 @@ export default function S2App() {
   const byeUntil = useRef(0)
   // Sasha 266 · row 943 (a): the mic's own words when it isn't hearing (blocked, can't hear you) — on the page, never only a tooltip
   const [micNote, setMicNote] = useState<string | null>(null)
+  useEffect(() => { if (micNote) typeBox.current?.focus() }, [micNote])   // Sasha 295 · the mic refused: said in one line, the box ready
   const newChat = useCallback(async () => {
     if (busy || clearing) return
     setClearing(true)
@@ -911,7 +927,7 @@ export default function S2App() {
     window.addEventListener('s2-sign-in', go)
     return () => window.removeEventListener('s2-sign-in', go)
   }, [])
-  useEffect(() => speaker.onSpeaking(b => { speakingRef.current = b; if (!b) setTimeout(() => safeReload(), 0) }), [speaker, safeReload])
+  useEffect(() => speaker.onSpeaking(b => { speakingRef.current = b; setSpeaking(b); if (!b) setTimeout(() => safeReload(), 0) }), [speaker, safeReload])
   // Sasha 283 · item 4c · THE WAY BACK: a page he was handed (their booking page, a platform's) — back in the app, she asks the ONE
   // question from its record (/api/booking/handover/word: agapi.venues.awaiting_word, asked once), or says what the confirmation
   // watcher already knows. His tap, or a plain yes / no (presence-rule wordOf), goes on that record; anything else is a normal turn.
@@ -978,8 +994,15 @@ export default function S2App() {
     if (voiceCtl.current?.granted()) { micUsed.current = true; voiceCtl.current.tap() }
   }
   const wake = () => { setDormant(false); setWoke(micUsed.current); speaker.unlock() }   // she was listening → listening again
+  // Sasha 295 · THE OPENING's moves (S2Hello calls each inside his tap): TALK starts the mic — its permission asked by this tap, never
+  // before one — then she says her hello · "or type": the box · a starter: his first message · her voice failed: one line, the box ready
+  const begin = () => { micUsed.current = true; if (!asleepRef.current && !muted && !micLive && !dormant) voiceCtl.current?.tap() }
+  const typeNow = () => typeBox.current?.focus()
+  const starter = (t: string) => { listenOnTap(); void send(t) }
+  const noSound = () => { setSoundNote(NO_SOUND); typeBox.current?.focus() }
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
-    started={tab !== 'sasha'} ctlRef={helloCtl} arrive={arrive !== undefined ? arrive : quick} micLive={micLive} lead={lead} working={working} />   // Sasha 273 · rule 4's answer, the mic's truth, her news · Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
+    started={tab !== 'sasha'} ctlRef={helloCtl} arrive={arrive !== undefined ? arrive : quick} micLive={micLive} lead={lead} working={working}
+    onBegin={begin} onType={typeNow} onStarter={starter} onNoSound={noSound} onOpening={setOpeningUp} />   // Sasha 273 · rule 4's answer, the mic's truth, her news · Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>
@@ -1019,15 +1042,14 @@ export default function S2App() {
         </section>
       ) : tab === 'activity' ? <section style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0 }}><Activity /></section> : (
           <section style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, padding: '0 16px 12px' }}>
-            {msgs.length === 0 ? (
-              <div style={{ textAlign: 'center', paddingTop: '18vh' }}>
-                <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Playfair Display',Georgia,serif", lineHeight: 1.25 }}>{GREETING}</div>
-                <p style={{ color: C.dim, marginTop: 10 }}>A table tonight, a spa on Saturday, an email to someone, a booking in your calendar.</p>
+            {msgs.length === 0 ? (openingUp ? null : (   /* Sasha 295 · never a second welcome under the opening: it waits while the panel is up */
+              <div data-empty style={{ textAlign: 'center', paddingTop: '18vh' }}>
+                <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Playfair Display',Georgia,serif", lineHeight: 1.25 }}>{greet}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 22 }}>
-                  {CHIPS.map((_, j) => CHIPS[(chipAt + j) % CHIPS.length]).map(c => (
-                    <button key={c} onClick={() => { speaker.unlock(); listenOnTap(); send(c) }} style={{ padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 14.5, transition: 'all .4s' }}>{c}</button>))}
+                  {STARTERS.map(c => (   /* Sasha 295 · the opening's starters (backend s2_home.STARTERS), never a rotating eight */
+                    <button key={c} data-starter onClick={() => { speaker.unlock(); listenOnTap(); send(c) }} style={{ padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 14.5 }}>{c}</button>))}
                 </div>
-              </div>
+              </div>)
             ) : msgs.map((m, i) => (
               <div key={i} style={{ margin: '10px 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
                 {m.text || m.role === 'user' ? (
@@ -1046,6 +1068,8 @@ export default function S2App() {
               unmount the mic (its cleanup stopped the capture, and iOS then played her through the call-volume route) */}
           {asleep ? (   /* Sasha 268 · item 8: paused, said plainly — the mic off, her voice stopped, her live face let go (S2Hello) */
             <div role="status" data-sasha-paused style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: `1px solid ${C.gold}`, background: 'rgba(232,185,49,.08)', fontSize: 14, lineHeight: 1.4, fontWeight: 600 }}>{ASLEEP_LINE}</div>) : null}
+          {soundNote ? (   /* Sasha 295 · her voice didn't play after his tap: one line, the box ready — never a silent face */
+            <div role="status" data-no-sound style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: `1px solid ${C.gold}`, background: 'rgba(232,185,49,.08)', fontSize: 14, lineHeight: 1.4, fontWeight: 600 }}>{soundNote}</div>) : null}
           {micNote ? (   /* Sasha 266 · the mic is "on" only when it hears; otherwise this, plainly, with how to allow it */
             <div role="status" data-mic-stuck style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(240,120,120,.45)', background: 'rgba(240,120,120,.08)', fontSize: 14, lineHeight: 1.4 }}>
               <div style={{ fontWeight: 700 }}>{micNote}</div>
@@ -1070,12 +1094,12 @@ export default function S2App() {
           <footer style={{ flex: 'none', padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* Sasha 273 · item 3: the voice label is the MIC's real state (lib/presence-rule.mjs voiceOf, from VoiceButton's strict `hearing`),
                 on the mic itself — "Voice on" and its green ring only while it hears; otherwise "Tap to talk" (the tap starts or resumes it) */}
-            {(() => { const vo = voiceOf({ asleep, dormant, micLive }); return (
-            <div className="s2-mic" data-live={vo.live ? '1' : '0'} data-cue={!vo.live && !asleep && !!micNote ? '1' : '0'} onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            {(() => { const vo = voiceOf({ asleep, dormant, micLive }); const cue = cueOf({ asleep, dormant, micLive, speaking, thinking: busy || working, micNote }); return (
+            <div className="s2-mic" data-live={vo.live ? '1' : '0'} data-cue={!vo.live && !asleep && !!micNote ? '1' : '0'} data-cue-state={cue.state} onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={t => { voiceNext.current = voiceCtl.current?.speechEndAt() ?? Date.now(); void send(t) }} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
                 strict ctlRef={voiceCtl} onConnectedChange={setMicLive} />}{/* Sasha 273 · item 3: "on" only while it hears */}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
               <span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-live="polite"
-                style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{vo.words}</span>
+                style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{cue.words}</span>{/* Sasha 295 · ONE cue: listening · thinking · speaking */}
             </div>) })()}
             <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
@@ -1090,7 +1114,13 @@ export default function S2App() {
                pulses gently with "Tap to talk": unmistakable, never a modal */
             + `.s2-mic[data-cue="1"] button{animation:s2cue 1.6s ease-in-out infinite}.s2-mic[data-cue="1"] [data-voice-state]{font-size:12px}`
             + `@keyframes s2cue{0%,100%{box-shadow:0 0 0 0 rgba(232,185,49,.55)}50%{box-shadow:0 0 0 9px rgba(232,185,49,0)}}`
-            + `@media (prefers-reduced-motion: reduce){.s2-mic[data-cue="1"] button{animation:none;box-shadow:0 0 0 3px #e8b931}}`}</style>
+            + `@media (prefers-reduced-motion: reduce){.s2-mic[data-cue="1"] button{animation:none;box-shadow:0 0 0 3px #e8b931}}`
+            /* Sasha 295 · THE ONE CUE (lib/opening-rule.mjs cueOf), each its own look: speaking — a solid gold ring · thinking — a slow
+               soft pulse · listening — the green ring above */
+            + `.s2-mic[data-cue-state="speaking"] button{box-shadow:0 0 0 4px #e8b931}`
+            + `.s2-mic[data-cue-state="thinking"] button{animation:s2think 1.8s ease-in-out infinite}`
+            + `@keyframes s2think{0%,100%{box-shadow:0 0 0 2px rgba(255,255,255,.25)}50%{box-shadow:0 0 0 7px rgba(255,255,255,.08)}}`
+            + `@media (prefers-reduced-motion: reduce){.s2-mic[data-cue-state="thinking"] button{animation:none;box-shadow:0 0 0 3px rgba(255,255,255,.4)}}`}</style>
     </main>{hello}
     {handover ? (   /* Sasha 236 · Tap to finish in a sheet over her (the CAPTCHA, terms, their button) — then back to her, as /next */
       <div role="dialog" aria-label="Finish the booking" style={{ position: 'fixed', inset: 0, zIndex: 60, background: C.bg, display: 'flex', flexDirection: 'column' }}>

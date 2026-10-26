@@ -257,6 +257,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T72": ("Details has their website (AgAPI's own, else their Google listing — never a URL built by S2) in a new tab, a visible "
             "Back to Sasha, and AgAPI's sources page when it gives one",
             ["tests.test_s293"]),
+    "T73": ("The opening: on load ONE action (Tap to talk to Sasha · or type · her starters), nothing said before the tap; her hello says "
+            "what she does; every starter is one of her chips (Sasha 295)",
+            ["tests.test_s295"]),
 }
 
 _RUNNER = """

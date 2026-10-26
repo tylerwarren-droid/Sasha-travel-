@@ -21,7 +21,8 @@ let OPEN_SHEET: string | null = null
  *  Sasha can take it, the pick's reason, and the photo's credit. All optional: /next's cards are unchanged without them. */
 export type CardExtra = { feel?: string | null; price_level?: number | null; distance_m?: number | null; availability_words?: string | null
   how_far_words?: string | null; reason?: string | null; photo_by?: string | null
-  label?: string | null }   // Sasha 291 · AgAPI's own label for what they want to do (a walk-in place, for takeaway or eat now)
+  label?: string | null   // Sasha 291 · AgAPI's own label for what they want to do (a walk-in place, for takeaway or eat now)
+  recognition?: string | null }   // Sasha 292 · AgAPI's recognition sentence, as given (credited and dated) — none → nothing
 
 export function PlaceCard({ card: shown, onBook, tone = 'dark', badge, extra, action, noDetails }: { card: Ev; onBook: (name: string, placeId: string) => void; tone?: 'dark' | 'light'; badge?: string | null
   extra?: CardExtra; action?: { label: string; onClick: () => void }; noDetails?: boolean }) {
@@ -73,6 +74,7 @@ export function PlaceCard({ card: shown, onBook, tone = 'dark', badge, extra, ac
             {typeof extra?.distance_m === 'number' ? ` · ${extra.distance_m < 1000 ? `${Math.round(extra.distance_m)} m` : `${(extra.distance_m / 1000).toFixed(1)} km`}` : ''}
           </span>
           {extra?.feel ? <span style={{ display: 'block', fontSize: 13, color: dim, marginTop: 2 }}>{untag(extra.feel)}</span> : null}
+          {extra?.recognition ? <span data-recognition style={{ display: 'block', fontSize: 11.5, color: GOLD, marginTop: 2 }}>{untag(extra.recognition)}</span> : null}
           {extra?.label ? <span data-intent-label style={{ display: 'block', fontSize: 12.5, color: dim, marginTop: 2 }}>{untag(extra.label)}</span> : null}
           {extra?.availability_words ? <span style={{ display: 'block', fontSize: 12.5, color: dim, marginTop: 2 }}>{untag(extra.availability_words)}</span> : null}
           {extra?.how_far_words ? <span style={{ display: 'block', fontSize: 12.5, color: dim, marginTop: 2 }}>{untag(extra.how_far_words)}</span> : null}

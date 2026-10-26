@@ -584,7 +584,8 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
 #: what of each option reaches the screen — never `contacts` (unconfirmed: never shown as a way she writes)
 DISCOVER_CARD = ("ref", "group", "kind", "name", "feel", "type", "rating", "reviews", "price_level", "distance_m", "availability_words",
                  "how_far", "how_far_words", "photo", "link", "place_id", "next", "hand_over", "reason", "rank", "address",
-                 "label")   # Sasha 291 · AgAPI's own label for the intent ("walk-in, no bookings")
+                 "label",   # Sasha 291 · AgAPI's own label for the intent ("walk-in, no bookings")
+                 "recognition")   # Sasha 292 · its curated recognition (recognition.view): kept as {words, source_url} below
 
 
 # Sasha 291 · WHAT THEY WANT TO DO, read from their OWN words this turn (never the model's `what`) — the ONE place S2 reads it; AgAPI's
@@ -625,6 +626,10 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
     pick = res.get("pick") if isinstance(res.get("pick"), dict) else None
     for o in options:
         o["pick"] = bool(pick and o.get("ref") == pick.get("ref"))
+        rec = o.pop("recognition", None)   # Sasha 292 · AgAPI's ONE recognition sentence (credited, dated) — as given, or nothing
+        if isinstance(rec, dict) and isinstance(rec.get("words"), str) and rec["words"].strip():
+            o["recognition"] = {"words": rec["words"].strip()[:200],
+                                **({"source_url": rec["source_url"]} if str(rec.get("source_url") or "").startswith("https://") else {})}
     # the cards a tap names (read_booking_route → card_of): a place by its listing; an independent by its own site ONLY — its ref is
     # AgAPI's option id, never a listing, so it never travels as a place_id (venue.profile reads place.place_id through Places)
     VN.remember_cards(ctx.account, [{**({"place_id": o["place_id"]} if o.get("kind") == "place" and o.get("place_id") else
@@ -633,11 +638,13 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
                                      "address": o.get("address")}
                                     for o in options if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")])
     say = (checks or {}).get("say_text") or res.get("say_text") or ""
-    return {"venues": [{"name": o.get("name"), "kind": o.get("kind"), "group": o.get("group"), "pick": o["pick"]} for o in options],
+    return {"venues": [{"name": o.get("name"), "kind": o.get("kind"), "group": o.get("group"), "pick": o["pick"],
+                        **({"recognition": o["recognition"]["words"]} if o.get("recognition") else {})} for o in options],
             "say": say, "refused": refused, **({"checks": {"ask_text": checks.get("ask_text")}} if checks else {}),
             "how": ("Said for you already, from the search's own answer: say nothing more this turn. "
                     + ("If they want to book, book nothing until they answer checks.ask_text. " if checks else "")
-                    + "A tap on a card is their pick."),
+                    + "A tap on a card is their pick. A venue's recognition is said only as its `recognition` gives it (one short "
+                      "clause, its guide and year) — never for a venue without one, never as a recommendation or a promise."),
             "discover": {"groups": [] if refused else (res.get("groups") or []), "options": options, "pick": None if refused else pick,
                          "refused": refused, "checks": checks, "say_text": say, "agapi": r.get("agapi")}}
 

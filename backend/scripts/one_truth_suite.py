@@ -251,6 +251,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T70": ("What they want to do (book · takeaway · delivery · eat now · browse) is read in ONE place from their own words and sent to "
             "venue.discover; AgAPI's options are shown as given with its own label — S2 never filters, re-ranks or adds back a place",
             ["tests.test_s291"]),
+    "T71": ("A place's curated recognition is AgAPI's one sentence (credited, dated) as given — on its card and in her words — or nothing; "
+            "S2 names no guide itself and never re-ranks a value ask",
+            ["tests.test_s292"]),
 }
 
 _RUNNER = """

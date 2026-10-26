@@ -244,6 +244,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "one line; else ONE line asks); her words never name the channel; a reply that isn't clearly yes or no is never said as "
             "confirmed; every fake guest store has the real store's shape",
             ["tests.test_s288"]),
+    "T69": ("A message route AgAPI decided reaches the floor only when AgAPI's own answer carries no way to send it (any wa.me link → "
+            "their own WhatsApp; sender kanoe → Kanoe's card); the link-less decision is said in one warning, and AgAPI's decision "
+            "(no link, no number) is kept on the booking's measure row",
+            ["tests.test_s289"]),
 }
 
 _RUNNER = """

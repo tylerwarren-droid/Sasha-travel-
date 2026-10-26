@@ -451,6 +451,24 @@ def _with_act(act: str, fn) -> None:
             _STATS["dropped"] += 1
 
 
+def _is_link(u: Any) -> bool:
+    return str(u or "").startswith(("https://", "http://", "mailto:", "tel:"))
+
+
+def decision_of(op: str, result: dict) -> dict:
+    """Sasha 289 · the first real booking (Mano Santa, 26 Oct) reached the floor and S2 kept no copy of what AgAPI had decided — it had
+    to be replayed. AgAPI's decision as received, on the booking's row: route, channel, sender, how far, and WHETHER each way to take
+    it carried a link (never the link itself, never a number)."""
+    d = result.get("decision") or {}
+    b = d.get("button") if isinstance(d.get("button"), dict) else {}
+    out = {"op": op, **{k: d.get(k) for k in ("route", "channel", "sender", "how_far")}, "button_link": _is_link(b.get("link")),
+           "button_sends": bool(b.get("sends")),
+           "option_links": sum(1 for o in d.get("options") or [] if isinstance(o, dict) and _is_link(o.get("link")))}
+    if op == "venue.prepare_booking":
+        out["person_send"] = _is_link((result.get("person_send") or {}).get("whatsapp"))
+    return out
+
+
 def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional[str] = None) -> None:
     """agapi_route.post, after EVERY AgAPI call (the one transport). Bookings see their acts' events here: a submit (and its
     duplicates), a status (the outcome), a profile lookup; an action after the person cancelled is counted."""
@@ -499,6 +517,8 @@ def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional
                 _stop(b, "no_answer")
         if op == "venue.profile":
             b["profile_ms"].append(ms)
+        if op in ("venue.profile", "venue.prepare_booking") and isinstance(result, dict) and isinstance(result.get("decision"), dict):
+            b["decisions"] = (b.get("decisions") or [])[-4:] + [decision_of(op, result)]   # Sasha 289 · read on the row, never replayed
         if op == "venue.cancel_booking" and isinstance(env, dict) and env.get("ok") and (body or {}).get("act_id"):
             _cancelled(b, (result or {}).get("status") or (result or {}).get("state"))
         _save(b)

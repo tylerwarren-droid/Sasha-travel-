@@ -939,6 +939,9 @@ async def own_whatsapp(ctx, a: dict, rd: dict, res: Optional[dict], at: Optional
     her words (voice.OWN_WHATSAPP — AgAPI's line names the channel; `dec` is kept for the record). Never "can't". No link: THE FLOOR (286)."""
     from app.agent import voice as V
     if not link:
+        if dec and dec.get("route") not in (None, "none"):   # Sasha 289 · AgAPI's route with no way to take it (Mano Santa): said, never silent
+            log.warning("[venues] %s: AgAPI decided %s/%s (sender %s) with no link to send it — the floor", _API().plain_venue(rd["venue"]),
+                        dec.get("route"), dec.get("channel"), dec.get("sender"))
         return await floor_out(ctx, a, rd, res, card, None, at)
     venue = _API().plain_venue(rd["venue"])
     party = ((res or {}).get("how_many") or {}).get("count") or a.get("party") or 0

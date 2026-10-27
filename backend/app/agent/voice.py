@@ -664,6 +664,55 @@ def progress_due(said: int, since_first_s: float) -> bool:
     return said < PROGRESS_MAX and since_first_s >= LONG_WAIT_S - 0.01
 
 
+# ── Sasha 299 · TRUE PROGRESS (Tyler's real bookings: tap → her answer took 11–15 s with ONE line, "On it", then nothing) ─────────
+# While a turn works, a line is said only for a step that IS running (the stream's own tool_start in, its tool event out — voice.Steps),
+# in that step's words, with the venue's name when the person tapped its card: ONCE when the step is new and STEP_GAP_S have passed since
+# her last words, and its "still" line ONCE if it runs on STEP_STILL_S. Never a line for a step that isn't running, never the same line
+# twice, never a claim (found, booked, sent — the result says those, by code). Thinking with no step running keeps 279's rule.
+STEP_GAP_S = 4.0
+STEP_STILL_S = 8.0
+_TRUE = {   # kind → (its line, its still line); {v}: the venue
+    "route": ("Checking how {v} takes bookings.", "Still checking how {v} takes bookings."),
+    "booking": ("Getting your booking ready with {v}.", "Still getting it ready with {v}."),
+}
+
+
+def step_words(tool: Optional[str], venue: Optional[str] = None, still: bool = False) -> Optional[str]:
+    """The step's own line (or its still line): with the venue when known (else "they" / none), from _STEP for the steps without one."""
+    kind = _STEP_OF.get(tool or "")
+    if not kind:
+        return None
+    if kind in _TRUE:
+        line = _TRUE[kind][1 if still else 0]
+        v = str(venue or "").strip()[:60]
+        return line.format(v=v) if v else line.replace(" with {v}", "").replace("how {v} takes", "how they take")
+    return _STEP[kind][1 if still else 0]
+
+
+def progress_next(now: float, said_at: float, step: Optional[str], said: dict, venue: Optional[str] = None) -> Optional[Tuple[str, str]]:
+    """→ (line, key) when a TRUE progress line is due now, else None. `said_at`: her last words of any kind; `step`: the tool running now
+    (Steps.now); `said`: {key: when} the progress lines said this turn (a step's key, and its ":still")."""
+    kind = _STEP_OF.get(step or "")
+    if not kind or now - said_at < STEP_GAP_S - 0.01:
+        return None
+    if kind not in said:
+        return step_words(step, venue), kind
+    if kind + ":still" not in said and now - said[kind] >= STEP_STILL_S - 0.01:
+        return step_words(step, venue, still=True), kind + ":still"
+    return None
+
+
+def progress_wait(now: float, said_at: float, step: Optional[str], said: dict) -> float:
+    """Seconds until progress_next could next say something (inf: nothing to wait for)."""
+    kind = _STEP_OF.get(step or "")
+    if not kind or (kind in said and kind + ":still" in said):
+        return float("inf")
+    at = said_at + STEP_GAP_S
+    if kind in said:
+        at = max(at, said[kind] + STEP_STILL_S)
+    return max(0.0, at - now)
+
+
 # ── Sasha 279 · B + C — A FINISHED BOOKING, SAID ONCE (live_events.completed is the only caller) ─────────────────────────────────────
 #: B · the payment is confirmed: she says so first, unasked
 PAID = "Your payment for {item} went through — you're booked."
@@ -778,8 +827,8 @@ def page_line(tool: str, r: dict) -> str:
     if res.get("status") not in ("page_on_phone", "page_link"):
         return ""
     prep = res.get("prepared")
-    if isinstance(prep, dict):   # their form: filled → "Done — it's on your screen" stays as it was; NOT filled → said so
-        return NOT_FILLED if prep.get("filled") is False else ""
+    if isinstance(prep, dict):   # their form: NOT filled → said so; filled and following AgAPI's decision → its own line (Sasha 299)
+        return NOT_FILLED if prep.get("filled") is False else str(res.get("page_says") or "")
     if not res.get("page_url"):
         return ""
     return f"{res.get('page_says') or PAGE_HERE} {res.get('phone_line') or ''}".strip()   # a platform's page: its line, the phone's outcome
@@ -867,7 +916,8 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
            "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "KIND_ASK_ES", "KIND_CHOICES_ES", "kind_ask", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "KIND_ASK_ES", "KIND_CHOICES_ES", "kind_ask",
+           "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",

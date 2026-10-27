@@ -269,6 +269,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T76": ("A booking's hand-over button always reaches the screen (her 'tap the button' is never said over none); 297's question is in "
             "Spanish when the page is (Sasha 298)",
             ["tests.test_s298"]),
+    "T77": ("While a turn works, a line is said only for a step that IS running, in its own words (with the tapped venue's name), once — "
+            "never a line twice; a tap's reads start at the tap; a platform card's line is said by code (Sasha 299)",
+            ["tests.test_s299"]),
 }
 
 _RUNNER = """

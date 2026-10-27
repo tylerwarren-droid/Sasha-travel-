@@ -25,7 +25,8 @@ import logging
 import re
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Optional
+import time as _clock   # Sasha 299 · (`time` here is datetime's)
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 log = logging.getLogger("agapi.venues")
@@ -177,6 +178,29 @@ def _what(a: dict) -> str:
     return (a.get("what") or "a table").strip()[:120]
 
 
+# ── Sasha 299 · THE 11–15 SECONDS: a tap on a card's Book names the venue, so the two reads its booking makes — S2's own venue read
+# (/api/booking/venues/read) and AgAPI's venue.profile (venue_truth, one read per site at a time, cached) — start AT THE TAP, while she
+# is still thinking (3–4 s measured), instead of after. The same reads, never extra ones: read_booking_route takes this one (_read).
+_AHEAD: Dict[Tuple[str, str], Tuple[float, Any]] = {}
+AHEAD_S = 120.0
+
+
+def read_ahead(account: str, place_id: str) -> bool:
+    """Start the tapped card's reads now (the /s2 turn route calls it on a card's tap). → whether they were started."""
+    import asyncio
+    c = card_of(account, place_id)
+    if not c or not place_id or ((account, place_id) in _AHEAD and _clock.time() - _AHEAD[(account, place_id)][0] < AHEAD_S):
+        return False
+    body = {"name": c.get("name"), "place_id": place_id, "website": c.get("website"), "s2_demo": True}
+    _AHEAD[(account, place_id)] = (_clock.time(), asyncio.create_task(_API().api(account, "POST", "/api/booking/venues/read",
+                                                                                {k: v for k, v in body.items() if v})))
+    from agapi import venue_truth as VT
+    p = asyncio.create_task(VT.profile(c, listing=True))   # warms AgAPI's read: engine_channel then shares it (VT._INFLIGHT / cache)
+    VT._BG.add(p)
+    p.add_done_callback(VT._BG.discard)
+    return True
+
+
 async def _read(ctx, a: dict) -> dict:
     """The venue read through the booking API (it keeps a read_id the routes need), remembered per account."""
     GW = _API()
@@ -192,7 +216,14 @@ async def _read(ctx, a: dict) -> dict:
         body["s2_demo"] = True
         if not body.get("place_id"):   # a card named but not passed by id: the card on screen is the pick
             body["place_id"] = (card_of(ctx.account, None, a.get("name")) or {}).get("place_id")
-    status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
+    ahead = _AHEAD.pop((ctx.account, str(body.get("place_id") or "")), None) if s2 else None   # Sasha 299 · started at his tap
+    if ahead and _clock.time() - ahead[0] < AHEAD_S:
+        try:
+            status, rd = await ahead[1]
+        except Exception:
+            status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
+    else:
+        status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
     if status != 200:
         raise _err((rd or {}).get("rule") or "read_failed", GW.refusal_words(rd or {}, status))
     venue = (rd.get("listing") or {}).get("name") or a.get("name") or rd.get("venue")
@@ -1870,8 +1901,9 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                     "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": True, "button": label,
                                  **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},
                     **({"in_app": True} if VS.TAP.get() is not None else {}),
-                    "say": next((x for x in ((prep.get("say") if fw["refused"] else dec.get("say_text")),)
-                                 if x and not V.asks_for_link(x)), None) or V.done_form(getattr(ctx, "surface", "s2"))}   # 286: never a link ask
+                    "say": (said := next((x for x in ((prep.get("say") if fw["refused"] else dec.get("say_text")),)
+                                          if x and not V.asks_for_link(x)), None) or V.done_form(getattr(ctx, "surface", "s2"))),   # 286: never a link ask
+                    "page_says": said}   # Sasha 299 · in the app said by code (voice.page_line): no model step just to say it
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
                 "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": filled,
                              **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},

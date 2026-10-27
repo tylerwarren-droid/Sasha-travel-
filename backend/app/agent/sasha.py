@@ -1325,7 +1325,7 @@ LONG_WAIT_FAR = 1e9
 _SPOKEN = ("text", "replace", "done", "error", "say")
 
 
-async def with_holding(events, account: str, after_s: Optional[float] = None, first: Optional[str] = None):
+async def with_holding(events, account: str, after_s: Optional[float] = None, first: Optional[str] = None, venue: Optional[str] = None):
     """Sasha 257 · THE HOLDING LINE (row 863): her turn's events as they come; if none of her words has come within
     voice.HOLD_AFTER_S, ONE short line first ({"type": "hold", "text", "say"} — shown and, with her voice on, spoken), then the real
     answer. Never for a fast reply, never a claim, never twice in a turn. Sasha 264 · item 1: then, while a tool runs (or before her
@@ -1334,7 +1334,10 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
     silence, and the quiver's own "filler" lines are not said on top of them.
     Sasha 279 · A: those lines are said ONCE — a second only on a long wait, never a third (voice.progress_due) — then quiet; the
     stream says the one state the screen shows instead: {"type": "working", "on": true} while her answer hasn't begun, "on": false
-    when it has (or the turn ends). /s2's ring pulses on it."""
+    when it has (or the turn ends). /s2's ring pulses on it.
+    Sasha 299 · TRUE PROGRESS (voice.progress_next, the ONE rule): while a step runs, its own line — once when it is new and STEP_GAP_S
+    have passed since her last words, its still line once on STEP_STILL_S — with `venue` (the tapped card's name) when known; the first
+    line, when a step is already running, is that step's own line rather than a generic one."""
     import asyncio
     q: asyncio.Queue = asyncio.Queue()
     end = object()
@@ -1355,6 +1358,8 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
     said_at = last_at = t0   # the last thing she said (her words, the holding line, a progress line) / the last event of any kind
     held_n, held_at = 0, t0   # Sasha 279 · A: "working on it" lines said this turn, and when the first was
     working = False
+    trued: Dict[str, float] = {}   # Sasha 299 · the steps' own lines said this turn (voice.progress_next's keys) and when
+    said_lines: set = set()        # every holding / progress line said this turn (never one twice)
     if first:   # Sasha 265 · item 5: the first line, now — the stream's first event
         started = True
         said_at = last_at = held_at = t0
@@ -1368,6 +1373,7 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
                 timeout = max(0.0, wait - (now - t0))
             else:   # Sasha 279 · the second line is due LONG_WAIT_S after the first (while a step runs, or before her words) — then none
                 due = (held_at + _V.LONG_WAIT_S if (steps.now or not words) and _V.progress_due(held_n, LONG_WAIT_FAR) else float("inf"))
+                due = min(due, now + _V.progress_wait(now, said_at, steps.now, trued))   # Sasha 299 · a running step's own line
                 timeout = max(0.0, min(due, last_at + KEEPALIVE_S) - now)
             try:
                 item = await asyncio.wait_for(q.get(), timeout)
@@ -1375,15 +1381,33 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
                 now = loop.time()
                 if not started:
                     started = True
-                    line = _V.holding_line(account)
+                    true1 = _V.step_words(steps.now, venue) if steps.now else None   # Sasha 299 · a step already running: ITS line
+                    line = true1 or _V.holding_line(account)
+                    if true1:
+                        trued[_V._STEP_OF.get(steps.now or "", "")] = now
                     said_at = last_at = held_at = now
                     held_n, working = 1, True
+                    said_lines.add(line)
                     yield {"type": "hold", "text": line, "say": line}
                     yield {"type": "working", "on": True}
+                    continue
+                pn = _V.progress_next(now, said_at, steps.now, trued, venue)   # Sasha 299 · the step running now: its own, true line
+                if pn:
+                    trued[pn[1]] = said_at = last_at = now
+                    said_lines.add(pn[0])
+                    yield {"type": "hold", "text": pn[0], "say": pn[0]}
                     continue
                 # Sasha 279 · A: a tool still running, or her words not begun, on a LONG wait → ONE more line (voice.progress_due)
                 if (steps.now or not words) and _V.progress_due(held_n, now - held_at):
                     line = _V.progress_line(steps.now, account)
+                    for _ in range(4):   # Sasha 299 · never a line already said this turn (a step's own line included)
+                        if line not in said_lines:
+                            break
+                        line = _V.progress_line(steps.now, account)
+                    if line in said_lines:   # nothing new to say: quiet (the ring shows she works)
+                        held_n += 1
+                        continue
+                    said_lines.add(line)
                     said_at = last_at = now
                     if held_n == 0:
                         held_at = now
@@ -1682,6 +1706,14 @@ KEEP_S1_LINES = (
     "already said \"Got it — …\": don't say that again — call hold_booking and read back.")
 
 
+def tapped_venue(account: str, body: dict) -> Optional[str]:
+    """Sasha 299 · the venue his tap named (a card's Book: its place_id, matched to the cards he was shown), for her progress lines."""
+    from agapi import venues as VN
+    pid = str(((body or {}).get("pick") or {}).get("place_id") or "")[:200] if isinstance((body or {}).get("pick"), dict) else ""
+    c = VN.card_of(account, pid) if pid else None
+    return str(c.get("name") or "").strip() or None if c else None
+
+
 def pick_hint(account: str, pid: str, message: str) -> str:
     """Sasha 231 / 237 · a tap on a venue card (S2's Choose, WhatsApp's list picker): THAT card's place_id, matched to the cards
     this account was shown — never a name guess. Unknown id → the message as it is."""
@@ -1822,6 +1854,9 @@ async def agent_turn(request: Request):
         pid = str(pick.get("place_id") or "")[:200]
         if pid:   # Sasha 231 · a Choose tap carries THAT card's place_id — matched to the cards on their screen, never a name guess
             message = pick_hint(account, pid, message)   # Sasha 237 · shared with WhatsApp's list picker
+            if surface == "s2":   # Sasha 299 · its reads start at the tap, while she thinks
+                from agapi import venues as _VN
+                _VN.read_ahead(account, pid)
 
     async def events():
         if guest_token:   # CR 71 · this guest's own token goes with S2's AgAPI calls (via_agapi); /next never sets it
@@ -1861,7 +1896,8 @@ async def agent_turn(request: Request):
             turn_events = turn_with_quiver(account, message, body.get("history") or [], session_id, surface)
             # Sasha 265 · item 5: a request for work hears voice.first_line at once (the stream's first event, before the timing)
             # Sasha 273 · item 8: the first line ONCE per request, then the quiver (voice.first_ack) — the page's own (said_first) kept as said
-            held = with_holding(turn_events, account, first=_V.first_ack(account, message, said=body.get("said_first"))) if remembers else turn_events
+            held = with_holding(turn_events, account, first=_V.first_ack(account, message, said=body.get("said_first")),
+                                venue=tapped_venue(account, body)) if remembers else turn_events   # Sasha 299 · + the venue his tap named
             async for ev in held:   # Sasha 257 · the holding line
                 if timing and not ev.get("first"):   # Sasha 265 · item 5: the timing goes out after the first line (if one), never before
                     yield timing

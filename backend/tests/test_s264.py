@@ -54,7 +54,8 @@ class NoSilence(unittest.TestCase):
         with mock.patch.object(V, "LONG_WAIT_S", 0.2):
             evs = run(collect(S.with_holding(self.slow_tool_turn(), ACCT, after_s=0.05)))
         holds = [e["text"] for e in evs if e["type"] == "hold"]
-        self.assertIn(holds[0], V.HOLDING)                                   # the holding line first, as before
+        self.assertIn(holds[0], V.HOLDING + (V.step_words("search_flights"),))   # the holding line first — Sasha 299 · MOVED: or, a step already running, ITS own line
+        self.assertEqual(len(set(holds)), len(holds), holds)                 # Sasha 299 · never the same line twice in a turn
         self.assertEqual(len(holds), V.PROGRESS_MAX)                         # Sasha 279: twice at most, however long the tool runs
         self.assertTrue(set(holds[1:]) <= set(V._STEP["flights"]), holds)   # from the step actually running
         self.assertEqual([e["type"] for e in evs][-2:], ["text", "done"])

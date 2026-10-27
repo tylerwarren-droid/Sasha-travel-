@@ -15,7 +15,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FNS = {"decide": lambda i: BR.decide(i), "call_opening": lambda i: {"text": BR.call_opening(i["rest"])},
        "call_answer": lambda i: BR.call_answer(i["said"]), "call_payload": lambda i: BR.CALL_PAYLOAD, "stopped": lambda i: BR.stopped(i["what"], i["why"]),
        "no_answer": lambda i: BR.no_answer(i.get("page_link"), i.get("phone"), i.get("email"), i.get("n", 2)),   # booking-rules/2 (n: 2.1)
-       "call_allowed": lambda i: BR.call_allowed(i["access"], i["state"], i["now"]), "on_it": lambda i: {"text": BR.on_it(i["next"])}}
+       "call_allowed": lambda i: BR.call_allowed(i["access"], i["state"], i["now"]), "on_it": lambda i: {"text": BR.on_it(i["next"])},
+       "check_in_at": lambda i: {"at": BR.check_in_at(i["sent_at"], i["booking_at"])},   # booking-rules/2.2
+       "watch": lambda i: BR.watch(i["started_at"], i.get("booking_at"), i.get("state"), i["now"]),   # booking-rules/2.3
+       "search": lambda i: BR.search(i["venue"], i["senders"], i.get("after"))}
 
 
 def get(d, path):
@@ -42,4 +45,4 @@ class Vectors(unittest.TestCase):
                         self.assertNotEqual(get(out, k[1:]), want)
                     else:
                         self.assertEqual(get(out, k), want, f"{v['name']}: {k}")
-        self.assertEqual(rules, {f"R{i}" for i in range(1, 15)} | {"access"})   # one gate per rule, none missing
+        self.assertEqual(rules, {f"R{i}" for i in range(1, 15)} | {"access", "check_in", "watch"})   # one gate per rule, none missing

@@ -56,7 +56,7 @@ def _src(case, rel):
 
 class TheRules21(unittest.TestCase):
     def test_gate_the_engine_s_words(self):
-        self.assertTrue(BR.VERSION.startswith("booking-rules/2.1"))
+        self.assertTrue(BR.VERSION.startswith("booking-rules/2.4"))   # CR 129 · was 2.1: the same rules, R14 reading every field
         self.assertEqual(BR.PHRASES["no_answer_first"], "They didn't pick up.")
         self.assertEqual(BR.PHRASES["no_answer"], "They didn't pick up again — the form is the fastest way.")
         self.assertEqual(BR.no_answer(PAGE, n=1)["ask_text"], BR.PHRASES["ask_try_again"])

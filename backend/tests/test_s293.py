@@ -32,10 +32,10 @@ ANSWER = {"ok": True, "result": {
 def search():
     async def call(account, op, body, approval=None):
         return ANSWER
-    ctx = API.Ctx(account=ACCT, mode="test", user_said="restaurants in Madrid", session="s293", surface="s2", via="page")
+    ctx = API.Ctx(account=ACCT, mode="test", user_said="tapas restaurants in Madrid", session="s293", surface="s2", via="page")   # Sasha 297 · MOVED: a specific ask (a vague one now hears her one question first)
     with mock.patch.object(VS, "_call", call), mock.patch("agapi.test_venues.search", mock.AsyncMock(return_value=None)), \
             mock.patch.object(VN, "named_on_screen", lambda *a: None):
-        return run(API._search_venues(ctx, {"what": "restaurant", "where": "Madrid", "country": "ES"}))
+        return run(API._search_venues(ctx, {"what": "tapas restaurant", "where": "Madrid", "country": "ES"}))   # Sasha 297 · MOVED
 
 
 class Details(unittest.TestCase):

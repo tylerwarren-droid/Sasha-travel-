@@ -60,6 +60,7 @@ type Card =
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
   | { k: 'subscriptions'; items: Ev[]; total?: string; source?: string }   // CR 84 · what they pay for, from their receipts
   | { k: 'discover'; groups: { id: string; label: string; refs: string[]; more?: number }[]; options: Ev[]; pick?: Ev | null; sources_url?: string | null }   // Sasha 276 · AgAPI venue.discover (293: + its sources page)
+  | { k: 'kind_ask'; ask: string; choices: string[] }   // Sasha 297 · her ONE question before a vague restaurant search (voice.KIND_ASK)
   | { k: 'sign_in' }   // Sasha 274 · a guest's booking: sign in to book for real (this conversation kept)
   | { k: 'no_answer'; act_id: string; ask?: string; choices: { id: string; label: string; page?: string }[]; page?: string }   // Sasha 269 · AgAPI's
 const NOT_CLEARED = 'I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'   // Sasha 265 · item 3
@@ -70,6 +71,19 @@ type Ev = Record<string, any>
 const bookedLine = (ev: Ev): string | null =>
   ev?.status && ['booked', 'partly_booked'].includes(String(ev.status.state)) && ev.status.line ? String(ev.status.line) : null
 type Item = { kind: string; state: string; check: 'green' | 'red' | 'amber'; line: string; at: string; ref: string; about?: string; proof?: { reference?: string } }
+
+/** Sasha 297 · "WHAT KIND OF PLACE?" — her question is her own line above (said and shown by the server, voice.KIND_ASK); these are its
+ *  three answers (voice.KIND_CHOICES). A tap sends its words as his message — the same as saying them; tapped once, they go. */
+function KindAsk({ choices, send }: { choices: string[]; send: (t: string) => void }) {
+  const [done, setDone] = useState(false)
+  if (done) return null
+  return (
+    <div data-kind-ask style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '6px 0 2px' }}>
+      {choices.map(t => (
+        <button key={t} type="button" data-kind-choice onClick={() => { setDone(true); send(t) }}
+          style={{ padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>{t}</button>))}
+    </div>)
+}
 
 /** The first n sentences — a card's headline, not her whole reply. */
 function firstSentences(t: string, n: number): string {
@@ -475,6 +489,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
           {g.items.map(i => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{i}</div>)}
         </div>))}
     </Box>)
+  if (c.k === 'kind_ask') return <KindAsk choices={c.choices} send={send} />   // Sasha 297 · a tap IS the answer (or their own words)
   if (c.k === 'discover') return <DiscoverCards c={c} choose={pick} />   // Sasha 276 · AgAPI's groups, its pick, through the ONE place card
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={pick} />   // Sasha 231 · the tap carries the card's place_id
   if (c.k === 'booked') return <><Box k={/^Partly booked/i.test(c.line) ? 'Partly booked' : 'Booked'} h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^(Partly )?Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
@@ -822,6 +837,7 @@ export default function S2App() {
             else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
             else if (ev.kind === 'wa_open' && typeof ev.open === 'string' && ev.open.startsWith('https://wa.me/')) add({ k: 'wa_open', to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') })   // Sasha 230
             else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })
+            else if (ev.kind === 'kind_ask' && Array.isArray(ev.choices) && ev.choices.length) add({ k: 'kind_ask', ask: String(ev.ask || ''), choices: ev.choices.map(String) })   // Sasha 297
             else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on })
             else if (ev.kind === 'notice' && ev.title) add({ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })

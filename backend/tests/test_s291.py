@@ -100,7 +100,8 @@ class Discover(unittest.TestCase):
 class TheRatchet(unittest.TestCase):
     def test_one_reader_one_call_no_filter_of_s2s_own(self):
         src = inspect.getsource(API._discover)
-        self.assertIn('"intent": intent_of(ctx.user_said)', src)
+        self.assertIn('intent = intent_of(ctx.user_said)', src)   # Sasha 297 · MOVED: read once, then place_kind's answer (a tap) may set it
+        self.assertIn('"intent": kind["body"].get("intent") or intent', src)
         self.assertNotRegex(src, r"left_out|reservable|walk.?in|fits_intent")   # S2 never filters on intent itself
         users = [p for p in BACKEND.rglob("*.py") if "tests" not in p.parts and "intent_of(" in p.read_text(errors="ignore")
                  and "agapi/v0.py" not in str(p) and "def intent_of" not in p.read_text(errors="ignore")]

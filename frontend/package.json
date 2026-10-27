@@ -7,7 +7,7 @@
     "prebuild": "node scripts/check-outcome-surfaces.mjs && node scripts/check-voice-watchdog.mjs",
     "build": "next build",
     "start": "next start",
-    "test": "node --test scripts/site-tabs.test.mjs scripts/agapi-hub.test.mjs scripts/agent-bubble.test.mjs scripts/mic-fail.test.mjs scripts/downsample.test.mjs scripts/no-test-label.test.mjs scripts/acting-rule.test.mjs scripts/gmail-offer.test.mjs scripts/sleep-rule.test.mjs scripts/walk-246.test.mjs scripts/place-view.test.mjs scripts/one-total-249.test.mjs scripts/one-identity.test.mjs scripts/greeting-rule.test.mjs scripts/trip-flights.test.mjs scripts/calm-shell-257.test.mjs scripts/presence-rule.test.mjs scripts/intent-label-291.test.mjs scripts/recognition-292.test.mjs scripts/details-293.test.mjs scripts/opening-rule.test.mjs"
+    "test": "node --test scripts/site-tabs.test.mjs scripts/agapi-hub.test.mjs scripts/agent-bubble.test.mjs scripts/mic-fail.test.mjs scripts/downsample.test.mjs scripts/no-test-label.test.mjs scripts/acting-rule.test.mjs scripts/gmail-offer.test.mjs scripts/sleep-rule.test.mjs scripts/walk-246.test.mjs scripts/place-view.test.mjs scripts/one-total-249.test.mjs scripts/one-identity.test.mjs scripts/greeting-rule.test.mjs scripts/trip-flights.test.mjs scripts/calm-shell-257.test.mjs scripts/presence-rule.test.mjs scripts/intent-label-291.test.mjs scripts/recognition-292.test.mjs scripts/details-293.test.mjs scripts/opening-rule.test.mjs scripts/kind-ask-297.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.26.0",

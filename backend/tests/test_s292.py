@@ -43,7 +43,7 @@ ANSWER = {"ok": True, "result": {
                  "recognition": {"list": "michelin", "words": ""}}]}}
 
 
-def search(answer, said, what="restaurant", where="Madrid"):
+def search(answer, said, what="Spanish restaurant", where="Madrid"):   # Sasha 297 · MOVED: a specific ask (a vague one hears her one question first)
     sent = []
 
     async def call(account, op, body, approval=None):

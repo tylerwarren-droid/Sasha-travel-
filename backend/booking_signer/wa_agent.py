@@ -256,6 +256,7 @@ KIND_MAP = {
     "keep_capture": "keep_capture",          # sets st["photo_for"] (needs the state)
     "keep_handoff": _nothing,                # WhatsApp takes the photo directly
     "focus": _nothing, "trip": _nothing, "inline": _nothing,
+    "kind_ask": _nothing,   # Sasha 297 · her one question before a vague search: /s2's page only (v0._discover via "page") — never on WhatsApp
     "discover": _nothing,   # Sasha 276 · never reaches WhatsApp: its brain searches via "wa" (its list cards) until Sasha 277 — tests.test_s276
 }
 

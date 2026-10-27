@@ -607,10 +607,24 @@ def intent_of(said: Optional[str]) -> str:
 
 
 async def _discover(ctx: Ctx, a: dict) -> dict:
-    from agapi import venue_submit as VS, venues as VN
+    from agapi import venue_submit as VS, venues as VN, place_kind as PK
+    from app.agent import voice as V
+    # Sasha 297 · WHAT KIND OF PLACE (agapi/place_kind.py, the ONE place it is decided): a vague restaurant ask hears ONE question first,
+    # once a session; an answer (or the person's own words) is passed to AgAPI's own ranking — never a list or a re-rank of S2's
+    intent = intent_of(ctx.user_said)   # Sasha 291 · THE intent, from their own words — its ONE reader
+    held = await PK.held_for(ctx.account, ctx.session) if ctx.session else {"asked": True}   # no session: never asked
+    kind = PK.decide(ctx.user_said, a.get("what"), intent, held)
+    if kind.get("hold"):
+        await PK.hold(ctx.account, ctx.session, kind["hold"])
+    if kind["ask"]:
+        return {"kind_ask": {"ask": V.KIND_ASK, "choices": list(V.KIND_CHOICES)}, "venues": [], "say": V.KIND_ASK,
+                "how": ("Your one question is on their screen and said for you already: say nothing more this turn. When they answer — "
+                        "a tap or their own words — call search_venues again with the same what and where; their answer is read from "
+                        "their words. Never ask it again yourself.")}
     dates = a.get("dates") if isinstance(a.get("dates"), dict) else None
     body = {"what": str(a["what"])[:120], "where": {"query": str(a["where"])[:120], **({"country": a["country"]} if a.get("country") else {})},
-            "intent": intent_of(ctx.user_said),
+            "intent": kind["body"].get("intent") or intent,
+            **({"notes": kind["body"]["notes"]} if kind["body"].get("notes") else {}),
             **({"open_at": str(a["open_at"])[:16]} if a.get("open_at") else {}),
             **({"dates": {k: str(dates[k])[:10] for k in ("from", "to") if dates.get(k)}} if dates else {}),
             **({"when_words": str(a["when_words"])[:60]} if a.get("when_words") else {}),

@@ -263,6 +263,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T74": ("Coming back: her first words after a return pick up where they were (voice.pickup_line over her memory, read only); the "
             "corner's words are the camera line once a session, then 'Still here.' (ES 'Aquí sigo.') (Sasha 296)",
             ["tests.test_s296"]),
+    "T75": ("A vague restaurant ask hears ONE question first (Something special · Good value · Takeaway / delivery), once a session, never when "
+            "they already said it; each answer is AgAPI's own input (recognition first · its value ranking · its intent) (Sasha 297)",
+            ["tests.test_s297"]),
 }
 
 _RUNNER = """

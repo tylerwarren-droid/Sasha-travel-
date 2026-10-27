@@ -7,7 +7,8 @@
   go    otherwise — with what the kind sends to AgAPI venue.discover. Each maps onto AgAPI's OWN existing behaviour (AgAPI
         discovery_rules, read-only), never a ranking, list or venue of S2's:
           special  → nothing added: AgAPI already orders curated recognition first
-          value    → notes "good value": AgAPI's value words → its value ranking first, then the cheaper
+          value    → "good value" leads the search's `what` — exactly where a person's own "cheap restaurant" goes: AgAPI reads its value
+                     words there (venue_discover_in takes no other field for it — `notes` is refused) → its value ranking first
           takeaway → intent "takeaway" · delivery → intent "delivery": AgAPI's fits_intent keeps those places and labels them
 The answer holds for the session; asked once, never again in that session — whatever the answer was. New chat = a new session.
 The person's words are only READ here (to know they already said it); nothing here is shown, and nothing here names a place.
@@ -64,19 +65,22 @@ def decide(said: Optional[str], what: Optional[str], intent: str, held: Optional
     h = held or {}
     k = tap_kind(said) or said_kind(said) or (intent if intent in ("takeaway", "delivery") else None)
     if k:   # said now: this search has it; it HOLDS for the session only as the answer to her question
-        return {"ask": False, "kind": k, "body": body_for(k), "hold": {"asked": True, "kind": k} if h.get("asked") and not h.get("kind") else None}
+        return {"ask": False, "kind": k, "body": body_for(k, what), "hold": {"asked": True, "kind": k} if h.get("asked") and not h.get("kind") else None}
     if h.get("kind") in KINDS:   # their answer holds for the session — but what they say they want to do NOW ("book…") wins
-        b = body_for(h["kind"])
+        b = body_for(h["kind"], what)
         return {"ask": False, "kind": h["kind"], "body": {} if "intent" in b and intent != "browse" else b, "hold": None}
     if h.get("asked") or intent in SETTLED_INTENTS or not vague(what):
         return {"ask": False, "kind": None, "body": {}, "hold": None}
     return {"ask": True, "hold": {"asked": True, "kind": None}}
 
 
-def body_for(kind: Optional[str]) -> Dict[str, Any]:
-    """What venue.discover gets for this kind — AgAPI's own inputs only."""
+VALUE_WORDS = "good value"
+
+
+def body_for(kind: Optional[str], what: Optional[str] = None) -> Dict[str, Any]:
+    """What venue.discover gets for this kind — AgAPI's own inputs only (venue_discover_in: what · intent · …)."""
     if kind == "value":
-        return {"notes": "good value"}
+        return {} if said_kind(what) == "value" else {"what_prefix": VALUE_WORDS}   # their `what` already says it: nothing added
     if kind in ("takeaway", "delivery"):
         return {"intent": kind}
     return {}   # special (AgAPI's recognition-first order is its default) or none

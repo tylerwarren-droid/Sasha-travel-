@@ -622,9 +622,9 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
                         "a tap or their own words — call search_venues again with the same what and where; their answer is read from "
                         "their words. Never ask it again yourself.")}
     dates = a.get("dates") if isinstance(a.get("dates"), dict) else None
-    body = {"what": str(a["what"])[:120], "where": {"query": str(a["where"])[:120], **({"country": a["country"]} if a.get("country") else {})},
+    what = f'{kind["body"]["what_prefix"]} {a["what"]}' if kind["body"].get("what_prefix") else str(a["what"])   # Sasha 297 · "good value …"
+    body = {"what": what[:120], "where": {"query": str(a["where"])[:120], **({"country": a["country"]} if a.get("country") else {})},
             "intent": kind["body"].get("intent") or intent,
-            **({"notes": kind["body"]["notes"]} if kind["body"].get("notes") else {}),
             **({"open_at": str(a["open_at"])[:16]} if a.get("open_at") else {}),
             **({"dates": {k: str(dates[k])[:10] for k in ("from", "to") if dates.get(k)}} if dates else {}),
             **({"when_words": str(a["when_words"])[:60]} if a.get("when_words") else {}),

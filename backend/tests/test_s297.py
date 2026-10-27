@@ -22,6 +22,8 @@ from app.agent import sasha as S, voice as V
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 ACCT = "00000000-0000-4000-8000-000000002970"
 run = asyncio.run
+#: AgAPI v1.39 spec/ext/kanoe-sandbox.schema.json venue_discover_in — additionalProperties: false (Sasha 297: `notes` was refused live)
+ALLOWED = {"what", "where", "open_at", "dates", "when_words", "party", "near", "all", "intent"}
 FOUND = {"ok": True, "result": {"say_text": "I've found a few good options in Madrid — my pick is Casa Uno (test).",
                                 "pick": {"ref": "v1", "name": "Casa Uno (test)", "reason": "r"},
                                 "groups": [{"id": "places", "label": "places", "refs": ["v1", "v2"]}],
@@ -57,14 +59,15 @@ class TheOnePlace(unittest.TestCase):
         self.assertEqual(S.render("search_venues", out, {}), {"type": "render", "kind": "kind_ask", "ask": V.KIND_ASK, "choices": list(V.KIND_CHOICES)})
 
     def test_each_answer_is_agapis_own_input(self):
-        for answer, want in (("Something special", {"intent": "browse"}), ("Good value", {"intent": "browse", "notes": "good value"}),
-                             ("Takeaway / delivery", {"intent": "takeaway"}), ("just delivery please", {"intent": "delivery"})):
+        for answer, want in (("Something special", {"intent": "browse", "what": "restaurant"}), ("Good value", {"intent": "browse", "what": "good value restaurant"}),
+                             ("Takeaway / delivery", {"intent": "takeaway", "what": "restaurant"}), ("just delivery please", {"intent": "delivery", "what": "restaurant"})):
             PK._HELD.clear()
             search("find me a restaurant", session="s297-b")                          # asked
             out, sent = search(answer, session="s297-b")                              # the model searches again on the answer
             self.assertEqual(len(sent), 1, answer)
             body = sent[0][1]
-            self.assertEqual({k: body[k] for k in ("intent", "notes") if k in body}, want, answer)
+            self.assertEqual({k: body[k] for k in ("intent", "what") if k in body}, want, answer)
+            self.assertLessEqual(set(body), ALLOWED, answer)   # AgAPI's venue_discover_in only (additionalProperties: false)
             self.assertEqual([o["name"] for o in out["discover"]["options"]], ["Casa Dos (test)", "Casa Uno (test)"])   # as AgAPI gave them
 
     def test_never_when_they_already_said_it(self):
@@ -88,7 +91,7 @@ class TheOnePlace(unittest.TestCase):
         search("find me a restaurant", session="s297-e")
         search("Good value", session="s297-e")
         out, sent = search("and somewhere for lunch tomorrow", what="lunch", session="s297-e")   # the answer holds
-        self.assertEqual(sent[0][1].get("notes"), "good value")
+        self.assertEqual(sent[0][1]["what"], "good value lunch")
         out, sent = search("find me a restaurant", session="s297-new")    # New chat = a new session: asked once there
         self.assertIn("kind_ask", out)
 

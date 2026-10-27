@@ -298,7 +298,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
         if (s.camera && cameraOffLine()) markCamera()
       } else if (st === 'hold') await held()
       else if (st === 'pause') await pause()
-      else if (st === 'still') { const t = stillHereLine(lang()); if (t && await speak(t, '') !== 'face') return how }
+      else if (st === 'still') { const t = stillHereLine(lang()); if (t && await speak(t, t) !== 'face') return how }   // it missed her lips: said from the corner, never dropped
     }
     return how
   }

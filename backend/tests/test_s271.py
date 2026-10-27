@@ -131,7 +131,7 @@ class HerArrivalsWords(unittest.TestCase):
         # Sasha 281 · MOVED: the camera words join the hello only when her live face says it (presence-rule withCamera)
         self.assertIn("return withCamera(back && first ? rule.helloBack.replace('{name}', first) : rule.hello, rule.cameraOff, live)", fl)
         hello = _front(self, "app/s2/S2Hello.tsx")
-        self.assertIn("arrivalLine(nameRef.current ?? null, !!back.current, live)", hello)
+        self.assertIn("arrivalLine(nameRef.current ?? null, !!back.current, false)", hello)   # Sasha 296 · MOVED: the line alone; settle adds the camera words
         self.assertNotIn("helloLine", hello)
 
 

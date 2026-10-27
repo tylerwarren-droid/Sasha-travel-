@@ -9,9 +9,12 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: Request): Promise<Response> {
   const who = await agentHeaders()
   if (!who) return NextResponse.json({ ok: false, rule: 'sign_in_required' }, { status: 401 })
-  const session = new URL(request.url).searchParams.get('session')?.slice(0, 64) ?? ''
+  const q = new URL(request.url).searchParams
+  const session = q.get('session')?.slice(0, 64) ?? ''
+  // Sasha 296 · ?pickup=1: her first words after a return (backend /s2/pickup — read only: no recall, no news taken)
+  const to = q.get('pickup') === '1' ? `${API_URL}/api/agent/s2/pickup` : `${API_URL}/api/agent/s2/memory?session=${encodeURIComponent(session)}`
   try {
-    const r = await fetch(`${API_URL}/api/agent/s2/memory?session=${encodeURIComponent(session)}`, { headers: { ...who, 'x-sasha-surface': 's2' }, cache: 'no-store' })
+    const r = await fetch(to, { headers: { ...who, 'x-sasha-surface': 's2' }, cache: 'no-store' })
     return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })

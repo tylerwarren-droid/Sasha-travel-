@@ -1915,6 +1915,7 @@ async def first_line_rule():
     work — so the page says it the instant one is sent (the network alone took 0.8–1.4 s); the stream's own first line (`first`) is then
     the same words, not said twice. Public: words and a pattern, nothing of anyone's."""
     return {"line": _V.FIRST_LINE, "work": _V._WORK.pattern, "flags": "i", "camera_off": _V.CAMERA_OFF,   # 268: her arrival's line
+            "still_here": _V.STILL_HERE, "still_here_es": _V.STILL_HERE_ES,   # 296: every move into the corner after the first
             "hello": _V.HELLO, "hello_back": _V.HELLO_BACK,   # 271 · B: her arrival ("Hey there" / "Hey <name>", then camera_off)
             "trip": _V._TRIP.pattern, "try": _V.TRY_FIRST, "acks": list(_V.ACKS)}   # 273 item 8: the one quiver (the page's rule: voice.ack_for)   # 268 item 7: any other request for a service → "Let me see what I can do."
 
@@ -1986,6 +1987,24 @@ async def s2_memory(request: Request, session: str = ""):
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}
+
+
+@router.get("/s2/pickup")
+async def s2_pickup(request: Request):
+    """Sasha 296 · COMING BACK: her first words after a return to /s2 (voice.pickup_line over her memory) — read only: no recall, no
+    handover, no news taken (those are the load's, /s2/memory). Signed-in accounts only."""
+    from app.services.chat_account import chat_account, signed_in
+    if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
+        return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
+    from agapi import s2_memory as MEM
+    try:
+        return {"ok": True, "line": await MEM.pickup(account)}
+    except Exception as e:
+        log.warning("[memory] pickup failed: %s: %s", type(e).__name__, e)
+        return {"ok": True, "line": _V.pickup_line(None)}
 
 
 __all__ = ["router", "pick_hint", "turn", "turn_with_quiver", "make_filler", "filler_ok", "opener_of", "strip_openers", "clean_for_model", "drop_internal", "flight_card", "stays_card", "render", "RENDER", "KINDS", "FAST_MODEL", "guard_check", "guard_strip", "tools_for_model", "system_prompt", "MODEL"]

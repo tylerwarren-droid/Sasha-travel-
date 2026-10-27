@@ -17,14 +17,17 @@
  * Sasha 295 · THE OPENING (lib/opening-rule.mjs, its one place): on arrival her still waits with ONE action — "Tap to talk to Sasha",
  * "or type", the starters — and says nothing until that tap; the tap starts the mic and her hello (its audio already fetched). The
  * 5 s "not on screen → her voice alone" race of Sasha 232 is gone with it: before the tap nothing is said, so nothing waits on her face.
+ * Sasha 296 · COMING BACK, AND "STILL HERE" (the same rule): a return (returned) is her still full size with "Tap to continue" — the
+ * same panel — and his tap hears her pick up where they were; every move into the corner is settle(): the camera words once a session,
+ * then a pause, "Still here.", a pause.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { openingEnds, OPENING } from '@/lib/greeting-rule.mjs'
-import { presence, ring, HOLD_MS, inView, WORK_PULSE_CSS, WORK_PULSE_S, speakVia } from '@/lib/presence-rule.mjs'
+import { presence, ring, HOLD_MS, inView, WORK_PULSE_CSS, WORK_PULSE_S, speakVia, withCamera } from '@/lib/presence-rule.mjs'
 import { openingShown } from '@/lib/greeting-rule.mjs'
-import { arrivalLine, newsLine } from '@/lib/first-line'
+import { arrivalLine, newsLine, cameraOffLine, stillHereLine } from '@/lib/first-line'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · her face shares the page's one audio session
-import { READY, TALK, OR_TYPE, STARTERS, opening } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING, its one place
+import { READY, BACK, OR_TYPE, STARTERS, PAUSE_MS, CAMERA_SAID, opening, settle as settleOf } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING, its one place · 296: + the return, the corner
 
 export type Talker = {
   unlock: () => void
@@ -146,21 +149,28 @@ const CORNER_FALLBACK = { left: `calc(100vw - ${CORNER + 16}px)`, top: `calc(100
 /** Sasha 273 · the visible viewport (a phone browser's bars are outside it): where the corner may sit. */
 const viewNow = () => { const v = window.visualViewport; return v ? { top: v.offsetTop, height: v.height, left: v.offsetLeft, width: v.width } : { top: 0, height: window.innerHeight, left: 0, width: window.innerWidth } }
 const held = () => new Promise(r => setTimeout(r, HOLD_MS))   // Sasha 273 · item 1: after her speech-ended event, ~0.5 s, then the corner
+const pause = () => new Promise(r => setTimeout(r, PAUSE_MS))   // Sasha 296 · the slight pause on both ends of "Still here."
+/** Sasha 296 · this tab's session has heard the camera words on her lips (opening-rule CAMERA_SAID). */
+const cameraSaid = (): boolean => { try { return sessionStorage.getItem(CAMERA_SAID) === '1' } catch { return false } }
+const markCamera = () => { try { sessionStorage.setItem(CAMERA_SAID, '1') } catch { /* private mode */ } }
+const lang = (): string => { try { return navigator.language || 'en' } catch { return 'en' } }
 
 /** Sasha 268 · what the page asks of her: is she full size, and — on his next request after a tap brought her back — say this, then
  *  the corner. Sasha 271: during her arrival she is already saying it; she goes to the corner as it ends. Sasha 273 · again: rule 4
  *  (lib/presence-rule.mjs reappear) said she reappears — the arrival once more ("Hey <name>", or her news first), then the corner. */
 export type HelloCtl = { big: () => boolean; bye: (line: string, speak: boolean) => Promise<void>; again: (news?: string | null) => boolean; live: () => boolean
-  waiting: () => boolean }   // Sasha 295 · the opening waits for his tap (anything he does first ends it: bye)
+  waiting: () => boolean   // Sasha 295 · the opening waits for his tap (anything he does first ends it: bye)
+  returned: (pickup: Promise<string>) => boolean   // Sasha 296 · the page is back (opening-rule returned): her still, "Tap to continue"
+  settleLine: () => string }   // Sasha 296 · what she says going into the corner now (settle): the camera words once, then 'Still here.'
 
 export default function S2Hello({ talker, name, signedIn, backLine, dormant, asleep = false, onWake, started = false, ctlRef, arrive, micLive = false, lead = null, working = false,
-  onBegin, onType, onStarter, onNoSound, onOpening }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
+  onBegin, onType, onStarter, onNoSound, onOpening, muted = false }: { talker: Talker; name: string | null | undefined; signedIn: boolean | null; backLine?: string | null; dormant?: boolean
   asleep?: boolean; onWake?: () => void
   /** Sasha 295 · THE OPENING's moves (lib/opening-rule.mjs), each inside his tap: the mic · the box · a starter · her voice failed · panel up */
   onBegin?: () => void; onType?: () => void; onStarter?: (t: string) => void; onNoSound?: () => void; onOpening?: (up: boolean) => void
   started?: boolean; ctlRef?: { current: HelloCtl | null }
-  arrive?: boolean; micLive?: boolean; lead?: string | null; working?: boolean }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her · Sasha 251 · started: the conversation has begun — the opening ends · Sasha 273 · arrive: rule 4's answer at load (undefined: not known yet) · micLive: the mic is hearing
-  type Phase = 'off' | 'ready' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
+  arrive?: boolean; micLive?: boolean; lead?: string | null; working?: boolean; muted?: boolean }) {   // Sasha 246 item 2 · asleep: her face stops and dims; a tap on it wakes her · Sasha 251 · started: the conversation has begun — the opening ends · Sasha 273 · arrive: rule 4's answer at load (undefined: not known yet) · micLive: the mic is hearing
+  type Phase = 'off' | 'ready' | 'back' | 'starting' | 'face' | 'faceLate' | 'voice' | 'tap' | 'bubble' | 'faceAgain'
   const [phase, setPhase] = useState<Phase>('off')
   const [tapFor, setTapFor] = useState<'face' | 'voice'>('voice')
   const phaseRef = useRef<Phase>('off')
@@ -258,31 +268,53 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const leadRef = useRef<string | null>(lead)   // the load's news (rule 4 at load), said once
   const leadSaid = useRef<string | null>(null)
   useEffect(() => { leadRef.current = lead }, [lead])
-  // Sasha 271 · B: voice.arrival_line — "Hey there." / "Hey <name>." + voice.CAMERA_OFF, from the backend. Sasha 281: `cam` carries the
-  // camera words (said only by her live face), `plain` is the line alone (her voice from the corner: no camera was on).
+  // Sasha 271 · B: voice.arrival_line — "Hey there." / "Hey <name>.", from the backend. Sasha 281 · 296: `plain` is the line alone; the
+  // camera words are settle()'s to add (her live face, once a session) — lipLine() is what her lips will say, fetched ahead.
   const words = async () => {
     if (back.current === null) back.current = metBefore() || !!backRef.current
     const fresh = leadRef.current && leadRef.current !== leadSaid.current ? leadRef.current : null
     if (fresh) leadSaid.current = fresh
     const n = news.current || fresh
-    const say = (live: boolean) => (n ? newsLine(n, live) : arrivalLine(nameRef.current ?? null, !!back.current, live))
-    const [cam, plain] = await Promise.all([say(true), say(false)])
+    const plain = await (n ? newsLine(n, false) : arrivalLine(nameRef.current ?? null, !!back.current, false))
     text.current = plain
     setLine(plain)
-    return { cam, plain }
+    return { plain }
   }
+  const lipLine = (plain: string) => (cameraSaid() ? plain : withCamera(plain, cameraOffLine(), true))
+  // Sasha 296 · INTO THE CORNER — the ONE way (opening-rule settle), from her arrival, a return, his request and a tap on her face:
+  // `lead` said on her lips (with the camera words the first time a session; else a pause, "Still here.", a pause). No live face: the
+  // corner first, `plain` in her voice, no camera words. → how her lead went. The caller then sends her to the corner.
+  const settleNow = async (lead: string, plain: string): Promise<'face' | 'played' | 'blocked' | 'failed' | 'none'> => {
+    const s = settleOf({ said: cameraSaid(), live: faceUp() })
+    if (!s.steps.length) return speak('', plain)
+    let how: 'face' | 'played' | 'blocked' | 'failed' | 'none' = 'face'
+    for (const st of s.steps) {
+      if (asleepRef.current) return how   // paused mid-way: she stops (the pause's own collapse)
+      if (st === 'say') {
+        const t = s.camera ? withCamera(lead, cameraOffLine(), true) : lead
+        if (!t) continue
+        how = await speak(t, plain)
+        if (how !== 'face') return how   // it missed her lips: speak() took her to the corner and said `plain`
+        if (s.camera && cameraOffLine()) markCamera()
+      } else if (st === 'hold') await held()
+      else if (st === 'pause') await pause()
+      else if (st === 'still') { const t = stillHereLine(lang()); if (t && await speak(t, '') !== 'face') return how }
+    }
+    return how
+  }
+  const settleLine = () => (faceUp() ? (cameraSaid() ? stillHereLine(lang()) : cameraOffLine()) : '')
   // Sasha 271 · B (row 1008): her lines, then the corner — no wait for his first request (Sasha 266/268's stay is gone).
   // Sasha 273 · item 1: "then" is her line's OWN speech-ended event, then HOLD_MS — never a guessed duration, so she never leaves mid-line.
   const toCorner = async () => { if (OPENING.includes(phaseRef.current)) { await held(); if (OPENING.includes(phaseRef.current)) await handoff() } }
   // Sasha 295 · her lines are worked out ONCE, while the opening waits (their audio fetched then) — the tap says these
-  const lines = useRef<Promise<{ cam: string; plain: string }> | null>(null)
+  const lines = useRef<Promise<{ plain: string }> | null>(null)
   const take = () => { const l = lines.current || words(); lines.current = null; return l }
   const speakFace = async () => {
     if (asleepRef.current || startedRef.current) return handoff()   // Sasha 246 · asleep: no hello — straight to the (dimmed) bubble · Sasha 251: or already talking
-    const { cam, plain } = await take()
-    if (!face.current || !cam) return handoff()
-    const how = await speak(cam, plain)   // her live face says it, lip-synced — over when SHE says it is (AVATAR_SPEAK_ENDED)
-    if (how === 'face') await toCorner()   // Sasha 281 · else it missed her lips: speak() already took her to the corner and said it
+    const { plain } = await take()
+    if (!face.current || !plain) return handoff()
+    const how = await settleNow(plain, plain)   // Sasha 296 · her live face says it, then settle's beats — each over when SHE says it is
+    if (how === 'face') { if (OPENING.includes(phaseRef.current)) await handoff() }   // Sasha 281 · else it missed her lips: speak() took her to the corner
     else { if (how === 'failed') onNoSound?.(); await handoff() }   // Sasha 295 · never a silent face: her one line, the box ready
   }
   const speakVoice = async () => {
@@ -334,7 +366,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
       keyOn()
       v.muted = true; v.play().catch(() => {})   // her live face, quiet, until his tap
       const l = await lines.current?.catch(() => null)
-      if (l?.cam) prefetchPcm(l.cam)
+      if (l?.plain) prefetchPcm(lipLine(l.plain))   // what her lips will say (settle: the camera words once a session)
       // her live face bills by the minute: a tap that never comes lets it go (her still stays, the action with it)
       timers.current.timer = setTimeout(() => { if (phaseRef.current === READY && face.current === f) letGo(f) }, FACE_IDLE_S * 1000)
     }).catch(() => console.log('[s2-hello] face failed to start — her voice will say it'))
@@ -346,7 +378,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const early1 = useRef(false)   // a tap before her arrival was decided ('off'): held, then the hello once it is
   const begin = () => {
     if (phaseRef.current === 'off') { talker.unlock(); onBegin?.(); early1.current = true; return }
-    if (phaseRef.current !== READY) return
+    if (phaseRef.current !== READY && phaseRef.current !== BACK) return   // Sasha 296 · "Tap to continue": the same tap
     if (timers.current.timer) clearTimeout(timers.current.timer)
     talker.unlock()
     onBegin?.()
@@ -355,7 +387,7 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     else { to('voice'); void speakVoice() }
   }
   /** OR_TYPE, or a starter: the box (or that first message) — the opening ends at once, with no hello over it. */
-  const skipTo = (then: () => void) => { if (phaseRef.current !== READY && phaseRef.current !== 'off') return; talker.unlock(); lines.current = null; then(); void handoff() }
+  const skipTo = (then: () => void) => { if (phaseRef.current !== READY && phaseRef.current !== BACK && phaseRef.current !== 'off') return; talker.unlock(); lines.current = null; then(); void handoff() }
   useEffect(() => {
     if (signedIn !== true || arrive === undefined || phaseRef.current !== 'off') return
     arriveNow(arrive === false)
@@ -371,6 +403,16 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
     news.current = lead || null
     to('off')
     arriveNow(false)
+    return true
+  }
+  /** Sasha 296 · RETURNED (opening-rule returned, asked by the page's ONE return handler): from the corner only, never while paused or
+   *  over another tab — her still full size and "Tap to continue"; his tap hears `pickup` (voice.pickup_line, its audio fetched now)
+   *  in her voice, from the corner. No live face is started for it (it takes ~10 s to come; the tap is sooner). */
+  const returnedNow = (pickup: Promise<string>) => {
+    if (phaseRef.current !== 'bubble' || asleepRef.current || startedRef.current || byeing.current) return false
+    lines.current = pickup.then(plain => { text.current = plain; setLine(plain); return { plain } })
+    lines.current.then(({ plain }) => { if (plain) talker.prefetch?.(plain) }).catch(() => {})
+    to(BACK)
     return true
   }
 
@@ -408,16 +450,18 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const byeing = useRef(false)
   const isBig = () => OPENING.includes(phaseRef.current) || phaseRef.current === 'faceAgain'
   const bye = async (lineToSay: string, loud: boolean) => {
-    if (phaseRef.current === READY) { lines.current = null; await handoff(); return }   // Sasha 295 · he spoke or typed before the tap: the opening ends, no hello
+    if (phaseRef.current === READY || phaseRef.current === BACK) { lines.current = null; await handoff(); return }   // Sasha 295 · he spoke or typed before the tap: the opening ends, no hello
     if (phaseRef.current !== 'faceAgain' || byeing.current) return
     byeing.current = true
     try {
-      // Sasha 281 · the camera line only on her live lips; no live face → no camera words, the corner at once (speak, plain '')
-      if (loud && lineToSay && !asleepRef.current) await speak(lineToSay, '')   // Sasha 273 · over when her speech-ended event says so
+      // Sasha 281 · the camera line only on her live lips; no live face → no camera words, the corner at once
+      // Sasha 296 · settle: the camera words the first time a session, else a pause, "Still here.", a pause (lineToSay is settleLine's)
+      if (loud && lineToSay && !asleepRef.current) await settleNow('', '')   // Sasha 273 · each over when her speech-ended event says so
     } catch { /* said or not, she goes to work */ } finally { byeing.current = false }
     await collapse()
   }
-  useEffect(() => { if (ctlRef) ctlRef.current = { big: isBig, bye, again, live: faceUp, waiting: () => phaseRef.current === READY } })
+  useEffect(() => { if (ctlRef) ctlRef.current = { big: isBig, bye, again, live: faceUp, waiting: () => phaseRef.current === READY || phaseRef.current === BACK,
+    returned: returnedNow, settleLine } })
 
   // Sasha 246 item 2 · fall asleep: her face, if it is up (the hello or "her face back"), stops NOW — mid-word — and becomes the
   // dimmed bubble; no hello is said later in this visit. Waking is the parent's (the bubble's tap → onWake).
@@ -477,11 +521,13 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
   const p = presence({ phase, tapFor, started, signedIn, soon, asleep, dormant, reduced: reducedMotion(), micLive, arrive })
   const big = p.where === 'full'
   // Sasha 295 · the page draws no second welcome under the opening (its empty state waits while the panel is up)
-  const panel = opening({ phase, signedIn, started, asleep, full: big }).panel
+  const op = opening({ phase, signedIn, soon, started, asleep, full: big })   // Sasha 296 · + soon: a brand-new guest's first paint carries it
+  const panel = op.panel
   useEffect(() => { onOpening?.(panel) }, [panel, onOpening])
   useEffect(() => { if (!big) return; const t = setInterval(() => setLive(drawn(canvas.current)), 50); return () => clearInterval(t) }, [big])   // 268: within 50 ms
   const r = ring(p.look, talking, working)   // Sasha 279 · A · she works: the ring pulses (lib/presence-rule.mjs)
-  const tap = p.tap === 'collapse' ? collapse : p.tap === 'wake' ? () => onWake?.() : p.tap === 'face_back' ? faceBack : undefined
+  // Sasha 296 · a tap on her face sends her to the corner through settle — never at once and silent
+  const tap = p.tap === 'collapse' ? () => { void bye(settleLine(), !muted) } : p.tap === 'wake' ? () => onWake?.() : p.tap === 'face_back' ? faceBack : undefined
   const corner = p.where === 'corner'
   return (
     <>
@@ -511,12 +557,12 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
             <button type="button" data-opening-talk onClick={begin} style={{ width: '100%', maxWidth: 340, minHeight: 58, padding: '14px 18px', borderRadius: 999, border: 0, background: GOLD, color: '#111',
               fontWeight: 800, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: '0 8px 24px rgba(232,185,49,.35)', cursor: 'pointer' }}>
               <svg aria-hidden width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v4" /></svg>
-              {TALK}</button>
+              {op.words}</button>
             <button type="button" data-opening-type onClick={() => skipTo(() => onType?.())} style={{ background: 'none', border: 0, color: 'rgba(255,255,255,.85)', fontSize: 15, textDecoration: 'underline', textUnderlineOffset: 3, padding: '4px 10px', cursor: 'pointer' }}>{OR_TYPE}</button>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+            {op.starters ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
               {STARTERS.map(t => (
                 <button key={t} type="button" data-starter onClick={() => skipTo(() => onStarter?.(t))} style={{ padding: '7px 12px', borderRadius: 999, border: '1px solid rgba(255,255,255,.28)', background: 'rgba(20,20,28,.75)', color: '#fff', fontSize: 13.5, cursor: 'pointer' }}>{t}</button>))}
-            </div>
+            </div> : null}
           </div>) : null}
         {p.card ? (   /* her voice alone: her line under her face, in the same frame (Sasha 265 · item 2) */
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 16px 16px', background: 'linear-gradient(transparent, rgba(10,10,16,.92) 30%)', color: '#fff', fontSize: 16, lineHeight: 1.45 }}>

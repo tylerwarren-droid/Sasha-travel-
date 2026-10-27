@@ -29,12 +29,12 @@ import { bookingReq } from '@/lib/booking-client'   // Sasha 283 · the trip car
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
-import { loadFirstLine, isWork, takeFirstLine, forgetAcks, cameraOffLine } from '@/lib/first-line'
+import { loadFirstLine, isWork, takeFirstLine, forgetAcks } from '@/lib/first-line'
 import { BLOCKED, stepsFor } from '@/lib/mic-state'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
-import { NO_SOUND, STARTERS, cueOf } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING: its starters, her one cue, her no-sound line
+import { NO_SOUND, STARTERS, cueOf, returned } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING: its starters, her one cue, her no-sound line · 296: a return
 import { arrivalLine } from '@/lib/first-line'   // Sasha 295 · the empty conversation's line is her hello's own words
 
 type Card =
@@ -759,7 +759,7 @@ export default function S2App() {
     const leaving = isRequest && !!helloCtl.current?.big()
     // Sasha 281 · the camera line only when her LIVE face says it; her still alone → no camera words, the corner, the usual first line
     const onCamera = leaving && !!helloCtl.current?.live()
-    const said1 = onCamera ? (cameraOffLine() || null) : pick || tap ? null : takeFirstLine(t)   // Sasha 273 · item 8: once per request, then the quiver
+    const said1 = onCamera ? (helloCtl.current?.settleLine() || null) : pick || tap ? null : takeFirstLine(t)   // Sasha 273 · item 8: once per request, then the quiver · 296: the camera words once a session, then 'Still here.'
     if (onCamera) {
       if (said1) patch(m => ({ ...m, hold: said1 }))
       byeUntil.current = Date.now() + 9000   // her line first: the stream's lines are shown, not spoken over it
@@ -799,7 +799,7 @@ export default function S2App() {
           if (ev.type === 'text') { reply += ev.delta; patch(m => ({ ...m, text: untag(reply) })) }
           else if (ev.type === 'say') { if (ev.interrupt) speaker.interrupt(); speaker.say(ev.text) }
           else if (ev.type === 'tool_start' && helloCtl.current?.big()) {   // Sasha 268 · a request the rule missed: the first tool it starts
-            const l = helloCtl.current.live() ? cameraOffLine() : ''   // Sasha 281 · the camera line only on her live lips
+            const l = helloCtl.current.live() ? helloCtl.current.settleLine() : ''   // Sasha 281 · the camera line only on her live lips · 296: once a session
             if (l) { patch(m => ({ ...m, hold: l })); byeUntil.current = Date.now() + 9000 }
             void helloCtl.current.bye(l, !muted) }
           else if (ev.type === 'hold') { if (ev.first && said1) continue; patch(m => ({ ...m, hold: ev.text })); if (Date.now() > byeUntil.current) speaker.say(ev.say || ev.text) }   // 265 · never twice   // Sasha 257 · the holding line (row 863)
@@ -901,6 +901,9 @@ export default function S2App() {
   // stops what she is saying — she never resumes mid-sentence.
   const tabRef = useRef(tab)
   useEffect(() => { tabRef.current = tab }, [tab])
+  const hiddenAt = useRef<number | null>(null)   // Sasha 296 · the moment the page went away (a hidden tab, a locked phone)
+  const dormantRef = useRef(false)
+  useEffect(() => { dormantRef.current = dormant }, [dormant])
   // Sasha 274 · item 1 · A NEW RELEASE: an open page kept running the old code after a deploy. It compares its own build with the one
   // live now (/api/version) when it comes back and when a turn ends — never on a timer — and reloads only at a SAFE moment: she isn't
   // answering or speaking, no booking question waits (midFlow), she isn't full size, nothing is queued. The conversation goes across
@@ -967,10 +970,19 @@ export default function S2App() {
     voiceCtl.current?.resume()
     checkRelease()
     askWord()   // Sasha 283 · item 4c · back from their page: the one question, whatever else her return does
+    // Sasha 296 · how long the page was away: its own two moments (hidden, then shown) — never a timer
+    const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0
+    hiddenAt.current = null
     if (arrive === undefined && Date.now() - loadedAt.current < 3000) return   // the load's own rule 4 hasn't answered yet: it will
     const r = rule4()
-    if (!r.greet || tabRef.current !== 'sasha') return
-    if (!helloCtl.current?.again(r.lead === 'news' ? newsRef.current : null)) return
+    const again = r.greet && tabRef.current === 'sasha' && !!helloCtl.current?.again(r.lead === 'news' ? newsRef.current : null)
+    if (!again) {
+      // Sasha 296 · RETURNED short of rule 4 (lib/opening-rule.mjs returned): her still full size, "Tap to continue" — the tap hears
+      // her pick up where they were (voice.pickup_line, read now: GET /api/s2-memory?pickup=1, read only)
+      if (returned({ away, asleep: asleepRef.current, dormant: dormantRef.current, busy: busyRef.current, here: tabRef.current === 'sasha' }))
+        helloCtl.current?.returned(fetch('/api/s2-memory?pickup=1', { cache: 'no-store' }).then(r2 => r2.json()).then(j => (typeof j?.line === 'string' ? untag(j.line) : '')).catch(() => ''))
+      return
+    }
     newsRef.current = null
     const line = backLineRef.current
     if (r.lead === 'hello' && line) {
@@ -982,7 +994,7 @@ export default function S2App() {
   useEffect(() => { comeBackRef.current = comeBack }, [comeBack])
   useEffect(() => {
     if (!signedIn) return
-    const vis = () => { if (document.visibilityState === 'hidden') speaker.interrupt(); else comeBackRef.current?.() }
+    const vis = () => { if (document.visibilityState === 'hidden') { hiddenAt.current = hiddenAt.current ?? Date.now(); speaker.interrupt() } else comeBackRef.current?.() }   // Sasha 296 · when it went
     const shown = (e: PageTransitionEvent) => { if (e.persisted) comeBackRef.current?.() }
     document.addEventListener('visibilitychange', vis); window.addEventListener('pageshow', shown)
     return () => { document.removeEventListener('visibilitychange', vis); window.removeEventListener('pageshow', shown) }
@@ -997,12 +1009,21 @@ export default function S2App() {
   // Sasha 295 · THE OPENING's moves (S2Hello calls each inside his tap): TALK starts the mic — its permission asked by this tap, never
   // before one — then she says her hello · "or type": the box · a starter: his first message · her voice failed: one line, the box ready
   const begin = () => { micUsed.current = true; if (!asleepRef.current && !muted && !micLive && !dormant) voiceCtl.current?.tap() }
+  // Sasha 296 · item 4: a brand-new guest's action is drawn before the page's sign-in check answers (her first paint) — a tap then has
+  // no mic mounted yet: it is asked for once the page is signed in (the mic's own words say if it then needs a tap)
+  const micAsked = useRef(false)
+  const beginNow = () => { if (!voiceCtl.current) micAsked.current = true; begin() }
+  useEffect(() => {
+    if (!signedIn || !micAsked.current) return
+    const t = setTimeout(() => { if (micAsked.current) { micAsked.current = false; voiceCtl.current?.tap() } }, 0)
+    return () => clearTimeout(t)
+  }, [signedIn])
   const typeNow = () => typeBox.current?.focus()
   const starter = (t: string) => { listenOnTap(); void send(t) }
   const noSound = () => { setSoundNote(NO_SOUND); typeBox.current?.focus() }
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
     started={tab !== 'sasha'} ctlRef={helloCtl} arrive={arrive !== undefined ? arrive : quick} micLive={micLive} lead={lead} working={working}
-    onBegin={begin} onType={typeNow} onStarter={starter} onNoSound={noSound} onOpening={setOpeningUp} />   // Sasha 273 · rule 4's answer, the mic's truth, her news · Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
+    onBegin={beginNow} onType={typeNow} onStarter={starter} onNoSound={noSound} onOpening={setOpeningUp} muted={muted} />   // Sasha 273 · rule 4's answer, the mic's truth, her news · Sasha 268 · small talk keeps her full size; his first real request (send) sends her to work   // Sasha 267 · another tab is him acting too: she goes to the circle (her frame sat over My Keep, swallowing taps)   // Sasha 265 · item 2: turns restored from last time don't end this arrival's opening · the same place in every branch: it outlives the sign-in check · Sasha 251 · started: their first turn ends the opening
   if (signedIn === null) return <><main style={{ minHeight: '100dvh', background: C.bg }} />{hello}</>
   if (!signedIn) return (<>
     <main style={{ minHeight: '100dvh', background: C.bg, color: '#fff', display: 'grid', placeItems: 'center', padding: 24, fontFamily: 'system-ui' }}>

@@ -117,7 +117,7 @@ class A_TheRing(unittest.TestCase):
         self.assertIn("const pulse = working && (look === 'listening' || look === 'idle') ? WORK_PULSE : null", rule)
         app = (FRONT / "app/s2/S2App.tsx").read_text()
         self.assertIn("if (ev.type === 'working' && typeof ev.on === 'boolean') setWorking(ev.on)", app)
-        self.assertIn("working={working}\n    onBegin={begin}", app)   # Sasha 295 · MOVED: + the opening's moves
+        self.assertIn("working={working}\n    onBegin={beginNow}", app)   # Sasha 296 · MOVED: a tap before the sign-in check · Sasha 295 · MOVED: + the opening's moves
         hello = (FRONT / "app/s2/S2Hello.tsx").read_text()
         self.assertIn("const r = ring(p.look, talking, working)", hello)
         self.assertIn("data-sasha-working={r.pulse ? 'pulse' : undefined}", hello)

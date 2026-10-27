@@ -83,8 +83,8 @@ class OneWayToHerLips(unittest.TestCase):
     def test_the_page_asks_for_the_camera_line_only_with_her_live_face(self):
         app = _front(self, "app/s2/S2App.tsx")
         self.assertIn("const onCamera = leaving && !!helloCtl.current?.live()", app)
-        self.assertIn("const l = helloCtl.current.live() ? cameraOffLine() : ''", app)
-        self.assertIn("if (loud && lineToSay && !asleepRef.current) await speak(lineToSay, '')", self.hello)
+        self.assertIn("const l = helloCtl.current.live() ? helloCtl.current.settleLine() : ''", app)   # Sasha 296 · MOVED: settle's line
+        self.assertIn("if (loud && lineToSay && !asleepRef.current) await settleNow('', '')", self.hello)   # Sasha 296 · MOVED: through settle
 
     def test_her_voice_alone_is_drawn_in_the_corner(self):
         gr = _front(self, "lib/greeting-rule.mjs")

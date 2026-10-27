@@ -57,7 +57,7 @@ test('/s2 draws her from it: one element, measured to the corner, no portal, no 
   assert.match(hello, /c\.dataset\.drawn = '0'/)                                      // letting her live face go shows her still
   assert.match(hello, /SESSION_DISCONNECTED/)                                         // its session ending by itself, too
   assert.match(hello, /\(corner \|\| \(big && !live\)\) && <div aria-hidden data-sasha-still/)
-  assert.match(hello, /arrivalLine\(nameRef\.current \?\? null, !!back\.current, live\)/)   // her lines: voice.py's, never the page's own · Sasha 281 MOVED: + live
+  assert.match(hello, /arrivalLine\(nameRef\.current \?\? null, !!back\.current, false\)/)   // her lines: voice.py's, never the page's own · Sasha 281 MOVED: + live · Sasha 296 MOVED: the line alone — the camera words are settle's
   assert.doesNotMatch(hello, /WELCOME_BACK|Hey, welcome back!|I'm going to head behind the scenes/)
   const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
   assert.match(app, /<span id="s2-face-slot"/)
@@ -115,7 +115,7 @@ test('273 · 4 + 5: /s2 greets only from rule 4, has one return handler, and its
   assert.match(app, /\.\.\.\(greet \? \[\{ role: 'sasha' as const, text: line/)
   assert.equal((app.match(/addEventListener\('visibilitychange'/g) || []).length, 1)   // ONE return handler (mic + rule 4)
   assert.match(app, /voiceCtl\.current\?\.resume\(\)/)
-  assert.match(app, /if \(document\.visibilityState === 'hidden'\) speaker\.interrupt\(\)/)   // never resumes mid-sentence
+  assert.match(app, /if \(document\.visibilityState === 'hidden'\) \{ hiddenAt\.current = hiddenAt\.current \?\? Date\.now\(\); speaker\.interrupt\(\) \}/)   // never resumes mid-sentence · Sasha 296 MOVED: + when it went
   assert.match(app, /data-s2-shell style=\{\{ height: '100dvh'/)
   assert.match(app, /paddingBottom: 'calc\(10px \+ env\(safe-area-inset-bottom\)\)'/)
   assert.doesNotMatch(app, /'🔊 Voice on'/)                                              // "Voice" is the mic's word, never the speaker's
@@ -186,14 +186,16 @@ test('281 · ONE way S2Hello speaks: Face.say (her lips) and the voice are reach
   assert.match(hello, /if \(!a \|\| gone\) return false/)
   assert.match(hello, /idle\.current = setTimeout\(\(\) => \{ if \(phaseRef\.current === 'faceAgain'\) void collapse\(\) \}/)   // her face let go → the corner
   assert.match(hello, /const ended = \(\) => \{ if \(mine && face\.current === mine\) void collapse\(\) \}/)
-  assert.match(hello, /if \(loud && lineToSay && !asleepRef\.current\) await speak\(lineToSay, ''\)/)   // bye: no camera words without a camera
+  assert.match(hello, /if \(loud && lineToSay && !asleepRef\.current\) await settleNow\('', ''\)/)   // bye: no camera words without a camera · Sasha 296 MOVED: through settle
 })
 
 test('281 · the page asks for the camera line only while her live face is up', () => {
   const app = code(readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8'))
   assert.match(app, /const onCamera = leaving && !!helloCtl\.current\?\.live\(\)/)
-  assert.match(app, /const said1 = onCamera \? \(cameraOffLine\(\) \|\| null\)/)
-  assert.match(app, /const l = helloCtl\.current\.live\(\) \? cameraOffLine\(\) : ''/)
+  assert.match(app, /const said1 = onCamera \? \(helloCtl\.current\?\.settleLine\(\) \|\| null\)/)   // Sasha 296 MOVED: settle's line (the camera words once a session)
+  assert.match(app, /const l = helloCtl\.current\.live\(\) \? helloCtl\.current\.settleLine\(\) : ''/)
+  const hello2 = code(readFileSync(new URL('../app/s2/S2Hello.tsx', import.meta.url), 'utf8'))
+  assert.match(hello2, /const settleLine = \(\) => \(faceUp\(\) \? \(cameraSaid\(\) \? stillHereLine\(lang\(\)\) : cameraOffLine\(\)\) : ''\)/)   // no live face: no words
   const fl = code(readFileSync(new URL('../lib/first-line.ts', import.meta.url), 'utf8'))
   assert.equal((fl.match(/withCamera\(/g) || []).length, 2)                                             // arrival and news
 })

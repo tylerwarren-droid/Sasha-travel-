@@ -303,6 +303,27 @@ def line_for(m: Optional[dict], account: str) -> Optional[str]:
     return f"Welcome back — we were looking at {thing}. Want to carry on?"
 
 
+def pickup_of(m: Optional[dict], account: str) -> str:
+    """Sasha 296 · COMING BACK: her first words after a return to the page (voice.pickup_line) — what they were on, as line_for knows
+    it (the same 24 h), a read-back still waiting for their yes, or nothing remembered. Read only: nothing is kept or handed over."""
+    from app.agent import voice as V
+    if not m or not m.get("thing"):
+        return V.pickup_line(None)
+    try:
+        if NOW() - datetime.fromisoformat(m["updated_at"]) > OFFER_FOR:
+            return V.pickup_line(None)
+    except Exception:
+        return V.pickup_line(None)
+    p = m.get("pending") or {}
+    if p.get("kind") == "hold" and p.get("what"):
+        return V.pickup_line(p["what"], ready=_hold_live(account, p))
+    return V.pickup_line(m["thing"])
+
+
+async def pickup(account: str) -> str:
+    return pickup_of(await _load(account), account)
+
+
 def handover(m: dict) -> str:
     """Sasha 239 · what the model is told on return (found live: "Oven Mozzarella is the one you've picked" when nothing was picked).
     Decided only if they decided; otherwise they were looking — and it must not say they chose."""

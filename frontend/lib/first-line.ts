@@ -7,17 +7,19 @@
 import { apiUrl } from '@/lib/api'
 import { withCamera } from '@/lib/presence-rule.mjs'
 
-let rule: { line: string; re: RegExp; cameraOff: string; trip: RegExp | null; tryLine: string; hello: string; helloBack: string; acks: string[] } | null = null
+let rule: { line: string; re: RegExp; cameraOff: string; trip: RegExp | null; tryLine: string; hello: string; helloBack: string; acks: string[]
+  stillHere: string; stillHereEs: string } | null = null
 let loading: Promise<void> | null = null
 
 export function loadFirstLine(): Promise<void> {
   if (rule || loading) return loading || Promise.resolve()
   loading = fetch(apiUrl('/api/agent/first-line'), { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
-    .then((j: { line?: string; work?: string; flags?: string; camera_off?: string; trip?: string; try?: string; hello?: string; hello_back?: string; acks?: string[] } | null) => {
+    .then((j: { line?: string; work?: string; flags?: string; camera_off?: string; still_here?: string; still_here_es?: string; trip?: string; try?: string; hello?: string; hello_back?: string; acks?: string[] } | null) => {
       if (j?.line && j?.work) rule = { line: j.line, re: new RegExp(j.work, j.flags || 'i'), cameraOff: j.camera_off || '',
                                        trip: j.trip ? new RegExp(j.trip, j.flags || 'i') : null, tryLine: j.try || '',
-                                       hello: j.hello || '', helloBack: j.hello_back || '', acks: Array.isArray(j.acks) ? j.acks.filter(x => typeof x === 'string' && x) : [] }
+                                       hello: j.hello || '', helloBack: j.hello_back || '', acks: Array.isArray(j.acks) ? j.acks.filter(x => typeof x === 'string' && x) : [],
+                                       stillHere: j.still_here || '', stillHereEs: j.still_here_es || '' }
     })
     .catch(() => { /* not read: the stream's own first line still comes (~1 s) */ })
     .finally(() => { loading = null })
@@ -27,6 +29,13 @@ export function loadFirstLine(): Promise<void> {
 /** Sasha 268 · her line when his request sends her back to the corner (voice.CAMERA_OFF), or '' when it hasn't been read. */
 export function cameraOffLine(): string {
   return rule?.cameraOff || ''
+}
+
+/** Sasha 296 · voice.STILL_HERE ("Still here." — ES voice.STILL_HERE_ES, "Aquí sigo.") — every move into the corner after the first in a
+ *  session (lib/opening-rule.mjs settle); '' when the rule hasn't been read (she then goes to the corner without it). */
+export function stillHereLine(lang: string): string {
+  if (!rule) return ''
+  return /^es\b/i.test(lang || '') && rule.stillHereEs ? rule.stillHereEs : rule.stillHere
 }
 
 /** Sasha 271 · B (row 1008) · her ARRIVAL in one breath (voice.arrival_line): "Hey there." — a return: "Hey <first name>." — then

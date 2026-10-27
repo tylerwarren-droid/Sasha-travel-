@@ -12,8 +12,22 @@
 //   after        one cue each, on the mic itself (cueOf): listening · thinking · speaking. A refused mic or sound that won't play is
 //                said in one line, the box ready (NO_SOUND, the mic's own words) — never a silent face.
 // No second welcome over the page, no per-device branch, no timer that shows "ready" before it is.
+//
+// Sasha 296 · COMING BACK, AND "STILL HERE" (Tyler, 26 Oct: "when you come back after say thirty seconds… you have to tap the mic to
+// activate and it's just not entirely clear what needs to happen… the user just has to always be informed and know what to do"). The
+// same rule, for every state after the first seconds — never a second "resume" screen:
+//   returned     the page back (a hidden tab, a locked phone) after AWAY_MS away, short of rule 4's re-arrival (presence-rule
+//                reappear): her still full size with ONE action — CONTINUE, OR_TYPE — the same panel, in her frame (phase BACK). His tap:
+//                her sound, the mic, then she speaks first, ONE line that picks up where they were (voice.pickup_line).
+//   paused       her one action is Wake (sleep-rule): the corner, dimmed, its word, and the page's line.
+//   the corner   settle(): the first time in a session her line carries the camera words (voice.CAMERA_OFF); every time after, a pause →
+//                "Still here." (ES "Aquí sigo.") → a pause → the circle. Never the full line twice in a session; no live face, no words.
+//   her face     always drawn while signed in (presence never 'none'): full size or the corner — paused, listening, thinking, speaking.
+// Measured before (390×844 and desktop): back after 30 s or a lock — only the 40 px circle and the mic's small word; on desktop the one
+// tap there turned a live mic OFF. Her face sent to the corner: at once and silent (≤0.5 s); her requests: the full camera line every time.
 import { STARTERS } from './capabilities.generated.mjs'
 import { voiceOf } from './presence-rule.mjs'
+import { buttonLabel } from './sleep-rule.mjs'
 
 export { STARTERS }
 /** The opening's phase in S2Hello: her still, waiting for his tap. */
@@ -23,15 +37,51 @@ export const OR_TYPE = 'or type'
 /** Her one line when her voice can't be played here, after his tap (the mic's refusal has its own words: lib/mic-state). */
 export const NO_SOUND = 'My voice won’t play on this device — I’ll answer in writing. Type below.'
 
-/** What the opening draws: the panel (TALK · OR_TYPE · STARTERS) while her arrival waits for his tap — and only then. `full`: she is
- *  drawn full size now (presence) — before her arrival is decided ('off', rule 4 still asking, up to ~2.5 s) the panel is already
- *  there with her, so the first paint never shows her without the action (a tap then is held until the arrival is decided).
- *  @param {{ phase: string, signedIn: boolean | null, started?: boolean, asleep?: boolean, full?: boolean }} s */
+/** Sasha 296 · S2Hello's phase while a return waits for his tap (her still, full size, CONTINUE). */
+export const BACK = 'back'
+export const CONTINUE = 'Tap to continue'
+/** Sasha 296 · away this long (hidden → visible, the page's own two moments) and a return is `returned`; a glance away is nothing. */
+export const AWAY_MS = 10000
+/** Sasha 296 · the slight pause on both ends of "Still here." — not instantaneous. */
+export const PAUSE_MS = 700
+
+/** What the opening draws, and the ONE action of every state: the panel (TALK, or CONTINUE on a return · OR_TYPE · STARTERS on load)
+ *  while she waits for his tap — and only then. `full`: she is drawn full size now (presence) — before her arrival is decided ('off',
+ *  rule 4 still asking, up to ~2.5 s) the panel is already there with her, so the first paint never shows her without the action (a
+ *  tap then is held until the arrival is decided). Sasha 296 · `soon`: this browser holds a sign-in (its cookie) while the page's own
+ *  check is still answering — a brand-new guest sees the action with her first paint. `action`: what to do now, in every state —
+ *  'talk' · 'continue' (the panel) · 'wake' (paused) · 'cue' (the mic's own word: listening · thinking · speaking · tap).
+ *  @param {{ phase: string, signedIn: boolean | null, soon?: boolean, started?: boolean, asleep?: boolean, full?: boolean }} s */
 export function opening(s) {
-  const waits = s.phase === READY || (s.phase === 'off' && !!s.full)
-  const panel = s.signedIn === true && waits && !s.started && !s.asleep
-  return { panel, speaks: s.phase !== READY && s.phase !== 'off' }
+  const back = s.phase === BACK
+  const waits = s.phase === READY || back || (s.phase === 'off' && !!s.full)
+  const sure = s.signedIn === true || (s.signedIn === null && !!s.soon)
+  const panel = sure && waits && !s.started && !s.asleep
+  const action = s.asleep ? 'wake' : panel ? (back ? 'continue' : 'talk') : 'cue'
+  return { panel, action, words: s.asleep ? buttonLabel(true) : back ? CONTINUE : TALK, starters: panel && !back,
+           speaks: !waits && s.phase !== 'off' }
 }
+
+/** Sasha 296 · RETURNED: the page is back after `away` ms hidden — not paused (Wake is its action), not at rest, nothing in flight (her
+ *  answer is what's there), on her own tab. Rule 4's re-arrival (30 min, a new day, news) is asked first, by the same return handler.
+ *  @param {{ away: number, asleep?: boolean, dormant?: boolean, busy?: boolean, here?: boolean }} s */
+export function returned(s) {
+  return Number(s.away) >= AWAY_MS && !s.asleep && !s.dormant && !s.busy && s.here !== false
+}
+
+/** Sasha 296 · INTO THE CORNER, the ONE rule (arrival, a return, his request, a tap on her face): `said` — the camera words have
+ *  already been on her lips this session; `live` — her live face is up. The steps S2Hello runs, in order:
+ *    'say'    her line (with the camera words when `camera`; alone, CAMERA_OFF itself) · 'hold' HOLD_MS (presence-rule)
+ *    'pause'  PAUSE_MS · 'still' "Still here." (voice.STILL_HERE / STILL_HERE_ES)
+ *  No live face: no camera words, no "Still here" — the corner at once, her line in her voice (Sasha 281).
+ *  @param {{ said: boolean, live: boolean }} s  @returns {{ camera: boolean, steps: ('say' | 'hold' | 'pause' | 'still')[] }} */
+export function settle(s) {
+  if (!s.live) return { camera: false, steps: [] }
+  if (!s.said) return { camera: true, steps: ['say', 'hold'] }
+  return { camera: false, steps: ['say', 'pause', 'still', 'pause'] }
+}
+/** Sasha 296 · this tab's session: the camera words have been on her lips (sessionStorage — a reload of the tab keeps it). */
+export const CAMERA_SAID = 's2_camera_said'
 
 /** What a tap on TALK starts, in this order, inside the tap (a phone allows sound and the mic's prompt only there). */
 export const ON_TAP = ['unlock', 'mic', 'hello']

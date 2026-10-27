@@ -260,6 +260,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T73": ("The opening: on load ONE action (Tap to talk to Sasha · or type · her starters), nothing said before the tap; her hello says "
             "what she does; every starter is one of her chips (Sasha 295)",
             ["tests.test_s295"]),
+    "T74": ("Coming back: her first words after a return pick up where they were (voice.pickup_line over her memory, read only); the "
+            "corner's words are the camera line once a session, then 'Still here.' (ES 'Aquí sigo.') (Sasha 296)",
+            ["tests.test_s296"]),
 }
 
 _RUNNER = """

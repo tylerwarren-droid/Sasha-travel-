@@ -495,6 +495,22 @@ HELLO_BACK = "Hi {name} — what shall I book for you?"
 # Sasha 281 (Tyler, 21 Oct 17:58 — her lips didn't move on it) · ONE short line, and said ONLY by her live face (the page's speak(),
 # presence-rule withCamera): with no live face there is no camera to turn off — her line is the hello alone, from the corner.
 CAMERA_OFF = "I'm turning my camera off — just talk, or tap to see me."
+# Sasha 296 (Tyler, 26 Oct: "I like that she tells you… but 20 times would get tedious… a slight pause on both ends") · CAMERA_OFF is
+# said ONCE a session; every move into the corner after it is a pause, this, a pause (frontend/lib/opening-rule.mjs settle).
+STILL_HERE = "Still here."
+STILL_HERE_ES = "Aquí sigo."
+# Sasha 296 · COMING BACK (30 s away, a locked phone, a hidden tab): after his tap on "Tap to continue" she speaks first, ONE line that
+# picks up where they were — from her memory of the conversation (agapi.s2_memory.pickup), never the model's.
+PICKUP = "Still on {thing}?"
+PICKUP_READY = "Still on {thing}? It's ready — just say yes."
+PICKUP_NONE = "Welcome back — what shall I book for you?"
+
+
+def pickup_line(thing: Optional[str] = None, ready: bool = False) -> str:
+    """Her first words after a return: what they were on ("Still on dinner in Madrid?"), a read-back still waiting for their yes, or
+    — nothing remembered — the plain way back in."""
+    t = str(thing or "").strip().rstrip(".?!")[:120]
+    return (PICKUP_READY if ready else PICKUP).format(thing=t) if t else PICKUP_NONE
 
 # Sasha 283 · item 4c · THE WAY BACK (agapi.venues.awaiting_word / answer_word): the one question on his return, and its answers
 DID_IT = "Did it go through?"
@@ -834,7 +850,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
            "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",

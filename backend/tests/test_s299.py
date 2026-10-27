@@ -81,6 +81,16 @@ class TheStream(unittest.TestCase):
         self.assertNotIn("hold", types[types.index("text"):])   # after her words begin: no progress line
 
 
+    def test_a_steps_own_line_never_follows_a_generic_one_about_it(self):
+        """Found live (cad2fa6, La Mi Venta): 279's generic second line ("Setting up the booking.") came 4 s before the step's own."""
+        plan = [("ev", {"type": "tool_start", "name": "hold_venue"}), ("sleep", 0.5), ("ev", {"type": "tool", "name": "hold_venue", "ok": True}),
+                ("ev", {"type": "text", "delta": "Done."}), ("ev", {"type": "done", "text": "x"})]
+        with mock.patch.object(V, "STEP_GAP_S", 0.3), mock.patch.object(V, "STEP_STILL_S", 5), mock.patch.object(V, "LONG_WAIT_S", 0.1):
+            evs = run(collect(S.with_holding(self.turn(plan), ACCT, after_s=0.02, venue="Casa")))
+        holds = [e["text"] for e in evs if e["type"] == "hold"]
+        self.assertEqual(holds, ["Getting your booking ready with Casa."], holds)
+
+
 class TheCuts(unittest.TestCase):
     def test_a_taps_reads_start_at_the_tap_and_are_used_once(self):
         calls = []
@@ -97,7 +107,7 @@ class TheCuts(unittest.TestCase):
                 return {}
 
         async def go():
-            with mock.patch.object(VN, "_API", lambda: GW), mock.patch.object(VN, "card_of", lambda *a: {"name": "Casa (test)", "place_id": "PZ"}), \
+            with mock.patch.object(VN, "_API", lambda: GW), mock.patch.object(VN, "card_of", lambda *a: {"name": "Casa (test)", "place_id": "PZ", "address": "Calle Falsa 1, 28012 Madrid, Spain"}), \
                     mock.patch("agapi.venue_truth.profile", mock.AsyncMock(return_value={})):
                 VN._READS.pop(ACCT, None)
                 self.assertTrue(VN.read_ahead(ACCT, "PZ"))
@@ -108,6 +118,38 @@ class TheCuts(unittest.TestCase):
         rd = run(go())
         self.assertEqual(rd["read_id"], "r1")
         self.assertEqual(calls, ["/api/booking/venues/read"])          # the read started at the tap IS the route's read
+
+    def test_an_early_read_that_fails_is_read_again_never_passed_on(self):
+        """Found live (cad2fa6): the read started at the tap had no city, the venue read refused it (city_invalid), and that refusal
+        became read_booking_route's answer. Now the card's own address gives the city, and any early failure is simply read again."""
+        answers = [(400, {"rule": "city_invalid"}), (200, {"read_id": "r2", "venue": "Casa (test)", "rungs": [], "facts": []})]
+        calls = []
+
+        class GW:
+            @staticmethod
+            async def api(account, method, path, body, timeout=None):
+                calls.append(body.get("city"))
+                return answers[len(calls) - 1]
+
+            @staticmethod
+            def _hours_of(rd, now):
+                return {}
+
+            @staticmethod
+            def refusal_words(rd, status):
+                return "refused"
+
+        async def go():
+            with mock.patch.object(VN, "_API", lambda: GW), mock.patch.object(VN, "card_of", lambda *a: {"name": "Casa (test)", "place_id": "PQ", "address": "C. Uno 2, 28005 Madrid, España"}), \
+                    mock.patch("agapi.venue_truth.profile", mock.AsyncMock(return_value={})):
+                VN._READS.pop(ACCT, None)
+                VN._AHEAD.pop((ACCT, "PQ"), None)
+                VN.read_ahead(ACCT, "PQ")
+                ctx = type("C", (), {"account": ACCT, "surface": "s2"})()
+                return await VN._read(ctx, {"name": "Casa (test)", "place_id": "PQ", "city": "Madrid"})
+        self.assertEqual(run(go())["read_id"], "r2")
+        self.assertEqual(calls, ["Madrid", "Madrid"])   # the early read had the card's city; its failure → the route's own read
+        self.assertIsNone(VN.city_of("Madrid"))         # no address to read a city from: no early read at all
 
     def test_the_platform_cards_line_is_said_by_code(self):
         r = {"ok": True, "result": {"status": "page_link", "in_app": True, "page_url": "https://x.example/p",

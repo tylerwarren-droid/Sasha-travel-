@@ -191,7 +191,10 @@ def read_ahead(account: str, place_id: str) -> bool:
     c = card_of(account, place_id)
     if not c or not place_id or ((account, place_id) in _AHEAD and _clock.time() - _AHEAD[(account, place_id)][0] < AHEAD_S):
         return False
-    body = {"name": c.get("name"), "place_id": place_id, "website": c.get("website"), "s2_demo": True}
+    city = city_of(c.get("address"))   # the read needs a city (venue_read: 2–60 characters): the card's own address says it
+    if not city:
+        return False
+    body = {"name": c.get("name"), "place_id": place_id, "website": c.get("website"), "city": city, "s2_demo": True}
     _AHEAD[(account, place_id)] = (_clock.time(), asyncio.create_task(_API().api(account, "POST", "/api/booking/venues/read",
                                                                                 {k: v for k, v in body.items() if v})))
     from agapi import venue_truth as VT
@@ -199,6 +202,15 @@ def read_ahead(account: str, place_id: str) -> bool:
     VT._BG.add(p)
     p.add_done_callback(VT._BG.discard)
     return True
+
+
+def city_of(address: Optional[str]) -> Optional[str]:
+    """"Calle de Atocha 12, 28012 Madrid, Spain" → "Madrid": the locality before the country, its postcode dropped."""
+    parts = [x.strip() for x in str(address or "").split(",") if x.strip()]
+    if len(parts) < 2:
+        return None
+    c = re.sub(r"^\d[\d\s-]*", "", parts[-2]).strip()
+    return c if 2 <= len(c) <= 60 else None
 
 
 async def _read(ctx, a: dict) -> dict:
@@ -221,6 +233,9 @@ async def _read(ctx, a: dict) -> dict:
         try:
             status, rd = await ahead[1]
         except Exception:
+            status, rd = 0, None
+        if status != 200:   # the early read failed: the route's own read, as before — an early read only ever saves time
+            log.info("[venues] the read started at the tap didn't answer (%s) — reading now", status)
             status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
     else:
         status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})

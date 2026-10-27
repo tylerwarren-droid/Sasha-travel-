@@ -1399,6 +1399,9 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
                     continue
                 # Sasha 279 · A: a tool still running, or her words not begun, on a LONG wait → ONE more line (voice.progress_due)
                 if (steps.now or not words) and _V.progress_due(held_n, now - held_at):
+                    if _V._STEP_OF.get(steps.now or "") in _V._TRUE:
+                        held_n += 1   # Sasha 299 · a step with its OWN lines (progress_next: its line, its still line) — never a generic one too
+                        continue
                     line = _V.progress_line(steps.now, account)
                     for _ in range(4):   # Sasha 299 · never a line already said this turn (a step's own line included)
                         if line not in said_lines:

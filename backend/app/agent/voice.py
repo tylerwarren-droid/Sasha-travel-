@@ -689,11 +689,21 @@ def step_words(tool: Optional[str], venue: Optional[str] = None, still: bool = F
     return _STEP[kind][1 if still else 0]
 
 
-def progress_next(now: float, said_at: float, step: Optional[str], said: dict, venue: Optional[str] = None) -> Optional[Tuple[str, str]]:
+#: no tool running, a tool's result back, her answer not begun: she IS putting it together (the model composing) — said once a turn
+COMPOSING = "Putting it together now."
+
+
+def progress_next(now: float, said_at: float, step: Optional[str], said: dict, venue: Optional[str] = None,
+                  composing: bool = False) -> Optional[Tuple[str, str]]:
     """→ (line, key) when a TRUE progress line is due now, else None. `said_at`: her last words of any kind; `step`: the tool running now
-    (Steps.now); `said`: {key: when} the progress lines said this turn (a step's key, and its ":still")."""
+    (Steps.now); `said`: {key: when} the progress lines said this turn (a step's key, and its ":still"); `composing`: no tool running,
+    one has finished, her answer not begun."""
+    if now - said_at < STEP_GAP_S - 0.01:
+        return None
+    if not step and composing:
+        return (COMPOSING, "composing") if "composing" not in said else None
     kind = _STEP_OF.get(step or "")
-    if not kind or now - said_at < STEP_GAP_S - 0.01:
+    if not kind:
         return None
     if kind not in said:
         return step_words(step, venue), kind
@@ -702,8 +712,10 @@ def progress_next(now: float, said_at: float, step: Optional[str], said: dict, v
     return None
 
 
-def progress_wait(now: float, said_at: float, step: Optional[str], said: dict) -> float:
+def progress_wait(now: float, said_at: float, step: Optional[str], said: dict, composing: bool = False) -> float:
     """Seconds until progress_next could next say something (inf: nothing to wait for)."""
+    if not step and composing:
+        return float("inf") if "composing" in said else max(0.0, said_at + STEP_GAP_S - now)
     kind = _STEP_OF.get(step or "")
     if not kind or (kind in said and kind + ":still" in said):
         return float("inf")
@@ -917,7 +929,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
            "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
            "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "KIND_ASK_ES", "KIND_CHOICES_ES", "kind_ask",
-           "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",

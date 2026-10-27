@@ -67,7 +67,7 @@ class TheStream(unittest.TestCase):
         with mock.patch.object(V, "STEP_GAP_S", 0.12), mock.patch.object(V, "STEP_STILL_S", 0.9), mock.patch.object(V, "LONG_WAIT_S", 5.0):
             evs = run(collect(S.with_holding(self.turn(plan), ACCT, after_s=0.05, venue="DiverXO")))
         holds = [e["text"] for e in evs if e["type"] == "hold"]
-        self.assertEqual(holds, ["Checking how DiverXO takes bookings.", "Getting your booking ready with DiverXO."], holds)
+        self.assertEqual(holds, ["Checking how DiverXO takes bookings.", "Getting your booking ready with DiverXO.", V.COMPOSING], holds)   # + composing: 0.3 s > the gap
         self.assertEqual([e["type"] for e in evs][-2:], ["text", "done"])
 
     def test_no_line_once_her_words_have_begun_and_none_twice(self):
@@ -89,6 +89,19 @@ class TheStream(unittest.TestCase):
             evs = run(collect(S.with_holding(self.turn(plan), ACCT, after_s=0.02, venue="Casa")))
         holds = [e["text"] for e in evs if e["type"] == "hold"]
         self.assertEqual(holds, ["Getting your booking ready with Casa."], holds)
+
+
+    def test_composing_after_the_tools_is_said_once(self):
+        """Found live (c4c04b1, DiverXO as a guest): the tools were back in 4 s and the model composed for ~5 s with nothing said."""
+        plan = [("ev", {"type": "tool_start", "name": "hold_venue"}), ("sleep", 0.05), ("ev", {"type": "tool", "name": "hold_venue", "ok": True}),
+                ("sleep", 0.6), ("ev", {"type": "text", "delta": "Their page is on your screen."}), ("ev", {"type": "done", "text": "x"})]
+        with mock.patch.object(V, "STEP_GAP_S", 0.15), mock.patch.object(V, "LONG_WAIT_S", 5.0):
+            evs = run(collect(S.with_holding(self.turn(plan), ACCT, after_s=0.01, venue="Casa")))
+        holds = [e["text"] for e in evs if e["type"] == "hold"]
+        self.assertEqual(holds.count(V.COMPOSING), 1, holds)
+        self.assertEqual(holds[0], "Getting your booking ready with Casa.")
+        self.assertIsNone(V.progress_next(10, 0, None, {}, composing=False))   # before any tool: the holding line's job, not this
+        self.assertIsNone(V.progress_next(10, 0, None, {"composing": 5}, composing=True))   # once a turn
 
 
 class TheCuts(unittest.TestCase):

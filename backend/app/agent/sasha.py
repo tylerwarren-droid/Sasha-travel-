@@ -1360,6 +1360,7 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
     working = False
     trued: Dict[str, float] = {}   # Sasha 299 · the steps' own lines said this turn (voice.progress_next's keys) and when
     said_lines: set = set()        # every holding / progress line said this turn (never one twice)
+    stepped = False                # a tool has come back this turn (then, nothing running and no words yet: she is composing)
     if first:   # Sasha 265 · item 5: the first line, now — the stream's first event
         started = True
         said_at = last_at = held_at = t0
@@ -1373,10 +1374,11 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
                 timeout = max(0.0, wait - (now - t0))
             else:   # Sasha 279 · the second line is due LONG_WAIT_S after the first (while a step runs, or before her words) — then none
                 due = (held_at + _V.LONG_WAIT_S if (steps.now or not words) and _V.progress_due(held_n, LONG_WAIT_FAR) else float("inf"))
-                due = min(due, now + _V.progress_wait(now, said_at, steps.now, trued))   # Sasha 299 · a running step's own line
+                due = min(due, now + _V.progress_wait(now, said_at, steps.now, trued, stepped and not words))   # Sasha 299 · a running step's own line
                 timeout = max(0.0, min(due, last_at + KEEPALIVE_S) - now)
             try:
-                item = await asyncio.wait_for(q.get(), timeout)
+                # Sasha 299 · an event already here comes first — never a line about a moment that is already over
+                item = q.get_nowait() if not q.empty() else await asyncio.wait_for(q.get(), timeout)
             except asyncio.TimeoutError:
                 now = loop.time()
                 if not started:
@@ -1391,7 +1393,7 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
                     yield {"type": "hold", "text": line, "say": line}
                     yield {"type": "working", "on": True}
                     continue
-                pn = _V.progress_next(now, said_at, steps.now, trued, venue)   # Sasha 299 · the step running now: its own, true line
+                pn = _V.progress_next(now, said_at, steps.now, trued, venue, stepped and not words)   # Sasha 299 · the step running now: its own, true line
                 if pn:
                     trued[pn[1]] = said_at = last_at = now
                     said_lines.add(pn[0])
@@ -1427,6 +1429,8 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
                 raise item
             last_at = loop.time()
             steps.see(item)
+            if isinstance(item, dict) and item.get("type") == "tool":
+                stepped = True   # Sasha 299
             if first and isinstance(item, dict) and item.get("type") == "filler":
                 continue   # Sasha 265 · item 5: her first line and the progress lines hold the silence — no second acknowledgement
             if isinstance(item, dict) and item.get("type") in _SPOKEN:

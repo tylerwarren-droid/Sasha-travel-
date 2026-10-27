@@ -204,6 +204,32 @@ def read_ahead(account: str, place_id: str) -> bool:
     return True
 
 
+#: Sasha 299 · (4) a search older than this is not "the search it came from" (the person may have moved on)
+TAP_SLOT_S = 30 * 60
+
+
+def tap_plan(account: str, session: Optional[str], place_id: str) -> Optional[List[Tuple[str, dict]]]:
+    """Sasha 299 · (4) (Tyler, 27 Oct: "a Book tap runs the route and hold by code; the model only writes the words") · THE ONE PLACE a
+    tap's two calls are decided: [read_booking_route, hold_venue], their arguments ONLY from what he already gave — the card he tapped
+    (name, place_id, website, its address's city) and the search it came from in THIS session (day · time · party, v0.SEARCH_SLOT).
+    Anything missing → None: the model's path, as before. Never a default day, time or party; nothing here decides a route."""
+    from agapi import v0 as API
+    c = card_of(account, place_id) if place_id else None
+    slot = API.SEARCH_SLOT.get(account) or {}
+    if not c or not c.get("name") or not session or slot.get("session") != session or _clock.time() - float(slot.get("at") or 0) > TAP_SLOT_S:
+        return None
+    at = str(slot.get("open_at") or "")
+    party = slot.get("party")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", at) or not isinstance(party, int) or not 1 <= party <= 20:
+        return None
+    city = city_of(c.get("address")) or (str(slot.get("where") or "").split(",")[-1].strip() or None)
+    if not city or not 2 <= len(city) <= 60:
+        return None
+    venue = {"name": str(c["name"])[:80], "city": city, "place_id": place_id, **({"website": c["website"]} if c.get("website") else {}),
+             **({"country": slot["country"]} if slot.get("country") else {})}
+    return [("read_booking_route", dict(venue)), ("hold_venue", {**venue, "day": at[:10], "time": at[11:16], "party": party})]
+
+
 def city_of(address: Optional[str]) -> Optional[str]:
     """"Calle de Atocha 12, 28012 Madrid, Spain" → "Madrid": the locality before the country, its postcode dropped."""
     parts = [x.strip() for x in str(address or "").split(",") if x.strip()]

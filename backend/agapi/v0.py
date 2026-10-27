@@ -35,6 +35,11 @@ VERSION = "v0"
 from booking_signer import fx as _FX   # noqa: E402 · Sasha 249 · ONE RATE (fx.py, dated) for every conversion into euros
 
 
+#: Sasha 299 · (4) the card his Book tap named this turn (set by the turn route from its body's `pick`; "" elsewhere)
+TAP_PICK: ContextVar[str] = ContextVar("TAP_PICK", default="")
+#: Sasha 299 · (4) what his last search this session asked for — its time, party and place (venues.tap_plan reads it; nothing else)
+SEARCH_SLOT: Dict[str, dict] = {}
+
 #: Sasha 298 · the /s2 page's browser language for this turn (set by the turn route from its body's `lang`; "" elsewhere)
 PAGE_LANG: ContextVar[str] = ContextVar("PAGE_LANG", default="")
 
@@ -640,6 +645,9 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
     if not r.get("ok"):
         e = r.get("error") or {}
         raise ToolError(e.get("code") or "discover_failed", e.get("message") or "the search didn't answer")
+    if ctx.session:   # Sasha 299 · (4) what HE asked for — a Book tap on one of these cards books exactly this, nothing invented
+        SEARCH_SLOT[ctx.account] = {"session": ctx.session, "at": time.time(), "open_at": str(a.get("open_at") or "")[:16],
+                                    "party": a.get("party"), "where": str(a.get("where") or "")[:120], "country": a.get("country")}
     res = r.get("result") or {}
     checks = res.get("checks") if isinstance(res.get("checks"), dict) else None
     refused = bool(res.get("refused"))

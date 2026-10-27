@@ -172,5 +172,85 @@ class TheCuts(unittest.TestCase):
         self.assertEqual(V.page_line("hold_venue", r), V.NOT_FILLED)
 
 
+class ABookTapRunsByCode(unittest.TestCase):
+    """Sasha 299 · (4) (Tyler, 27 Oct: "Yes: a Book tap runs the route and hold by code; the model only writes the words")."""
+    CARD = {"name": "Casa Prueba (test)", "place_id": "PT", "website": "https://casa.example/", "address": "Calle Uno 1, 28012 Madrid, Spain"}
+
+    def setUp(self):
+        from agapi import v0 as API
+        API.SEARCH_SLOT[ACCT] = {"session": "s299-tap", "at": __import__("time").time(), "open_at": "2026-10-30T21:00", "party": 2,
+                                 "where": "Madrid", "country": "ES"}
+
+    def tearDown(self):
+        from agapi import v0 as API
+        API.SEARCH_SLOT.pop(ACCT, None)
+
+    def plan(self, **slot):
+        from agapi import v0 as API
+        API.SEARCH_SLOT[ACCT].update(slot)
+        with mock.patch.object(VN, "card_of", lambda *a: dict(self.CARD)):
+            return VN.tap_plan(ACCT, "s299-tap", "PT")
+
+    def test_the_two_calls_from_only_what_he_gave(self):
+        p = self.plan()
+        self.assertEqual([n for n, _ in p], ["read_booking_route", "hold_venue"])
+        self.assertEqual(p[1][1], {"name": "Casa Prueba (test)", "city": "Madrid", "place_id": "PT", "website": "https://casa.example/",
+                                   "country": "ES", "day": "2026-10-30", "time": "21:00", "party": 2})
+
+    def test_anything_missing_is_the_models_path(self):
+        for slot in ({"open_at": "2026-10-30"}, {"open_at": ""}, {"party": None}, {"party": 0}, {"session": "another"}, {"at": 0}):
+            self.setUp()
+            self.assertIsNone(self.plan(**slot), slot)   # never a default day, time or party; never another session's search
+        with mock.patch.object(VN, "card_of", lambda *a: None):
+            self.assertIsNone(VN.tap_plan(ACCT, "s299-tap", "PT"))
+
+    def test_the_turn_runs_them_and_the_model_only_writes_the_words(self):
+        import app.services.llm as LLM
+        from agapi import v0 as API
+        from app.agent.fakes import Block, client
+        called, seen = [], []
+
+        async def call(ctx, name, args):
+            called.append((name, {k: args.get(k) for k in ("name", "day", "time", "party")}))
+            return {"ok": True, "result": {"status": "awaiting_yes" if name == "hold_venue" else "read", "venue": "Casa Prueba (test)"}}
+
+        async def go():
+            tok = API.TAP_PICK.set("PT")
+            try:
+                async for _ in S.turn(ACCT, 'This one: "Casa Prueba (test)"', [], "s299-tap", None, "s2"):
+                    pass
+            finally:
+                API.TAP_PICK.reset(tok)
+        with mock.patch.object(VN, "card_of", lambda *a: dict(self.CARD)), mock.patch.object(API, "call", call), \
+                mock.patch.object(LLM, "client", client([[Block(type="text", text="Here it is.")]], seen=seen)):
+            run(go())
+        self.assertEqual([n for n, _ in called][:2], ["read_booking_route", "hold_venue"])   # by code, before any model step
+        self.assertEqual(called[1][1], {"name": "Casa Prueba (test)", "day": "2026-10-30", "time": "21:00", "party": 2})
+        self.assertEqual(len(seen), 1)                                                       # ONE model call: the words
+        self.assertEqual(seen[0]["model"], S.FAST_MODEL)
+        results = [b for m in seen[0]["messages"] if m["role"] == "user" and isinstance(m["content"], list) for b in m["content"]
+                   if isinstance(b, dict) and b.get("type") == "tool_result"]
+        self.assertEqual(len(results), 2)                                                   # with the two results in front of it
+
+    def test_no_plan_the_model_decides_as_before(self):
+        import app.services.llm as LLM
+        from agapi import v0 as API
+        from app.agent.fakes import Block, client
+        API.SEARCH_SLOT.pop(ACCT, None)
+        seen = []
+
+        async def go():
+            tok = API.TAP_PICK.set("PT")
+            try:
+                async for _ in S.turn(ACCT, 'This one: "Casa Prueba (test)"', [], "s299-tap", None, "s2"):
+                    pass
+            finally:
+                API.TAP_PICK.reset(tok)
+        with mock.patch.object(VN, "card_of", lambda *a: dict(self.CARD)), \
+                mock.patch.object(LLM, "client", client([[Block(type="text", text="Which day?")]], seen=seen)):
+            run(go())
+        self.assertNotIn("tool_result", str(seen[0]["messages"]))                           # the model's own first step: nothing ran before it
+
+
 if __name__ == "__main__":
     unittest.main()

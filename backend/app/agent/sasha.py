@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import time
+import types   # Sasha 299 · (4) a Book tap's first step (its calls, in a step's shape)
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -196,6 +197,18 @@ KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + s
 def _fine_print_tools() -> tuple:
     from agapi import s2_fine_print as FP
     return FP.TOOL_NAMES + ("find_subscriptions", "cancel_subscription")   # CR 84 · the subscriptions list card; Sasha 243 · its cancel page
+
+
+class _TapUse:
+    """Sasha 299 · (4) a Book tap's call (agapi.venues.tap_plan) standing in the first model step's place — the shape the turn's loop
+    reads from a step (type, id, name, input; model_dump for the messages), so the SAME loop runs it: every gate, render and line."""
+    type = "tool_use"
+
+    def __init__(self, id: str, name: str, input: dict):
+        self.id, self.name, self.input = id, name, input
+
+    def model_dump(self, exclude_none: bool = True) -> dict:
+        return {"type": "tool_use", "id": self.id, "name": self.name, "input": self.input}
 
 
 def render(tool: str, res: dict, args: dict) -> Optional[dict]:
@@ -883,33 +896,46 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     last_tools: set = set()
     agapi_out = False   # Sasha 261 · an AgAPI outage's line was said this turn
     read_back_said = False   # Sasha 262 · the read-back's one line was said this turn (item 10)
+    # Sasha 299 · (4) (Tyler, 27 Oct) A BOOK TAP RUNS THE ROUTE AND THE HOLD BY CODE: its two calls (venues.tap_plan — only what he
+    # already gave) stand in for the first model step; the model then only writes the words (or nothing, when a code line ends the turn)
+    tap_uses: List[Any] = []
+    if surface == "s2" and not wa and API.TAP_PICK.get():
+        from agapi import venues as _VNt
+        plan = _VNt.tap_plan(account, session, API.TAP_PICK.get())
+        tap_uses = [_TapUse(f"toolu_tap_{turn_key}_{i}", n, a) for i, (n, a) in enumerate(plan or [])]
     for step in range(MAX_STEPS):
         # Sasha 205 · the fast model talks and summarises (incl. a proposal, a total, a booking); the big one only weighs
-        # search results (flights, stays, venues) to choose among them
-        model = MODEL if last_tools & _WEIGH else FAST_MODEL
+        # search results (flights, stays, venues) to choose among them · Sasha 299 · (4) after a tap's calls: only the words — the fast one
+        model = MODEL if last_tools & _WEIGH and not tap_uses else FAST_MODEL
         t_step, ttft = time.perf_counter(), None
-        async with client.messages.stream(model=model, max_tokens=900, system=system_now(), tools=tools, messages=msgs) as s:
-            async for ev in s:
-                if ttft is None and ev.type in ("text", "content_block_start"):
-                    ttft = int((time.perf_counter() - t_step) * 1000)
-                if ev.type == "text":
-                    if first_text_ms is None:
-                        first_text_ms = int((time.perf_counter() - t0) * 1000)
-                    voice["text_started"] = True
-                    raw.append(ev.text)
-                    pending += ev.text
-                    if voice.get("flush_now") and not spoken_any and time.perf_counter() - t0 > SPLIT_AFTER_S:
-                        for e in await flush(only_sentences=True):
+        if step == 0 and tap_uses:
+            for u in tap_uses:
+                yield {"type": "tool_start", "name": u.name}
+            final = types.SimpleNamespace(content=list(tap_uses), usage=None)
+            step_ms.append({"model": "tap", "at": int((t_step - t0) * 1000), "first_token": None, "ms": 0, "cached": None})
+        else:
+            async with client.messages.stream(model=model, max_tokens=900, system=system_now(), tools=tools, messages=msgs) as s:
+                async for ev in s:
+                    if ttft is None and ev.type in ("text", "content_block_start"):
+                        ttft = int((time.perf_counter() - t_step) * 1000)
+                    if ev.type == "text":
+                        if first_text_ms is None:
+                            first_text_ms = int((time.perf_counter() - t0) * 1000)
+                        voice["text_started"] = True
+                        raw.append(ev.text)
+                        pending += ev.text
+                        if voice.get("flush_now") and not spoken_any and time.perf_counter() - t0 > SPLIT_AFTER_S:
+                            for e in await flush(only_sentences=True):
+                                yield e
+                    elif ev.type == "content_block_start" and getattr(ev.content_block, "type", "") == "tool_use":
+                        for e in await flush():
                             yield e
-                elif ev.type == "content_block_start" and getattr(ev.content_block, "type", "") == "tool_use":
-                    for e in await flush():
-                        yield e
-                    yield {"type": "tool_start", "name": ev.content_block.name}
-            final = await s.get_final_message()
-        u_ = getattr(final, "usage", None)
-        _MS.usage(model, u_)   # Sasha 275 · S1 measure: this step's tokens, on the turn (observation only)
-        step_ms.append({"model": model, "at": int((t_step - t0) * 1000), "first_token": ttft, "ms": int((time.perf_counter() - t_step) * 1000),   # 299: + at
-                        "cached": getattr(u_, "cache_read_input_tokens", None)})
+                        yield {"type": "tool_start", "name": ev.content_block.name}
+                final = await s.get_final_message()
+            u_ = getattr(final, "usage", None)
+            _MS.usage(model, u_)   # Sasha 275 · S1 measure: this step's tokens, on the turn (observation only)
+            step_ms.append({"model": model, "at": int((t_step - t0) * 1000), "first_token": ttft, "ms": int((time.perf_counter() - t_step) * 1000),   # 299: + at
+                            "cached": getattr(u_, "cache_read_input_tokens", None)})
         for e in await flush():
             yield e
         msgs.append({"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in final.content]})
@@ -1874,6 +1900,8 @@ async def agent_turn(request: Request):
             VS.TAP.set(tap_session)
         if surface == "s2" and isinstance(body.get("lang"), str):   # Sasha 298 · the page's browser language (her words picked by it)
             API.PAGE_LANG.set(body["lang"][:16])
+        if surface == "s2" and isinstance(body.get("pick"), dict) and body["pick"].get("place_id"):   # Sasha 299 · (4) his Book tap
+            API.TAP_PICK.set(str(body["pick"]["place_id"])[:200])
         if over:   # Sasha 215 · said, in her voice, never a bare 429
             yield f"data: {json.dumps({'type': 'error', 'message': over, 'rule': 'budget'})}\n\n"
             return

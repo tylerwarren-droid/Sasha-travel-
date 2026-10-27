@@ -938,6 +938,7 @@ async def own_whatsapp(ctx, a: dict, rd: dict, res: Optional[dict], at: Optional
     """Sasha 287 · the same card when Kanoe may not send it: their own WhatsApp, prefilled (AgAPI's wa.me link and its button label), in
     her words (voice.OWN_WHATSAPP — AgAPI's line names the channel; `dec` is kept for the record). Never "can't". No link: THE FLOOR (286)."""
     from app.agent import voice as V
+    from agapi import venue_submit as VS
     if not link:
         if dec and dec.get("route") not in (None, "none"):   # Sasha 289 · AgAPI's route with no way to take it (Mano Santa): said, never silent
             log.warning("[venues] %s: AgAPI decided %s/%s (sender %s) with no link to send it — the floor", _API().plain_venue(rd["venue"]),
@@ -949,6 +950,9 @@ async def own_whatsapp(ctx, a: dict, rd: dict, res: Optional[dict], at: Optional
     say = V.OWN_WHATSAPP   # her voice: AgAPI's message line names and limits the channel ("takes booking requests by WhatsApp")
     return {"status": "page_link", "venue": venue, "booked": False, "route": "message", **_link_out(link),
             "button": {"label": V.SEND_ON_WHATSAPP, "link": link}, "page_says": say,   # in the app: said by code (voice.page_line)
+            # Sasha 298 · found live: without `in_app` page_line said nothing and the MODEL said it — splicing the drafted message into
+            # her line ("…they'll reply to you. Would you have space? Thanks.\" It isn't booked…"). In the app: by code, word for word.
+            **({"in_app": True} if VS.TAP.get() is not None else {}),
             "say": say + " Say exactly that — never that it's booked."}
 
 

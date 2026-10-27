@@ -117,5 +117,29 @@ class TheHandOverIsShown(unittest.TestCase):
         self.assertTrue(all(e["kind"] != "handover" for e in got))
 
 
+class HerWhatsAppLineIsCodes(unittest.TestCase):
+    """Found live (Taberna Las Sobrinas): the own-WhatsApp result had no `in_app`, so page_line said nothing and the model said it — with
+    the drafted message spliced in. In the app it is voice.OWN_WHATSAPP, said by code, word for word."""
+
+    def test_said_by_code_in_the_app(self):
+        from app.agent import voice as V
+        tok = VS.TAP.set("s298-tap")
+        try:
+            with mock.patch.object(VN, "note_prepared", mock.AsyncMock()):
+                res = run(VN.own_whatsapp(API.Ctx(account=ACCT, surface="s2"), {"party": 2}, {"venue": "Taberna Prueba (test)"},
+                                          {"how_many": {"count": 2}}, "2026-10-30", None, "https://wa.me/34600000000?text=Hola", None))
+        finally:
+            VS.TAP.reset(tok)
+        self.assertTrue(res["in_app"])
+        self.assertEqual(V.page_line("hold_venue", {"ok": True, "result": res}), V.OWN_WHATSAPP)
+        self.assertEqual(res["button"], {"label": V.SEND_ON_WHATSAPP, "link": "https://wa.me/34600000000?text=Hola"})
+
+    def test_off_the_app_as_before(self):   # WhatsApp's brain / old S1: no in-app tap — unchanged (the model's `say`)
+        with mock.patch.object(VN, "note_prepared", mock.AsyncMock()):
+            res = run(VN.own_whatsapp(API.Ctx(account=ACCT), {"party": 2}, {"venue": "Taberna Prueba (test)"}, None, "2026-10-30", None,
+                                      "https://wa.me/34600000000", None))
+        self.assertNotIn("in_app", res)
+
+
 if __name__ == "__main__":
     unittest.main()

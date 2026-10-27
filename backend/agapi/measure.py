@@ -192,13 +192,19 @@ def turn_start(account: Optional[str], session: Optional[str], surface: str, cha
     t = {"tid": uuid.uuid4().hex[:16], "account": h(account), "session": h(session), "surface": surface,
          "channel": channel if channel in ("voice", "text", "tap", "chip") else "text", "t0": time.perf_counter(), "at": _now(),
          "first_visible_ms": None, "done_ms": None, "error": None, "tools": [], "usage": {}, "places": 0, "searches": 0,
-         "cids": [], "agapi_ops": 0}
+         "cids": [], "agapi_ops": 0, "ops": []}   # Sasha 299 · ops: each AgAPI call's name, start and ms (the turn's timeline)
     _TURN.set(t)
     return t
 
 
 def current() -> Optional[dict]:
     return _TURN.get()
+
+
+def since() -> Optional[int]:
+    """Sasha 299 · ms since this turn began (the timeline's clock), or None outside a turn."""
+    t = _TURN.get()
+    return int((time.perf_counter() - t["t0"]) * 1000) if t is not None else None
 
 
 _VISIBLE = ('"type": "hold"', '"type": "text"', '"type": "replace"', '"type": "render"', '"type": "say"')
@@ -476,6 +482,8 @@ def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional
         t = _TURN.get()
         if t is not None:
             t["agapi_ops"] += 1
+            if len(t.setdefault("ops", [])) < 40:   # Sasha 299 · the timeline: which AgAPI call, when it began, how long (no contents)
+                t["ops"].append({"op": op, "at": int((time.perf_counter() - t["t0"]) * 1000) - ms, "ms": ms})
         if not op.startswith("venue."):
             return
         result = env.get("result") if isinstance(env, dict) and env.get("ok") else None

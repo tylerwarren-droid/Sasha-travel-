@@ -908,7 +908,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             final = await s.get_final_message()
         u_ = getattr(final, "usage", None)
         _MS.usage(model, u_)   # Sasha 275 · S1 measure: this step's tokens, on the turn (observation only)
-        step_ms.append({"model": model, "first_token": ttft, "ms": int((time.perf_counter() - t_step) * 1000),
+        step_ms.append({"model": model, "at": int((t_step - t0) * 1000), "first_token": ttft, "ms": int((time.perf_counter() - t_step) * 1000),   # 299: + at
                         "cached": getattr(u_, "cache_read_input_tokens", None)})
         for e in await flush():
             yield e
@@ -1097,7 +1097,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     if tstate["dropped"]:
         guard_log.append(f"names not on screen dropped: {tstate['dropped']}")
     ms = {"first_text": first_text_ms, "total": int((time.perf_counter() - t0) * 1000), "first_model": FAST_MODEL,
-          "models": sorted({x["model"] for x in step_ms}), "steps": step_ms}
+          "models": sorted({x["model"] for x in step_ms}), "steps": step_ms,
+          "ops": list((_MS.current() or {}).get("ops") or [])}   # Sasha 299 · each AgAPI call: when, how long (observation only)
     log.info("[agent] turn %s ms first-text=%s total=%s tools=%s guard=%s", session, ms["first_text"], ms["total"],
              [c["tool"] for c in ctx.calls], guard_log)
     yield {"type": "done", "text": text, "guard": guard_log, "tools": ctx.calls, "ms": ms}

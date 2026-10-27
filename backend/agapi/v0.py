@@ -1686,7 +1686,10 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
     if ctx.surface == "s2" and res["ok"]:   # CR 76 · a read-back shown is recorded for THE ONE YES RULE
         from agapi import yes_gate as YG
         YG.shown(ctx, name, out)
+    from agapi import measure as _M   # Sasha 299 · the timeline: when this tool began on the turn's clock (observation only)
+    _now_ms = _M.since()
     ctx.calls.append({"tool": name, "ok": res["ok"], "agent": t["agent"], "ms": int((time.perf_counter() - t_call) * 1000),
+                      **({"at": _now_ms - int((time.perf_counter() - t_call) * 1000)} if _now_ms is not None else {}),
                       **({"status": out.get("status")} if isinstance(out, dict) and out.get("status") else {}),
                       **({"code": res["error"]["code"]} if not res["ok"] else {})})
     from agapi import measure as MS   # Sasha 275 · S1 measure — observation only: how far a booking got, and why it stopped

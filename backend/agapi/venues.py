@@ -1851,13 +1851,13 @@ async def _finish(ctx, held: dict, how: Optional[dict] = None) -> dict:
     _HELD.pop(ctx.account, None)
     card = card_of(ctx.account, held.get("place_id"), venue)
     from agapi import s2_outcomes as OC   # CR 87 · every real booking attempt goes in the outcomes ledger (never the person's details)
-    try:
+    try:   # CR 130 · the ledger is written AFTER her answer (OC.booked_later): never a wait on it (8.9 s, La Mi Venta's tap)
         out = await _book_inner(ctx, held, how, venue, rung)
     except Exception as e:
-        await OC.booked(ctx.account, held, venue, area_of(card) if card else None, error=str(getattr(e, "message", "") or type(e).__name__))
+        OC.booked_later(ctx.account, held, venue, area_of(card) if card else None, error=str(getattr(e, "message", "") or type(e).__name__))
         raise
     if out.get("status") != "waiting_for_their_tap":   # Sasha 254 · nothing has gone yet: recorded when it does
-        await OC.booked(ctx.account, held, venue, area_of(card) if card else None, result=out)
+        OC.booked_later(ctx.account, held, venue, area_of(card) if card else None, result=out)
     if out.get("status") == "confirmed" and out.get("line"):   # Sasha 279 · C: a completed booking — the closing line, once, in the
         from booking_signer import live_events as LE           # line both doors say word for word (the email sent and read first)
         done = await LE.completed(ctx.account, f"venue:{held.get('trip_item_id') or held.get('id') or venue}:{held.get('when')}",

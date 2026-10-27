@@ -108,6 +108,30 @@ async def booked(account: str, held: dict, venue: str, city: Optional[str], resu
             start()
 
 
+_LATER: Set["asyncio.Task"] = set()   # CR 130 · ledger writes in flight after her answer (held: a task can't be collected mid-write)
+
+
+def booked_later(account: str, held: dict, venue: str, city: Optional[str], result: Optional[dict] = None, error: Optional[str] = None) -> None:
+    """CR 130 · A RECORD OF WHAT HAPPENED NEVER HOLDS UP THE PERSON'S ANSWER. Sasha 299 (4), La Mi Venta's tap: outcomes.record took 8.9 s
+    and she said nothing until it was back. The answer's path (venues._finish) hands the write here: started now, on this loop, written
+    after — the same booked(), the same once-only bookkeeping. Never raises. (A process restart inside its ~0.2 s loses that one row;
+    the person's answer no longer waits for the ledger.)"""
+    try:
+        t = asyncio.get_running_loop().create_task(booked(account, dict(held), venue, city, result=result, error=error))
+    except RuntimeError:   # no running loop: nothing to write after
+        return
+    _LATER.add(t)
+    t.add_done_callback(_LATER.discard)
+
+
+async def settle(timeout: float = 5.0) -> int:
+    """CR 130 · the ledger writes still in flight, finished (tests; a clean shutdown). → how many were waited for."""
+    pending = list(_LATER)
+    if pending:
+        await asyncio.wait(pending, timeout=timeout)
+    return len(pending)
+
+
 async def basket_booked(account: str, rows: list) -> int:
     """Sasha 249 · basket bookings (a trip's flights and hotels, booked by their provider's API after the payment) go in the ledger
     too (EU 245 §1.16): rung "api", channel "api", sector flight / hotel, the provider's name and the destination city — never the

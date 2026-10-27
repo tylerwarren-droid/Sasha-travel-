@@ -483,7 +483,11 @@ def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional
         if t is not None:
             t["agapi_ops"] += 1
             if len(t.setdefault("ops", [])) < 40:   # Sasha 299 · the timeline: which AgAPI call, when it began, how long (no contents)
-                t["ops"].append({"op": op, "at": int((time.perf_counter() - t["t0"]) * 1000) - ms, "ms": ms})
+                srv = ((env.get("trace") or {}).get("ms") if isinstance(env, dict) and isinstance(env.get("trace"), dict) else None)
+                t["ops"].append({"op": op, "at": int((time.perf_counter() - t["t0"]) * 1000) - ms, "ms": ms,
+                                 # CR 130 · AgAPI's OWN time for it (its envelope's trace.ms): an 8.9 s call is then AgAPI's, or the
+                                 # wire's and this loop's — the 15:12 outcomes.record could not be told apart
+                                 **({"server_ms": int(srv)} if isinstance(srv, (int, float)) else {})})
         if not op.startswith("venue."):
             return
         result = env.get("result") if isinstance(env, dict) and env.get("ok") else None

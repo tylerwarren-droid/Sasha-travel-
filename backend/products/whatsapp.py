@@ -32,7 +32,7 @@ STRICT = os.getenv("SASHA_SPACES", "strict") != "loose"
 _CAMPUS = re.compile(r"^\s*(campus\s*me|campusme|campus)\b", re.I)
 _RELOC = re.compile(r"^\s*(relocation|relocate|relocating|reloc|ex-?01|residencia)\b", re.I)
 _HEALTH = re.compile(r"^\s*(salud|health|sanidad|m[eé]dico\s+en\s+madrid|espa[nñ]a\s*me|espa[nñ]ame|espa[nñ]a)\b", re.I)
-_DILIGENCE = re.compile(r"^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])", re.I)   # CR 15 · AD preview; never "add", "Ad-hoc"
+_DILIGENCE = re.compile(r"^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])", re.I)   # CR 128 · AD's space (its word); never "add", "Ad-hoc"
 _AD_SHORT = re.compile(r"^\s*ad(?![\w'’-])", re.I)
 _ESPANA = re.compile(r"^\s*(espa[nñ]a\s*me|espa[nñ]ame|espa[nñ]a)\b", re.I)   # CR 15 · EspañaMe: the health demo + concepts
 _LATER = re.compile(r"^\s*(later|not now|another time|luego|m[aá]s tarde|despu[eé]s)\s*[.!]?\s*$", re.I)   # CR 30 · kept, set aside
@@ -76,7 +76,7 @@ def typo_keyword(body: str) -> Optional[str]:
     if not w or " " in w or len(w) < 5:
         return None
     for prod, words in (("relocation", ("relocation", "relocate")), ("campus", ("campus", "campusme")),
-                        ("health", ("españa", "espana", "españame"))):
+                        ("health", ("españa", "espana", "españame")), ("diligence", ("diligence",))):
         if any(0 < _lev(w, x) <= (1 if len(x) <= 6 else 2) for x in words):
             return prod
     return None
@@ -376,16 +376,15 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     for prod, rx in (("campus", _CAMPUS), ("relocation", _RELOC), ("health", _HEALTH), ("diligence", _DILIGENCE)):
         if not target and rx.match(body):
             if prod == "diligence" and _AD_SHORT.match(body):
-                from . import diligence as DG
                 rest = _AD_SHORT.sub("", body, count=1).strip(" :,")
-                if sashas_question or (rest and not DG.is_ask(rest)):
-                    continue                                     # bare "ad": alone or "ad check …" only; never over Sasha's question
+                if sashas_question or rest:
+                    continue                                     # "ad" alone only ("ad hoc …" is a word); never over Sasha's question
             target, entering = prod, True
     if not target and not payload:                              # CR 40 · "relocaton", "campsu", "espña": the word, mistyped
         guess = typo_keyword(body)
         if guess:
             target, entering = guess, True
-            body = START_WORD[guess]
+            body = START_WORD.get(guess, guess)
             p["Body"] = body
     if not target and not payload and (not STRICT or asked_last == "health"):   # CR 35 · "find my centre": health's (strict: in it)
         from .health import cita as CI
@@ -518,7 +517,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         rest = rx.sub("", body, count=1).strip(" :,-") if rx else body
         rest = body if rest and not re.match(r"^(me|mode)\b", rest, re.I) else rest   # "campus visits at Yale…": all of it
     ctx = {"account": ch["account_id"], "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "media": media,
-           "early": early or _no_early, "plan_for": plan_for, "espana": bool(entering and _ESPANA.match(body))}
+           "early": early or _no_early, "plan_for": plan_for, "espana": bool(entering and _ESPANA.match(body)),
+           "sid": p.get("MessageSid")}   # CR 128 · AD's space hands the message to AgAPI with Twilio's id (its idempotency key)
     import json as _json
     before = (st["pending"].get("step"), _json.dumps(st["pending"].get("facts"), sort_keys=True, default=str))
     handled = await _module(target).turn(ctx, rest, payload, entering=entering)
@@ -650,6 +650,9 @@ def _last_said(parts: List[str], cap: int = 1500) -> str:
 
 def _welcome_back(product: str, saved: dict) -> str:
     """Resuming: where we were, in one line — the product's last question, said again."""
+    line = getattr(_module(product), "RESUME_LINE", None)
+    if line:                                   # CR 128 · AD's space: its ONE line, every time its word is said
+        return line
     last = (saved.get("last_said") or "").strip()
     return f"{_RESUME_Q[product]} {last}" if last else _RESUME_Q[product]
 

@@ -3,7 +3,7 @@ RelocateMe or EspañaMe. Before this, five places decided it (the WhatsApp produ
 web tab's mode) under three names for EspañaMe ("espana", "health", "españa"), and sasha.turn (/next, /s2, WhatsApp's one brain) did
 not know it at all.
 
-  current_space(account)            → "sasha" | "campus" | "relocation" | "espana" — the one answer, for every surface
+  current_space(account)            → "sasha" | "campus" | "relocation" | "espana" | "diligence" (CR 128) — the one answer
   set_space(account, space, cause)  → the space now (old names accepted: see ALIASES); `cause` says who moved it ("whatsapp", "web",
                                       "s2", "next", …)
 
@@ -24,15 +24,16 @@ from typing import Dict, Optional
 
 log = logging.getLogger("products.space")
 
-SPACES = ("sasha", "campus", "relocation", "espana")
-NAME = {"sasha": "Sasha (travel)", "campus": "CampusMe", "relocation": "RelocateMe", "espana": "EspañaMe"}
+SPACES = ("sasha", "campus", "relocation", "espana", "diligence")   # CR 128 · AD has its word
+NAME = {"sasha": "Sasha (travel)", "campus": "CampusMe", "relocation": "RelocateMe", "espana": "EspañaMe", "diligence": "Applied Diligence"}
 #: every name a space has had anywhere (the products' keys, me3's modes, the WhatsApp words, the web tab's modes) → the one name
-ALIASES = {"sasha": "sasha", "travel": "sasha", "trip": "sasha", "diligence": "sasha", "": "sasha",
+ALIASES = {"sasha": "sasha", "travel": "sasha", "trip": "sasha", "": "sasha",
+           "diligence": "diligence", "applieddiligence": "diligence", "ad": "diligence",
            "campus": "campus", "campusme": "campus",
            "relocation": "relocation", "relocate": "relocation", "relocateme": "relocation", "move": "relocation",
            "espana": "espana", "españa": "espana", "health": "espana", "espaname": "espana", "españame": "espana"}
 #: the one name → the products' own internal key (product_cases.product, the WhatsApp state's pending.product)
-ENGINE = {"campus": "campus", "relocation": "relocation", "espana": "health"}
+ENGINE = {"campus": "campus", "relocation": "relocation", "espana": "health", "diligence": "diligence"}
 _SPACE: Dict[str, dict] = {}   # account → {space, cause, at} — this process's copy (the memory when there's no table)
 
 
@@ -112,8 +113,9 @@ def context_line(rec: dict) -> str:
     s = normalize(rec.get("space"))
     if s == "sasha":
         return ""
-    return (f"\n\nTheir space now: {NAME[s]} (the space they chose). {NAME[s]}'s own steps run in its own tab on the web and by its "
-            f"word on WhatsApp; here, help with whatever they ask. If they want travel again, saying “sasha” brings them back.")
+    where = "by its word on WhatsApp" if s == "diligence" else "in its own tab on the web and by its word on WhatsApp"   # CR 128 · AD: WhatsApp only
+    return (f"\n\nTheir space now: {NAME[s]} (the space they chose). {NAME[s]}'s own steps run {where}; here, help with whatever they "
+            f"ask. If they want travel again, saying “sasha” brings them back.")
 
 
 __all__ = ["SPACES", "NAME", "ALIASES", "normalize", "engine_key", "current_space", "current", "set_space", "from_pending", "asked",

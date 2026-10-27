@@ -1,4 +1,12 @@
-"""CR 15 · Applied Diligence PREVIEW on WhatsApp: "diligence" (or "ad") → "check TotalEnergies in France" → AD's own
+"""CR 128 · "DILIGENCE" — Applied Diligence's SPACE on WhatsApp, entered by its word like "campus", "relocate", "espana" (Tyler, 27 Oct:
+"give me an AD word — diligence"). The word is read in the ONE switch (products/whatsapp.py); on entry, ONE line (LINE); inside, every
+message is handed to AgAPI's ONE inbound op with space: "diligence" (CR 127's door: "link <email>", the 6-digit code, then AD itself —
+AgAPI sends AD's reply from Kanoe's number); "sasha" or another word leaves, as for the others. Outside the space nothing goes to AD.
+
+⚠ RETIRED by CR 128 on WhatsApp: the CR 15 register PREVIEW below ("check TotalEnergies in France" → AD's preview endpoint). Its
+functions and rules are kept (and tested) so the founder can re-home or retire them; the WhatsApp word no longer reaches them.
+
+CR 15 · Applied Diligence PREVIEW: "check TotalEnergies in France" → AD's own
 register lookup (the US tab's endpoint) → the identified register result, its SOURCE, the RETRIEVED date and AD's honest
 SCOPE line, labelled PREVIEW. Nothing is added to what AD returns, nothing is kept beyond the message.
 
@@ -29,10 +37,6 @@ from typing import Optional, Tuple
 
 log = logging.getLogger("products.diligence")
 TIMEOUT_S = 15.0
-
-INTRO = ("Applied Diligence — PREVIEW 🔎 Tell me a company and its country — e.g. “check TotalEnergies in France”, or a "
-         "registration number with its country. I show what the official register returns, with its source and date. "
-         "A preview, not a due-diligence report.")
 
 # country words → ISO 3166-1 alpha-2 (the names people type; the code is what AD's contract takes)
 COUNTRIES = {
@@ -236,29 +240,47 @@ async def lookup(country: str, name: Optional[str], number: Optional[str]) -> st
     return render(j, asked)
 
 
-# ── the skill (CR 10's router: a mode inside the one conversation, no walls) ───────────────────────────────────────────
+# ── the space (CR 128): the word's ONE line, then every message to AgAPI's door ────────────────────────────────────────────
+
+LINE = "Applied Diligence — who should I investigate? (Send 'link <your AD email>' first if this number isn't linked.)"
+RESUME_LINE = LINE   # its word said again (or after another space): the same one line
+CLOSED = ("Applied Diligence on WhatsApp is in a private beta, and this number isn't in it yet — nothing was sent to Applied Diligence. "
+          "Say “sasha” for travel.")
+DOWN = "Applied Diligence couldn't be reached just now — nothing was sent. Try again in a minute, or say “sasha” for travel."
+WHATSAPP_ONLY = "Applied Diligence works on WhatsApp: send “diligence” there."
+_WORD = re.compile(r"(?i)^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])[\s:,-]*")
+
 
 async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optional[bool]:
     pend, out = ctx["st"]["pending"], ctx["out"]
-    t = re.sub(r"(?i)^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])[\s:,]*", "", body or "").strip()   # "ad check …": the mode word off
-    if entering and not t:
-        pend["step"] = "ask"
-        out.text(INTRO)
+    pend["step"] = "ask"                           # in the space until its word or another one leaves it (never "done" by itself)
+    t = _WORD.sub("", body or "", count=1).strip() if entering else (body or "").strip()
+    if not t:
+        out.text(LINE)
         return True
-    got = parse(t) if (entering or is_ask(t)) else None
-    if not got:
-        if entering:
-            pend["step"] = "ask"
-            out.text("A company and its country, please — e.g. “check TotalEnergies in France”.")
-            return True
-        return False                               # not a lookup: Sasha answers it, in the same chat
-    country, name, number = got
-    if will_query(country, name):
-        await ctx["early"](f"Checking {name or number} in the register ({country})…")
-    out.text(await lookup(country, name, number))
-    pend["step"] = "ask"                           # another company? same mode; "sasha" goes back
-    return True
+    number = (ctx.get("ch") or {}).get("number_e164")
+    if not number or ctx.get("frm") == "web":      # the web chat: AD's door is Kanoe's WhatsApp number
+        out.text(WHATSAPP_ONLY)
+        return True
+    from agapi import venue_submit as VS
+    r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence")
+    if r.get("ad") == "closed":
+        out.text(CLOSED)                           # AgAPI never writes to a number outside the beta: said here
+    elif not r.get("ad"):
+        log.error("[diligence] AgAPI didn't take a message in AD's space: %s", r.get("why"))
+        out.text(DOWN)
+    return True                                    # AgAPI sent AD's reply (or its own line) from Kanoe's number
 
+
+def claims(pend: dict, body: str, payload: str, media: list) -> bool:
+    return pend.get("step") == "ask"               # in the space, every message is AD's
+
+
+def context(pend: dict) -> dict:
+    return {"product": "diligence", "city": None, "country": None, "dates": [], "name": None, "line": "[Applied Diligence]"}
+
+
+# ── CR 15's preview helpers (retired from WhatsApp by CR 128; kept: see the module's docstring) ─────────────────────────────
 
 _VERB = re.compile(r"(?i)^\s*(?:please\s+)?(check|look\s*up|lookup|verify|search|who\s+is)\b")
 
@@ -267,11 +289,3 @@ def is_ask(text: str) -> bool:
     """A lookup said as one ('check X in Y', or a registration number) — so "dinner in Spain" is never taken for a company."""
     got = parse(text or "")
     return bool(got) and (bool(_VERB.match(text or "")) or got[2] is not None)
-
-
-def claims(pend: dict, body: str, payload: str, media: list) -> bool:
-    return pend.get("step") == "ask" and is_ask(body)
-
-
-def context(pend: dict) -> dict:
-    return {"product": "diligence", "city": None, "country": None, "dates": [], "name": None, "line": "[AD preview]"}

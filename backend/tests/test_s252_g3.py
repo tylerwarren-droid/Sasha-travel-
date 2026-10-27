@@ -334,11 +334,12 @@ class ProductsSeeNoQuestionAfterABrainTurn(Base):
     def test_a_bare_ad_after_a_brain_turn_is_ad_and_waits_while_sasha_asks(self):
         run(GW.push_payment_question({"account_id": ACCOUNT}, {"id": "pay-1234567890", "read_back_sha256": "b" * 64, "payee": "Casa Lucio",
                                                               "read_back_lines": ["x", "Ask them?"]}))
-        self.say("ad check TotalEnergies in France")
-        self.assertEqual(self.calls, [])                              # Sasha's own question is open: not the AD mode
+        from products import space as SPC
+        self.say("ad")
+        self.assertNotEqual(run(SPC.current_space(ACCOUNT)), "diligence")   # Sasha's own question is open: not AD's space
         self.say("no")                                                # answered → closed
-        self.say("ad check TotalEnergies in France")
-        self.assertEqual(len(self.calls), 1)                          # was: never (the brain's state looked like a question)
+        self.say("ad")
+        self.assertEqual(run(SPC.current_space(ACCOUNT)), "diligence")      # CR 128 · bare "ad" is AD's word (was: never — G12)
 
 
 if __name__ == "__main__":

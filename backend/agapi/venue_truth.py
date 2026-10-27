@@ -29,6 +29,7 @@ ENGINE_OP = "venue.profile"           # CR 89 (agapi v1.6.0, 12 Oct) — was "di
 FAMILY = "venues"
 TTL_S = 24 * 3600
 ENGINE_TIMEOUT_S = 75.0
+from agapi.booking_rules import booking_rules as BR   # CR 129 · platform_of: a channel naming a platform is never "I'll book it"
 from app.agent.voice import ASK_BOOK as ASK_FILL   # Sasha 249 · the one booking question lives in her voice (app/agent/voice.py)
 FILLABLE = ("form", "own_engine", "widget")            # the venue's own booking form / engine: rung 2
 PREPARED = FILLABLE + ("whatsapp",)                    # prepared by venue.prepare_booking: a form to confirm, a WhatsApp to send
@@ -317,7 +318,12 @@ def channel(site: Optional[dict]) -> Optional[dict]:
     if not first:
         return None
     alt = next((k for k in ks if k["kind"] in REQUESTS), None) if first["kind"] in FILLABLE else None
-    return {**first, **({"alternative": alt} if alt else {}), "ask": ASK_FILL if alt else None,
+    # CR 129 · the ONE question ("I'll book it. Want a prefilled form…") follows the route AgAPI DECIDED (venue.profile's decision): only
+    # when Kanoe fills their own form. A platform's widget counted as "fillable" here, so La Mi Venta (CoverManager) heard "I'll book it"
+    # while AgAPI's decision said "you press Book there" (Sasha 298). With no decision kept: never for a channel that names a platform.
+    route = ((site or {}).get("decision") or {}).get("route")
+    fills = route in ("send_form", "ask_then_send") if route else not BR.platform_of(first)
+    return {**first, **({"alternative": alt} if alt else {}), "ask": ASK_FILL if alt and fills else None,
             "confirm": ((site or {}).get("confirm") or {}).get("type"), "has_form": bool((site or {}).get("form"))}
 
 

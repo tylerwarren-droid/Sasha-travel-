@@ -1,5 +1,5 @@
 {
- "version": "booking-rules/2.1 · 2026-10-14",
+ "version": "booking-rules/2.4 · 2026-10-27",
  "vectors": [
   {
    "rule": "R1",
@@ -2529,6 +2529,255 @@
     "say": "no_answer_no_page",
     "say_text": "They didn't pick up again — here's their email so you can reach them yourself.",
     "channel.value": "reservas@example.test"
+   }
+  },
+  {
+   "rule": "check_in",
+   "name": "a booking days away: 3 h after the person sent it",
+   "fn": "check_in_at",
+   "input": {
+    "sent_at": "2026-10-16T10:00:00Z",
+    "booking_at": "2026-10-20T20:00:00Z"
+   },
+   "expect": {
+    "at": "2026-10-16T13:00:00Z"
+   }
+  },
+  {
+   "rule": "check_in",
+   "name": "a booking tonight: halfway there",
+   "fn": "check_in_at",
+   "input": {
+    "sent_at": "2026-10-16T16:00:00Z",
+    "booking_at": "2026-10-16T20:00:00Z"
+   },
+   "expect": {
+    "at": "2026-10-16T18:00:00Z"
+   }
+  },
+  {
+   "rule": "check_in",
+   "name": "a booking 4 h + away, the 3 h mark too close: 2 h before it",
+   "fn": "check_in_at",
+   "input": {
+    "sent_at": "2026-10-16T12:00:00Z",
+    "booking_at": "2026-10-16T19:00:00Z"
+   },
+   "expect": {
+    "at": "2026-10-16T15:00:00Z"
+   }
+  },
+  {
+   "rule": "check_in",
+   "name": "within the hour: no check-in, never after the booking",
+   "fn": "check_in_at",
+   "input": {
+    "sent_at": "2026-10-16T19:20:00Z",
+    "booking_at": "2026-10-16T20:00:00Z"
+   },
+   "expect": {
+    "at": null
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "just sent: the first look 2 minutes after the send",
+   "fn": "watch",
+   "input": {
+    "started_at": "2026-10-17T10:00:00Z",
+    "booking_at": "2026-10-20T19:00:00Z",
+    "state": "sent",
+    "now": "2026-10-17T10:00:30Z"
+   },
+   "expect": {
+    "active": true,
+    "next_at": "2026-10-17T10:02:00Z",
+    "until": "2026-10-18T10:00:00Z"
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "backing off: 3 hours in, the next look is 5 h 20 after the send",
+   "fn": "watch",
+   "input": {
+    "started_at": "2026-10-17T10:00:00Z",
+    "booking_at": "2026-10-20T19:00:00Z",
+    "state": "sent",
+    "now": "2026-10-17T13:00:00Z"
+   },
+   "expect": {
+    "active": true,
+    "next_at": "2026-10-17T15:20:00Z"
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "a booking tonight: never past the booking time",
+   "fn": "watch",
+   "input": {
+    "started_at": "2026-10-17T17:00:00Z",
+    "booking_at": "2026-10-17T19:00:00Z",
+    "state": "sent",
+    "now": "2026-10-17T18:00:00Z"
+   },
+   "expect": {
+    "active": true,
+    "next_at": "2026-10-17T18:20:00Z",
+    "until": "2026-10-17T19:00:00Z"
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "confirmed: no more looking",
+   "fn": "watch",
+   "input": {
+    "started_at": "2026-10-17T10:00:00Z",
+    "booking_at": "2026-10-20T19:00:00Z",
+    "state": "confirmed",
+    "now": "2026-10-17T10:05:00Z"
+   },
+   "expect": {
+    "active": false,
+    "next_at": null
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "24 hours passed: the watch ends",
+   "fn": "watch",
+   "input": {
+    "started_at": "2026-10-17T10:00:00Z",
+    "booking_at": "2026-10-25T19:00:00Z",
+    "state": "sent",
+    "now": "2026-10-18T10:00:01Z"
+   },
+   "expect": {
+    "active": false
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "the search: the platform's domain, the venue's site and its name, a booking word, since the day before",
+   "fn": "search",
+   "input": {
+    "venue": "Dal Cuore",
+    "senders": [
+     "dish.co",
+     "dalcuore.metro.rest"
+    ],
+    "after": "2026-10-17"
+   },
+   "expect": {
+    "gmail": "after:2026/10/16 (from:dalcuore.metro.rest OR from:dish.co OR \"dal cuore\" OR \"cuore\") (reserva OR reservation OR booking OR booked OR confirm OR confirmación OR confirmada OR confirmado OR cita OR appointment OR mesa OR table OR cancel OR modific OR prenotazione OR réservation)",
+    "after": "2026-10-16"
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "never the whole inbox: no sender and no name → no search",
+   "fn": "search",
+   "input": {
+    "venue": "",
+    "senders": [],
+    "after": "2026-10-17"
+   },
+   "expect": {
+    "gmail": null,
+    "outlook": null
+   }
+  },
+  {
+   "rule": "watch",
+   "name": "a branch name: the full name as a phrase AND its distinctive word",
+   "fn": "search",
+   "input": {
+    "venue": "Gaditana Retiro",
+    "senders": [
+     "thefork.com"
+    ],
+    "after": "2026-10-17"
+   },
+   "expect": {
+    "venue_words": [
+     "gaditana retiro",
+     "gaditana"
+    ]
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "CR 129 · a platform's widget on their OWN page (its name says the platform) → hand over, never 'I'll book it'",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "widget",
+       "value": "CoverManager booking widget",
+       "url": "https://www.lamiventa.com/reserva-2/",
+       "host": "www.lamiventa.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-27T10:00:00Z",
+     "booking_at": "2026-10-30T20:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "say": "platform",
+    "!say": "ask_book",
+    "say_text": "They book on CoverManager: their page is ready for you — you press Book there. I never book on a platform for you."
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "CR 129 · a 'form' on their own host whose link is the platform's → hand over",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "form",
+       "value": "https://www.covermanager.com/reservation/module_restaurant/x/spanish",
+       "host": "www.lamiventa.com"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-10-27T10:00:00Z",
+     "booking_at": "2026-10-30T20:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on",
+      "real_venue_sends": "on"
+     },
+     "preference": "handle"
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_form_zero_touch"
    }
   }
  ]

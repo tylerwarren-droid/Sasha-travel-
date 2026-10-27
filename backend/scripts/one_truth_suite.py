@@ -266,6 +266,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T75": ("A vague restaurant ask hears ONE question first (Something special · Good value · Takeaway / delivery), once a session, never when "
             "they already said it; each answer is AgAPI's own input (recognition first · its value ranking · its intent) (Sasha 297)",
             ["tests.test_s297"]),
+    "T76": ("A booking's hand-over button always reaches the screen (her 'tap the button' is never said over none); 297's question is in "
+            "Spanish when the page is (Sasha 298)",
+            ["tests.test_s298"]),
 }
 
 _RUNNER = """

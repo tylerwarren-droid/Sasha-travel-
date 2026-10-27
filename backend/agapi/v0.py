@@ -25,6 +25,7 @@ import logging
 import re
 import time
 from pathlib import Path
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -32,6 +33,10 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 log = logging.getLogger("agapi.v0")
 VERSION = "v0"
 from booking_signer import fx as _FX   # noqa: E402 · Sasha 249 · ONE RATE (fx.py, dated) for every conversion into euros
+
+
+#: Sasha 298 · the /s2 page's browser language for this turn (set by the turn route from its body's `lang`; "" elsewhere)
+PAGE_LANG: ContextVar[str] = ContextVar("PAGE_LANG", default="")
 
 
 @dataclass
@@ -49,6 +54,7 @@ class Ctx:
     act_said: Optional[str] = None     # CR 76 · /s2: the person's words this turn, as the act was called
     space: str = "sasha"               # Sasha 249 · the account's space (products/space.py), read at the start of sasha.turn
     via: str = "page"                  # Sasha 276 · "wa" when WhatsApp's brain runs as s2 (its list cards keep find's shape until 277)
+    lang: str = field(default_factory=lambda: PAGE_LANG.get())   # Sasha 298 · the page's browser language (its turn body's `lang`)
 
 
 class ToolError(Exception):
@@ -617,7 +623,8 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
     if kind.get("hold"):
         await PK.hold(ctx.account, ctx.session, kind["hold"])
     if kind["ask"]:
-        return {"kind_ask": {"ask": V.KIND_ASK, "choices": list(V.KIND_CHOICES)}, "venues": [], "say": V.KIND_ASK,
+        ask, choices = V.kind_ask(ctx.lang)   # Sasha 298 · in the page's language, picked like "Aquí sigo."
+        return {"kind_ask": {"ask": ask, "choices": list(choices)}, "venues": [], "say": ask,
                 "how": ("Your one question is on their screen and said for you already: say nothing more this turn. When they answer — "
                         "a tap or their own words — call search_venues again with the same what and where; their answer is read from "
                         "their words. Never ask it again yourself.")}

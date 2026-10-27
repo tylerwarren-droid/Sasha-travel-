@@ -72,6 +72,15 @@ const bookedLine = (ev: Ev): string | null =>
   ev?.status && ['booked', 'partly_booked'].includes(String(ev.status.state)) && ev.status.line ? String(ev.status.line) : null
 type Item = { kind: string; state: string; check: 'green' | 'red' | 'amber'; line: string; at: string; ref: string; about?: string; proof?: { reference?: string } }
 
+/** Sasha 298 · THE HAND-OVER CARD says what its one tap does (found live: "Finish it on their page" over "Send on WhatsApp"): their own
+ *  WhatsApp (a wa.me link — the message written, he presses send) or their page (he presses Book there). From where the button goes. */
+const handoverWords = (url: string): { h: string; next: string } => (/^https:\/\/wa\.me\//.test(url)
+  ? { h: 'Send it from your WhatsApp', next: 'Opens your WhatsApp with the message written — you press send. They reply to you there.' }
+  : { h: 'Finish it on their page', next: 'Opens their page with your details — you press Book there. Nothing is sent until you do.' })
+
+/** Sasha 298 · the browser's language, sent with each turn: her server-said words are picked by it (as "Aquí sigo." is here). */
+const pageLang = (): string => { try { return navigator.language || 'en' } catch { return 'en' } }
+
 /** Sasha 297 · "WHAT KIND OF PLACE?" — her question is her own line above (said and shown by the server, voice.KIND_ASK); these are its
  *  three answers (voice.KIND_CHOICES). A tap sends its words as his message — the same as saying them; tapped once, they go. */
 function KindAsk({ choices, send }: { choices: string[]; send: (t: string) => void }) {
@@ -461,9 +470,10 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
   if (c.k === 'keep_capture') return <KeepCapture what={c.what} />
   if (c.k === 'wa_open') return <WaOpen c={c} />
   if (c.k === 'handover') return (   // Sasha 236 · as /next's onHandover: our Tap to finish in a sheet over her; a platform's page in their browser
-    <Box k="One tap left" h="Finish it on their page">
+    <Box k="One tap left" h={handoverWords(c.url).h}>
       <button type="button" onClick={() => { if (c.external) window.open(c.url, '_blank', 'noopener'); else window.dispatchEvent(new CustomEvent('s2-handover', { detail: c.url })) }}
         style={{ marginTop: 6, padding: '10px 18px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700 }}>{untag(c.label || 'Tap to finish')}</button>
+      <div data-handover-next style={{ fontSize: 13, color: C.dim, marginTop: 6 }}>{handoverWords(c.url).next}</div>
       {(c.alts || []).map(x => (   /* Sasha 286 · the floor: the listing's WhatsApp / number beside their website */
         <a key={x.link} href={x.link} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, marginLeft: 8, padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 700, textDecoration: 'none' }}>{untag(x.label)}</a>))}
     </Box>)
@@ -792,7 +802,7 @@ export default function S2App() {
     try {
       arm()
       const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
-        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, channel: m.channel, ...(pick ? { pick } : {}), ...(tap ? { tap } : {}), ...(said1 && !leaving ? { said_first: said1 } : {}) }) })   // Sasha 265 · the card's tap
+        body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, channel: m.channel, lang: pageLang(), ...(pick ? { pick } : {}), ...(tap ? { tap } : {}), ...(said1 && !leaving ? { said_first: said1 } : {}) }) })   // Sasha 265 · the card's tap
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const rd = r.body?.getReader()
       const dec = new TextDecoder()

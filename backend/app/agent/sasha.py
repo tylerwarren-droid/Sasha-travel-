@@ -991,7 +991,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 if ev and ev.get("focus") and ev["focus"] in {c.get("place_id") for c in tstate["cards"]}:
                     # a PICK from the cards on screen: the cards stay, the picked one is highlighted (never the others removed)
                     tstate["focus"] = ev["focus"]
-                    ev = {"type": "render", "kind": "focus", "focus": ev["focus"]}
+                    if ev.get("kind") == "venues":
+                        ev = {"type": "render", "kind": "focus", "focus": ev["focus"]}
+                    else:   # Sasha 298 · a card of its own (a hand-over's button — their WhatsApp, their page): highlighted AND shown.
+                        # Found live: it was swallowed into the highlight, and she said "Tap the button" over a screen with none.
+                        yield {"type": "render", "kind": "focus", "focus": ev["focus"], "turn": turn_key}
                 elif ev:
                     names = _card_names(ev)
                     if names:   # this turn's results REPLACE the screen (never shown beside older ones)
@@ -1825,6 +1829,8 @@ async def agent_turn(request: Request):
         if tap_session and remembers:   # Sasha 258 · /s2 and /next (parity): their yes is in_app_tap. Old S1 (parity off): unchanged
             from agapi import venue_submit as VS
             VS.TAP.set(tap_session)
+        if surface == "s2" and isinstance(body.get("lang"), str):   # Sasha 298 · the page's browser language (her words picked by it)
+            API.PAGE_LANG.set(body["lang"][:16])
         if over:   # Sasha 215 · said, in her voice, never a bare 429
             yield f"data: {json.dumps({'type': 'error', 'message': over, 'rule': 'budget'})}\n\n"
             return

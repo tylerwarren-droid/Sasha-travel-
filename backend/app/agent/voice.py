@@ -617,7 +617,7 @@ def discover_line(tool: str, r: dict) -> str:
     once, with its cards; the turn ends on it. The words are AgAPI's: nothing here composes them."""
     res = (r or {}).get("result") if (r or {}).get("ok") else None
     if tool == "search_venues" and isinstance(res, dict) and isinstance(res.get("kind_ask"), dict):   # Sasha 297 · her ONE question
-        return KIND_ASK
+        return str(res["kind_ask"].get("ask") or KIND_ASK)   # Sasha 298 · in the page's language (kind_ask)
     if tool != "search_venues" or not isinstance(res, dict) or not isinstance(res.get("discover"), dict):
         return ""
     return str(res.get("say") or "").strip()
@@ -628,6 +628,14 @@ def discover_line(tool: str, r: dict) -> str:
 # spoken and on screen, with these three taps (answerable by voice too). Each answer is passed to AgAPI's own ranking — never a list here.
 KIND_ASK = "Something special, good value, or takeaway?"
 KIND_CHOICES = ("Something special", "Good value", "Takeaway / delivery")
+# Sasha 298 · Spanish, picked like "Aquí sigo." (the page's browser language, sent with each turn)
+KIND_ASK_ES = "¿Algo especial, buena relación calidad-precio o para llevar?"
+KIND_CHOICES_ES = ("Algo especial", "Buena relación calidad-precio", "Para llevar / a domicilio")
+
+
+def kind_ask(lang: Optional[str] = None) -> Tuple[str, Tuple[str, ...]]:
+    """Her one question and its three answers, in the page's language: Spanish for es-*, else English."""
+    return (KIND_ASK_ES, KIND_CHOICES_ES) if str(lang or "").lower().startswith("es") else (KIND_ASK, KIND_CHOICES)
 
 
 def progress_line(tool: Optional[str], account: str = "") -> str:
@@ -859,7 +867,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
            "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
-           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "KIND_ASK_ES", "KIND_CHOICES_ES", "kind_ask", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",

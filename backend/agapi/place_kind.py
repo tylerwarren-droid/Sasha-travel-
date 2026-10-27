@@ -25,15 +25,22 @@ KINDS = ("special", "value", "takeaway", "delivery")
 #: read in its ONE place (v0.intent_of, Sasha 291) and passed in.
 SAID = (
     ("value", re.compile(r"(?i)\b(?:cheap(?:er|est)?|budget|good value|value for money|affordable|inexpensive|not too expensive|"
-                         r"bib|barat[oa]s?|econ[oó]mic[oa]s?|men[uú] del d[ií]a)\b")),
+                         r"bib|barat[oa]s?|econ[oó]mic[oa]s?|men[uú] del d[ií]a|(?:buena relaci[oó]n )?calidad[- ]precio)\b")),
     ("special", re.compile(r"(?i)\b(?:something special|special (?:occasion|night|dinner|meal)|michelin|starred|\d\s*stars?|fine[- ]dining|"
-                           r"fancy|upscale|high[- ]end|tasting menu|gastronomic|haute cuisine|celebrat\w*|anniversary)\b")),
+                           r"fancy|upscale|high[- ]end|tasting menu|gastronomic|haute cuisine|celebrat\w*|anniversary|"
+                           r"algo especial|alta cocina|con estrellas?|estrellas? michelin|ocasi[oó]n especial|aniversario|celebra\w*|"
+                           r"men[uú] degustaci[oó]n)\b")),
 )
 #: a dining ask with nothing more in it: every word of the search's `what` is one of these, and one names a meal or a restaurant
 _GENERIC = {"a", "an", "the", "some", "somewhere", "something", "place", "places", "spot", "good", "nice", "great", "decent", "lovely",
             "best", "local", "new", "to", "for", "of", "out", "eat", "dine", "dining", "food", "bite", "meal", "restaurant", "restaurants",
-            "dinner", "lunch", "brunch", "breakfast", "supper", "table", "tonight", "today", "tomorrow", "go", "get"}
-_MEAL = {"eat", "dine", "dining", "food", "meal", "restaurant", "restaurants", "dinner", "lunch", "brunch", "breakfast", "supper", "table"}
+            "dinner", "lunch", "brunch", "breakfast", "supper", "table", "tonight", "today", "tomorrow", "go", "get",
+            # Sasha 298 · the same, in Spanish
+            "un", "una", "unos", "algo", "algún", "alguno", "sitio", "sitios", "lugar", "bueno", "buen", "buena", "para", "de", "donde",
+            "comer", "cenar", "almorzar", "comida", "cena", "almuerzo", "desayuno", "mesa", "restaurante", "restaurantes", "esta",
+            "noche", "hoy", "mañana", "salir"}
+_MEAL = {"eat", "dine", "dining", "food", "meal", "restaurant", "restaurants", "dinner", "lunch", "brunch", "breakfast", "supper", "table",
+         "comer", "cenar", "almorzar", "comida", "cena", "almuerzo", "desayuno", "mesa", "restaurante", "restaurantes"}
 #: what settles it without asking: they said what they want to do (eat right now) — or the kind itself
 SETTLED_INTENTS = ("takeaway", "delivery", "eat_now")
 
@@ -42,7 +49,8 @@ def tap_kind(said: Optional[str]) -> Optional[str]:
     """Their tap on one of her three answers (its words exactly, voice.KIND_CHOICES) → its kind; "Takeaway / delivery" is takeaway."""
     from app.agent import voice as V
     t = str(said or "").strip().rstrip(".!").lower()
-    return next((k for c, k in zip(V.KIND_CHOICES, ("special", "value", "takeaway")) if c.lower() == t), None)
+    return next((k for labels in (V.KIND_CHOICES, V.KIND_CHOICES_ES)   # Sasha 298 · either language's taps
+                 for c, k in zip(labels, ("special", "value", "takeaway")) if c.lower() == t), None)
 
 
 def said_kind(said: Optional[str]) -> Optional[str]:

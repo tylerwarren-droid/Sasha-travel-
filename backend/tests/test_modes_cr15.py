@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 from unittest import mock
 
 from booking_signer import guest_whatsapp as GW
@@ -30,7 +31,7 @@ class Base(TG.Base):
         super().setUp()
         self.saved = (ST.STORE, DG.HTTP)
         ST.STORE = ST.MemoryCaseStore()
-        self.calls, self.answer = [], (200, LIVE)
+        self.calls, self.answer, self.looked = [], (200, LIVE), []
 
         async def http(url, key, body):
             self.calls.append((url, body))
@@ -48,7 +49,17 @@ class Base(TG.Base):
         super().tearDown()
 
     def said(self):
-        return "\n".join(self.bodies() + [b for b, _ in GW.SENDER.contents])
+        return "\n".join(self.bodies() + [b for b, _ in GW.SENDER.contents] + self.looked)
+
+    def look(self, text):
+        """CR 128 · the preview is no longer reached by the WhatsApp word (AD's door is): its rules are tested on its helpers."""
+        t = re.sub(r"(?i)^\s*ad\s+", "", text)
+        got = DG.parse(t)
+        self.looked.append(run(DG.lookup(*got)) if got else "")
+        return self.looked[-1]
+
+    def last(self):
+        return self.looked[-1]
 
 
 class Words(Base):
@@ -104,13 +115,10 @@ class Words(Base):
 
 class Diligence(Base):
     def test_check_totalenergies_in_france(self):
-        self.say("diligence")
-        self.assertIn("Applied Diligence — PREVIEW 🔎", self.bodies()[-1])
-        self.say("check TotalEnergies in France")
+        r = self.look("check TotalEnergies in France")
         (url, body), = self.calls
         self.assertEqual((url, body), ("https://ad.test/api/preview/register",
                                        {"country": "FR", "name": "TotalEnergies", "registration_number": None}))
-        r = self.bodies()[-1]
         lines = r.split("\n")
         self.assertEqual(lines[0], "🔎 *Applied Diligence — PREVIEW*")
         self.assertTrue(lines[1].startswith("Scope: This preview identifies the company"))   # never the casualty of a cut
@@ -119,65 +127,56 @@ class Diligence(Base):
         self.assertIn("Standing: not shown — SIRENE publishes establishment and activity data", r)
         self.assertIn("Source: INSEE SIRENE — https://api.insee.fr/entreprises/sirene", r)
         self.assertIn("Read from the register: 7 Oct 2026, 09:14 UTC", r)
-        self.say("check BNP Paribas in France")                               # same mode, another company
-        self.assertEqual(len(self.calls), 2)
 
     def test_ad_one_shot_and_a_registration_number(self):
-        self.say("ad SIREN 542051180 in France")
+        self.look("ad SIREN 542051180 in France")
         self.assertEqual(self.calls[0][1], {"country": "FR", "name": None, "registration_number": "542051180"})
 
     def test_the_netherlands_is_never_asked(self):
-        self.say("ad check Shell in the Netherlands")
+        self.look("ad check Shell in the Netherlands")
         self.assertEqual(self.calls, [])
-        self.assertIn("the Dutch company register's terms don't allow passing on its records", self.bodies()[-1])
+        self.assertIn("the Dutch company register's terms don't allow passing on its records", self.last())
         self.assertNotIn("Checking", self.said())                              # never "checking" before a refusal
 
     def test_people_are_never_looked_up(self):
-        self.say("ad check Mr Patrick Pouyanné in France")
+        self.look("ad check Mr Patrick Pouyanné in France")
         self.assertEqual(self.calls, [])
-        self.assertIn("companies only — not people", self.bodies()[-1])
+        self.assertIn("companies only — not people", self.last())
 
     def test_ambiguous_unreachable_not_found_are_three_different_things(self):
         self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None,
                              "candidates": [{"legal_name": "TOTAL SA", "registration_number": "1"}]})
-        self.say("ad check Total in France")
-        self.assertIn("possible matches, not confirmed", self.bodies()[-1])
+        self.look("ad check Total in France")
+        self.assertIn("possible matches, not confirmed", self.last())
         self.answer = (200, {**LIVE, "status": "not_found", "entity": None})
-        self.say("check Nowhere Ltd in France")
-        self.assertIn("The register's own answer: no company matching", self.bodies()[-1])
+        self.look("check Nowhere Ltd in France")
+        self.assertIn("The register's own answer: no company matching", self.last())
         self.answer = TimeoutError()
-        self.say("check TotalEnergies in France")
-        self.assertIn("couldn't be reached just now — nothing was checked", self.bodies()[-1])
+        self.look("check TotalEnergies in France")
+        self.assertIn("couldn't be reached just now — nothing was checked", self.last())
         self.answer = (200, {**LIVE, "status": "uncovered_preview", "entity": None})
-        self.say("check Foo in France")
-        self.assertIn("isn't certified for sale — so no result is shown", self.bodies()[-1])
-
-    def test_a_dinner_while_diligence_is_open_is_sashas(self):
-        TG.stand_in_brain(self)   # Sasha 253 · item 5: Sasha's is the one brain
-        self.say("diligence")
-        self.say("dinner in Spain for 2 tomorrow at 21:00")
-        self.assertEqual(self.calls, [])
-        self.assertEqual(self.brain_saw, ["dinner in Spain for 2 tomorrow at 21:00"])
+        self.look("check Foo in France")
+        self.assertIn("isn't certified for sale — so no result is shown", self.last())
 
     def test_not_connected_says_so_and_the_sample_is_labelled(self):
         os.environ["AD_PREVIEW_URL"] = ""
-        self.say("ad check TotalEnergies in France")
-        self.assertIn("isn't connected here yet, so nothing was checked", self.bodies()[-1])
+        self.look("ad check TotalEnergies in France")
+        self.assertIn("isn't connected here yet, so nothing was checked", self.last())
         os.environ["AD_PREVIEW_SAMPLE"] = "1"
-        self.say("check TotalEnergies in France")
-        r = self.bodies()[-1]
+        self.look("check TotalEnergies in France")
+        r = self.last()
         self.assertIn("SAMPLE (a fixed example response, not a live register lookup)", r)
         self.assertIn("Read from the register: — (sample, not read live)", r)
-        self.say("check BNP Paribas in France")                               # the sample is about ONE company only
-        self.assertIn("isn't connected here yet", self.bodies()[-1])
+        self.look("check BNP Paribas in France")                               # the sample is about ONE company only
+        self.assertIn("isn't connected here yet", self.last())
         self.assertEqual(self.calls, [])
 
 
 class V2Shape(Base):
     def test_active_is_the_registers_word_never_a_standing(self):
         self.answer = (200, V2)
-        self.say("ad check TotalEnergies in France")
-        r = self.bodies()[-1]
+        self.look("ad check TotalEnergies in France")
+        r = self.last()
         self.assertIn("Register status (its own words): Active", r)
         self.assertIn("Standing: not shown — this register doesn't publish insolvency or winding-up", r)
         self.assertNotIn("Standing: active", r)
@@ -185,13 +184,13 @@ class V2Shape(Base):
 
     def test_a_sole_trader_is_a_person_never_shown(self):
         self.answer = (200, {**V2, "entity": {**V2["entity"], "legal_category": "1000", "legal_name": "JEAN DUPONT"}})
-        self.say("ad check Dupont Plomberie in France")
-        self.assertIn("a sole trader — a person, not a company", self.bodies()[-1])
-        self.assertNotIn("JEAN DUPONT", self.bodies()[-1])
+        self.look("ad check Dupont Plomberie in France")
+        self.assertIn("a sole trader — a person, not a company", self.last())
+        self.assertNotIn("JEAN DUPONT", self.last())
 
     def test_malta_and_austria_refused_locally_too(self):
-        self.say("ad check Foo Ltd in Malta")
-        self.say("check Bar GmbH in Austria")
+        self.look("ad check Foo Ltd in Malta")
+        self.look("check Bar GmbH in Austria")
         self.assertEqual(self.calls, [])
 
     def test_three_coverage_statuses_three_sentences(self):
@@ -199,8 +198,8 @@ class V2Shape(Base):
                           ("uncovered_preview", "isn't certified for sale"),
                           ("not_in_preview", "hasn't established that its licence allows passing its records on")):
             self.answer = (200, {**V2, "status": st, "entity": None})
-            self.say("ad check Foo in France")
-            self.assertIn(words, self.bodies()[-1], st)
+            self.look("ad check Foo in France")
+            self.assertIn(words, self.last(), st)
 
 
 class AdIsOnlyAWholeWord(Base):
@@ -219,19 +218,19 @@ class AdIsOnlyAWholeWord(Base):
 class CapAndPerson(Base):
     def test_the_daily_cap_and_a_person_refused_by_ad(self):
         self.answer = (429, {"error": "rate_limited"})
-        self.say("ad check TotalEnergies in France")
-        self.assertIn("today's preview limit is reached", self.bodies()[-1])
+        self.look("ad check TotalEnergies in France")
+        self.assertIn("today's preview limit is reached", self.last())
         self.answer = (400, {"error": "person_not_supported", "message": "companies only"})
-        self.say("check Jean Dupont Plomberie in France")
-        self.assertIn("checks companies only — not people", self.bodies()[-1])
-        self.assertNotIn("no company matching", self.bodies()[-1])
+        self.look("check Jean Dupont Plomberie in France")
+        self.assertIn("checks companies only — not people", self.last())
+        self.assertNotIn("no company matching", self.last())
 
 
 class SireneInconsistent(Base):
     def test_sirene_standing_claimed_expressible_is_said_inconsistent_not_corrected(self):
         self.answer = (200, {**LIVE, "standing": {"value": "active", "expressible": True, "because": "x"}})
-        self.say("ad check TotalEnergies in France")
-        r = self.bodies()[-1]
+        self.look("ad check TotalEnergies in France")
+        r = self.last()
         self.assertIn("Standing: not shown — the register's capability could not be established for this answer.", r)
         self.assertNotIn("Standing: active", r)
 
@@ -239,8 +238,8 @@ class SireneInconsistent(Base):
 class NotAttributable(Base):
     def test_a_record_without_its_attribution_date_is_not_shown(self):
         self.answer = (200, {**LIVE, "status": "not_attributable", "entity": None})
-        self.say("ad check TotalEnergies in France")
-        r = self.bodies()[-1]
+        self.look("ad check TotalEnergies in France")
+        r = self.last()
         self.assertIn("didn't say when its information was last updated", r)
         self.assertNotIn("hasn't established that its licence", r)
 
@@ -284,19 +283,19 @@ class Truncated(Base):
     def test_a_short_list_is_never_the_whole_register(self):
         self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": 221, "candidates_shown": 5,
                              "candidates": [{"legal_name": f"TOTALENERGIES {i}", "registration_number": str(i)} for i in range(5)]})
-        self.say("ad check TotalEnergies in France")
+        self.look("ad check TotalEnergies in France")
         self.assertIn("Showing 5 of 221 names the register matched. This list is not complete, and a name that does not "
-                      "appear here has not been ruled out", self.bodies()[-1])
+                      "appear here has not been ruled out", self.last())
         self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": None, "candidates_shown": 2,
                              "candidates": [{"legal_name": "A", "registration_number": "1"}, {"legal_name": "B", "registration_number": "2"}]})
-        self.say("check Foo in France")
+        self.look("check Foo in France")
         self.assertIn("Showing 2 names; the register did not say how many it matched. This list may not be complete, and a name "
                       "that does not appear here has not been ruled out — narrow the search or give a registration number.",
-                      self.bodies()[-1])                                          # byte-identical to AD's own sentence
+                      self.last())                                          # byte-identical to AD's own sentence
         self.answer = (200, {**LIVE, "status": "ambiguous", "entity": None, "candidate_count": 2, "candidates_shown": 2,
                              "candidates": [{"legal_name": "A", "registration_number": "1"}, {"legal_name": "B", "registration_number": "2"}]})
-        self.say("check Bar in France")
-        self.assertNotIn("Showing", self.bodies()[-1])
+        self.look("check Bar in France")
+        self.assertNotIn("Showing", self.last())
 
     def test_one_name_and_none(self):
         from products import diligence as DG
@@ -308,7 +307,7 @@ class Truncated(Base):
 class MachineryFailure(Base):
     def test_unrecorded_is_never_a_finding(self):
         self.answer = (503, {"error": "unrecorded", "message": "the dispatch decision was not recorded"})
-        self.say("ad check TotalEnergies in France")
-        r = self.bodies()[-1]
+        self.look("ad check TotalEnergies in France")
+        r = self.last()
         self.assertIn("the check could not be run right now — nothing was checked", r)
         self.assertNotRegex(r, r"(?i)no company|not found|matches|identified|unrecorded")

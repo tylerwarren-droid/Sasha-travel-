@@ -893,10 +893,11 @@ async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card
             out["how"] = "Say `say` exactly — never that it's booked."
             return out
     from app.agent import voice as V
+    from agapi import itinerary as IT
     if not link:   # Sasha 286 · nothing of AgAPI's to hand over: THE FLOOR (never "send me their link")
         return await floor_out(ctx, a, rd, res, card, None, at)
     await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], res["how_many"]["count"], link,
-                        platform=dec.get("channel") if dec.get("route") == "platform" else None, place_id=rd.get("place_id"))
+                        platform=IT.platform_name(dec.get("channel"), (dec.get("button") or {}).get("label")), place_id=rd.get("place_id"))
     return {"status": "page_link", "venue": venue, "booked": False, "route": dec["route"], **_link_out(link),
             "button": {"label": V.OPEN_THEIR_PAGE if refused else (dec.get("button") or {}).get("label"), "link": link},
             # Sasha 284b (live, Boys Don't Cry — a quote, no slot): nothing was prepared here, so neither AgAPI's words ("I've written it")
@@ -1931,8 +1932,10 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         except Exception as e:
             log.warning("[venues] the prepared page was not sent to the phone: %s", type(e).__name__)
         # Sasha 254 · ONE TRUTH: "It's in your bookings" is true only because it IS — get_status reads this record
+        from agapi import itinerary as IT   # Sasha 300 · the platform it is on, when the decision names one (its channel or its button)
+        dec = ((held.get("follow") or {}).get("decision")) or {}
         await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"), place_id=held.get("place_id"),
-                            platform=held.get("channel_name"))   # Sasha 300 · the itinerary says it as a platform only when it is one
+                            platform=IT.platform_name(held.get("channel_name"), dec.get("channel"), (dec.get("button") or {}).get("label")))
         from app.agent import voice as V
         from agapi import venue_submit as VS
         # Sasha 264 · item 2 (Tyler's spa, 14 Oct): AgAPI gave no filled page — their own page opened EMPTY and she said "Done — it's

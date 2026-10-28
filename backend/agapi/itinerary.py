@@ -22,8 +22,9 @@ from urllib.parse import quote, urlsplit
 log = logging.getLogger("agapi.itinerary")
 
 # ── the route a booking went by, and its words (one owner) ─────────────────────────────────────────────────────────────────
-ROUTE_WORDS = {"email": "by email", "kanoe_whatsapp": "on WhatsApp, from Kanoe", "your_whatsapp": "from your WhatsApp",
-               "platform": "on {platform}", "their_page": "on their own page", "call": "by phone", "form": "on their booking form"}
+#: never a channel's name (her voice, Sasha 249: the model reads these too) — the platform's name is only its button's label, never said
+ROUTE_WORDS = {"email": "by email", "kanoe_whatsapp": "by message, from Kanoe", "your_whatsapp": "from your own phone",
+               "platform": "on their booking platform", "their_page": "on their own page", "call": "by phone", "form": "on their booking form"}
 #: how a change / cancellation / running late goes, per route — the booking's OWN route, never another
 #:   message      AgAPI writes and sends it on the act's own channel (venue.change_booking / venue.cancel_booking), on his yes
 #:   call         AgAPI's call act (the same op, route call), on his yes
@@ -53,7 +54,7 @@ def words(status: str, route: Optional[str] = None) -> str:
 
 
 def route_words(route: str, platform: Optional[str] = None) -> str:
-    return ROUTE_WORDS.get(route, "").format(platform=platform or "their booking platform")
+    return ROUTE_WORDS.get(route, "")
 
 
 def map_url(name: Optional[str], place_id: Optional[str]) -> Optional[str]:
@@ -89,9 +90,24 @@ def handover_route(r: dict) -> str:
     return "their_page"
 
 
+#: the platforms as the person reads them (a decision's channel or its button may say "CoverManager booking widget", "Book on TheFork")
+_PLATFORM_NAMES = {"covermanager": "CoverManager", "thefork": "TheFork", "eltenedor": "ElTenedor", "opentable": "OpenTable", "resy": "Resy",
+                   "sevenrooms": "SevenRooms", "quandoo": "Quandoo", "bookatable": "Bookatable", "restoo": "Restoo", "fresha": "Fresha",
+                   "treatwell": "Treatwell", "booksy": "Booksy"}
+
+
+def platform_name(*said: Any) -> Optional[str]:
+    """The first of these words that names a booking platform, as the person reads it — else None."""
+    for x in said:
+        n = re.sub(r"[^a-z]", "", str(x or "").lower())
+        hit = next((v for k, v in _PLATFORM_NAMES.items() if n and k in n), None)
+        if hit:
+            return hit
+    return None
+
+
 def is_platform(name: Any) -> bool:
-    n = re.sub(r"[^a-z]", "", str(name or "").lower())
-    return bool(n) and any(re.sub(r"[^a-z]", "", h.split(".")[0]) == n for h in _PLATFORM_HOSTS)
+    return platform_name(name) is not None
 
 
 def act_route(a: dict) -> str:
@@ -153,8 +169,7 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
                     "status": "booked_by_you" if booked else "handed_over", "venue": h.get("venue"), "date": h.get("date") or None,
                     "time": h.get("time") or None, "party": h.get("party") or None, "type": "restaurant",
                     **({"url": h["url"]} if h.get("url") else {}), **({"link_id": h["link_id"]} if h.get("link_id") else {}),
-                    **({"platform": (h["platform"] if is_platform(h.get("platform")) else None) or _platform(str(h.get("url") or ""))}
-                       if route == "platform" else {}),
+                    **({"platform": platform_name(h.get("platform")) or _platform(str(h.get("url") or ""))} if route == "platform" else {}),
                     **({"place_id": h["place_id"]} if h.get("place_id") else {})})
     for r in out:
         r["status_words"] = words(r["status"], r["route"])
@@ -301,7 +316,7 @@ def page_answer(row: dict, kind: str) -> dict:
     if row["route"] == "your_whatsapp" and link:
         link = re.sub(r"\?.*$", "", link)   # his chat with them — the number only, never a message written here (CR 131 (d))
     out = {"status": "yours_there", "venue": row.get("venue"), "route": row["route"], "booked": row["status"] in ("confirmed", "booked_by_you"),
-           "say": V.manage_line(kind, row["route"], row.get("venue") or "the venue", row.get("platform"))}
+           "say": V.manage_line(kind, row["route"], row.get("venue") or "the venue", row.get("platform"), link=bool(link))}
     if link:
         out.update(open=link, page_url=link, button={"label": V.manage_button(row["route"], row.get("platform")), "link": link})
     return out

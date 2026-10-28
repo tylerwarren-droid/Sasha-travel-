@@ -252,6 +252,11 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
                 # Sasha 286 · the button's own words (AgAPI's, or the floor's) and the listing's WhatsApp / number beside it
                 **({"label": res["button"]["label"]} if isinstance(res.get("button"), dict) and res["button"].get("label") else {}),
                 **({"alternatives": res["floor"]["alternatives"]} if isinstance(res.get("floor"), dict) and res["floor"].get("alternatives") else {})}
+    # Sasha 300 · a change / cancellation / running late that is HIS to do where it was booked (their page, his WhatsApp chat): the
+    # page she says she's opened IS on the screen, as its button — found live: "I've opened the page for you" over no button
+    if tool in ("change_booking", "running_late", "cancel_venue", "cancel_booking") and res.get("status") in ("yours_there", "yours_to_send") \
+            and isinstance(res.get("button"), dict) and res["button"].get("link"):
+        return {"type": "render", "kind": "handover", "url": res["button"]["link"], "external": True, "label": res["button"].get("label")}
     if tool == "propose_trip":   # Sasha 210 · the proposal arrives WITH its flights: a card per leg, the chosen one marked
         opts = res.get("flight_options") or {}
         cards = [flight_card({"flights": opts[leg], "leg": leg}, {"origin": (opts[leg][0] or {}).get("from"),

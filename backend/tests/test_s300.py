@@ -120,8 +120,10 @@ class OneItinerary(Base):
         self.assertEqual({k: v["route"] for k, v in r.items()},
                          {"DiverXO": "email", "Casa Lucio": "kanoe_whatsapp", "Botín": "call", "La Mi Venta": "platform",
                           "Taberna Las Sobrinas": "your_whatsapp", "Bar Tomate": "their_page"})
-        self.assertEqual(r["La Mi Venta"]["route_words"], "on CoverManager")
-        self.assertEqual(r["Taberna Las Sobrinas"]["route_words"], "from your WhatsApp")
+        self.assertEqual(r["La Mi Venta"]["route_words"], "on their booking platform")
+        self.assertEqual(r["La Mi Venta"]["platform"], "CoverManager")   # its button's label only — never said (rule 249)
+        self.assertEqual(r["Taberna Las Sobrinas"]["route_words"], "from your own phone")
+        self.assertEqual([w for x in r.values() for w in V.channel_words(x["route_words"] + " " + x["status_words"])], [])
 
     def test_status_is_the_records_and_their_words_are_data(self):
         self.api.states["act_mail"] = "confirmed"
@@ -204,7 +206,9 @@ class ChangeByItsRoute(Base):
         self.assertEqual(out["status"], "yours_there")
         self.assertEqual(out["open"], "https://project.kanoe.ai/prepared/vpr_x")
         self.assertEqual(out["say"], V.manage_line("change", "platform", "La Mi Venta", "CoverManager"))
-        self.assertIn("on CoverManager", out["say"])
+        self.assertEqual(out["say"], "La Mi Venta is on their booking platform, so you change it there — here's their page. Nothing is sent from here.")
+        self.assertEqual(V.channel_words(out["say"]), [])
+        self.assertNotIn("booked", out["say"])   # a hand-over isn't booked until they confirm: never said as booked
         self.assertEqual((self.agapi_sends(), self.sent), ([], []))
 
     def test_his_own_whatsapp_booking_opens_his_chat_never_a_message_written_here(self):
@@ -218,6 +222,29 @@ class ChangeByItsRoute(Base):
         out = run(VN.cancel_venue(Ctx("cancel Bar Tomate", ago=-1), {"venue": "Bar Tomate"}))
         self.assertEqual((out["status"], out["open"]), ("yours_there", "https://bartomate.test/reservas"))
         self.assertEqual(self.sent, [])
+
+
+class HerVoice(Base):
+    def test_no_line_of_hers_here_names_a_channel(self):
+        lines = [V.manage_line(k, r, "Casa", "CoverManager", link=l) for k in ("change", "cancel", "late")
+                 for r in ("platform", "your_whatsapp", "their_page") for l in (True, False)]
+        lines += [V.change_not_yet("Casa", IT.route_words(r), k) for r in IT.ROUTE_WORDS for k in ("change", "late")]
+        self.assertEqual(V.check(lines), [])
+
+
+class WhatHeSees(Base):
+    def test_the_page_she_says_is_on_the_screen_as_its_button(self):
+        from app.agent import sasha as S
+        out = run(SM.change_booking(Ctx("move La Mi Venta to 22:00", ago=-1), {"what": "venue", "venue": "La Mi Venta", "new_time": "22:00"}))
+        ev = S.render("change_booking", out, {})
+        self.assertEqual((ev["kind"], ev["url"], ev["label"]), ("handover", "https://project.kanoe.ai/prepared/vpr_x", "Open CoverManager"))
+        wa = S.render("cancel_venue", run(VN.cancel_venue(Ctx("cancel Las Sobrinas", ago=-1), {"venue": "Taberna Las Sobrinas"})), {})
+        self.assertEqual((wa["url"], wa["label"]), ("https://wa.me/34611222333", "Open your WhatsApp chat"))
+
+    def test_a_platform_is_named_from_the_decisions_words(self):
+        self.assertEqual(IT.platform_name(None, "CoverManager booking widget"), "CoverManager")
+        self.assertEqual(IT.platform_name("their booking page", "Book on TheFork"), "TheFork")
+        self.assertIsNone(IT.platform_name("their booking form", "WhatsApp"))
 
 
 class ChangeNotYetInAgAPI(Base):

@@ -1,9 +1,11 @@
 """Sasha 300 · THE ONE ITINERARY — every booking on the account, from request to after the visit, built HERE and nowhere else.
 
-  THE RECORD   a venue booking lives on AgAPI's booking record: its act (act_id — venue_sent / venue_requests), read through
-               venue.booking_status (agapi.venue_submit.bookings). Sasha keeps a POINTER to it (s2_memory "venue_acts"), never a
-               second truth about its state. Two routes don't reach that record yet — a platform hand-over and an own-WhatsApp
-               hand-over (CR 131 (a): venue.handed_over) — so their row is the hand-over's (agapi.venues.prepared_pages) until then.
+  THE RECORD   a venue booking lives on AgAPI's booking record: its act (act_id — venue_sent / venue_requests). CR 132: ONE read of
+               it — venue.bookings (agapi.venue_submit.agapi_bookings) — gives every act's state, route, place and map link, how it is
+               managed and an open change; a hand-over with a prepared booking is an act there too (venue.handed_over, written by
+               agapi.venues.note_prepared). Sasha keeps a POINTER (s2_memory "venue_acts"), never a second truth about its state.
+               An AgAPI without venue.bookings: the acts through venue.booking_status, as before. A hand-over with no prepared
+               booking (THE FLOOR, a page with no slot) stays the hand-over's row (agapi.venues.prepared_pages).
                A booking made on the old ladder (/next: the signer's trip_items) is read from its own record, as before.
   THE VIEW     of(account) → each booking's status (asked · confirmed · offered another time · declined · cancelled · handed over),
                venue, day, time, people, the ROUTE it went by, the venue's own words (untrusted data), its map link, its trip.
@@ -137,13 +139,46 @@ def _trip_of(plans: List[dict], day: Optional[str]) -> Optional[dict]:
 
 # ── THE ROWS ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+#: CR 132 · AgAPI's record (venue.bookings) in the itinerary's words: its route, and its state
+_AG_ROUTE = {"email": "email", "whatsapp": "kanoe_whatsapp", "whatsapp_person": "your_whatsapp", "platform": "platform",
+             "their_page": "their_page", "call": "call", "form": "form"}
+_AG_STATE = {"sent": "asked", "confirmed": "confirmed", "proposed": "offered", "declined": "declined", "cancelled": "cancelled",
+             "failed": "failed", "calling": "calling", "no_answer": "no_answer", "handed_over": "handed_over", "sent_by_person": "asked",
+             "booked_by_person": "booked_by_you", "opted_out": "declined"}
+
+
+def _from_record(g: dict, a: Optional[dict] = None) -> dict:
+    """CR 132 · one booking on AgAPI's record (venue.bookings) as an itinerary row — AgAPI's state, route, slot, place and change, as given."""
+    v, at = g.get("venue") or {}, str(g.get("at") or "")
+    ref = str(g.get("external_ref") or "")
+    trip = ref[5:] if ref.startswith("trip:") else (a or {}).get("trip_id")
+    return {"id": g["act_id"], "source": "act", "act_id": g["act_id"], "route": _AG_ROUTE.get(str(g.get("route") or ""), "their_page"),
+            "status": _AG_STATE.get(str(g.get("state") or ""), "asked"), "venue": v.get("name") or (a or {}).get("venue"),
+            "date": at[:10] or None, "time": at[11:16] or None, "party": g.get("party"), "type": "restaurant",
+            **({"place_id": v["place_id"]} if v.get("place_id") else {}), **({"map_url": v["maps_url"]} if v.get("maps_url") else {}),
+            **({"address": v["address"]} if v.get("address") else {}), **({"trip_id": trip} if trip else {}),
+            **({"platform": g["platform"]} if g.get("platform") else {}), **({"url": g["manage_url"]} if g.get("manage_url") else {}),
+            **({"reference": g["reference"]} if g.get("reference") else {}),
+            **({"venue_said": {"untrusted_text": str((g.get("venue_words") or {}).get("untrusted_text") or "")[:160]}}
+               if (g.get("venue_words") or {}).get("untrusted_text") else {}),
+            **({"change": g["change"]} if g.get("change") else {})}
+
+
 async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]:
-    """Every venue booking on the account — the records' (AgAPI's acts, the old ladder's), then the hand-overs not on one."""
+    """Every venue booking on the account — AgAPI's record (venue.bookings: CR 132), the old ladder's, then the hand-overs on neither."""
     from agapi import venues as VN, venue_submit as VS
     acts = {a.get("act_id"): a for a in await VS.acts_of(account)}
+    record = await VS.agapi_bookings(account)   # None: an AgAPI without venue.bookings — the acts as before
+    on_agapi = {g["act_id"]: g for g in record or [] if g.get("act_id")}
     records = await VN.venue_bookings(account, include_cancelled=True)
     out: List[dict] = []
+    today = date.today().isoformat()
+    for g in on_agapi.values():   # CR 132 · AgAPI's record is the truth for every booking on it (the hand-overs too); from today on
+        if (str(g.get("at") or "")[:10] or today) >= today:
+            out.append(_from_record(g, acts.get(g["act_id"])))
     for b in records:
+        if b.get("act_id") and b["act_id"] in on_agapi:
+            continue   # on AgAPI's record: its row is above
         if b.get("act_id"):
             a = acts.get(b["act_id"]) or {}
             route = act_route({**a, **b})

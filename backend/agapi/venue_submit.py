@@ -104,6 +104,63 @@ async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = N
     return {"matched": bool(res.get("matched")), **({k: res[k] for k in ("kept", "why", "opted_out", "booking", "ad", "replied") if k in res})}
 
 
+# ── CR 132 · AgAPI's booking record holds every route now: a hand-over is an act (venue.handed_over), and ONE list reads them all ─────
+
+_LATER_HANDED: set = set()   # the hand-over writes in flight (held so they finish; never awaited by the answer)
+
+
+async def handed_over(account: str, prepared_id: str, how: str, link: Optional[str] = None) -> Optional[str]:
+    """CR 132 (a) · a hand-over (a platform's page, their page, his own WhatsApp) on AgAPI's ONE booking record → its act_id, or None
+    (AgAPI without the op yet, or not answering: the hand-over row Sasha keeps stands, as before). Nothing is sent; no approval."""
+    uid = await end_user(account)
+    if not uid or how not in ("platform", "whatsapp_person", "their_page"):
+        return None
+    r = await _call(account, "venue.handed_over", {"end_user": uid, "prepared_id": prepared_id, "how": how,
+                                                   **({"link": link} if str(link or "").startswith("https://") and how != "whatsapp_person"
+                                                      else {})})   # a wa.me link carries his words and their number: never passed
+    if not r.get("ok"):
+        log.info("[venue_submit] hand-over not on AgAPI's record: %s", (r.get("error") or {}).get("code"))
+        return None
+    return (r.get("result") or {}).get("act_id")
+
+
+def handed_over_later(account: str, prepared_id: Optional[str], how: str, link: Optional[str] = None) -> None:
+    """The same, after her answer (CR 130: a record of what happened never holds up the person's answer)."""
+    import asyncio
+    if not prepared_id:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+
+    async def run():
+        try:
+            await handed_over(account, prepared_id, how, link)
+        except Exception as e:
+            log.info("[venue_submit] hand-over write failed: %s", type(e).__name__)
+    t = loop.create_task(run())
+    _LATER_HANDED.add(t)
+    t.add_done_callback(_LATER_HANDED.discard)
+
+
+async def agapi_bookings(account: str) -> Optional[List[dict]]:
+    """CR 132 (b) · venue.bookings — every booking on AgAPI's record for this person (cancelled ones too), or None when AgAPI doesn't
+    answer it (an AgAPI without the op: the itinerary reads what it read before)."""
+    uid = await end_user(account)
+    if not uid:
+        return None
+    try:
+        r = await _call(account, "venue.bookings", {"end_user": uid, "include_cancelled": True})
+    except Exception as e:   # never the itinerary's failure: it reads what it read before
+        log.info("[venue_submit] venue.bookings not read: %s", type(e).__name__)
+        return None
+    if not r.get("ok"):
+        log.info("[venue_submit] venue.bookings not read: %s", (r.get("error") or {}).get("code"))
+        return None
+    return list((r.get("result") or {}).get("bookings") or [])
+
+
 def _err(r: dict) -> dict:
     e = r.get("error") or {}
     return {"code": e.get("code") or "unavailable", "message": e.get("message") or "the venue booking service didn't answer",
@@ -714,5 +771,6 @@ async def _approval(account: str, rid: str, said: str):
 
 
 __all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL",
+           "handed_over", "handed_over_later", "agapi_bookings",
            "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt",
            "call_again", "link_whatsapp", "confirm_whatsapp", "whatsapp_link_signature", "stay_of", "unkept"]

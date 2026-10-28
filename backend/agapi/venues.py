@@ -56,7 +56,8 @@ async def prepared_pages(account: Optional[str]) -> List[dict]:
 
 
 async def note_prepared(account: str, venue: str, when: str, party: Any, url: Optional[str], link_id: Optional[str] = None,
-                        route: Optional[str] = None, platform: Optional[str] = None, place_id: Optional[str] = None) -> None:
+                        route: Optional[str] = None, platform: Optional[str] = None, place_id: Optional[str] = None,
+                        prepared_id: Optional[str] = None) -> None:
     """A prepared page drawn for them: on the record (the same booking prepared again replaces its line, never a second one).
     Sasha 283 · item 4c: EVERY page hand-over writes this row (the copy card, and a platform's page with its booking_links id) — the
     one place the way back reads."""
@@ -70,6 +71,10 @@ async def note_prepared(account: str, venue: str, when: str, party: Any, url: Op
     from agapi import s2_memory as M
     if not await M.put_kind(account, PREPARED_KIND, rows):
         log.info("[venues] prepared page kept in this process only (no memory table)")
+    if prepared_id:   # CR 132 (a) · AgAPI's booking record holds the hand-over too — after her answer, never holding it up
+        from agapi import venue_submit as VS
+        how = {"your_whatsapp": "whatsapp_person", "platform": "platform"}.get(str(route or ""), "platform" if platform else "their_page")
+        VS.handed_over_later(account, prepared_id, how, url)
 
 
 # ── Sasha 283 · item 4c · THE WAY BACK: a page handed over is never left hanging ───────────────────────────────────────────────────
@@ -927,7 +932,8 @@ async def kanoe_whatsapp(ctx, a: dict, rd: dict, res: dict, at: str, now, card: 
     pdec = p.get("decision") if p.get("ok") and isinstance(p.get("decision"), dict) else (dec or {})
     own = own_link(pdec, p)
     if not p.get("ok") or pdec.get("sender") != "kanoe":   # AgAPI's gate: not this person (or not prepared) — their own WhatsApp
-        return await own_whatsapp(ctx, a, rd, res, at, card, own, pdec if pdec.get("sender") == "person" else None)
+        return await own_whatsapp(ctx, a, rd, res, at, card, own, pdec if pdec.get("sender") == "person" else None,
+                                  prepared_id=p.get("prepared_id") if p.get("ok") else None)
     rb = await VS.read_back(ctx.account, p["prepared_id"])
     if not rb.get("ok"):   # the gate again at the read-back (AgAPI refused it), or no read-back: the same line, their own WhatsApp
         log.info("[venues] %s: Kanoe's WhatsApp not read back (%s) — their own WhatsApp", venue, rb["error"]["code"])
@@ -1011,7 +1017,7 @@ def own_link(dec: Optional[dict], p: Optional[dict] = None) -> Optional[str]:
 
 
 async def own_whatsapp(ctx, a: dict, rd: dict, res: Optional[dict], at: Optional[str], card: Optional[dict], link: Optional[str],
-                       dec: Optional[dict]) -> dict:
+                       dec: Optional[dict], prepared_id: Optional[str] = None) -> dict:
     """Sasha 287 · the same card when Kanoe may not send it: their own WhatsApp, prefilled (AgAPI's wa.me link and its button label), in
     her words (voice.OWN_WHATSAPP — AgAPI's line names the channel; `dec` is kept for the record). Never "can't". No link: THE FLOOR (286)."""
     from app.agent import voice as V
@@ -1024,7 +1030,7 @@ async def own_whatsapp(ctx, a: dict, rd: dict, res: Optional[dict], at: Optional
     venue = _API().plain_venue(rd["venue"])
     party = ((res or {}).get("how_many") or {}).get("count") or a.get("party") or 0
     await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, link, route="your_whatsapp",
-                        place_id=rd.get("place_id"))   # the way back (283) · Sasha 300: the itinerary's route
+                        place_id=rd.get("place_id"), prepared_id=prepared_id)   # the way back (283) · Sasha 300: the itinerary's route
     say = V.OWN_WHATSAPP   # her voice: AgAPI's message line names and limits the channel ("takes booking requests by WhatsApp")
     return {"status": "page_link", "venue": venue, "booked": False, "route": "message", **_link_out(link),
             "button": {"label": V.SEND_ON_WHATSAPP, "link": link}, "page_says": say,   # in the app: said by code (voice.page_line)
@@ -1935,7 +1941,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         from agapi import itinerary as IT   # Sasha 300 · the platform it is on, when the decision names one (its channel or its button)
         dec = ((held.get("follow") or {}).get("decision")) or {}
         await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"), place_id=held.get("place_id"),
-                            platform=IT.platform_name(held.get("channel_name"), dec.get("channel"), (dec.get("button") or {}).get("label")))
+                            platform=IT.platform_name(held.get("channel_name"), dec.get("channel"), (dec.get("button") or {}).get("label")),
+                            prepared_id=(prep or {}).get("prepared_id"))   # CR 132 (a) · on AgAPI's record too
         from app.agent import voice as V
         from agapi import venue_submit as VS
         # Sasha 264 · item 2 (Tyler's spa, 14 Oct): AgAPI gave no filled page — their own page opened EMPTY and she said "Done — it's
@@ -2317,6 +2324,15 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
         if r.get("status") == "waiting_for_their_tap":
             return {"status": "waiting_for_their_tap", "venue": held.get("venue"),
                     "say": "I've sent you the link — the cancellation goes once you tap yes there."}
+        if r.get("status") == "person_sends":   # CR 132 (d)3 · booked from his own WhatsApp: AgAPI's words, for HIM to send there
+            m = r.get("message") or {}
+            return {"status": "yours_to_send", "venue": held.get("venue"), "sent": False, "say": r.get("say") or "",
+                    **({"open": m["link"], "button": {"label": "Send on WhatsApp", "link": m["link"]}} if m.get("link") else {})}
+        if r.get("status") == "not_allowed":   # CR 132 · not sent (their window closed, no approved message yet): said, with his own way
+            tk = r.get("takeover")
+            link = tk if isinstance(tk, str) else (tk or {}).get("link")
+            return {"status": "not_cancelled", "venue": held.get("venue"), "say": r.get("say") or "",
+                    **({"open": link, "page_url": link} if link else {})}
         return {"status": "requested", "venue": held.get("venue"),
                 "say": "I've asked them to cancel it. It's still booked until they confirm — I'll tell you when they do."}
     rb = await VS.cancel_read_back(ctx.account, a["act_id"])

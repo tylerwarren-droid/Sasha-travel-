@@ -858,6 +858,19 @@ def phone_line(sent: bool, out: str) -> str:
     return PHONE_FAILED.format(why=why)
 
 
+#: Sasha 302 · the tools whose `say` is said BY CODE, word for word, and the turn ends on it (found live on 301: the phone paraphrased
+#: the fine print in markdown — "**Taberna Las Sobrinas:**" on screen). Their words are built from the itinerary's rows and his Keep.
+SAID_AS_GIVEN = ("booking_fine_print", "keep_note")
+
+
+def fine_print_line(tool: str, r: dict) -> str:
+    """Sasha 302 · booking_fine_print's / keep_note's own `say`: the venue's terms in their quoted words, his perks — never a paraphrase."""
+    res = (r or {}).get("result") if (r or {}).get("ok") else None
+    if tool not in SAID_AS_GIVEN or not isinstance(res, dict):
+        return ""
+    return str(res.get("say") or "").strip()
+
+
 def page_line(tool: str, r: dict) -> str:
     """Sasha 264 · the line an in-app booking page ends on (book_venue → a platform's page, or a prepared form): the page is on their
     screen, the phone's outcome said, an unfilled form said as unfilled. Else "" (WhatsApp, and old S1: as they were)."""

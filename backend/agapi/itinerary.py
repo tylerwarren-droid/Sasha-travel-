@@ -164,6 +164,10 @@ def _from_record(g: dict, a: Optional[dict] = None) -> dict:
             **({"reference": g["reference"]} if g.get("reference") else {}),
             **({"venue_said": {"untrusted_text": str((g.get("venue_words") or {}).get("untrusted_text") or "")[:160]}}
                if (g.get("venue_words") or {}).get("untrusted_text") else {}),
+            # Sasha 302 · the terms read the record's words IN FULL (the 160 above is the line shown): a cut sentence is never a term
+            **({"terms_text": str((g.get("venue_words") or {}).get("untrusted_text") or "")[:4000]}
+               if (g.get("venue_words") or {}).get("untrusted_text") else {}),
+            **({"type": "hotel"} if (a or {}).get("stay") else {}),   # Sasha 302 · a stay act (CR 102) is a hotel on the itinerary
             **({"change": g["change"]} if g.get("change") else {})}
 
 
@@ -187,14 +191,16 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
             route = act_route({**a, **b})
             status = _ACT.get(str(b.get("status") or ""), "asked")
             row = {"id": b["act_id"], "source": "act", "act_id": b["act_id"], "route": route, "status": status,
-                   **({"place_id": a["place_id"]} if a.get("place_id") else {}), **({"trip_id": a["trip_id"]} if a.get("trip_id") else {})}
+                   **({"place_id": a["place_id"]} if a.get("place_id") else {}), **({"trip_id": a["trip_id"]} if a.get("trip_id") else {}),
+                   **({"stay": True} if a.get("stay") or b.get("stay") else {})}   # Sasha 302 · a hotel stay's act (CR 102)
         else:
             route = _LADDER_ROUTE.get(str(b.get("channel") or "form"), "form")
             status = _LADDER.get(str(b.get("status") or ""), "asked")
             row = {"id": b["trip_item_id"], "source": "ladder", "trip_item_id": b["trip_item_id"], "route": route, "status": status,
                    **({"trip_id": b["trip_id"]} if b.get("trip_id") else {}), **({"address": b["address"]} if b.get("address") else {})}
+        kind = "hotel" if row.pop("stay", None) else b.get("type")
         out.append({**row, "venue": b.get("venue"), "date": b.get("date"), "time": b.get("time"), "party": b.get("party"),
-                    "type": b.get("type"), **({"reference": b["reference"]} if b.get("reference") else {}),
+                    "type": kind, **({"reference": b["reference"]} if b.get("reference") else {}),
                     **({"venue_said": b["venue_said"]} if b.get("venue_said") else {}),
                     **({"venue_words": b["venue_words"]} if b.get("venue_words") and not b.get("act_id") else {}),   # 301 · the ladder's own
                     **{k: b[k] for k in ("cancel", "change", "country") if b.get(k)}})
@@ -294,6 +300,8 @@ def row_terms(r: dict) -> List[dict]:
     if r.get("source") == "ladder" or (r.get("source") is None and r.get("venue_words")):
         text = r.get("venue_words")
         cut = None
+    elif r.get("terms_text"):   # Sasha 302 · AgAPI's record (venue.bookings): its words in full
+        text, cut = r["terms_text"], None
     else:
         said = r.get("venue_said")
         text = said.get("untrusted_text") if isinstance(said, dict) else None
@@ -308,6 +316,8 @@ async def _wallet(account: str) -> List[dict]:
 
 def _venue_kind(t: Optional[str]) -> str:
     t = (t or "").lower()
+    if t in ("hotel", "stay"):   # Sasha 302 · a hotel stay booked as an act (CR 102)
+        return "hotel"
     return "spa" if re.search(r"spa|massage|beauty|salon|nail|hair|wellness", t) else "dinner"
 
 

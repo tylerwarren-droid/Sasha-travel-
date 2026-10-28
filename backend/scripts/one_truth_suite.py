@@ -280,6 +280,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "the hours they stated, reminded once before it passes), and his loyalty numbers and card perks from ONE place, his Keep — "
             "masked, the last four only, never a term or a perk nobody stated (Sasha 301)",
             ["tests.test_s301"]),
+    "T80": ("The fine print is said by code, word for word, never paraphrased; a term on AgAPI's record is read from the venue's words "
+            "in full (never the display line's cut); a hotel stay act is a hotel, so his programme shows on it only (Sasha 302)",
+            ["tests.test_s302"]),
 }
 
 _RUNNER = """

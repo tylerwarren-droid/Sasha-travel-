@@ -276,6 +276,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "change, a cancellation or 'running late' goes by the route it was booked on, on his yes — or is said plainly and nothing "
             "is sent (Sasha 300)",
             ["tests.test_s300"]),
+    "T79": ("Every booking's fine print is on its ONE itinerary row: the venue's terms in their own sentences (a deadline only from "
+            "the hours they stated, reminded once before it passes), and his loyalty numbers and card perks from ONE place, his Keep — "
+            "masked, the last four only, never a term or a perk nobody stated (Sasha 301)",
+            ["tests.test_s301"]),
 }
 
 _RUNNER = """

@@ -180,7 +180,8 @@ RENDER.update({"remember_name": "inline"})   # Sasha 246
 RENDER.update({"save_contact": "inline"})   # Sasha 253 · the booking contact, saved
 RENDER.update({"hotel_request": "read_back"})   # Sasha 235 · upgrade my room: its read-back, then the outcome on the same card
 RENDER.update({"file_confirmation": "inline", "time_between": "inline", "add_to_trip": "inline", "save_for_later": "inline"})   # Sasha 253
-RENDER.update({"call_again": "inline"})   # Sasha 269 · "try once more": the act's own words, said
+RENDER.update({"call_again": "inline"})
+RENDER.update({"booking_fine_print": "inline", "keep_note": "inline"})   # Sasha 301 · the fine print, said; a card / loyalty number, saved   # Sasha 269 · "try once more": the act's own words, said
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
 KINDS_S2_PAGE = {"discover", "kind_ask"}   # Sasha 297 · + her one question before a vague search ·   # Sasha 276 · venue.discover's groups + pick: /s2's page only (via "page") — never /next (s1) or WhatsApp (via "wa", until 277)

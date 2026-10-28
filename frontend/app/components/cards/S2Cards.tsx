@@ -13,7 +13,12 @@ type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-exp
 export const C = { bg: '#0b0b10', card: '#16151d', line: 'rgba(255,255,255,.1)', gold: '#E8B923', dim: 'rgba(255,255,255,.6)' }
 export type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'car'; title: string; when: string; where?: string; status: string; reference?: string; id?: string
   // Sasha 300 · THE ONE ITINERARY: the status in words, the way it was made, the venue's own words (data), its map
-  status_words?: string; route_words?: string; venue_said?: { untrusted_text?: string }; map_url?: string; trip?: string }
+  status_words?: string; route_words?: string; venue_said?: { untrusted_text?: string }; map_url?: string; trip?: string
+  // Sasha 301 · THE FINE PRINT: the venue's terms in their own sentences (with the deadline they state), his Keep's perks (masked)
+  terms?: Term[]; perks?: { kind: string; line: string }[] }
+export type Term = { kinds: string[]; quote: string; by?: string; by_words?: string }
+const TERM_LABEL: Record<string, string> = { deposit: 'Deposit', cancellation: 'Cancellation', no_show: 'No-show', time_limit: 'Time at the table' }
+export const termHead = (t: Term) => t.kinds.map((k) => TERM_LABEL[k] || k).join(' · ') + (t.by_words ? ` — by ${t.by_words}` : '')
 
 export function Box({ k, h, children, tone }: { k: string; h?: string; children?: React.ReactNode; tone?: string }) {
   return (
@@ -115,6 +120,10 @@ export function Plans({ items, on }: { items: Plan[]; on?: string }) {
             <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.88)' }}>{fmtWhen(p.when)}{p.where ? ` · ${untag(p.where)}` : ''}</div>
             <div style={{ fontSize: 12.5, color: C.dim }}>{untag(p.status_words || p.status)}{p.route_words ? ` · ${p.route_words}` : ''}{p.reference ? ` · Ref ${untag(p.reference)}` : ''}</div>
             {p.venue_said?.untrusted_text ? <div style={{ fontSize: 12.5, color: C.dim, fontStyle: 'italic' }}>They said: &ldquo;{p.venue_said.untrusted_text}&rdquo;</div> : null}
+            {(p.terms || []).map((t, k) => (
+              <div key={`t${k}`} style={{ fontSize: 12.5, color: 'rgba(255,255,255,.82)' }}>
+                <b>{termHead(t)}</b>: <span style={{ fontStyle: 'italic', color: C.dim }}>&ldquo;{t.quote}&rdquo;</span></div>))}
+            {(p.perks || []).map((x, k) => <div key={`p${k}`} style={{ fontSize: 12.5, color: C.gold }}>{x.line}</div>)}
             {p.map_url ? <a href={p.map_url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: C.gold }}>Map</a> : null}
           </div>
         </div>))}

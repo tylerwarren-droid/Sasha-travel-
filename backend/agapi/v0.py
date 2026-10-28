@@ -1617,6 +1617,9 @@ BY_NAME.update({t["name"]: t for t in MANAGE_TOOLS})
 from agapi import s2_hotel as _HOTEL   # noqa: E402 · Sasha 235 · /s2 only: a request to their hotel (upgrade my room) — not in TOOLS (S1)
 MANAGE_TOOLS += _HOTEL.tools()
 BY_NAME.update({t["name"]: t for t in MANAGE_TOOLS})
+from agapi import booking_fine_print as _FINE   # noqa: E402 · Sasha 301 · the fine print on each booking (asked) and his cards / loyalty (told)
+MANAGE_TOOLS += _FINE.tools()
+BY_NAME.update({t["name"]: t for t in MANAGE_TOOLS})
 _HELD: Dict[str, dict] = {}   # account → the last read-back's sha256 (hold_booking), for book
 _IDEM: Dict[str, dict] = {}   # the fast path in this process; claim() is the durable one (Sasha 215)
 ACTS = {"book", "book_venue", "cancel_venue", "send_email", "send_whatsapp"}   # spend, send or cancel: claimed once, durably, before they act
@@ -1624,6 +1627,7 @@ READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read
          "add_to_calendar", "get_activity", "keep_list"}
 ACTS = ACTS | {"running_late", "change_booking", "cancel_booking"}   # Sasha 226 · claimed once, durably, before they act
 READS = READS | {"my_plans"}
+READS = READS | {"booking_fine_print"}   # Sasha 301 · reads the itinerary only
 
 
 def _act_bound_to(account: str, name: str) -> Optional[str]:

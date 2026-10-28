@@ -43,9 +43,13 @@ ROUTES_EVERY = timedelta(minutes=5)
 _ROUTED: Dict[str, datetime] = {}   # booking → when Routes was last asked (the time only, nothing of Google's)
 CONFIRMED = ("confirmed", "guest_booked")
 HONEST = ("requested", "attempting", "unclear", "proposed", "quoted", "waitlisted", "link_sent", "pending")
-PRIORITY = {"written_confirmation": 0, "leave_now": 1, "two_hours": 1, "day_before": 2, "not_confirmed": 2, "morning_brief": 3}
+PRIORITY = {"written_confirmation": 0, "leave_now": 1, "two_hours": 1, "cancel_by": 1, "day_before": 2, "not_confirmed": 2, "morning_brief": 3}
 #: Sasha 300 · the "~2 hours before" reminder: due from TWO_HOURS before the booking, never in its last hour (a leave_now's)
 TWO_HOURS = timedelta(hours=2)
+#: Sasha 301 · the reminder before a cancellation deadline the VENUE stated (its own sentence, agapi/booking_terms.py): due from this
+#: long before the deadline until it passes, once per booking (sql/044 lets the ledger hold the kind)
+CANCEL_BY_LEAD = timedelta(hours=6)
+LEDGER_KEYED = ("two_hours", "cancel_by")   # kinds the ledger holds by booking_key (043) — never by trip_item_id alone
 KINDS = tuple(PRIORITY)
 
 
@@ -100,6 +104,9 @@ def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datet
         return f"{day}: {venue}, {hhmm}, {_party(b)}, ref {_ref(b)}.{_where(b)} Reply CANCEL {venue.split()[0]} to cancel."
     if kind == "two_hours":   # Sasha 300 · ~2 h before: where, the map, and "running late?" (running_late: the booking's own route)
         return f"In 2 hours: {venue}, {hhmm}, {_party(b)}.{_where(b)} Running late? Tell me."
+    if kind == "cancel_by":   # Sasha 301 · their own words, quoted; the deadline worked out from the hours they stated
+        return (f"Cancellation deadline for {venue} ({day.lower() if day in ('Tonight', 'Today', 'Tomorrow') else day}, {hhmm}): "
+                f"{extra['by_words']}. They said: “{extra['quote']}” Want to cancel? Tell me.")
     if kind == "not_confirmed":
         if b.get("status") == "proposed":
             return f"{day}, {hhmm} at {venue}: not confirmed yet. They offered another time; it's not booked until you say yes."
@@ -131,6 +138,8 @@ def template_vars(kind: str, b: dict, extra: Optional[dict] = None) -> dict:
         return {1: b.get("venue"), 2: f"{SN.day_words(b.get('date'))} {b.get('time')}", 3: status_words(b.get("status") or "")}
     if kind == "leave_now":
         return {1: b.get("venue"), 2: b.get("time"), 3: extra.get("minutes"), 4: extra.get("mode_words"), 5: extra.get("label")}
+    if kind == "cancel_by":   # Sasha 301 · no approved template yet: outside the 24-hour window it isn't sent (said in the log)
+        return {1: b.get("venue"), 2: extra.get("by_words"), 3: str(extra.get("quote") or "")[:200]}
     if kind == "two_hours":   # Sasha 300 · no approved template yet: outside the 24-hour window it isn't sent (said in the log)
         return {1: b.get("venue"), 2: b.get("time"), 3: _party(b)}
     if kind == "written_confirmation":
@@ -299,7 +308,7 @@ class PostgresProactiveStore:
 
     async def claim(self, row):
         tid = _uuid(row.get("trip_item_id"))
-        if row.get("trip_item_id") and tid is None or row["kind"] == "two_hours":
+        if row.get("trip_item_id") and tid is None or row["kind"] in LEDGER_KEYED:
             # Sasha 300 · an AgAPI act or a hand-over (no trip_items row), or the 2-hour kind: keyed by booking_key (sql/043).
             # Before 043 the database refuses it — logged once, -1: nothing is sent (never a reminder that could repeat)
             try:
@@ -308,9 +317,10 @@ class PostgresProactiveStore:
                     "values ($1,$2,$3,$4,$5,$6,'skipped','claimed') on conflict do nothing returning id",
                     uuid.UUID(row["account_id"]), tid, str(row["trip_item_id"])[:300], row["kind"], row["local_day"], row.get("status_at_send")))
             except Exception as e:
-                if "043" not in _WARNED:
-                    _WARNED.add("043")
-                    log.warning("[proactive] a reminder for a booking with no trip item isn't held yet (apply sql/043): %s", type(e).__name__)
+                sql = "044" if row["kind"] == "cancel_by" else "043"   # Sasha 301 · cancel_by's kind is 044's
+                if sql not in _WARNED:
+                    _WARNED.add(sql)
+                    log.warning("[proactive] a %s reminder isn't held by the ledger yet (apply sql/%s): %s", row["kind"], sql, type(e).__name__)
                 return -1
         return await self._run(lambda c: c.fetchval(
             "insert into proactive_sent (account_id, trip_item_id, kind, local_day, status_at_send, channel, outcome) "
@@ -413,6 +423,8 @@ def _due(kind: str, b: dict, now: datetime, extra: Optional[dict] = None) -> boo
         return now >= due
     if kind == "two_hours":
         return start - TWO_HOURS <= now < start - timedelta(hours=1)
+    if kind == "cancel_by":
+        return extra["by"] - CANCEL_BY_LEAD <= now < extra["by"]
     if kind == "leave_now":
         leave = start - timedelta(seconds=extra["seconds"]) - LEAVE_MARGIN
         return leave <= now < start - timedelta(seconds=extra["seconds"])
@@ -427,8 +439,8 @@ async def _send(ch: dict, kind: str, b: Optional[dict], text, variables: Optiona
     from . import guest_whatsapp as GW
     sid = await STORE.claim({"account_id": ch["account_id"], "trip_item_id": (b or {}).get("id") if kind != "morning_brief" else None,
                              "kind": kind, "local_day": local_day, "status_at_send": status})
-    if sid == -1:   # Sasha 300 · the ledger can't hold it yet (043 not applied): nothing sent, said in the log
-        return "not sent: the reminder ledger can't hold this booking yet (043)"
+    if sid == -1:   # Sasha 300 · the ledger can't hold it yet (043 / 301: 044 not applied): nothing sent, said in the log
+        return f"not sent: the reminder ledger can't hold this booking yet ({'044' if kind == 'cancel_by' else '043'})"
     if sid is None:
         return "already sent"
     if callable(text):
@@ -451,6 +463,18 @@ async def _send(ch: dict, kind: str, b: Optional[dict], text, variables: Optiona
     r = await GW.SENDER.send(frm, ch["number_e164"], content_sid=tsid, variables=variables)
     await STORE.finish(sid, "whatsapp_template", r)
     return r
+
+
+def cancel_by_of(b: dict) -> Optional[dict]:
+    """Sasha 301 · the booking's earliest cancellation deadline the venue stated → {by (aware), by_words, quote}, or None."""
+    from agapi import booking_terms as BT
+    t = BT.cancel_by(b.get("terms") or [])
+    if not t:
+        return None
+    try:
+        return {"by": datetime.fromisoformat(t["by"]), "by_words": t["by_words"], "quote": t["quote"]}
+    except (KeyError, ValueError):
+        return None
 
 
 async def _rows(account: str) -> List[dict]:
@@ -497,6 +521,9 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                 due.append((PRIORITY["two_hours"], "two_hours", b, {}))
             elif kind and kind not in prefs.get("off_kinds", []) and _due(kind, b, now):
                 due.append((PRIORITY[kind], kind, b, {}))
+            cut = cancel_by_of(b) if b.get("status") in CONFIRMED and "cancel_by" not in prefs.get("off_kinds", []) else None
+            if cut and _due("cancel_by", b, now, cut):   # Sasha 301 · before the cancellation deadline THEY stated passes
+                due.append((PRIORITY["cancel_by"], "cancel_by", b, cut))
             if b.get("status") in CONFIRMED and "leave_now" not in prefs.get("off_kinds", []) and now >= start - timedelta(hours=3) \
                     and not (hasattr(STORE, "claimed") and await STORE.claimed(str(b["id"]), "leave_now")):   # Sasha 146 · once sent, no more Routes calls
                 place = await STORE.default_place(account)

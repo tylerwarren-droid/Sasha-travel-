@@ -19,10 +19,26 @@ PROGRAMS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
     "marriott.com": ("hotel", ("marriott", "westin", "sheraton", "ritz-carlton", "st. regis", "w hotel", "ac hotel", "renaissance",
                                   "courtyard", "moxy", "aloft", "le méridien", "le meridien", "four points", "edition")),
     "club.kanoe.ai": ("any", ("sasha test venue", "kanoe demo spa")),   # OUR fictional test club
+    # Sasha 301 · the fine print on a hotel booking: the major chains' programmes, each with the brand names it covers (a fixed list)
+    "hilton.com": ("hotel", ("hilton", "conrad", "waldorf astoria", "doubletree", "hampton by hilton", "curio collection", "canopy by hilton")),
+    "hyatt.com": ("hotel", ("hyatt", "andaz", "thompson hotel", "alila")),
+    "ihg.com": ("hotel", ("intercontinental", "holiday inn", "crowne plaza", "kimpton", "hotel indigo", "six senses", "voco")),
+    "all.accor.com": ("hotel", ("novotel", "ibis", "sofitel", "pullman", "mercure", "fairmont", "raffles", "mgallery", "swissôtel",
+                                "swissotel", "mövenpick", "movenpick")),
+    "melia.com": ("hotel", ("meliá", "melia", "innside", "paradisus", "me madrid", "me london")),
+    "nh-hotels.com": ("hotel", ("nh hotel", "nh collection", "nhow", "anantara", "avani", "tivoli")),
 }
 #: the vault names a site by its address (vault/api._clean); a programme's name is accepted too
-ALIASES = {"iberia plus": "iberia.com", "marriott bonvoy": "marriott.com", "kanoe test club": "club.kanoe.ai"}
-NAMES = {"iberia.com": "Iberia Plus", "marriott.com": "Marriott Bonvoy", "club.kanoe.ai": "Kanoe Test Club"}
+ALIASES = {"iberia plus": "iberia.com", "marriott bonvoy": "marriott.com", "kanoe test club": "club.kanoe.ai",
+           "iberia": "iberia.com", "iberia club": "iberia.com", "marriott": "marriott.com", "bonvoy": "marriott.com",
+           "hilton honors": "hilton.com", "hilton honours": "hilton.com", "hilton": "hilton.com",
+           "world of hyatt": "hyatt.com", "hyatt": "hyatt.com", "ihg one rewards": "ihg.com", "ihg rewards": "ihg.com", "ihg": "ihg.com",
+           "all accor": "all.accor.com", "accor live limitless": "all.accor.com", "accor": "all.accor.com",
+           "meliá rewards": "melia.com", "melia rewards": "melia.com", "meliá": "melia.com", "melia": "melia.com",
+           "nh discovery": "nh-hotels.com", "nh rewards": "nh-hotels.com"}
+NAMES = {"iberia.com": "Iberia Plus", "marriott.com": "Marriott Bonvoy", "club.kanoe.ai": "Kanoe Test Club", "hilton.com": "Hilton Honors",
+         "hyatt.com": "World of Hyatt", "ihg.com": "IHG One Rewards", "all.accor.com": "ALL Accor", "melia.com": "Meliá Rewards",
+         "nh-hotels.com": "NH Discovery"}
 
 TOKEN = "⟨your number, added from your vault when it's sent⟩"
 

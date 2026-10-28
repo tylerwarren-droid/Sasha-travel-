@@ -66,12 +66,17 @@ TYPES: Dict[str, dict] = {
     "card_product":      {"tier": FREE, "name": "Card", "fields": {"issuer": (1, 60, "text"), "product": (1, 80, "text"),
                                                                    "network": (2, 12, "enum:visa|mastercard|amex|discover|jcb|unionpay|diners|other"),
                                                                    "country": (0, 2, "iso2")}},   # a photo rarely says it: optional
+    # Sasha 301 · HIS card as he told her: its name, the LAST FOUR only (never more), and a perk in his own words with what it's for
+    "my_card":           {"tier": FREE, "name": "Your card", "fields": {"name": (1, 60, "text"), "last4": (4, 4, "last4"),
+                                                                       "perk": (0, 200, "text"),
+                                                                       "perk_for": (0, 10, "enum:hotel|restaurant|spa|flight|car|any"),
+                                                                       "perk_where": (0, 60, "text")}},
 }
 # what the mask may show (never the value): a type's public words, and the LAST characters of its secret field
 PUBLIC = {"preference": ("topic",), "loyalty": ("program",), "home_address": ("country",), "passport": ("country",),
           "national_id": ("kind", "country"), "trusted_traveller": ("program",), "visa_residence": ("country",),
           "insurance_policy": ("insurer",), "health_card": ("issuer",), "booking_reference": ("provider",), "door_code": ("place",),
-          "wifi": ("network",), "esim": ("provider",), "card_product": ("product", "network")}
+          "wifi": ("network",), "esim": ("provider",), "card_product": ("product", "network"), "my_card": ("name",)}
 SECRET = {"loyalty": "number", "passport": "number", "national_id": "number", "trusted_traveller": "number", "visa_residence": "number",
           "insurance_policy": "number", "health_card": "number", "booking_reference": "reference"}
 PROGRAM_WORDS = {"global_entry": "Global Entry", "tsa_precheck": "TSA PreCheck", "nexus": "NEXUS", "sentri": "SENTRI",
@@ -162,12 +167,18 @@ def normalise(kind: str, value: dict) -> Dict[str, str]:
         if k == "card_product" and re.search(r"\d{4}|(?:\d[ -]?){4}|[•*]{2,}|[xX]{4,}", v):   # CR 74 · no card digits, not even the last 4
             raise Refused(f"/value/{f}", "never_card", "A card is kept as its product only (issuer, product, network, country) — never any "
                                                        "of its numbers, not even the last four.")
+        if k == "my_card" and f != "last4" and re.search(r"(?:\d[ -]?){7}\d", v):   # Sasha 301 · no run of a card's digits
+            raise Refused(f"/value/{f}", "never_card", "A card is kept by its name and its last four digits only — never more of its number.")
         if _OTP.search(v):
             raise Refused(f"/value/{f}", "never_2fa", NEVER["otp"][1])
         if fk == "id":
             v = re.sub(r"[\s-]", "", v).upper()
             if not re.fullmatch(r"[A-Z0-9]+", v):
                 raise Refused(f"/value/{f}", "id", f"The {f.replace('_', ' ')} is letters and digits only.")
+        elif fk == "last4":
+            v = re.sub(r"[\s•*xX.-]", "", v)
+            if not re.fullmatch(r"\d{4}", v):
+                raise Refused(f"/value/{f}", "never_card", "Only the card's last four digits are kept — four digits, nothing more.")
         elif fk == "iso2":
             v = v.upper()
             if not re.fullmatch(r"[A-Z]{2}", v):
@@ -207,6 +218,8 @@ def mask(kind: str, v: Dict[str, str]) -> str:
         return f"{pub[0]} ({v['country']}) {_tail(v['number'])}"
     if kind == "preference":
         return f"Preference: {v['topic']}"
+    if kind == "my_card":                            # Sasha 301 · "Amex Gold ••••1234" — the last four are the only digits it has
+        return f"{v['name']} {MASK}{v['last4']}"
     if kind == "card_product":                       # "Chase Sapphire Reserve · Visa" — nothing secret in it
         return f"{v['product']} · {NETWORK_WORDS.get(v['network'], v['network'].title())}"
     if kind in ("door_code", "wifi", "esim", "home_address"):

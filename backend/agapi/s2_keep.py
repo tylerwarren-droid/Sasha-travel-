@@ -231,13 +231,44 @@ async def put(account: str, kind: str, value: dict) -> dict:
     row = {"id": iid, "account_id": account, "type": kind, "tier": K.tier_of(kind), "masked": K.mask(kind, values), "fingerprint": fp,
            "nonce": nonce, "ciphertext": ct, "created_at": NOW(), "last_used_at": None}
     values = None
-    await st.add_item(row)
+    try:
+        await st.add_item(row)
+    except Exception as e:
+        if type(e).__name__ == "CheckViolationError":   # Sasha 301 · a type the database doesn't allow yet (my_card before sql/044)
+            raise KeepError("type_not_open", f"Your Keep can't hold a {K.TYPES[kind]['name'].lower()} yet — nothing was saved.") from None
+        raise
     await _activity(account, "keep_save", row, {"reference": "keep:" + iid, "item": row["masked"]})
     return {**_out(row), "created": True}
 
 
 async def list_(account: str) -> List[dict]:
     return [_out(i) for i in await _store().items_of(account)]
+
+
+#: Sasha 301 · what the itinerary's fine print may read of his own Keep: a loyalty item's PROGRAMME (never its number) and his cards
+#: as he told them (the name, the last four, the perk in his words — none of it a secret)
+WALLET_FIELDS = {"loyalty": ("program",), "my_card": ("name", "last4", "perk", "perk_for", "perk_where")}
+
+
+async def wallet(account: str) -> List[dict]:
+    """His loyalty programmes and his cards, for the fine print on each booking → [{item_id, type, masked, <WALLET_FIELDS>}]. Opened
+    here, the fields above copied, the rest dropped — a loyalty number never leaves the Keep. Closed / unreadable → [] (logged)."""
+    out: List[dict] = []
+    try:
+        st = _store()
+        items = [i for i in await st.items_of(account) if i["type"] in WALLET_FIELDS]
+        if not items:
+            return []
+        dek = await _dek(account, create=False)
+        for it in items:
+            v = K.open_(dek, K.item_aad(account, account, str(it["id"]), it["type"]), bytes(it["nonce"]), bytes(it["ciphertext"]))
+            out.append({"item_id": str(it["id"]), "type": it["type"], "masked": it["masked"],
+                        **{f: v[f] for f in WALLET_FIELDS[it["type"]] if v.get(f)}})
+            v = None
+    except Exception as e:   # the fine print is a nicety on the row: never a reason the itinerary can't be read
+        log.info("[keep] wallet not read: %s", type(e).__name__)
+        return []
+    return out
 
 
 _USE_WORDS = {"keep_save": "Saved", "keep_use": "Used", "keep_show": "Shown on your screen"}

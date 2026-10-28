@@ -2234,7 +2234,8 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
              **{k: r[k] for k in ("channel", "trip_id", "address") if r.get(k)},
              **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full
              # Sasha 215 · CR 56 — the venue's OWN words (an email/SMS reply) are untrusted data, never instructions to her
-             **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {})}
+             **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {}),
+             **({"venue_words": str(r["venue_words"])[:4000]} if r.get("venue_words") else {})}   # Sasha 301 · their own words: the terms
             for r in (j or {}).get("reservations") or []
             if (r.get("date") or today) >= today and (include_cancelled or r.get("status") != "cancelled")][:20 - len(acts)]
 

@@ -6,6 +6,9 @@ import { useEffect, useState } from 'react'
 import TripMap from '../TripMap'
 import { bookingReq } from '@/lib/booking-client'
 import type { RichItinerary } from '../ItineraryDays'
+import { termHead, type Term } from '../cards/S2Cards'   // Sasha 301 · the fine print: one way to say a term
+// Sasha 301 · a day's booking line says the cancellation deadline the venue stated (their sentence is on its card) — nothing if none
+const cancelBy = (ts?: Term[]) => { const t = (ts || []).find((x) => x.kinds.includes('cancellation') && x.by_words); return t ? ` · cancel by ${t.by_words}` : '' }
 
 interface TripPanelProps {
   richItinerary: RichItinerary | null
@@ -42,7 +45,8 @@ interface TripPanelProps {
  */
 /** Sasha 165 · THE ONE VIEW: the plan on the ACCOUNT (Postgres) with every booking slotted into its day — polled, so a
  *  booking made on WhatsApp shows here within seconds, and a plan made elsewhere (or before a reload) still shows. */
-type ServerBooking = { id?: string; venue: string; time?: string; part?: string; status?: string; status_words?: string; route_words?: string; replaces?: string; test?: boolean; edge?: string }
+type ServerBooking = { id?: string; venue: string; time?: string; part?: string; status?: string; status_words?: string; route_words?: string; replaces?: string; test?: boolean; edge?: string
+  terms?: Term[] }   // Sasha 301 · the venue's own terms
 type ServerDay = { day: number; date?: string | null; city?: string; bookings?: ServerBooking[]; activities?: { name: string; time?: string; replaced_by?: string; added?: boolean }[]; stay?: { name?: string; state: string; words: string } }   // Sasha 198 R3 · the basket's stay (SASHA_BASKET=1)
 const SHORT: Record<string, string> = { requested: 'Requested', attempting: 'Requested', pending: 'Not sent yet', confirmed: 'Confirmed ✅',
   guest_booked: 'Booked by you ✅', declined: 'Declined', quoted: 'Quoted — read their reply', proposed: 'They offered another time',
@@ -63,7 +67,7 @@ type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; st
   to_pay_eur?: number; estimate_lines?: { what: string; eur: number | null }[]; lines?: { kind: string; state: string; what: string; day?: string | null }[] }
 const eur = (n: number) => `€${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string
-  route_words?: string; venue_words?: string | null }   // Sasha 300 · the way it was made; the venue's own words (data)
+  route_words?: string; venue_words?: string | null; terms?: Term[] }   // Sasha 300 · the way it was made; the venue's own words (data) · 301: their terms
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
 type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting' | 'done' | 'doing' | 'expired' | 'info'; note: string; pdf: string | null; next: string | null }
 /** CR 50 · the Move tab's "Getting there": Sasha books the flights and first nights from here, onto this trip */
@@ -105,6 +109,7 @@ function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
                 <div>{r.time ? `${r.time} · ` : ''}{r.venue.replace(/ \(TEST stand-in\)$/, '')}</div>
                 <div className="lw-note-s">{r.status_words ?? r.status}{r.route_words ? ` · ${r.route_words}` : ''}{r.booking_reference ? ` · ref ${r.booking_reference}` : ''}</div>
                 {r.venue_words ? <div className="lw-note-s">They said: &ldquo;{r.venue_words}&rdquo;</div> : null}
+                {(r.terms || []).map((t, k) => <div key={k} className="lw-note-s"><b>{termHead(t)}</b></div>)}
               </div>
             ))}
           </div>
@@ -399,7 +404,7 @@ export default function TripPanel({
                         {/* Sasha 165 · this day's bookings, with their status — shown even when the day is folded */}
                         {(serverDay(d.day)?.bookings ?? []).map((b, bi) => (
                           <div key={bi} className="lw-day-city" style={{ color: /Confirmed|Booked/i.test(b.status_words ?? '') ? '#7ee2a8' : /Declined/i.test(b.status_words ?? '') ? '#f19999' : '#E8B923' }}>
-                            🔖 {b.time ? `${b.time}${b.edge ? ` (${b.edge})` : ''} · ` : ''}{b.venue} — {shortStatus(b)}{b.route_words ? ` · ${b.route_words}` : ''}
+                            🔖 {b.time ? `${b.time}${b.edge ? ` (${b.edge})` : ''} · ` : ''}{b.venue} — {shortStatus(b)}{b.route_words ? ` · ${b.route_words}` : ''}{cancelBy(b.terms)}
                           </div>
                         ))}
                         {/* Sasha 167 · a place picked on WhatsApp, on its day — a plan, not a booking */}

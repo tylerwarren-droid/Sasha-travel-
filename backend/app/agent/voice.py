@@ -255,6 +255,7 @@ SHOWS = {
     "cancel_booking": "Getting the cancellation ready", "send_email": "Sending that", "send_whatsapp": "Sending that",
     "hotel_request": "Sending that", "add_to_calendar": "The calendar links", "what_i_can_do": "Pulling that up",
     "keep_add": "Opening the photo picker",
+    "booking_fine_print": "Reading the fine print", "keep_note": "Saving that to your Keep",   # Sasha 301
     # fine print (CR 74/75/81) — each answers with a card on /s2
     "my_cards": "Looking up your cards", "add_card": "Adding the card", "card_cover": "Checking the cover", "which_card": "Checking your cards",
     "rental_cover": "Checking the cover", "accident": "Opening the accident case", "accident_notify": "Getting that message ready",
@@ -474,7 +475,8 @@ _STEP_OF = {"search_stays": "stays", "swap_stay": "stays", "search_flights": "fl
             "propose_trip": "trip", "prepare_trip": "trip", "search_venues": "places", "suggest_activities": "places",
             "read_booking_route": "route", "hold_venue": "booking", "book_venue": "booking", "hold_booking": "booking", "book": "booking",
             "cancel_venue": "booking", "change_booking": "booking", "cancel_booking": "booking", "get_trip": "up", "get_status": "up",
-            "get_total": "up", "my_plans": "up", "get_activity": "up", "what_i_can_do": "up", "keep_list": "up"}
+            "get_total": "up", "my_plans": "up", "get_activity": "up", "what_i_can_do": "up", "keep_list": "up",
+            "booking_fine_print": "up"}
 _STEP_N: dict = {}
 
 

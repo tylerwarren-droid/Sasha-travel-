@@ -235,7 +235,8 @@ async def put(account: str, kind: str, value: dict) -> dict:
         await st.add_item(row)
     except Exception as e:
         if _type_refused(e):   # Sasha 301 · a type the database doesn't allow yet (my_card before sql/044)
-            raise KeepError("type_not_open", f"Your Keep can't hold a {K.TYPES[kind]['name'].lower()} yet — nothing was saved.") from None
+            what = {"my_card": "your cards"}.get(kind, K.TYPES[kind]["name"].lower() + "s")
+            raise KeepError("type_not_open", f"Your Keep can't hold {what} yet — nothing was saved.") from None
         raise
     await _activity(account, "keep_save", row, {"reference": "keep:" + iid, "item": row["masked"]})
     return {**_out(row), "created": True}

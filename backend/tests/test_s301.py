@@ -128,6 +128,7 @@ class KeepCards(unittest.TestCase):
         with mock.patch.object(self.store, "add_item", refuse), self.assertRaises(ToolError) as e:
             self.note(kind="card", name="Amex Gold", last4="1234")
         self.assertEqual(e.exception.code, "type_not_open")
+        self.assertEqual(e.exception.message, "Your Keep can't hold your cards yet — nothing was saved.")
 
 
 class Perks(unittest.TestCase):

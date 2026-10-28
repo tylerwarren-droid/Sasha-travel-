@@ -2222,12 +2222,17 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
         raise unreachable("store_unreachable")
     today = date.today().isoformat()
     acts: List[dict] = []
+    from agapi import venue_submit as VS
     try:   # Sasha 254 · item 3 — the AgAPI sends, each with the venue's reply now (venue.booking_status), at most 5 s
-        from agapi import venue_submit as VS
-        acts = [b for b in await asyncio.wait_for(VS.bookings(account), timeout=5) if (b.get("date") or today) >= today
-                and (include_cancelled or b.get("status") != "cancelled")]
-    except Exception as e:
-        log.info("[venues] AgAPI acts not read: %s", type(e).__name__)
+        got = await asyncio.wait_for(VS.bookings(account), timeout=5)
+    except Exception as e:   # CR 134 · a slow read is never "no bookings" (cancel_venue's first booking_unknown): the acts as last known
+        log.info("[venues] AgAPI acts not read now (%s): as last known", type(e).__name__)
+        try:
+            got = await VS.bookings(account, read=False)
+        except Exception as e2:
+            log.info("[venues] AgAPI acts not read: %s", type(e2).__name__)
+            got = []
+    acts = [b for b in got if (b.get("date") or today) >= today and (include_cancelled or b.get("status") != "cancelled")]
     if status != 200:
         return acts
     try:   # CR 87 · a venue's reply that changed a reservation updates its outcome (once) — Sasha 247: awaited, at most 3 s (a bare

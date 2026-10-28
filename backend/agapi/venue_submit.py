@@ -600,7 +600,10 @@ async def change_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         approval = await _approval(account, rid, said)
         if isinstance(approval, dict):
             return approval
-        body = {"end_user": uid, "act_id": act_id, "kind": held.get("kind") or "change"}
+        # Sasha 302 · the approved call is read again (CR 132 venue_manage._ask): it carries what the read-back asked — the new time /
+        # party, or when he'll arrive — or AgAPI refuses it
+        ask = {k: v for k, v in (held.get("ask") or {}).items() if k in ("at", "party", "arrive") and v}
+        body = {"end_user": uid, "act_id": act_id, "kind": held.get("kind") or "change", **ask}
         r = await _call(account, "venue.change_booking", body, approval=approval)
         if not r.get("ok"):
             return {"ok": False, "error": _err(r)}

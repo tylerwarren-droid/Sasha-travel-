@@ -195,7 +195,7 @@ async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
             return {"status": "not_possible", "venue": b["venue"], "say": e["message"], **({"open": link, "page_url": link} if link else {})}
         raise _err(e["code"], e["message"])
     _hold(ctx, tool, rb["lines"], act_id=b["act_id"], read_back_id=rb["read_back_id"], read_back_sha256=rb.get("read_back_sha256"),
-          end_user=rb.get("end_user"), venue=b["venue"], kind=kind, route=b["route"])
+          end_user=rb.get("end_user"), venue=b["venue"], kind=kind, route=b["route"], ask=args)   # Sasha 302: his yes sends it
     return {"status": "awaiting_yes", "venue": b["venue"], "route": b["route"], "read_back": rb["lines"],
             "say": "Read this back in a sentence or two (its first line as it is) and ask: OK? Act only on their yes in their next turn."}
 

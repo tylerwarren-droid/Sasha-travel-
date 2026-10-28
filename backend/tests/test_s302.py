@@ -64,6 +64,42 @@ class OnTheRecord(unittest.TestCase):
 
 
 
+class HisYesCarriesTheAsk(unittest.TestCase):
+    """Found on the v1.43 sandbox walk (CR 132 venue_manage._ask): the approved venue.change_booking is read AGAIN — a change without
+    its new time, a "running late" without its arrive, is refused. His yes sends what the read-back asked, nothing less."""
+
+    def go(self, kind, ask):
+        import asyncio
+        from unittest import mock
+        from agapi import venue_submit as VS
+        sent = []
+
+        async def call(op, body, approval=None, account=None):
+            sent.append((op, dict(body), approval))
+            return {"ok": True, "result": {"status": "sent", "change_act_id": "act_chg"}}
+
+        async def approval(account, rid, said):
+            return "apv_1"
+        held = {"read_back_id": "rb_1", "act_id": "act_1", "end_user": "eu_1", "kind": kind, "ask": ask, "venue": "Taverna Correo"}
+        with mock.patch.object(VS, "CALL", call), mock.patch.object(VS, "_approval", approval), \
+                mock.patch.object(VS, "acts_of", mock.AsyncMock(return_value=[])), mock.patch.object(VS, "_remember", mock.AsyncMock()):
+            r = asyncio.run(VS.change_submit("acct", held, "yes"))
+        self.assertTrue(r["ok"])
+        return sent[-1]
+
+    def test_a_change_goes_with_its_new_time(self):
+        op, body, apv = self.go("change", {"at": f"{DAY}T21:30"})
+        self.assertEqual((op, apv, body["kind"], body["at"]), ("venue.change_booking", "apv_1", "change", f"{DAY}T21:30"))
+
+    def test_running_late_goes_with_when_they_arrive(self):
+        _, body, _ = self.go("late", {"arrive": "21:45"})
+        self.assertEqual((body["kind"], body["arrive"]), ("late", "21:45"))
+
+    def test_the_held_yes_keeps_the_ask(self):
+        from agapi import s2_manage as SM
+        self.assertIn("ask=args", inspect.getsource(SM._act_notice))
+
+
 from tests.test_s300 import Base as S300Base, Ctx, run   # noqa: E402
 
 

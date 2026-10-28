@@ -10,7 +10,10 @@ test('her face: live only from a frame actually drawn; ONE half-body still (268,
   assert.match(hello, /canvas\.dataset\.drawn = '1'/)                               // set only where a frame is drawn
   assert.match(hello, /const img = FACE_STILL/)                                      // 268: the one still, never a snapshot
   assert.doesNotMatch(hello.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''), /FACE_KEY|keptFace|sasha-face\.jpg/)                   // the kept close-up is retired
-  assert.match(hello, /else letGo\(f\)   \/\/ Sasha 257 · 268: no snapshot · 271: she's in the corner — her still/)   // Sasha 271 · Sasha 281 MOVED: a late face is let go unless a tap card waits for it (never mid-line)
+  // Sasha 271 · Sasha 281 MOVED · Sasha 303 MOVED: a late face is let go (its session closed) — no face is started before his tap any
+  // more, so the only late one is his tap's own (tapFace): not on screen in FACE_WAIT_MS, or the page moved on meanwhile
+  assert.match(hello, /if \(!f\) \{ p\.then\(late => \{ void late\.stop\('late'\) \}\)\.catch\(\(\) => \{\}\); return false \}/)
+  assert.match(hello, /if \(phaseRef\.current !== 'face'\) \{ void f\.stop\('late'\); return false \}/)
   assert.doesNotMatch(hello, /setTimeout\(\(\) => \{ face\.current = null; setImg\(still/)   // the old 0.9 s still is gone
 })
 

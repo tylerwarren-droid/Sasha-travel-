@@ -87,7 +87,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
   // greeting, which read as "she is not hearing me").
   const audioWatchRef = useRef<any>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'still'>('idle')
   const [error, setError] = useState('')
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'bad' | null>(null)
 
@@ -161,7 +161,9 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       ])
       // A prefetch that failed resolves to null — fall back to a live fetch rather than dying.
       const res = (tokenRes as Response | null) || (await fetch(tokenHref))
-      const { token } = await res.json()
+      const { token, rule } = await res.json().catch(() => ({}))
+      // Sasha 303 · the ONE gate opens her live face on /s2 only (a real signed-in person's tap): here, her still — never an error
+      if (rule === 'avatar_closed') { setStatus('still'); return }
       const t1 = performance.now()
       console.log(`[HG] token+sdk ${Math.round(t1 - t0)}ms${warm ? ' (prefetched)' : ''}`)
       if (!token) throw new Error('No token received')
@@ -537,6 +539,9 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
             <div className="text-[11px] text-white/25 tracking-[0.2em] uppercase">Sasha · AI Concierge</div>
           </div>
         </div>
+      )}
+      {status === 'still' && (
+        <div className="absolute inset-0" style={{ background: 'center 18% / cover no-repeat url(/sasha-half.webp)' }} role="img" aria-label="Sasha" />
       )}
       {status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">

@@ -281,6 +281,15 @@ def client(tid: str, body: dict, account: Optional[str]) -> None:
     _put("client", "c:" + str(tid)[:32], data)
 
 
+def avatar(row: dict) -> None:
+    """Sasha 303 · one row per avatar session, written by app.avatar_gate when it closes: who (hashed), why it opened, when it opened
+    and closed, its seconds, why it closed. The gate's own ledger counts the day — this row is the log, never read by the gate."""
+    if not isinstance(row, dict):
+        return
+    keep = {k: row.get(k) for k in ("who", "surface", "opened_why", "opened_at", "closed_at", "seconds", "closed_why")}
+    _put("avatar", "a:" + uuid.uuid4().hex[:24], keep)
+
+
 # ── BOOKINGS: one row per request, from the person's request through the yes, the action and the outcome ────────────────────
 def _key(account: Optional[str], place: Optional[str]) -> str:
     return f"{account}|{place or '?'}"
@@ -714,4 +723,4 @@ def stats() -> dict:
 
 
 __all__ = ["MEASURE_VERSION", "RETENTION_DAYS", "STAGES", "STOP_OF", "h", "observe", "turn_start", "turn_end", "usage", "places_read",
-           "client", "tool", "agapi_op", "derive", "summarise", "read_week", "read_rows", "daily", "daily_forever", "summary_line", "flush", "stats"]
+           "client", "avatar", "tool", "agapi_op", "derive", "summarise", "read_week", "read_rows", "daily", "daily_forever", "summary_line", "flush", "stats"]

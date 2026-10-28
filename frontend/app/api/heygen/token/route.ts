@@ -1,82 +1,12 @@
 import { NextResponse } from 'next/server'
-import { CONTEXT_ID } from '@/lib/avatar-context.mjs'   // Sasha 200 · one place for the avatar's context
 
-// Never let a token request be cached — every session needs a fresh JWT.
+/**
+ * Sasha 303 · RETIRED — this route minted a FULL LiveAvatar (HeyGen) session for ANY visitor, no sign-in (/vietnam, /next, the site
+ * root opened one on page load). Every avatar session now opens through the ONE gate (backend app/avatar_gate.py, via
+ * /api/s2-avatar/token): a real signed-in person's tap on /s2 only. This answers with her still (SashaAvatar shows it); nothing is minted.
+ */
 export const dynamic = 'force-dynamic'
 
-const AVATAR_ID = 'ab0765ad-69de-41fb-9f8a-bd01c3c52d6f'
-const VOICE_ID = '62bbb4b2-bb26-4727-bc87-cfb2bd4e0cc8'
-const SUPPORTED_LANGS = new Set(['en', 'vi', 'ko', 'zh', 'ja', 'fr', 'es', 'de', 'hi'])
-
-async function mintToken(body: any) {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10000)
-  try {
-    const res = await fetch('https://api.liveavatar.com/v1/sessions/token', {
-      method: 'POST',
-      headers: { 'X-API-KEY': process.env.HEYGEN_API_KEY as string, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-    const data = await res.json().catch(() => ({}))
-    return { ok: res.ok, status: res.status, data }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-export async function GET(request: Request) {
-  if (!process.env.HEYGEN_API_KEY) {
-    console.error('[token] HEYGEN_API_KEY is not set')
-    return NextResponse.json({ error: 'Server not configured: missing LiveAvatar API key' }, { status: 500 })
-  }
-
-  const url = new URL(request.url)
-  const langParam = (url.searchParams.get('lang') || 'en').toLowerCase()
-  const lang = SUPPORTED_LANGS.has(langParam) ? langParam : 'en'
-  const prevSession = url.searchParams.get('prev_session') || ''
-
-  const base: any = {
-    mode: 'FULL',
-    avatar_id: AVATAR_ID,
-    // `speed` lives INSIDE voice_settings (per-provider union) — a bare `speed` on
-    // avatar_persona is not in AvatarPersonaSchema and was silently ignored, so the
-    // avatar spoke at default speed. Verified live: this shape mints (code 1000).
-    // 0.8 was chosen back when the field was silently ignored; once it took effect the
-    // guest's first comment was "she's talking a bit too slow". 1.0 = natural pace.
-    avatar_persona: {
-      context_id: CONTEXT_ID, voice_id: VOICE_ID, language: lang,
-      voice_settings: { provider: 'elevenLabs', speed: 1.0 },
-    },
-    // No dynamic_variables. Sasha 200: the context's opening line is a greeting only and its prompt never plans or books
-    // (lib/avatar-context.mjs) — the conductor's guided script asks the name and leads the trip.
-    is_sandbox: false,
-  }
-
-  try {
-    // Cross-session memory (LiveAvatar Session Memory API): if we have the prior session id,
-    // ask the avatar to carry memory forward so a returning guest is remembered. If the
-    // account/session can't resolve it, retry cleanly WITHOUT memory so the session still starts.
-    let result
-    if (prevSession) {
-      result = await mintToken({ ...base, memory: { prev_session_id: prevSession } })
-      if (!result.ok) {
-        console.warn('[token] memory attach failed, retrying without memory:', result.status)
-        result = await mintToken(base)
-      }
-    } else {
-      result = await mintToken(base)
-    }
-
-    const token = result.data?.data?.session_token
-    if (!token) {
-      console.error('[token] no session_token — upstream', result.status, JSON.stringify(result.data))
-      return NextResponse.json({ error: 'No token from LiveAvatar', details: result.data }, { status: 502 })
-    }
-    return NextResponse.json({ token })
-  } catch (error: any) {
-    const msg = error?.name === 'AbortError' ? 'LiveAvatar token request timed out' : (error?.message || 'Token request failed')
-    console.error('[token] error:', msg)
-    return NextResponse.json({ error: msg }, { status: 504 })
-  }
+export async function GET(): Promise<Response> {
+  return NextResponse.json({ ok: false, rule: 'avatar_closed', say: 'Her video is on /s2 only.' }, { status: 403, headers: { 'cache-control': 'no-store' } })
 }

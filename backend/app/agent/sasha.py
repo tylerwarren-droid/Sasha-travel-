@@ -1823,6 +1823,8 @@ async def agent_turn(request: Request):
     message = str(body.get("message") or "").strip()[:4000]
     if not message:
         return JSONResponse({"ok": False, "rule": "empty"}, status_code=400)
+    from app import avatar_gate as _AVATAR
+    _AVATAR.touch(account)   # Sasha 303 · he is talking: his live face (if one is open) isn't quiet
     # Sasha 217 · CR 63 — the S-78 input guard on /next too: a password, PIN or card number never reaches the model (nor its
     # history, which the browser sends back next turn); the fixed reply is said, and nothing is kept
     from booking_signer.vault import guard as G

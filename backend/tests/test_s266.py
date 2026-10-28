@@ -83,13 +83,14 @@ class SheStaysThroughTheFirstExchange(unittest.TestCase):
         # Sasha 271 · MOVED (row 1008, Tyler): her arrival no longer stays full size through the first exchange — "Hey there" and the
         # camera-off line, then the corner AT ONCE (when said, never a timer); the live-face idle timer is only for a tap that
         # brought her back, and it lets her live face go (her still stays) — it never moves her
-        voice = hello[hello.index("const speakVoice = async () => {"):hello.index("const lateFace")]
+        voice = hello[hello.index("const speakVoice = async () => {"):hello.index("const capSay")]   # Sasha 303 · MOVED: lateFace is gone
         self.assertIn("await toCorner()", voice)
         self.assertNotIn("idleLive", hello)
-        idle = hello[hello.index("idle.current = setTimeout("):hello.index("}, FACE_IDLE_S * 1000)")]
         # Sasha 281 · MOVED (Tyler 21 Oct 17:58): her live face let go while full size takes her to the corner with it — her still
-        # left full size had the next line said over it (a frozen face)
-        self.assertIn("void collapse()", idle)
+        # left full size had the next line said over it (a frozen face). Sasha 303 · MOVED: the quiet is the ONE gate's (server, 60 s);
+        # its session's end is `ended` → collapse(), the same way — the page's FACE_IDLE_S timer is gone (tests.test_s303)
+        self.assertNotIn("FACE_IDLE_S", hello)
+        self.assertIn("const ended = () => { if (mine && face.current === mine) void collapse() }", hello)
         self.assertIn("if (!openingEnds(phaseRef.current, started)) return", hello)      # his first reply: then the circle
         self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", _tsx(self, "app/s2/S2App.tsx"))   # 268: small talk keeps her; his first request (bye) ends it
 

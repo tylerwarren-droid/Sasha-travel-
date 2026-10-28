@@ -184,7 +184,8 @@ test('281 · ONE way S2Hello speaks: Face.say (her lips) and the voice are reach
   assert.doesNotMatch(hello, /setPhase\('faceLate'\)|to\('faceLate'\)/)                              // a late face never shown mid-line
   assert.match(hello, /return new Promise<boolean>\(res => \{ speaking = \(\) => res\(true\)/)        // Face.say says whether it reached her lips
   assert.match(hello, /if \(!a \|\| gone\) return false/)
-  assert.match(hello, /idle\.current = setTimeout\(\(\) => \{ if \(phaseRef\.current === 'faceAgain'\) void collapse\(\) \}/)   // her face let go → the corner
+  // Sasha 303 · MOVED: her quiet face is closed by the ONE gate on the server (no page idle timer); its session's end → `ended` → the corner
+  assert.doesNotMatch(hello, /FACE_IDLE_S|idle\.current = setTimeout/)
   assert.match(hello, /const ended = \(\) => \{ if \(mine && face\.current === mine\) void collapse\(\) \}/)
   assert.match(hello, /if \(loud && lineToSay && !asleepRef\.current\) await settleNow\('', ''\)/)   // bye: no camera words without a camera · Sasha 296 MOVED: through settle
 })

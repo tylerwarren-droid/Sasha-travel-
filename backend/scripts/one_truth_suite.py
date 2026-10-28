@@ -283,6 +283,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T80": ("The fine print is said by code, word for word, never paraphrased; a term on AgAPI's record is read from the venue's words "
             "in full (never the display line's cut); a hotel stay act is a hotel, so his programme shows on it only (Sasha 302)",
             ["tests.test_s302"]),
+    "T81": ("ONE gate opens and closes every avatar (HeyGen) session: only a real signed-in person's tap on /s2; closed on the server "
+            "after 60 s with nobody talking, a hidden or closed tab, or a cap (his minutes, Kanoe's — server settings), one log row each "
+            "(Sasha 303)",
+            ["tests.test_s303"]),
 }
 
 _RUNNER = """

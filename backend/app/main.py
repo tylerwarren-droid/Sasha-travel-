@@ -76,6 +76,9 @@ app.include_router(booking_signer_router)  # /api/booking/*
 # Sasha 203 · Sasha as an AI agent with tools (/next): one model, AgAPI v0 (agapi/v0.py) — alongside the current Sasha
 from app.agent.sasha import router as agent_router  # noqa: E402
 app.include_router(agent_router)  # /api/agent/*
+# Sasha 303 · the ONE gate for her live face (HeyGen LiveAvatar): opens, holds and closes every session; its reaper closes the quiet ones
+from app.avatar_gate import router as avatar_router  # noqa: E402
+app.include_router(avatar_router)  # /api/avatar/*
 
 
 @app.on_event("startup")

@@ -25,6 +25,9 @@ export default async function MeasuresPage({ searchParams }: { searchParams: Pro
   const headers = await agentHeaders()
   const r = headers ? await fetch(`${API_URL}/api/agent/measures?days=${days}`, { headers, cache: 'no-store' }).catch(() => null) : null
   const j = r && r.ok ? await r.json().catch(() => null) : null
+  // Sasha 303 · her live face today, from the ONE gate's own day ledger (app/avatar_gate.py): minutes, sessions open, the two caps
+  const ar = headers ? await fetch(`${API_URL}/api/avatar/today`, { headers, cache: 'no-store' }).catch(() => null) : null
+  const av = ar && ar.ok ? await ar.json().catch(() => null) : null
   if (!j?.ok) return <main style={{ ...box, background: '#0b0b10', minHeight: '100dvh' }}><h1>Sasha · measures</h1><p>The store couldn’t be read{j?.rule ? ` (${j.rule})` : ''}.</p></main>
   const w: S = j.week
   const daysRows: [string, S][] = Object.entries(j.by_day || {})
@@ -38,6 +41,11 @@ export default async function MeasuresPage({ searchParams }: { searchParams: Pro
       <h2 style={{ fontSize: 17 }}>Daily summary</h2>{/* Sasha 275 · kept in sasha-prod, read here (the chat reads it from this page) — never sent elsewhere */}
       {(j.daily || []).length ? (j.daily as { day: string; line: string }[]).map(d => <p key={d.day} data-daily={d.day} style={{ fontSize: 13.5, margin: '6px 0', opacity: 0.9 }}>{d.line}</p>)
         : <p style={{ fontSize: 13.5, opacity: 0.7 }}>No daily summary yet — the first one is made after 07:00 Madrid.</p>}
+
+      <h2 style={{ fontSize: 17 }}>Avatar today (HeyGen)</h2>
+      <p data-avatar-today style={{ fontSize: 13.5, margin: '6px 0', opacity: 0.9 }}>{av?.ok
+        ? `${av.day}: ${(av.seconds / 60).toFixed(1)} min · ${av.open} open now · caps ${av.cap_person_min} min a person, ${av.cap_kanoe_min} min for Kanoe`
+        : 'The avatar gate couldn’t be read.'}</p>
 
       <h2 style={{ fontSize: 17 }}>Responsiveness (ms, p50 / p95 / p99)</h2>
       <table style={{ borderCollapse: 'collapse', width: '100%' }}><thead><tr><th style={th}>Day</th><th style={th}>Voice: end of speech → first audible</th><th style={th}>Text: first visible</th><th style={th}>Routine reply done</th></tr></thead>

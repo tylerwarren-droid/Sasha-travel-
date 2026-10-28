@@ -272,6 +272,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T77": ("While a turn works, a line is said only for a step that IS running, in its own words (with the tapped venue's name), once — "
             "never a line twice; a tap's reads start at the tap; a platform card's line is said by code (Sasha 299)",
             ["tests.test_s299"]),
+    "T78": ("Every booking on every route is on its trip's ONE itinerary (agapi/itinerary.py: my_plans, the Trip tab, the reminders); a "
+            "change, a cancellation or 'running late' goes by the route it was booked on, on his yes — or is said plainly and nothing "
+            "is sent (Sasha 300)",
+            ["tests.test_s300"]),
 }
 
 _RUNNER = """

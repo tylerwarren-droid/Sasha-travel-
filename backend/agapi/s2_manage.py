@@ -66,44 +66,9 @@ def _venue_kind(t: Optional[str]) -> str:
 
 
 async def plans_of(account: str) -> List[dict]:
-    """Everything booked (or awaiting payment) on the account, from Pacioli's records only — /next's and /s2's alike."""
-    from agapi import venues as VN
-    from booking_signer import basket as BK, plan_store as PS
-    out: List[dict] = []
-    for v in await VN.venue_bookings(account):
-        when = f"{v['date']}T{v['time']}" if v.get("date") and v.get("time") else (v.get("date") or "")
-        out.append({"kind": _venue_kind(v.get("type")), "title": v["venue"], "when": when, "status": v.get("status") or "",
-                    "party": v.get("party"), **({"reference": v["reference"]} if v.get("reference") else {}), "id": v["trip_item_id"],
-                    "source": "venue"})
-    seen = set()
-    for p in await PS.plans(account):
-        for r in await BK.items(account, p["trip_id"], ("booked", "pending_payment")):
-            if r["id"] in seen:
-                continue
-            seen.add(r["id"])
-            s = r.get("snapshot") or {}
-            status = "booked" if r["state"] == "booked" else "awaiting payment"
-            if r["kind"] == "flight":
-                title = " ".join(x for x in (s.get("owner"), s.get("flights")) if x) or "Flight"
-                where = f"{s.get('from') or ''} → {s.get('to') or ''}".strip(" →")
-                out.append({"kind": "flight", "title": title, "when": str(s.get("departs") or r.get("day") or ""), "where": where,
-                            "status": status, **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),
-                            "id": str(r["id"]), "order_id": r.get("order_id"), "trip": p.get("title"), "source": "flight"})
-            elif r["kind"] == "stay":
-                nights = int(s.get("nights") or 1)
-                out.append({"kind": "hotel", "title": s.get("name") or s.get("hotel") or "Your stay", "when": str(r.get("day") or ""),
-                            "where": s.get("city") or "", "nights": nights, "status": status,
-                            **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),
-                            "id": str(r["id"]), "trip_item_id": str(r["trip_item_id"]) if r.get("trip_item_id") else None,
-                            "trip": p.get("title"), "source": "hotel"})
-    from booking_signer import rental_moments as RM   # Sasha 227 · the rentals they told her about
-    for r in await RM.rentals(account):
-        out.append({"kind": "car", "title": f"{r['rental_company']} car rental", "when": r["pickup_date"] + (f"T{r['pickup_time']}" if r.get("pickup_time") else ""),
-                    "where": r.get("place") or r.get("country") or "", "status": "noted (booked elsewhere)", "id": r["id"], "source": "rental"})
-    today = date.today().isoformat()
-    keep = [i for i in out if (i["when"] or today)[:10] >= today or
-            (i["kind"] == "hotel" and i["when"] and (date.fromisoformat(i["when"][:10]) + timedelta(days=i.get("nights") or 1)).isoformat() > today)]
-    return sorted(keep, key=lambda i: (i["when"] + ("T15:00" if i["kind"] == "hotel" and len(i["when"]) == 10 else "")) or "9999")   # a stay from check-in
+    """Everything booked (or awaiting payment) on the account — Sasha 300: THE ONE ITINERARY (agapi/itinerary.py), every route."""
+    from agapi import itinerary as IT
+    return await IT.of(account)
 
 
 def _on(items: List[dict], day: str) -> List[dict]:
@@ -126,7 +91,8 @@ async def my_plans(ctx, a: dict) -> dict:
             items = _on(items, day)
         except ValueError:
             raise _err("date_invalid", "on is YYYY-MM-DD")
-    shown = [{k: i.get(k) for k in ("kind", "title", "when", "where", "status", "reference", "id", "party", "nights") if i.get(k) is not None}
+    shown = [{k: i.get(k) for k in ("kind", "title", "when", "where", "status", "status_words", "route_words", "venue_said", "reference",
+                                    "id", "party", "nights", "trip", "map_url") if i.get(k) is not None}   # Sasha 300 · its route, their words
              for i in items[:20]]
     return {"items": shown, **({"on": day} if day else {}), "count": len(items),
             "say": ("Nothing booked that day." if day else "Nothing coming up.") if not items else
@@ -136,16 +102,9 @@ async def my_plans(ctx, a: dict) -> dict:
 # ── RUNNING LATE (a venue) ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 async def _venue_target(ctx, a: dict) -> dict:
-    from agapi import venues as VN
-    bookings = await VN.venue_bookings(ctx.account)
-    tid, name = a.get("trip_item_id") or a.get("id"), (a.get("venue") or "").lower().strip()
-    hit = [b for b in bookings if (tid and b["trip_item_id"] == tid) or (name and name in (b["venue"] or "").lower())]
-    if not hit and not tid and not name:
-        today = date.today().isoformat()
-        hit = [b for b in bookings if b.get("date") == today] or bookings[:1]
-    if not hit:
-        raise _err("booking_unknown", "which booking? my_plans lists them")
-    return hit[0]
+    """Sasha 300 · the booking meant — the ONE itinerary's row (every route: AgAPI's acts, the hand-overs, the old ladder's)."""
+    from agapi import itinerary as IT
+    return await IT.find(ctx.account, a)
 
 
 def _arrive(b: dict, a: dict) -> Optional[str]:
@@ -164,6 +123,8 @@ async def _notice(ctx, a: dict, kind: str, tool: str) -> dict:
     GW = VN._API()
     said = ((a.get("approval") or {}).get("said")) or ""
     held = _held(ctx, tool)
+    if held and held.get("act_id") and said and _yes(said, ok=True):   # Sasha 300 · an AgAPI act: by ITS route, on this yes
+        return await _act_notice_go(ctx, held, said, kind)
     if held and said and _yes(said, ok=True):   # anything but their yes is a NEW read-back below (nothing is sent)
         await claim(ctx)
         _HELD.pop(ctx.account, None)
@@ -185,6 +146,11 @@ async def _notice(ctx, a: dict, kind: str, tool: str) -> dict:
                       {"reference": j.get("email_id") or held["tid"], "said": said, "read_back_sha256": "sha256:" + held["sha"]}, held["venue"])
         return {"status": j.get("status"), "venue": held["venue"], "say": j.get("say")}
     b = await _venue_target(ctx, a)
+    from agapi import itinerary as IT
+    if b["source"] == "handover":   # Sasha 300 · handed over (their page / his own WhatsApp): his, there, by that route — nothing sent
+        return IT.page_answer(b, kind)
+    if b["source"] == "act":   # Sasha 300 · AgAPI's act: the change goes by the route it went (venue.change_booking, CR 131 (c))
+        return await _act_notice(ctx, a, b, kind, tool)
     args = {"arrive": _arrive(b, a)} if kind == "late" else {k: v for k, v in (("time", a.get("new_time")), ("party", a.get("new_party"))) if v}
     if kind == "late" and not args["arrive"]:
         raise _err("arrive_missing", "how late? ask what time they'll get there (or how many minutes)")
@@ -199,6 +165,64 @@ async def _notice(ctx, a: dict, kind: str, tool: str) -> dict:
           venue=b["venue"])
     return {"status": "awaiting_yes", "venue": b["venue"], "route": j["route"], "read_back": lines,
             "say": "Read this back in a sentence or two (its first line as it is) and ask: OK? Act only on their yes in their next turn."}
+
+
+async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
+    """Sasha 300 · a change or "running late" for a booking AgAPI sent: venue.change_booking's read-back (its own route — an email
+    act's an email, a WhatsApp act's a WhatsApp, a call act's a call). Not offered by AgAPI yet → said plainly; nothing is sent."""
+    from agapi import venue_submit as VS
+    from app.agent import voice as V
+    if kind == "late":
+        arrive = _arrive(b, a)
+        if not arrive:
+            raise _err("arrive_missing", "how late? ask what time they'll get there (or how many minutes)")
+        args = {"arrive": arrive}
+    else:
+        hm = _HHMM.search(str(a.get("new_time") or ""))
+        day = str(a.get("new_date") or b.get("date") or "")[:10]
+        args = {**({"at": f"{day}T{int(hm.group(1)):02d}:{hm.group(2)}"} if hm and day else {}),
+                **({"party": int(a["new_party"])} if str(a.get("new_party") or "").isdigit() else {})}
+        if not args:
+            raise _err("change_missing", "what should it change to — a new time, or a different number of people?")
+    rb = await VS.change_read_back(ctx.account, b["act_id"], kind, **args)
+    if not rb.get("ok"):
+        e = rb["error"]
+        if e["code"] == "not_yet":
+            return {"status": "not_possible", "venue": b["venue"], "route": b["route"], "sent": False,
+                    "say": V.change_not_yet(b["venue"], b["route_words"], kind)}
+        if e["code"] == "not_allowed":
+            link = (e.get("details") or {}).get("link")
+            return {"status": "not_possible", "venue": b["venue"], "say": e["message"], **({"open": link, "page_url": link} if link else {})}
+        raise _err(e["code"], e["message"])
+    _hold(ctx, tool, rb["lines"], act_id=b["act_id"], read_back_id=rb["read_back_id"], read_back_sha256=rb.get("read_back_sha256"),
+          end_user=rb.get("end_user"), venue=b["venue"], kind=kind, route=b["route"])
+    return {"status": "awaiting_yes", "venue": b["venue"], "route": b["route"], "read_back": rb["lines"],
+            "say": "Read this back in a sentence or two (its first line as it is) and ask: OK? Act only on their yes in their next turn."}
+
+
+async def _act_notice_go(ctx, held: dict, said: str, kind: str) -> dict:
+    """On his yes (a later turn): venue.change_booking with the approval → sent by the act's route, or (his own WhatsApp) the message
+    for HIM to send. The venue's answer comes back on the act (venue.booking_status) and the itinerary shows it."""
+    from agapi.v0 import claim
+    from agapi import venue_submit as VS
+    await claim(ctx)
+    _HELD.pop(ctx.account, None)
+    r = await VS.change_submit(ctx.account, held, said)
+    if not r.get("ok"):
+        raise _err(r["error"]["code"], r["error"]["message"])
+    what = "venue_late" if kind == "late" else "booking_change"
+    if r.get("status") == "waiting_for_their_tap":
+        return {"status": "waiting_for_their_tap", "venue": held["venue"], "say": "I've sent you the link — it goes once you tap yes there."}
+    if r.get("status") == "person_sends":   # his own WhatsApp: the message AgAPI wrote, for him to send (nothing sent by Kanoe)
+        m = r.get("message") or {}
+        return {"status": "yours_to_send", "venue": held["venue"], "sent": False, "say": r.get("say") or "",
+                **({"open": m["link"], "button": {"label": "Send on WhatsApp", "link": m["link"]}} if m.get("link") else {})}
+    await _record(ctx.account, what, "requested" if r.get("status") == "sent" else "failed",
+                  {"reference": r.get("change_act_id") or held["act_id"], "said": said, "read_back_sha256": "sha256:" + held["sha"]},
+                  held["venue"])
+    return {"status": "requested" if r.get("status") == "sent" else r.get("status"), "venue": held["venue"],
+            "say": r.get("say") or ("I've told them. It's held once they reply." if kind == "late" else
+                                    "I've asked them. It's changed only once they reply to say so; until then it stays as it was.")}
 
 
 async def running_late(ctx, a: dict) -> dict:

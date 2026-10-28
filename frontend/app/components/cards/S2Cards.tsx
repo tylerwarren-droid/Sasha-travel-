@@ -11,7 +11,9 @@ import { subsHeading, subsFooter } from '@/lib/subscriptions-heading.mjs'   // S
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 export const C = { bg: '#0b0b10', card: '#16151d', line: 'rgba(255,255,255,.1)', gold: '#E8B923', dim: 'rgba(255,255,255,.6)' }
-export type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'car'; title: string; when: string; where?: string; status: string; reference?: string; id?: string }
+export type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'car'; title: string; when: string; where?: string; status: string; reference?: string; id?: string
+  // Sasha 300 · THE ONE ITINERARY: the status in words, the way it was made, the venue's own words (data), its map
+  status_words?: string; route_words?: string; venue_said?: { untrusted_text?: string }; map_url?: string; trip?: string }
 
 export function Box({ k, h, children, tone }: { k: string; h?: string; children?: React.ReactNode; tone?: string }) {
   return (
@@ -111,7 +113,9 @@ export function Plans({ items, on }: { items: Plan[]; on?: string }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700 }}>{untag(p.title)}</div>
             <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.88)' }}>{fmtWhen(p.when)}{p.where ? ` · ${untag(p.where)}` : ''}</div>
-            <div style={{ fontSize: 12.5, color: C.dim }}>{untag(p.status)}{p.reference ? ` · Ref ${untag(p.reference)}` : ''}</div>
+            <div style={{ fontSize: 12.5, color: C.dim }}>{untag(p.status_words || p.status)}{p.route_words ? ` · ${p.route_words}` : ''}{p.reference ? ` · Ref ${untag(p.reference)}` : ''}</div>
+            {p.venue_said?.untrusted_text ? <div style={{ fontSize: 12.5, color: C.dim, fontStyle: 'italic' }}>They said: &ldquo;{p.venue_said.untrusted_text}&rdquo;</div> : null}
+            {p.map_url ? <a href={p.map_url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: C.gold }}>Map</a> : null}
           </div>
         </div>))}
     </Box>

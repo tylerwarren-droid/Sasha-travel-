@@ -247,8 +247,9 @@ class TheWayBack(unittest.TestCase):
     def test_every_page_hand_over_carries_the_way_back_and_writes_the_row(self):
         src = inspect.getsource(VN._book_inner)
         self.assertEqual(src.count("_V.way_back(WA.s2_link())"), 2)   # the copy card's text and a platform page's text
-        self.assertIn('await note_prepared(ctx.account, venue, held["when"], held["party"], url, link_id=held["id"])', src)
-        self.assertIn('await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"))', src)
+        # Sasha 300 · moved: each hand-over also names its route, platform and place ID for the ONE itinerary (agapi/itinerary.py)
+        self.assertIn('await note_prepared(ctx.account, venue, held["when"], held["party"], url, link_id=held["id"], route="platform",', src)
+        self.assertIn('await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"), place_id=held.get("place_id"),', src)
         self.assertEqual(V.way_back("https://project.kanoe.ai/s2"), "Done? Back to Sasha: https://project.kanoe.ai/s2")
         from booking_signer import ladder_routes as LR
         paths = {getattr(r, "path", "") for r in LR.router.routes}

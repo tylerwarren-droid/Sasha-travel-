@@ -43,7 +43,9 @@ ROUTES_EVERY = timedelta(minutes=5)
 _ROUTED: Dict[str, datetime] = {}   # booking → when Routes was last asked (the time only, nothing of Google's)
 CONFIRMED = ("confirmed", "guest_booked")
 HONEST = ("requested", "attempting", "unclear", "proposed", "quoted", "waitlisted", "link_sent", "pending")
-PRIORITY = {"written_confirmation": 0, "leave_now": 1, "day_before": 2, "not_confirmed": 2, "morning_brief": 3}
+PRIORITY = {"written_confirmation": 0, "leave_now": 1, "two_hours": 1, "day_before": 2, "not_confirmed": 2, "morning_brief": 3}
+#: Sasha 300 · the "~2 hours before" reminder: due from TWO_HOURS before the booking, never in its last hour (a leave_now's)
+TWO_HOURS = timedelta(hours=2)
 KINDS = tuple(PRIORITY)
 
 
@@ -63,6 +65,11 @@ def _ref(b: dict) -> str:
 def _party(b: dict) -> str:
     n = b.get("party")
     return f"{n} {'person' if n == 1 else 'people'}" if n else "your party"
+
+
+def _where(b: dict) -> str:
+    """Sasha 300 · the address its record holds, and the map link (its place ID) — each only when there is one."""
+    return (f" {b['address']}." if b.get("address") else "") + (f" Map: {b['map_url']}" if b.get("map_url") else "")
 
 
 def status_words(status: str) -> str:
@@ -90,7 +97,9 @@ def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datet
     if kind == "day_before" and b.get("status") not in CONFIRMED:
         kind = "not_confirmed"
     if kind == "day_before":
-        return f"{day}: {venue}, {hhmm}, {_party(b)}, ref {_ref(b)}. Reply CANCEL {venue.split()[0]} to cancel."
+        return f"{day}: {venue}, {hhmm}, {_party(b)}, ref {_ref(b)}.{_where(b)} Reply CANCEL {venue.split()[0]} to cancel."
+    if kind == "two_hours":   # Sasha 300 · ~2 h before: where, the map, and "running late?" (running_late: the booking's own route)
+        return f"In 2 hours: {venue}, {hhmm}, {_party(b)}.{_where(b)} Running late? Tell me."
     if kind == "not_confirmed":
         if b.get("status") == "proposed":
             return f"{day}, {hhmm} at {venue}: not confirmed yet. They offered another time; it's not booked until you say yes."
@@ -122,6 +131,8 @@ def template_vars(kind: str, b: dict, extra: Optional[dict] = None) -> dict:
         return {1: b.get("venue"), 2: f"{SN.day_words(b.get('date'))} {b.get('time')}", 3: status_words(b.get("status") or "")}
     if kind == "leave_now":
         return {1: b.get("venue"), 2: b.get("time"), 3: extra.get("minutes"), 4: extra.get("mode_words"), 5: extra.get("label")}
+    if kind == "two_hours":   # Sasha 300 · no approved template yet: outside the 24-hour window it isn't sent (said in the log)
+        return {1: b.get("venue"), 2: b.get("time"), 3: _party(b)}
     if kind == "written_confirmation":
         return {1: b.get("venue"), 2: f"{SN.day_words(b.get('date'))} {b.get('time')}", 3: b.get("party"), 4: _ref(b)}
     return {1: render("morning_brief", b, extra)[len("Today: "):]}
@@ -287,11 +298,24 @@ class PostgresProactiveStore:
             raise e.rehint("026_proactive.sql") from None
 
     async def claim(self, row):
+        tid = _uuid(row.get("trip_item_id"))
+        if row.get("trip_item_id") and tid is None or row["kind"] == "two_hours":
+            # Sasha 300 · an AgAPI act or a hand-over (no trip_items row), or the 2-hour kind: keyed by booking_key (sql/043).
+            # Before 043 the database refuses it — logged once, -1: nothing is sent (never a reminder that could repeat)
+            try:
+                return await self._run(lambda c: c.fetchval(
+                    "insert into proactive_sent (account_id, trip_item_id, booking_key, kind, local_day, status_at_send, channel, outcome) "
+                    "values ($1,$2,$3,$4,$5,$6,'skipped','claimed') on conflict do nothing returning id",
+                    uuid.UUID(row["account_id"]), tid, str(row["trip_item_id"])[:300], row["kind"], row["local_day"], row.get("status_at_send")))
+            except Exception as e:
+                if "043" not in _WARNED:
+                    _WARNED.add("043")
+                    log.warning("[proactive] a reminder for a booking with no trip item isn't held yet (apply sql/043): %s", type(e).__name__)
+                return -1
         return await self._run(lambda c: c.fetchval(
             "insert into proactive_sent (account_id, trip_item_id, kind, local_day, status_at_send, channel, outcome) "
             "values ($1,$2,$3,$4,$5,'skipped','claimed') on conflict do nothing returning id",
-            uuid.UUID(row["account_id"]), uuid.UUID(row["trip_item_id"]) if row.get("trip_item_id") else None, row["kind"],
-            row["local_day"], row.get("status_at_send")))
+            uuid.UUID(row["account_id"]), tid, row["kind"], row["local_day"], row.get("status_at_send")))
 
     async def finish(self, sid, channel, outcome):
         await self._run(lambda c: c.execute("update proactive_sent set channel = $2, outcome = $3 where id = $1", sid, channel, outcome))
@@ -300,7 +324,11 @@ class PostgresProactiveStore:
         try:
             tid = uuid.UUID(str(trip_item_id))
         except (ValueError, TypeError):
-            return False
+            try:   # Sasha 300 · keyed by booking_key (043); before it, nothing of that kind was ever claimed for it
+                return bool(await self._run(lambda c: c.fetchval(
+                    "select exists (select 1 from proactive_sent where booking_key = $1 and kind = $2)", str(trip_item_id)[:300], kind)))
+            except Exception:
+                return False
         return bool(await self._run(lambda c: c.fetchval(
             "select exists (select 1 from proactive_sent where trip_item_id = $1 and kind = $2)", tid, kind)))
 
@@ -363,6 +391,16 @@ class PostgresProactiveStore:
 STORE: Any = None   # routes.py sets the Postgres store; tests a memory one
 
 
+_WARNED: set = set()
+
+
+def _uuid(v: Any) -> Optional[uuid.UUID]:
+    try:
+        return uuid.UUID(str(v)) if v else None
+    except (ValueError, TypeError):
+        return None
+
+
 # ── one tick ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def _due(kind: str, b: dict, now: datetime, extra: Optional[dict] = None) -> bool:
@@ -373,6 +411,8 @@ def _due(kind: str, b: dict, now: datetime, extra: Optional[dict] = None) -> boo
     if kind in ("day_before", "not_confirmed"):
         due = datetime.combine(start.date() - timedelta(days=1), DAY_BEFORE_AT, tzinfo=start.tzinfo)
         return now >= due
+    if kind == "two_hours":
+        return start - TWO_HOURS <= now < start - timedelta(hours=1)
     if kind == "leave_now":
         leave = start - timedelta(seconds=extra["seconds"]) - LEAVE_MARGIN
         return leave <= now < start - timedelta(seconds=extra["seconds"])
@@ -387,6 +427,8 @@ async def _send(ch: dict, kind: str, b: Optional[dict], text, variables: Optiona
     from . import guest_whatsapp as GW
     sid = await STORE.claim({"account_id": ch["account_id"], "trip_item_id": (b or {}).get("id") if kind != "morning_brief" else None,
                              "kind": kind, "local_day": local_day, "status_at_send": status})
+    if sid == -1:   # Sasha 300 · the ledger can't hold it yet (043 not applied): nothing sent, said in the log
+        return "not sent: the reminder ledger can't hold this booking yet (043)"
     if sid is None:
         return "already sent"
     if callable(text):
@@ -411,6 +453,14 @@ async def _send(ch: dict, kind: str, b: Optional[dict], text, variables: Optiona
     return r
 
 
+async def _rows(account: str) -> List[dict]:
+    """Sasha 300 · the reminders' bookings: THE ONE ITINERARY's (agapi/itinerary.py) — the old ladder's upcoming rows and every other
+    route's (AgAPI's acts, the hand-overs). Never a reminder for a booking the itinerary doesn't show."""
+    from . import guest_whatsapp as GW
+    from agapi import itinerary as IT
+    return await IT.upcoming(account, await GW._upcoming(account, names=False))
+
+
 async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
     """Every message due at `now`, sent within the rules. Returns what was done (the admin trigger shows it)."""
     from . import guest_whatsapp as GW
@@ -431,7 +481,7 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
         await PA.warm(account)   # Sasha 254 · the one record, fresh for this account's sync checks
         prefs = await STORE.get_prefs(account) or {"all_off": False, "off_kinds": []}
         reminders_ok = GW.consent_at_least(ch.get("consent_wording_version") or "v0", 3) and not prefs.get("all_off")
-        rows = await GW._upcoming(account, names=False)   # Sasha 141 · names are re-read only for a message sent
+        rows = await _rows(account)   # Sasha 141 · names are re-read only for a message sent · Sasha 300: the ONE itinerary's
         due: List[Tuple[int, str, Optional[dict], dict]] = []
         for b in rows:
             start = starts_at(b)
@@ -442,7 +492,10 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
             if not reminders_ok:
                 continue
             kind = "day_before" if b.get("status") in CONFIRMED else ("not_confirmed" if b.get("status") in HONEST else None)
-            if kind and kind not in prefs.get("off_kinds", []) and _due(kind, b, now):
+            two = b.get("status") in CONFIRMED and "two_hours" not in prefs.get("off_kinds", []) and _due("two_hours", b, now)
+            if two:   # Sasha 300 · ~2 h before: where, the map, "running late?" — it stands in for a day-before still waiting (one message)
+                due.append((PRIORITY["two_hours"], "two_hours", b, {}))
+            elif kind and kind not in prefs.get("off_kinds", []) and _due(kind, b, now):
                 due.append((PRIORITY[kind], kind, b, {}))
             if b.get("status") in CONFIRMED and "leave_now" not in prefs.get("off_kinds", []) and now >= start - timedelta(hours=3) \
                     and not (hasattr(STORE, "claimed") and await STORE.claimed(str(b["id"]), "leave_now")):   # Sasha 146 · once sent, no more Routes calls
@@ -472,7 +525,7 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                 done.append({"kind": kind, "booking": b.get("id"), "outcome": "dropped: the daily cap"})
                 continue
             # rule 1 · the status re-read at the send: cancelled at 17:59 never gets an 18:00 message
-            fresh = next((r for r in await GW._upcoming(account, names=False) if r["id"] == b["id"]), None) if kind != "morning_brief" else b
+            fresh = next((r for r in await _rows(account) if r["id"] == b["id"]), None) if kind != "morning_brief" else b
             if fresh is None:
                 done.append({"kind": kind, "booking": b["id"], "outcome": "skipped: no longer an active booking"})
                 continue
@@ -485,6 +538,10 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                     extra = {**extra, "items": await GW._with_names(account, [dict(x) for x in extra["items"]])}
                 else:
                     fresh = (await GW._with_names(account, [dict(fresh)]))[0]
+                    if kind in ("day_before", "two_hours") and not fresh.get("map_url"):   # Sasha 300 · its read's place ID, stored
+                        from agapi import itinerary as IT
+                        pid = (await _place_dest(account, fresh)).removeprefix("place_id:")
+                        fresh["map_url"] = IT.map_url(fresh.get("venue"), pid or None)
                 said["text"] = render(kind, fresh, extra, now)
                 return said["text"], template_vars(kind, fresh, extra)
             outcome = await _send(ch, kind, fresh, compose, None, local_day, fresh.get("status"))

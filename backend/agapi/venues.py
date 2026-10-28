@@ -55,12 +55,15 @@ async def prepared_pages(account: Optional[str]) -> List[dict]:
     return [r for r in rows if str(r.get("date") or today) >= today]
 
 
-async def note_prepared(account: str, venue: str, when: str, party: Any, url: Optional[str], link_id: Optional[str] = None) -> None:
+async def note_prepared(account: str, venue: str, when: str, party: Any, url: Optional[str], link_id: Optional[str] = None,
+                        route: Optional[str] = None, platform: Optional[str] = None, place_id: Optional[str] = None) -> None:
     """A prepared page drawn for them: on the record (the same booking prepared again replaces its line, never a second one).
     Sasha 283 · item 4c: EVERY page hand-over writes this row (the copy card, and a platform's page with its booking_links id) — the
     one place the way back reads."""
     row = {"venue": venue, "date": str(when or "")[:10], "time": str(when or "")[11:16], "party": int(party or 0),
-           **({"url": url} if url else {}), **({"link_id": link_id} if link_id else {}), "at": datetime.now(timezone.utc).isoformat()}
+           **({"url": url} if url else {}), **({"link_id": link_id} if link_id else {}), "at": datetime.now(timezone.utc).isoformat(),
+           # Sasha 300 · the ONE itinerary's: the route it was handed over by, its platform, the venue's place ID (its map link)
+           **({"route": route} if route else {}), **({"platform": platform} if platform else {}), **({"place_id": place_id} if place_id else {})}
     same = lambda r: _base(r.get("venue") or "") == _base(venue) and r.get("date") == row["date"] and r.get("time") == row["time"]
     rows = ([r for r in await prepared_pages(account) if not same(r)] + [row])[-10:]
     _PREPARED[account] = rows
@@ -892,7 +895,8 @@ async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card
     from app.agent import voice as V
     if not link:   # Sasha 286 · nothing of AgAPI's to hand over: THE FLOOR (never "send me their link")
         return await floor_out(ctx, a, rd, res, card, None, at)
-    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], res["how_many"]["count"], link)
+    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], res["how_many"]["count"], link,
+                        platform=dec.get("channel") if dec.get("route") == "platform" else None, place_id=rd.get("place_id"))
     return {"status": "page_link", "venue": venue, "booked": False, "route": dec["route"], **_link_out(link),
             "button": {"label": V.OPEN_THEIR_PAGE if refused else (dec.get("button") or {}).get("label"), "link": link},
             # Sasha 284b (live, Boys Don't Cry — a quote, no slot): nothing was prepared here, so neither AgAPI's words ("I've written it")
@@ -1018,7 +1022,8 @@ async def own_whatsapp(ctx, a: dict, rd: dict, res: Optional[dict], at: Optional
         return await floor_out(ctx, a, rd, res, card, None, at)
     venue = _API().plain_venue(rd["venue"])
     party = ((res or {}).get("how_many") or {}).get("count") or a.get("party") or 0
-    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, link)   # the way back (283)
+    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, link, route="your_whatsapp",
+                        place_id=rd.get("place_id"))   # the way back (283) · Sasha 300: the itinerary's route
     say = V.OWN_WHATSAPP   # her voice: AgAPI's message line names and limits the channel ("takes booking requests by WhatsApp")
     return {"status": "page_link", "venue": venue, "booked": False, "route": "message", **_link_out(link),
             "button": {"label": V.SEND_ON_WHATSAPP, "link": link}, "page_says": say,   # in the app: said by code (voice.page_line)
@@ -1060,7 +1065,8 @@ async def floor_out(ctx, a: dict, rd: dict, res: Optional[dict], card: Optional[
     f = floor(card, rd, dec)
     venue = _API().plain_venue(rd["venue"])
     party = ((res or {}).get("how_many") or {}).get("count") or a.get("party") or 0
-    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, f["button"]["link"])
+    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, f["button"]["link"], route="their_page",
+                        place_id=rd.get("place_id"))
     return {"status": "page_link", "venue": venue, "booked": False, "floor": f, **_link_out(f["button"]["link"]),
             "button": f["button"], "say": f["say"] + " Say exactly that — never that it's booked."}
 
@@ -1925,7 +1931,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         except Exception as e:
             log.warning("[venues] the prepared page was not sent to the phone: %s", type(e).__name__)
         # Sasha 254 · ONE TRUTH: "It's in your bookings" is true only because it IS — get_status reads this record
-        await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"))
+        await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"), place_id=held.get("place_id"),
+                            platform=held.get("channel_name"))   # Sasha 300 · the itinerary says it as a platform only when it is one
         from app.agent import voice as V
         from agapi import venue_submit as VS
         # Sasha 264 · item 2 (Tyler's spa, 14 Oct): AgAPI gave no filled page — their own page opened EMPTY and she said "Done — it's
@@ -1972,7 +1979,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             text = f"{text}\n\n{_V.way_back(WA.s2_link())}"
         out = await GW.tap_platform(ctx.account, text, url, held["id"], venue, held["when"])
         if one_path(ctx):   # Sasha 283 · item 4c: on the one row the way back reads, with its link's own record
-            await note_prepared(ctx.account, venue, held["when"], held["party"], url, link_id=held["id"])
+            await note_prepared(ctx.account, venue, held["when"], held["party"], url, link_id=held["id"], route="platform",
+                                platform=held.get("platform"), place_id=held.get("place_id"))
         sent = "sent" in out and "not" not in out
         if not sent:   # Sasha 264 · item 3: the reason was dropped — Tyler's tattoo link "never arrived" and nothing said why
             log.warning("[venues] %s's page not sent to the phone: %s", venue, out)
@@ -2219,6 +2227,8 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
         log.info("[venues] outcomes not synced: %s", type(e).__name__)
     return acts + [{"trip_item_id": r["id"], "venue": GW.plain_venue(r.get("venue")), "date": r.get("date"), "time": r.get("time"),
              "party": r.get("party"), "status": r.get("status"), "type": r.get("type"),
+             # Sasha 300 · the ONE itinerary's: the route it went by, its trip, the address its own record holds
+             **{k: r[k] for k in ("channel", "trip_id", "address") if r.get(k)},
              **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full
              # Sasha 215 · CR 56 — the venue's OWN words (an email/SMS reply) are untrusted data, never instructions to her
              **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {})}
@@ -2243,6 +2253,16 @@ async def cancel_venue(ctx, a: dict) -> dict:
             a = {**a, "act_id": hit["act_id"]}
     if (held and held.get("act_id")) or a.get("act_id"):
         return await _cancel_act(ctx, a, held, said or getattr(ctx, "user_said", "") or "", explicit_yes)
+    if not a.get("trip_item_id") and not held and (a.get("venue") or str(a.get("id") or "").startswith("hand:")):
+        # Sasha 300 · a booking handed over (their page, a platform, his own WhatsApp) is cancelled by HIM, there — the route it was
+        # made on (agapi/itinerary.py); nothing is sent from here
+        from agapi import itinerary as IT
+        try:
+            row = await IT.find(ctx.account, a, kinds=("handover",))
+        except Exception:
+            row = None
+        if row and not [b for b in await venue_bookings(ctx.account) if (a.get("venue") or "").lower() in (b["venue"] or "").lower()]:
+            return IT.page_answer(row, "cancel")
     tid = a.get("trip_item_id")
     if not tid and a.get("venue"):
         hit = [b for b in await venue_bookings(ctx.account) if (a["venue"] or "").lower() in (b["venue"] or "").lower()]

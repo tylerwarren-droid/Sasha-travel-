@@ -38,7 +38,11 @@ WORDS = {"nothing": "Nothing is booked yet.",
          "calling": "Not booked yet — I'm calling them",
          "no_answer": "Not booked — no one picked up",
          # Sasha 283 · item 4c: his answer to "Did it go through?" on a page he finished himself — on his word (or its confirmation email)
-         "by_you": "Booked by you on their page"}
+         "by_you": "Booked by you on their page",
+         # Sasha 300 · the ONE itinerary's other states (agapi/itinerary.py): said here, with the rest
+         "confirmed": "Confirmed",
+         "cancelled": "Cancelled",
+         "your_whatsapp": "Not booked — your WhatsApp message to them is written; it's booked once they reply yes"}
 ON_IT = ("booked", "partly_booked", "awaiting_payment")   # a Trip banner shows; the Book button goes
 
 

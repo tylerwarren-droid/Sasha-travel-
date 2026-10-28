@@ -87,7 +87,9 @@ async def _rows(account: str) -> List[dict]:
     if status != 200:
         return []
     from . import plan_store as PS
-    return PS.truthful([r for r in j.get("reservations") or [] if r.get("status") not in ("cancelled", "failed")])   # Sasha 157 · declined is shown, said so
+    from agapi import itinerary as IT   # Sasha 300 · THE ONE ITINERARY: AgAPI's acts and the hand-overs are asked about too
+    rows = (j.get("reservations") or []) + await IT.extra_reservations(account)
+    return PS.truthful([r for r in rows if r.get("status") not in ("cancelled", "failed")])   # Sasha 157 · declined is shown, said so
 
 
 def where_on(rows: List[dict], d: date) -> List[str]:

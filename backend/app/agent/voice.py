@@ -526,6 +526,30 @@ CALL_IT = "I'll make the booking — I can call them for you."
 REACH_THEM = "Here's how to reach them — you take it from there, and I'll ask how it went when you're back."
 
 
+def manage_line(kind: str, route: str, venue: str, platform: Optional[str] = None) -> str:
+    """Sasha 300 · a change / cancellation / running late for a booking made on THEIR page or from HIS WhatsApp: his to do there,
+    by the route it was made on — said, nothing sent from here."""
+    act = {"cancel": "cancel it", "late": "tell them you're running late"}.get(kind, "change it")
+    if route == "your_whatsapp":
+        return (f"You booked {venue} from your own WhatsApp, so {act} the same way: here's your chat with them. "
+                "Nothing is sent from here.")
+    where = f"on {platform}" if route == "platform" and platform else "on their own page"
+    if kind == "late":
+        return f"{venue} was booked {where}, so I can't tell them from here — their page is below, or call them. Nothing was sent."
+    return f"{venue} was booked {where}, so you {act} there — I've opened it for you. Nothing is sent from here."
+
+
+def manage_button(route: str, platform: Optional[str] = None) -> str:
+    return "Open your WhatsApp chat" if route == "your_whatsapp" else (f"Open {platform}" if platform else OPEN_THEIR_PAGE)
+
+
+#: Sasha 300 · AgAPI can't yet change a booking by the route it went (CR 131 (c): venue.change_booking) — said plainly, nothing sent
+def change_not_yet(venue: str, route_words: str, kind: str = "change") -> str:
+    what = "tell them you're running late" if kind == "late" else "change it"
+    return (f"I can't {what} from here yet — {venue} was booked {route_words}, and a change has to go the same way. "
+            "Nothing was sent. You can cancel it and book the new time, or contact them yourself.")
+
+
 def went_through(venue: str) -> str:
     """The watcher already knows (their confirmation came in): said, never asked."""
     return f"Their confirmation came in — {venue} is booked."

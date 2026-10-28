@@ -426,6 +426,7 @@ def merge(p: dict, bookings: List[dict]) -> dict:
         from .wa_brain import is_test
         entry = {"id": b.get("id"), "venue": b.get("venue"), "time": b.get("time"), "part": part, "status": b.get("status"),
                  "status_words": b.get("status_words"), "what": b.get("what"), "type": b.get("type"),
+                 **({"route_words": b["route_words"]} if b.get("route_words") else {}),   # Sasha 300 · the way it was made
                  "test": is_test(b), **({"edge": edge} if edge else {})}   # Sasha 167 · TEST-labelled; Sasha 169 · the flight's own day
         rx = _MATCH.get(b.get("category") or b.get("type") or "", r"$^")
         for a in day.get("activities") or []:

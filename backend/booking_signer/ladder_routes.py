@@ -498,7 +498,8 @@ async def plan_view(request: Request):
     if not p:
         return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
-    rows = PS.truthful((j or {}).get("reservations") or [] if s == 200 else [])
+    from agapi import itinerary as IT   # Sasha 300 · THE ONE ITINERARY: AgAPI's acts and the hand-overs are in their trip's days too
+    rows = PS.truthful(((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account))
     view = await PS.view(account, p, JN.for_journey(rows, p.get("trip_id")))
     tt = await trip_total(account, p.get("trip_id"), p)
     return {"plan": view, "plans": await PS.plans(account), **({"trip_total": tt} if tt else {}),
@@ -565,7 +566,8 @@ async def journeys_view(request: Request):
     await PWT.sweep(account)   # Sasha 183 · a payment waiting is booked before anything is shown
     await JN.file(account)
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
-    rows = (j or {}).get("reservations") or [] if s == 200 else []
+    from agapi import itinerary as IT   # Sasha 300 · THE ONE ITINERARY: every route's booking, in its trip
+    rows = ((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account)
     return await JN.journeys(account, rows)
 
 

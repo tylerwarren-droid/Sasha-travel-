@@ -170,7 +170,8 @@ class LeaveNowReadsNoListing(WatchersDoNotReadListings):
         store.get_read = mock.AsyncMock(return_value={"read": {"listing": {"place_id": "ChIJ-casa-lucio"}}})
         run(PR.STORE.save_place(ACCOUNT, "home", "Calle Mayor 1, Madrid"))
         # only leave_now here: a reminder actually SENT re-reads its name, rightly (AlreadySentCostsNothing covers that)
-        run(PR.STORE.set_prefs(ACCOUNT, off_kinds=["day_before", "not_confirmed", "morning_brief"]))
+        # Sasha 300 · moved: "two_hours" (a reminder SENT, which re-reads its name) is off here too — this test is leave_now's alone
+        run(PR.STORE.set_prefs(ACCOUNT, off_kinds=["day_before", "not_confirmed", "morning_brief", "two_hours"]))
         with mock.patch.object(PR, "ROUTES_HTTP", routes_http), mock.patch.object(LR, "LADDER_STORE", store), \
              mock.patch.dict(os.environ, {"GOOGLE_PLACES_API_KEY": "k"}):
             for m in range(3):

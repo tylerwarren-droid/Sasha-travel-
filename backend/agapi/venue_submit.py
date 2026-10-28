@@ -193,7 +193,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
                                       **({"country": held["country"]} if held.get("country") else {}),   # Sasha 259 · its calendar zone
                                       **({"route": "call"} if res.get("route") == "call" else {}),      # Sasha 265 · a phone booking
                                       **_message_of(res, held, said),   # Sasha 287/288 · Kanoe's message: its channel, its consent, its reference
-                                      **({"reference": res["reference"]} if res.get("reference") else {})})
+                                      **({"reference": res["reference"]} if res.get("reference") else {}), **_pointer_of(account, held)})
         return {"ok": True, **res}
     if await target(account) == "sandbox":
         a = await _call(account, "sandbox.simulate_approval", {"read_back_id": rid, "said": (said or "")[:200] or "yes"})
@@ -216,7 +216,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
                                   "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
                                   **({"route": "call"} if res.get("route") == "call" else {}), **_message_of(res, held, said),
-                                  **({"reference": res["reference"]} if res.get("reference") else {})})
+                                  **({"reference": res["reference"]} if res.get("reference") else {}), **_pointer_of(account, held)})
     return {"ok": True, **res}
 
 
@@ -347,8 +347,8 @@ async def bookings(account: str) -> List[dict]:
     cancelled = {a.get("cancels") for a in acts if a.get("cancels") and STATE.get(str(a.get("state") or "")) == "confirmed"}
     out = []
     for a in acts:
-        if a.get("cancels"):
-            continue   # the cancellation itself is said on the booking it cancels
+        if a.get("cancels") or a.get("changes"):
+            continue   # the cancellation (Sasha 300: or the change) itself is said on the booking it's about
         state = "cancelled" if a["act_id"] in cancelled else STATE.get(str(a.get("state") or "sent"), "requested")
         if state == "confirmed" and a.get("channel") in MESSAGE_CHANNELS and unclear(a.get("words")):
             state = "requested"   # Sasha 288 · "ok, we'll check" is never said as booked: what they wrote, and still a request
@@ -368,8 +368,25 @@ async def bookings(account: str) -> List[dict]:
                     **({"stay": stay_of(a["booking"])} if (a.get("booking") or {}).get("kind") == "stay" else {}),   # Sasha 271 · CR 102
                     **({"route": "call"} if a.get("route") == "call" else {}),
                     **({"wa": wa_line(a, state)} if a.get("channel") in MESSAGE_CHANNELS else {}),
-                    **({"cancel": "asked — waiting for the venue"} if pend else {})})
+                    **({"cancel": "asked — waiting for the venue"} if pend else {}),
+                    **({"change": _change_of(acts, a["act_id"])} if _change_of(acts, a["act_id"]) else {})})
     return out
+
+
+def _change_of(acts: List[dict], act_id: str) -> Optional[dict]:
+    """Sasha 300 · the newest change / running-late asked for this booking, as the itinerary shows it: what was asked, their answer."""
+    c = next((x for x in reversed(acts) if x.get("changes") == act_id), None)
+    if not c:
+        return None
+    return {"kind": c.get("kind") or "change", "state": STATE.get(str(c.get("state") or "sent"), "requested"),
+            **({"venue_said": {"untrusted_text": c["words"]}} if c.get("words") else {})}
+
+
+def _pointer_of(account: str, held: dict) -> dict:
+    """Sasha 300 · what Sasha keeps beside an act — a POINTER, never its state: the venue's place ID (its map link; a place ID may be
+    kept, the Maps terms) and the trip it is on (the newest plan whose days hold it is read at view time, so only an explicit one)."""
+    return {**({"place_id": str(held["place_id"])} if held.get("place_id") else {}),
+            **({"trip_id": str(held["trip_id"])} if held.get("trip_id") else {})}
 
 
 #: Sasha 288 · the channels Kanoe writes to a venue on (venue.submit_booking's request_reply): their replies are said the same way
@@ -475,6 +492,68 @@ async def cancel_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         parent = next((a for a in await acts_of(account) if a.get("act_id") == act_id), {})
         await _remember(account, {"act_id": cid, "cancels": act_id, "venue": parent.get("venue"), "when": parent.get("when"),
                                   "party": parent.get("party"), "state": res.get("status") or "sent", "say": res.get("say")})
+    return {"ok": True, **res}
+
+
+# ── Sasha 300 · MANAGE: a change or "running late" for an act — venue.change_booking (CR 131 (c)), by the act's OWN route ──────
+
+async def change_read_back(account: str, act_id: str, kind: str, at: Optional[str] = None, party: Optional[int] = None,
+                           arrive: Optional[str] = None) -> Dict[str, Any]:
+    """venue.change_booking without an approval → its read-back. AgAPI without the op yet (unknown_operation) → not_yet: said
+    plainly by the caller, nothing sent. A route that can't take it → not_allowed with their page, as a cancellation's."""
+    uid = await end_user(account)
+    if not uid:
+        return {"ok": False, "error": {"code": "no_end_user", "message": "the venue booking service doesn't know this person yet"}}
+    body = {"end_user": uid, "act_id": act_id, "kind": kind, **({"at": at} if at else {}), **({"party": int(party)} if party else {}),
+            **({"arrive": arrive} if arrive else {})}
+    r = await _call(account, "venue.change_booking", body)
+    e = r.get("error") or {}
+    res = r.get("result") or {}
+    if e.get("code") == "unknown_operation":
+        return {"ok": False, "error": {"code": "not_yet", "message": "AgAPI doesn't change bookings yet (CR 131)"}}
+    if r.get("ok") and str(res.get("status") or "") in ("not_allowed", "refused"):
+        tk = res.get("takeover") or {}
+        return {"ok": False, "error": {"code": "not_allowed", "message": res.get("say") or "that booking can't be changed from here",
+                                       "details": {"link": tk.get("link") or res.get("manage_url") or res.get("link")}}}
+    if e.get("code") != "approval_required":
+        return {"ok": False, "error": _err(r)} if not r.get("ok") else \
+            {"ok": False, "error": {"code": "sent_without_yes", "message": "the service didn't ask for their yes"}}
+    d = e.get("details") or {}
+    lines = list((d.get("read_back") or {}).get("lines") or d.get("lines") or [])
+    rid = d.get("read_back_id")
+    if not rid or not lines:
+        return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
+    if TAP.get() is None and WA.get() is None and await target(account) == "live":
+        await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
+    return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "act_id": act_id,
+            **({"read_back_sha256": d["read_back_sha256"]} if d.get("read_back_sha256") else {})}
+
+
+async def change_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
+    """On his yes (a later turn): the approval → venue.change_booking → {status sent, change_act_id} | {status person_sends, message}.
+    A change sent is kept as its own act (`changes`: its reply comes through venue.booking_status, like any request)."""
+    rid, act_id, uid = held["read_back_id"], held["act_id"], held.get("end_user") or await end_user(account)
+    if TAP.get() is not None or WA.get() is not None:   # in the app / a signed WhatsApp reply: their yes is the approval
+        sha = held.get("read_back_sha256") or held.get("sha") or ""
+        r = await (in_app_tap(account, rid, sha) if TAP.get() is not None else whatsapp_tap(account, rid, sha))
+        if not r.get("ok"):
+            return r
+        res = r.get("result") or {}
+    else:
+        approval = await _approval(account, rid, said)
+        if isinstance(approval, dict):
+            return approval
+        body = {"end_user": uid, "act_id": act_id, "kind": held.get("kind") or "change"}
+        r = await _call(account, "venue.change_booking", body, approval=approval)
+        if not r.get("ok"):
+            return {"ok": False, "error": _err(r)}
+        res = r.get("result") or {}
+    cid = res.get("change_act_id")
+    if cid:
+        parent = next((a for a in await acts_of(account) if a.get("act_id") == act_id), {})
+        await _remember(account, {"act_id": cid, "changes": act_id, "kind": held.get("kind") or "change", "venue": parent.get("venue"),
+                                  "when": parent.get("when"), "party": parent.get("party"), "state": res.get("status") or "sent",
+                                  "say": res.get("say")})
     return {"ok": True, **res}
 
 

@@ -93,8 +93,10 @@ async def keep_note(ctx, a: dict) -> dict:
         if isinstance(e, K.Refused):
             raise ToolError(e.rule, e.message) from None
         raise
-    return {"saved": out["masked"], "say": f"Saved in your Keep: {out['masked']}. I'll show it on the bookings it applies to.",
-            "how": "Say `say` as given — the mask only, never the number."}
+    what = (f"your {a.get('program')} number" if kind == "loyalty" else f"your {a.get('name')}").strip()
+    # found live: "Saved in your Keep: Marriott Bonvoy ••••001" was spoken "Marriott Bonvoy ending one" — the line names it, the card shows the mask
+    return {"saved": out["masked"], "say": f"Saved {what} in your Keep. I'll show it on the bookings it applies to.",
+            "how": "Say `say` as given — never the number."}
 
 
 def tools() -> List[dict]:

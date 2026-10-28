@@ -107,6 +107,7 @@ class KeepCards(unittest.TestCase):
     def test_a_loyalty_number_is_kept_and_only_its_mask_and_programme_leave(self):
         out = self.note(kind="loyalty", program="Marriott Bonvoy", number="123456789")
         self.assertEqual(out["saved"], "Marriott Bonvoy ••••789")
+        self.assertEqual(out["say"], "Saved your Marriott Bonvoy number in your Keep. I'll show it on the bookings it applies to.")
         w = run(KEEP.wallet(ACCT))
         self.assertEqual(w[0]["program"], "Marriott Bonvoy")
         self.assertNotIn("123456789", repr(w))   # the wallet never carries the number
@@ -118,11 +119,11 @@ class KeepCards(unittest.TestCase):
         self.assertEqual(e.exception.code, "perk_for_missing")
 
     def test_before_044_a_card_isnt_saved_and_she_says_so(self):
-        class CheckViolationError(Exception):
+        class StorageError(Exception):   # found live: the database's refusal came back wrapped, its check named in the words
             pass
 
         async def refuse(row):
-            raise CheckViolationError("keep_items_type_check")
+            raise StorageError('new row for relation "keep_items" violates check constraint "keep_items_type_check"')
         from agapi.v0 import ToolError
         with mock.patch.object(self.store, "add_item", refuse), self.assertRaises(ToolError) as e:
             self.note(kind="card", name="Amex Gold", last4="1234")

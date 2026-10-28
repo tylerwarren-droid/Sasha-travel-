@@ -234,11 +234,21 @@ async def put(account: str, kind: str, value: dict) -> dict:
     try:
         await st.add_item(row)
     except Exception as e:
-        if type(e).__name__ == "CheckViolationError":   # Sasha 301 · a type the database doesn't allow yet (my_card before sql/044)
+        if _type_refused(e):   # Sasha 301 · a type the database doesn't allow yet (my_card before sql/044)
             raise KeepError("type_not_open", f"Your Keep can't hold a {K.TYPES[kind]['name'].lower()} yet — nothing was saved.") from None
         raise
     await _activity(account, "keep_save", row, {"reference": "keep:" + iid, "item": row["masked"]})
     return {**_out(row), "created": True}
+
+
+def _type_refused(e: BaseException) -> bool:
+    """Sasha 301 · the database's type check refused the item (found live: the refusal came back wrapped, not as asyncpg's own class)."""
+    seen = 0
+    while e is not None and seen < 5:
+        if type(e).__name__ == "CheckViolationError" or "keep_items_type_check" in str(e):
+            return True
+        e, seen = (e.__cause__ or e.__context__), seen + 1
+    return False
 
 
 async def list_(account: str) -> List[dict]:

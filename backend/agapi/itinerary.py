@@ -126,6 +126,9 @@ def act_route(a: dict) -> str:
     return "form"
 
 
+#: Sasha 302 · the states in which an act carries the VENUE's words (an answer) — before one, what the record holds is AgAPI's own note
+ANSWERED = ("confirmed", "offered", "declined", "cancelled")
+
 _LADDER_ROUTE = {"form": "form", "phone": "call", "email": "email", "link": "platform"}
 
 
@@ -199,6 +202,8 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
             row = {"id": b["trip_item_id"], "source": "ladder", "trip_item_id": b["trip_item_id"], "route": route, "status": status,
                    **({"trip_id": b["trip_id"]} if b.get("trip_id") else {}), **({"address": b["address"]} if b.get("address") else {})}
         kind = "hotel" if row.pop("stay", None) else b.get("type")
+        if row["source"] == "act" and status not in ANSWERED:   # Sasha 302 · found live: "They said: Emailed … — sandbox: captured" was AgAPI's
+            b = {k: v for k, v in b.items() if k != "venue_said"}  # note on a sent request, not the venue's words (CR 132's venue.bookings rule)
         out.append({**row, "venue": b.get("venue"), "date": b.get("date"), "time": b.get("time"), "party": b.get("party"),
                     "type": kind, **({"reference": b["reference"]} if b.get("reference") else {}),
                     **({"venue_said": b["venue_said"]} if b.get("venue_said") else {}),

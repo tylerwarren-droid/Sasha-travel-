@@ -63,5 +63,33 @@ class OnTheRecord(unittest.TestCase):
         self.assertEqual(BT.perks_for(IT._venue_kind("restaurant"), "Taverna Correo", wallet), [])
 
 
+
+from tests.test_s300 import Base as S300Base, Ctx, run   # noqa: E402
+
+
+class OnTheCard(S300Base):
+    def test_the_plans_card_carries_the_fine_print(self):
+        from agapi import s2_manage as SM
+        self.assertIn('"terms", "perks"', inspect.getsource(SM.my_plans))   # found live: the card never got them (301)
+        self.api.states["act_mail"] = "confirmed"
+        out = run(SM.my_plans(Ctx(), {}))
+        self.assertTrue(all("venue_said" not in i for i in out["items"] if i["title"] in ("Casa Lucio", "Botín")))   # not answered yet
+
+    def test_a_sent_requests_note_is_never_their_words(self):
+        from agapi import venue_submit as VS
+        orig = VS.CALL
+
+        async def call(op, body, approval=None, account=None):
+            r = await orig(op, body, approval, account)
+            if op == "venue.booking_status" and body["act_id"] == "act_wa":
+                r["result"]["venue_words"] = {"untrusted_text": "Emailed Casa Lucio (x@y.test) — sandbox: captured, never sent."}
+            return r
+        from unittest import mock
+        with mock.patch.object(VS, "CALL", call):
+            r = {x["venue"]: x for x in run(IT.venue_rows("00000000-0000-4000-8000-000000000300"))}
+        self.assertEqual(r["Casa Lucio"]["status"], "asked")
+        self.assertNotIn("venue_said", r["Casa Lucio"])
+
+
 if __name__ == "__main__":
     unittest.main()

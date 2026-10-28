@@ -14,6 +14,7 @@ the ONE route (agapi_route.client_for("venues", account) inside agapi_route.acti
 Never the person's card; their name / phone / email only to prepare_booking (AgAPI keeps them 24 h, for that booking only)."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -367,16 +368,20 @@ def _words(st: Optional[dict]) -> Optional[str]:
     return str(t)[:240] if t else None
 
 
-async def bookings(account: str) -> List[dict]:
+async def bookings(account: str, read: bool = True) -> List[dict]:
     """The person's AgAPI venue acts as get_status rows (venue_bookings' shape): each one's state from venue.booking_status now (the
     venue's reply, their words as untrusted data), else as it was when sent. Sasha 256 · a cancellation sent through
-    venue.cancel_booking is its own act: once the venue confirms it, the booking it cancels reads "cancelled"."""
+    venue.cancel_booking is its own act: once the venue confirms it, the booking it cancels reads "cancelled".
+    CR 134 · the reads go out TOGETHER (one wait for the slowest, never the sum of them all), and read=False gives the acts as last known —
+    venue_bookings' answer when AgAPI is slow, so a booking is never "unknown" because its status took long to read."""
     acts = await acts_of(account)
     changed = False
-    for a in acts:
-        if str(a.get("state") or "") in FINAL and a.get("words") is not None or a.get("answered"):
+    need = [a for a in acts if read and not (str(a.get("state") or "") in FINAL and a.get("words") is not None or a.get("answered"))]
+    got = await asyncio.gather(*(status(account, a["act_id"]) for a in need), return_exceptions=True)
+    for a, st in zip(need, got):
+        if isinstance(st, BaseException):   # this one stays as it was; the others are read
+            log.info("[venue_submit] %s status not read: %s", a["act_id"], type(st).__name__)
             continue
-        st = await status(account, a["act_id"])
         if st is None:
             if str(a.get("state") or "") in FINAL:
                 a["answered"] = True   # confirmed on their own form: nothing more to ask

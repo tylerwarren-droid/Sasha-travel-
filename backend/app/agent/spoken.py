@@ -100,6 +100,10 @@ def speakable(text: str) -> str:
                lambda m: m.group(1) + " " + " ".join(_ONES[int(d)] for d in m.group(2)), t)
     # a code's digits one by one: IB 6453 · IB6453 · AA123
     t = re.sub(r"\b([A-Z]{2,3})\s?(\d{2,5})\b", lambda m: m.group(1) + " " + " ".join(_ONES[int(d)] for d in m.group(2)), t)
+    # Sasha 305 · a booking reference (VMOWK7, EUF3SG, 61094A): letters and digits mixed — spelled, a digit as its word (found live:
+    # "VMOWKseven")
+    t = re.sub(r"\b(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])[A-Z0-9]{5,8}\b",
+               lambda m: " ".join(_ONES[int(c)] if c.isdigit() else c for c in m.group(0)), t)
     # everything else: in words
     t = re.sub(r"\d[\d,]*(?:\.\d+)?", lambda m: words(int(float(m.group(0).replace(",", "")))) if "." not in m.group(0)
                else words(int(round(float(m.group(0).replace(",", ""))))), t)

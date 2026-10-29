@@ -330,6 +330,15 @@ def _options_view(options: List[dict]) -> List[dict]:
     return out
 
 
+NO_REAL_MONEY = "No real money moves."   # Sasha 305 · S2's screen drops a TEST label (Sasha 218): "This is a TEST booking — no money
+#                                          moves" showed as "This is a booking — no money moves". This says the truth with no label to drop
+
+
+def _s2_lines(lines: List[str]) -> List[str]:
+    from booking_signer import flight_manage as FM
+    return [NO_REAL_MONEY if x == FM.TEST_LINE else x for x in lines]
+
+
 def changed_words(got: dict) -> str:
     """Sasha 305 · after his yes: what Duffel's order says NOW (re-read after the change) — the new flight and times, its reference,
     and what was charged or refunded (Duffel's own change total). The order unread → said so, never the offer's words as the result."""
@@ -340,10 +349,10 @@ def changed_words(got: dict) -> str:
              f"{FM.money(amt, got.get('change_total_currency'))} comes back." if amt and amt < 0 else "Nothing was charged.")
     if not o:
         return (f"Changed — Duffel confirmed it. {money} I couldn't re-read the booking from Duffel just now "
-                f"({got.get('order_why') or 'no answer'}), so check My trips in a moment. {FM.TEST_LINE}")
+                f"({got.get('order_why') or 'no answer'}), so check My trips in a moment. {NO_REAL_MONEY}")
     legs = "; ".join(f"{l['flights']}, {l['times']}" for l in o.get("legs") or [] if l.get("times")) or o.get("flights") or "your flight"
     return (f"Changed — Duffel confirmed it. Your {o.get('owner') or 'airline'} booking now reads: {legs}. "
-            f"Booking reference {o.get('reference') or '—'}. {money} {FM.TEST_LINE}")
+            f"Booking reference {o.get('reference') or '—'}. {money} {NO_REAL_MONEY}")
 
 
 async def change_booking(ctx, a: dict) -> dict:
@@ -418,8 +427,14 @@ async def change_booking(ctx, a: dict) -> dict:
                         "say": f"That isn't one of the times Duffel offered for {FM._day(new_date)} — the times are {times}. "
                                "Say them and ask which one; never say a time is unavailable that is on this list."}
         q = pick or next((o for o in off["options"] if o["change_offer_id"] == off["default"]), off["options"][0])
-        lines = list(q["lines"])
-        others = [v for v in _options_view(off["options"]) if v["change_offer_id"] != q["change_offer_id"] and v["time"]]
+        lines = _s2_lines(list(q["lines"]))
+        mine = next((v for v in _options_view([q])), {})
+        others, said_ = [], {(mine.get("time"), mine.get("flights"), mine.get("cost"))}
+        for v in _options_view(off["options"]):   # Sasha 305 · found live: each time listed 2–3 times (fare brands), the offered one too
+            k = (v["time"], v["flights"], v["cost"])
+            if v["time"] and k not in said_:
+                said_.add(k)
+                others.append(v)
         if others:
             lines.insert(len(lines) - 1, "Other times that day, from the same Duffel quote: "
                          + ", ".join(f"{v['time']} ({v['flights']}, {v['cost']})" for v in others) + ".")
@@ -533,7 +548,7 @@ async def cancelled_words(got: dict) -> str:
     now = (f"Duffel's booking {o.get('reference') or '—'} now reads cancelled." if o.get("cancelled") else
            "I couldn't re-read the booking from Duffel just now — My trips shows it once Duffel does." if o.get("why") else
            f"Duffel's booking {o.get('reference') or '—'} doesn't read cancelled yet — I'll check again.")
-    return f"Cancelled — Duffel confirmed it. {refund} {now} {FM.TEST_LINE}"
+    return f"Cancelled — Duffel confirmed it. {refund} {now} {NO_REAL_MONEY}"
 
 
 async def cancel_booking(ctx, a: dict) -> dict:
@@ -590,8 +605,9 @@ async def cancel_booking(ctx, a: dict) -> dict:
             raise _err("cancel_unavailable", q["why"])
         if not q.get("possible"):
             return {"flight": True, "status": "not_possible", "say": q.get("say")}
-        _hold(ctx, "cancel_booking", q["lines"], kind="flight", quote_id=q["quote_id"], id=it["id"], title=it["title"])
-        return {"flight": True, "status": "awaiting_yes", "read_back": q["lines"], "say": "Read it back, with Duffel's refund, and ask: shall I cancel it?"}
+        rb = _s2_lines(q["lines"])
+        _hold(ctx, "cancel_booking", rb, kind="flight", quote_id=q["quote_id"], id=it["id"], title=it["title"])
+        return {"flight": True, "status": "awaiting_yes", "read_back": rb, "say": "Read it back, with Duffel's refund, and ask: shall I cancel it?"}
     if what == "hotel":
         it = row or await _item(ctx, a, "hotel")
         if it.get("status") == "awaiting payment":   # Sasha 246 · held with the trip's payment: the held trip is dropped as one

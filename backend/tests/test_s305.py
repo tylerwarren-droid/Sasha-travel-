@@ -137,7 +137,7 @@ class WhatSheSaysAfter(Base):
         from agapi import s2_manage as M
         q = run(FM.change_quote("ord_1", "2026-11-27", "out"))
         said = M.changed_words(run(FM.change_confirm(q["change_offer_id"])))
-        for part in ("U2 7650", "07:15", "NEW456", "€60.50 was charged to the Duffel test balance", FM.TEST_LINE):
+        for part in ("U2 7650", "07:15", "NEW456", "€60.50 was charged to the Duffel test balance", M.NO_REAL_MONEY):
             self.assertIn(part, said)
         self.assertNotIn("7640", said)
 
@@ -172,6 +172,42 @@ class SaidByCode(unittest.TestCase):   # found live: she offered the new times a
 
     def test_the_chain_says_it(self):
         self.assertIn("or _V.flight_line(u.name, r)) if honest else", (ROOT / "app" / "agent" / "sasha.py").read_text())
+
+
+class FoundOnTheSecondWalk(unittest.TestCase):
+    def test_a_booking_reference_is_spelled_aloud(self):   # found live: "VMOWKseven"
+        from app.agent.spoken import speakable
+        self.assertIn("V M O W K seven", speakable("(booking VMOWK7)"))
+        self.assertIn("E U F three S G", speakable("ref EUF3SG."))
+        self.assertEqual(speakable("IB6453"), "IB six four five three")         # a flight number is read as before
+        self.assertNotIn("V M O W K", speakable("VMOWK"))                       # a word in capitals isn't a reference
+
+    def test_s2_says_no_real_money_never_a_label_its_screen_drops(self):   # found live: "This is a booking — no money moves."
+        from agapi import s2_manage as M
+        got = M._s2_lines(["I'll move it.", FM.TEST_LINE])
+        self.assertEqual(got, ["I'll move it.", "No real money moves."])
+        self.assertNotIn("TEST", " ".join(got))
+
+    def test_each_other_time_once_and_never_the_one_offered(self):   # found live: 06:00 ×2 and 12:00 ×3, the offered 06:00 among them
+        from agapi import s2_manage as M
+        src = (ROOT / "agapi" / "s2_manage.py").read_text()
+        self.assertIn("k = (v[\"time\"], v[\"flights\"], v[\"cost\"])", src)
+        opt = lambda oid, t, fn: {"change_offer_id": oid, "departs": f"2026-11-22T{t}:00", "new_flights": fn, "change_total_amount": "125.00",
+                                  "change_total_currency": "EUR", "lines": ["I'll move it.", "€125.00.", FM.TEST_LINE]}
+        options = [opt("a", "06:00", "ZZ 8828"), opt("b", "06:00", "ZZ 8828"), opt("c", "12:00", "ZZ 5354"), opt("d", "12:00", "ZZ 5354")]
+        off = {"order_id": "ord_back", "new_date": "2026-11-22", "leg": None, "options": options, "default": "a",
+               "at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc)}
+        M._CHANGE["acct-305"] = off
+        try:
+            with mock.patch.object(M, "plans_of", mock.AsyncMock(return_value=[dict(RIO[1])])):
+                r = run(M.change_booking(Ctx(), {"what": "flight", "name": "Rio", "new_date": "2026-11-22"}))
+        finally:
+            M._CHANGE.pop("acct-305", None)
+            M._HELD.pop("acct-305", None)
+        other = next(l for l in r["read_back"] if l.startswith("Other times"))
+        self.assertEqual(other.count("12:00"), 1)
+        self.assertNotIn("06:00", other)
+        self.assertEqual(r["read_back"][-1], "No real money moves.")
 
 
 class Ctx:

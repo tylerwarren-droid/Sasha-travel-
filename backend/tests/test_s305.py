@@ -140,6 +140,24 @@ class OneBookingOneRow(Base):
         self.assertTrue(got[0]["live"])
 
 
+class TheBannerToo(Base):
+    def test_a_cancelled_basket_flights_ladder_copy_is_never_said_booked(self):   # found live: "Booked: … ref VMOWK7" after the cancel
+        from agapi import s2_status as ST, venues as VN, v0 as API, s2_outcomes as OC
+        from booking_signer import paid_watch as PW, plan_store as PS
+        self.duffel.cancelled = True
+        flight = {**NoSecondCopy.ROW, "trip_item_id": "ti-1", "state": "booked"}
+        copy = {"trip_item_id": "ti-1", "venue": "Flight U2 7640 Madrid → London (TEST booking)", "date": "2026-11-20", "time": "08:30",
+                "status": "confirmed", "reference": "ABC123"}
+        with mock.patch.object(PS, "by_id", mock.AsyncMock(return_value={"trip_id": "t1"})), \
+                mock.patch.object(VN, "venue_bookings", mock.AsyncMock(return_value=[copy])), \
+                mock.patch.object(BK, "items", mock.AsyncMock(side_effect=lambda a, t, states=None: [dict(flight)] if "booked" in (states or ()) else [])):
+            st = run(ST.status_of("acct-305", "t1", sweep=False))
+        self.assertEqual(st["venues"], [])                        # the ladder's copy of the basket flight is not a second booking
+        self.assertEqual(st["booked"], [])
+        self.assertIn("cancelled", " ".join(st["cancelled"]))    # the flight, as Duffel has it: cancelled
+        self.assertNotIn("Madrid → London (TEST booking)", ST.decide(st)["line"])
+
+
 class WhatSheSaysAfter(Base):
     def test_change_words_are_the_order_now_and_the_charge(self):
         from agapi import s2_manage as M

@@ -132,6 +132,10 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
         # Sasha 305 · a ticketed flight as Duffel has it now (BK.live): its line built again from the order, never the one kept at booking
         rows = await BK.live(await BK.items(account, p["trip_id"], ("pending_payment", "booked", "failed", "cancelled")))
         line = lambda r: r.get("status_line") or BK.status_line(r)
+        # Sasha 305 · found live: a basket flight's own trip item (the old ladder's copy) said "Booked … 21 Nov" after the flight was
+        # moved and cancelled — one booking, one line: the basket's
+        tied = {str(r["trip_item_id"]) for r in rows if r.get("trip_item_id")}
+        vb = [b for b in vb if str(b.get("trip_item_id") or "") not in tied]
         st = {"venues": vb, "anything_booked": any(r["state"] == "booked" for r in rows) or any(b["status"] == "confirmed" for b in vb),
               "booked": [line(r) for r in rows if r["state"] == "booked"],
               "failed": [line(r) for r in rows if r["state"] == "failed"],

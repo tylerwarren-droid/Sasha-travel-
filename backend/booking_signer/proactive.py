@@ -552,7 +552,15 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                 done.append({"kind": kind, "booking": b.get("id"), "outcome": "dropped: the daily cap"})
                 continue
             # rule 1 · the status re-read at the send: cancelled at 17:59 never gets an 18:00 message
-            fresh = next((r for r in await _rows(account) if r["id"] == b["id"]), None) if kind != "morning_brief" else b
+            now_rows = await _rows(account)
+            fresh = next((r for r in now_rows if r["id"] == b["id"]), None) if kind != "morning_brief" else b
+            if kind == "morning_brief":   # Sasha 310 · the brief too: only the bookings still on the record at the send (it kept its list)
+                live = {r["id"]: r for r in now_rows}
+                extra = {**extra, "items": [live[x["id"]] for x in extra.get("items") or [] if x.get("id") in live]}
+                if not extra["items"]:
+                    done.append({"kind": kind, "booking": b.get("id"), "outcome": "skipped: nothing left on the record today"})
+                    continue
+                fresh = extra["items"][0]
             if fresh is None:
                 done.append({"kind": kind, "booking": b["id"], "outcome": "skipped: no longer an active booking"})
                 continue

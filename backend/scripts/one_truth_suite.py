@@ -299,6 +299,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "ONE yes (tap or typed) sends it; a yes that can't go yet is said as it is (never \"tap Yes\" with nothing to tap, never a call "
             "on top); a number linked before CR 100 is confirmed once, from itself (Sasha 309)",
             ["tests.test_s309"]),
+    "T85": ("the morning brief, like every reminder, re-reads the record at the send (a cancelled booking is never in it); My trips "
+            "draws a stay as AgAPI's record has it (Sasha 310)",
+            ["tests.test_s310"]),
 }
 
 _RUNNER = """

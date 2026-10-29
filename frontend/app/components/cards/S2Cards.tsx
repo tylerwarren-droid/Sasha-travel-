@@ -15,7 +15,9 @@ export type Plan = { kind: 'dinner' | 'spa' | 'venue' | 'flight' | 'hotel' | 'ca
   // Sasha 300 · THE ONE ITINERARY: the status in words, the way it was made, the venue's own words (data), its map
   status_words?: string; route_words?: string; venue_said?: { untrusted_text?: string }; map_url?: string; trip?: string
   // Sasha 301 · THE FINE PRINT: the venue's terms in their own sentences (with the deadline they state), his Keep's perks (masked)
-  terms?: Term[]; perks?: { kind: string; line: string }[] }
+  terms?: Term[]; perks?: { kind: string; line: string }[]
+  // Sasha 310 · a stay as AgAPI's record has it (check-in, check-out, nights) — drawn as given, never worked out here
+  check_in?: string; check_out?: string; nights?: number }
 export type Term = { kinds: string[]; quote: string; by?: string; by_words?: string }
 const TERM_LABEL: Record<string, string> = { deposit: 'Deposit', cancellation: 'Cancellation', no_show: 'No-show', time_limit: 'Time at the table' }
 export const termHead = (t: Term) => t.kinds.map((k) => TERM_LABEL[k] || k).join(' · ') + (t.by_words ? ` — by ${t.by_words}` : '')
@@ -107,6 +109,12 @@ function fmtWhen(iso: string): string {
   const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
   return dateOnly ? day : `${day} · ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
 }
+/** Sasha 310 · a stay's dates as its record gives them: "Sun 15 Nov · 15:00 → Wed 18 Nov · 3 nights"; anything else: its when. */
+export function stayWhen(p: Plan): string {
+  if (!p.check_out) return fmtWhen(p.when)
+  const n = typeof p.nights === 'number' ? ` · ${p.nights} night${p.nights === 1 ? '' : 's'}` : ''
+  return `${fmtWhen(p.when)} → ${fmtWhen(p.check_out.slice(0, 10))}${n}`
+}
 const PLAN_ICON: Record<string, string> = { dinner: '🍽️', venue: '🍽️', spa: '💆', flight: '✈️', hotel: '🏨', car: '🚗' }
 
 export function Plans({ items, on }: { items: Plan[]; on?: string }) {
@@ -117,7 +125,7 @@ export function Plans({ items, on }: { items: Plan[]; on?: string }) {
           <span style={{ fontSize: 20, lineHeight: 1.2 }} aria-hidden>{PLAN_ICON[p.kind] || '📌'}</span>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700 }}>{untag(p.title)}</div>
-            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.88)' }}>{fmtWhen(p.when)}{p.where ? ` · ${untag(p.where)}` : ''}</div>
+            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.88)' }}>{stayWhen(p)}{p.where ? ` · ${untag(p.where)}` : ''}</div>
             <div style={{ fontSize: 12.5, color: C.dim }}>{untag(p.status_words || p.status)}{p.route_words ? ` · ${p.route_words}` : ''}{p.reference ? ` · Ref ${untag(p.reference)}` : ''}</div>
             {p.venue_said?.untrusted_text ? <div style={{ fontSize: 12.5, color: C.dim, fontStyle: 'italic' }}>They said: &ldquo;{p.venue_said.untrusted_text}&rdquo;</div> : null}
             {(p.terms || []).map((t, k) => (

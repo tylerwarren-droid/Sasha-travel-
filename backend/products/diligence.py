@@ -255,7 +255,8 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optiona
     pend, out = ctx["st"]["pending"], ctx["out"]
     pend["step"] = "ask"                           # in the space until its word or another one leaves it (never "done" by itself)
     t = _WORD.sub("", body or "", count=1).strip() if entering else (body or "").strip()
-    if not t:
+    media = [m for m in (ctx.get("media") or []) if isinstance(m, dict) and str(m.get("url") or "").startswith("http")]
+    if not t and not media:   # CR 136 · a file or a voice note with no words is evidence for a case, never "who should I investigate?"
         out.text(LINE)
         return True
     number = (ctx.get("ch") or {}).get("number_e164")
@@ -263,7 +264,9 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optiona
         out.text(WHATSAPP_ONLY)
         return True
     from agapi import venue_submit as VS
-    r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence")
+    r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence",
+                                  media=[{"url": m["url"], "type": m.get("type") or ""} for m in media],   # CR 136 · relayed onto the case
+                                  replied_to=ctx.get("replied_to"))
     if r.get("ad") == "closed":
         out.text(CLOSED)                           # AgAPI never writes to a number outside the beta: said here
     elif not r.get("ad"):

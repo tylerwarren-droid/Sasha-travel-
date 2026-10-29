@@ -80,6 +80,30 @@ class TheStayAsTheRecordHasIt(unittest.TestCase):
         self.assertTrue(said.endswith(V.STAY_ASK))
 
 
+class FoundOnTheWalk(unittest.TestCase):
+    def test_no_name_given_his_own_words_name_the_stay(self):   # the forced call gave no name: three hotels, "which_booking"
+        from agapi import s2_manage as M
+        rows = [{"kind": "hotel", "title": t, "when": "2026-11-15T15:00", "id": i, "source": "venue", "status": "confirmed"}
+                for t, i in (("Marriott Test Hotel (sandbox)", "act_M1"), ("Hotel WhatsApp (sandbox)", "act_W"), ("Marriott Test Hotel (sandbox)", "act_M2"))]
+        ctx = Ctx()
+        ctx.user_said = "Make my stay at Hotel WhatsApp 3 nights instead of 4."
+        with mock.patch.object(M, "plans_of", mock.AsyncMock(return_value=rows)):
+            self.assertEqual(run(M.booking_meant(ctx, {}, "hotel"))["id"], "act_W")
+            ctx.user_said = "make my stay 3 nights"
+            with self.assertRaises(Exception):   # nothing names it: asked, never the first taken
+                run(M.booking_meant(ctx, {}, "hotel"))
+
+    def test_what_the_record_already_holds_is_not_asked_again(self):   # "a change to check-in Sun 15 Nov and 3 nights"
+        from agapi import s2_manage as M, venue_submit as VS
+        b = {"act_id": "act_ST", "venue": "Hotel WhatsApp (sandbox)", "route": "whatsapp", "route_words": "", "date": "2026-11-15",
+             "party": 1, "stay": STAY}
+        rb = {"ok": True, "end_user": "eu_1", "read_back_id": "rb_1", "lines": LINES, "act_id": "act_ST"}
+        with mock.patch.object(VS, "change_read_back", mock.AsyncMock(return_value=rb)) as crb:
+            run(M._act_notice(Ctx(), {"nights": 3, "check_in": "2026-11-15", "new_party": 1}, b, "change", "change_booking"))
+        M._HELD.pop("acct-306", None)
+        self.assertEqual(crb.call_args.kwargs, {"nights": 3})
+
+
 class APriceBeforeEveryChange(unittest.TestCase):
     def test_a_change_or_cancel_request_calls_its_quote_tool_first(self):
         from app.agent import voice as V

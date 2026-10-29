@@ -192,6 +192,9 @@ async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
                 **({"party": int(a["new_party"])} if str(a.get("new_party") or "").isdigit() else {}),
                 **({"nights": int(nights)} if str(nights or "").isdigit() else {}),
                 **({"check_in": str(a["check_in"])[:10]} if a.get("check_in") else {})}
+        st0 = b.get("stay") if isinstance(b.get("stay"), dict) else {}
+        same = {"check_in": st0.get("check_in"), "nights": st0.get("nights"), "party": b.get("party")}   # Sasha 306 · AgAPI's record's own
+        args = {k: v for k, v in args.items() if same.get(k) is None or str(same[k]) != str(v)}   # found live: "check-in 15 Nov" re-asked
         if not args:
             raise _err("change_missing", "what should it change to — a new time, a different number of people, or (a stay) its nights "
                                          "or check-in day?")
@@ -271,6 +274,7 @@ async def _item(ctx, a: dict, kind: str) -> dict:
 _KINDS = {"flight": ("flight",), "hotel": ("hotel",), "venue": ("dinner", "spa"), "restaurant": ("dinner",), "dinner": ("dinner",),
           "spa": ("spa",), "table": ("dinner",)}
 _WHAT = {"flight": "flight", "hotel": "hotel", "dinner": "venue", "spa": "venue"}
+_GENERIC = {"hotel", "test", "sandbox", "the", "stay", "room", "rooms", "restaurant", "duffel", "airways", "flight"}
 
 
 async def booking_meant(ctx, a: dict, what: str) -> Optional[dict]:
@@ -296,6 +300,11 @@ async def booking_meant(ctx, a: dict, what: str) -> Optional[dict]:
         return pool[0]
     if what == "flight" and len(pool) > 1:
         raise _err("which_flight", "more than one flight is booked — which one: out or back (leg), or its id from my_plans?")
+    if not name and len(pool) > 1:   # Sasha 306 · found live: no name given (the forced call's arguments) — his own words name it
+        said = re.sub(r"\W+", " ", str(getattr(ctx, "user_said", "") or "").lower())
+        core = lambda t: [w for w in re.sub(r"\W+", " ", str(t or "").lower()).split() if len(w) > 3 and w not in _GENERIC]
+        hit = [i for i in pool if core(i.get("title")) and all(f" {w} " in f" {said} " for w in core(i.get("title")))]
+        pool = hit or pool
     if what == "hotel" and len(pool) > 1:   # two stays of the same name: never the first one found — ask, by their dates
         raise _err("which_booking", "more than one stay matches — which one? " + "; ".join(
             f"{i['title']} from {str(i.get('when') or '')[:10]} (id {i['id']})" for i in pool[:4]))

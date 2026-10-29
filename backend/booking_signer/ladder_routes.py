@@ -546,7 +546,7 @@ async def trip_total(account: str, trip_id: Optional[str], plan: Optional[dict] 
         return None
     from . import basket as BK
     try:
-        rows = await BK.items(account, trip_id, ("suggested", "chosen") + BK.HELD)
+        rows = await BK.live(await BK.items(account, trip_id, ("suggested", "chosen") + BK.HELD))   # Sasha 305 · a ticketed flight as it stands
     except Exception as e:
         log.info("[ladder_routes] trip total not read: %s", type(e).__name__)
         return None

@@ -129,11 +129,13 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
                               "cancelled": vc, "awaiting_payment": 0}   # Sasha 226 · a cancelled table is on the record too
         rows: List[dict] = []
     else:
-        rows = await BK.items(account, p["trip_id"], ("pending_payment", "booked", "failed", "cancelled"))
+        # Sasha 305 · a ticketed flight as Duffel has it now (BK.live): its line built again from the order, never the one kept at booking
+        rows = await BK.live(await BK.items(account, p["trip_id"], ("pending_payment", "booked", "failed", "cancelled")))
+        line = lambda r: r.get("status_line") or BK.status_line(r)
         st = {"venues": vb, "anything_booked": any(r["state"] == "booked" for r in rows) or any(b["status"] == "confirmed" for b in vb),
-              "booked": [r["status_line"] for r in rows if r["state"] == "booked"],
-              "failed": [r["status_line"] for r in rows if r["state"] == "failed"],
-              "cancelled": [r["status_line"] for r in rows if r["state"] == "cancelled"] + vc,
+              "booked": [line(r) for r in rows if r["state"] == "booked"],
+              "failed": [line(r) for r in rows if r["state"] == "failed"],
+              "cancelled": [line(r) for r in rows if r["state"] == "cancelled"] + vc,
               "awaiting_payment": sum(1 for r in rows if r["state"] == "pending_payment")}
         try:   # Sasha 259 · the trip's chosen-not-booked items (S2 item 12: one truth with the Trip tab's "not booked yet")
             st["chosen"] = [r.get("status_line") or BK.status_line(r) for r in await BK.items(account, p["trip_id"], ("chosen",))]

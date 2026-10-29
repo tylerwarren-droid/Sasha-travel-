@@ -137,7 +137,7 @@ async def add_to_calendar(ctx, a: dict) -> dict:
     if ev is None:
         from booking_signer import basket as BK, plan_store as PS
         p = await PS.latest(ctx.account)
-        for r in (await BK.items(ctx.account, p["trip_id"], ("booked",)) if p else []):
+        for r in (await BK.live(await BK.items(ctx.account, p["trip_id"], ("booked",))) if p else []):   # Sasha 305 · the flight as it is now
             if str(r["id"]) == bid and r["kind"] == "flight":
                 c = r.get("snapshot") or {}
                 tz, mins = c.get("from_tz") or "UTC", int(c.get("minutes") or 0)

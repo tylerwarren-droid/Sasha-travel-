@@ -628,7 +628,7 @@ def words(r: Dict[str, Any]) -> str:
             "pending_payment": "waiting for your payment"}.get(r["state"], r["state"])
 
 
-LIVE_KEYS = ("owner", "flights", "from", "to", "departs", "arrives")
+LIVE_KEYS = ("owner", "flights", "from", "to", "departs", "arrives", "minutes")
 
 
 async def live(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

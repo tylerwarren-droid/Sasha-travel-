@@ -107,11 +107,19 @@ class NoSecondCopy(Base):
         self.assertIs(r["live"], False)
         self.assertIn("isn't answering", r["live_why"])
 
-    def test_both_views_read_through_it(self):
-        it = (ROOT / "agapi" / "itinerary.py").read_text()
-        ps = (ROOT / "booking_signer" / "plan_store.py").read_text()
-        self.assertIn("rows = await BK.live(", it)            # My trips
-        self.assertIn("BK.overlay(m, await BK.live(rows))", ps)   # the Trip tab
+    def test_every_view_of_a_booked_flight_reads_through_it(self):   # found on the third walk: the banner and Getting there kept the old flight
+        pins = {"agapi/itinerary.py": "rows = await BK.live(",                       # My trips
+                "booking_signer/plan_store.py": "BK.overlay(m, await BK.live(rows))",  # the Trip tab's days
+                "agapi/s2_status.py": "rows = await BK.live(await BK.items(",          # get_status: her answer and the Trip banner
+                "booking_signer/ladder_routes.py": "rows = await BK.live(await BK.items(account, trip_id",   # Getting there / the total
+                "agapi/s2_tools.py": "await BK.live(await BK.items(ctx.account, p[\"trip_id\"], (\"booked\",)))"}   # add to calendar
+        for f, pin in pins.items():
+            self.assertIn(pin, (ROOT / f).read_text(), f)
+
+    def test_the_orders_duration_comes_with_it(self):
+        o = order()
+        o["slices"][0]["duration"] = "PT11H34M"
+        self.assertEqual(FM.order_view(o)["minutes"], 694)
 
 
 class OneBookingOneRow(Base):

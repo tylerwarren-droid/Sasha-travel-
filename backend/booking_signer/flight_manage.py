@@ -170,11 +170,14 @@ def forget(order_id: Optional[str]) -> None:
 
 def order_view(order: dict) -> Dict[str, Any]:
     """A Duffel order as the booking reads now: its legs, reference, airline and whether it's cancelled — from the order alone."""
-    legs = [_slice_line(sl) for sl in order.get("slices") or [] if isinstance(sl, dict)]
+    slices = [sl for sl in order.get("slices") or [] if isinstance(sl, dict)]
+    legs = [_slice_line(sl) for sl in slices]
     first = legs[0] if legs else {}
+    dur = re.fullmatch(r"P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?", str((slices[0] if slices else {}).get("duration") or ""))
     return {"order_id": order.get("id"), "reference": order.get("booking_reference"), "owner": _owner(order), "legs": legs,
             "flights": " + ".join(l["flights"] for l in legs) or None, "from": first.get("from"), "to": first.get("to"),
             "departs": first.get("departs"), "arrives": first.get("arrives"), "times": first.get("times"),
+            "minutes": (int(dur.group(1) or 0) * 1440 + int(dur.group(2) or 0) * 60 + int(dur.group(3) or 0)) if dur and dur.group(0) else None,
             "cancelled": bool(order.get("cancelled_at")), "cancelled_at": order.get("cancelled_at"),
             "total_amount": order.get("total_amount"), "total_currency": order.get("total_currency")}
 

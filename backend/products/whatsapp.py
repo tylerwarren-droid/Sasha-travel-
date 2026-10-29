@@ -518,7 +518,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         rest = body if rest and not re.match(r"^(me|mode)\b", rest, re.I) else rest   # "campus visits at Yale…": all of it
     ctx = {"account": ch["account_id"], "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "media": media,
            "early": early or _no_early, "plan_for": plan_for, "espana": bool(entering and _ESPANA.match(body)),
-           "sid": p.get("MessageSid")}   # CR 128 · AD's space hands the message to AgAPI with Twilio's id (its idempotency key)
+           "sid": p.get("MessageSid"),   # CR 128 · AD's space hands the message to AgAPI with Twilio's id (its idempotency key)
+           "replied_to": p.get("OriginalRepliedMessageSid")}   # CR 136 · the message this one answers (a reply to a case message)
     import json as _json
     before = (st["pending"].get("step"), _json.dumps(st["pending"].get("facts"), sort_keys=True, default=str))
     handled = await _module(target).turn(ctx, rest, payload, entering=entering)

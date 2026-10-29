@@ -769,7 +769,10 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     await PA.warm(account)   # Sasha 254 · the one record, fresh for this turn's sync checks (rehearsal, calls, real venues …)
     body = (p.get("Body") or "").strip()
     heard = None
-    if not body and not (p.get("ButtonPayload") or "").strip():
+    st = await STORE.get_state(key)
+    _pend = st.get("pending") or {}
+    in_ad = _pend.get("kind") == "product" and _pend.get("product") == "diligence"   # CR 136 · AD's space: the AUDIO is the evidence
+    if not body and not (p.get("ButtonPayload") or "").strip() and not in_ad:
         heard = await voice_text(p)   # Sasha 165 (5) · a voice note: its words, as if typed
         if heard:
             body = heard
@@ -778,7 +781,6 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
             p = {**{k: v for k, v in p.items() if not k.startswith("Media")}, "Body": heard, "NumMedia": "0"}
     payload = (p.get("ButtonPayload") or "").strip()
     now = NOW()
-    st = await STORE.get_state(key)
     loaded = copy.deepcopy(st.get("pending"))   # Sasha 252 · the open question as this turn found it
     st["last_inbound_at"] = now
     st["last_to"] = frm   # Sasha 162 · the number they wrote to: what Sasha starts goes from it

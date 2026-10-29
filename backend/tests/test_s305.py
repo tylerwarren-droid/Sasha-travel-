@@ -114,6 +114,24 @@ class NoSecondCopy(Base):
         self.assertIn("BK.overlay(m, await BK.live(rows))", ps)   # the Trip tab
 
 
+class OneBookingOneRow(Base):
+    def test_the_ladders_copy_of_a_basket_flight_is_not_listed_again(self):   # found live: each flight twice, once as a "dinner"
+        from agapi import itinerary as IT
+        from booking_signer import plan_store as PS, rental_moments as RM
+        flight = {**NoSecondCopy.ROW, "trip_item_id": "ti-1", "trip_id": "t1"}
+        ladder = {"id": "ti-1", "source": "ladder", "venue": "Flight U2 7640 Madrid → London (TEST booking)", "date": "2026-11-20",
+                  "time": "08:30", "status": "confirmed", "status_words": "booked", "route": "form", "route_words": "", "manage": "ladder",
+                  "type": "flight"}
+        with mock.patch.object(PS, "plans", mock.AsyncMock(return_value=[{"trip_id": "t1", "title": "Flight Madrid → London"}])), \
+                mock.patch.object(IT, "venue_rows", mock.AsyncMock(return_value=[ladder])), \
+                mock.patch.object(BK, "items", mock.AsyncMock(return_value=[flight])), \
+                mock.patch.object(RM, "rentals", mock.AsyncMock(return_value=[])), \
+                mock.patch.object(IT, "_wallet", mock.AsyncMock(return_value=[])):
+            got = run(IT.of("acct-305"))
+        self.assertEqual([(i["kind"], i["source"]) for i in got], [("flight", "flight")])
+        self.assertTrue(got[0]["live"])
+
+
 class WhatSheSaysAfter(Base):
     def test_change_words_are_the_order_now_and_the_charge(self):
         from agapi import s2_manage as M
@@ -130,6 +148,30 @@ class WhatSheSaysAfter(Base):
         said = run(M.cancelled_words(run(FM.cancel_confirm(q["quote_id"]))))
         self.assertIn("Refund: €76.41 to your original payment.", said)
         self.assertIn("Duffel's booking ABC123 now reads cancelled.", said)
+
+
+class SaidByCode(unittest.TestCase):   # found live: she offered the new times and left out the price
+    def test_a_flight_change_read_back_is_said_word_for_word_with_its_price(self):
+        from app.agent import voice as V
+        lines = ["I'll move your Duffel Airways flight ZZ 9492 on Sat 21 Nov to ZZ 8828, Sun 22 Nov 06:00 SNZ → 17:29 MAD (booking VMOWK7).",
+                 "The change costs €61.20 in total, including the airline's €50.00 change fee (Duffel's own quote).", FM.TEST_LINE]
+        said = V.flight_line("change_booking", {"ok": True, "result": {"flight": True, "status": "awaiting_yes", "read_back": lines}})
+        self.assertTrue(said.startswith(lines[0]))
+        self.assertIn("€61.20 in total, including the airline's €50.00 change fee", said)
+        self.assertTrue(said.endswith(V.CHANGE_ASK))
+        self.assertTrue(V.flight_line("cancel_booking", {"ok": True, "result": {"flight": True, "status": "awaiting_yes",
+                                                                               "read_back": ["Refund €76.41."]}}).endswith(V.CANCEL_ASK))
+
+    def test_after_the_yes_the_orders_words_and_only_for_a_flight(self):
+        from app.agent import voice as V
+        done = {"ok": True, "result": {"flight": True, "status": "changed", "say": "Changed — Duffel confirmed it. …"}}
+        self.assertEqual(V.flight_line("change_booking", done), "Changed — Duffel confirmed it. …")
+        self.assertEqual(V.flight_line("change_booking", {"ok": True, "result": {"status": "awaiting_yes", "read_back": ["a venue"]}}), "")
+        self.assertEqual(V.flight_line("my_plans", done), "")
+        self.assertEqual(V.flight_line("change_booking", {"ok": False, "error": {"code": "booking_unknown"}}), "")
+
+    def test_the_chain_says_it(self):
+        self.assertIn("or _V.flight_line(u.name, r)) if honest else", (ROOT / "app" / "agent" / "sasha.py").read_text())
 
 
 class Ctx:
@@ -172,6 +214,15 @@ class OneResolver(unittest.TestCase):
 
     def test_a_hotel_on_agapi_is_found_as_the_hotel(self):
         self.assertEqual(run(self.M.booking_meant(Ctx(), {"name": "marriott"}, "hotel"))["id"], "act_01STAY")
+
+    def test_two_stays_of_one_name_are_asked_never_the_first_taken(self):   # found live: the scratch guest's two Marriott stays
+        two = RIO + [{**RIO[2], "id": "act_01OLD", "when": "2026-10-30T15:00"}]
+        with mock.patch.object(self.M, "plans_of", mock.AsyncMock(return_value=two)):
+            with self.assertRaises(Exception) as e:
+                run(self.M.booking_meant(Ctx(), {"name": "Marriott"}, "hotel"))
+            self.assertEqual(getattr(e.exception, "code", None), "which_booking")
+            self.assertIn("2026-11-15", str(e.exception))
+            self.assertEqual(run(self.M.booking_meant(Ctx(), {"id": "act_01STAY"}, "hotel"))["id"], "act_01STAY")
 
     def test_hotel_nights_wait_for_agapi_and_nothing_is_sent(self):
         with mock.patch.object(self.M, "_notice", mock.AsyncMock()) as sent:

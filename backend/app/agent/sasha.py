@@ -987,7 +987,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             # Sasha 262 · S2 item 10: the read-back's ONE line, said by code; the turn ends on it (the model once added "I need a clear
             # yes first"). Sasha 263 · and the in-app yes's line (nothing waiting / booked + the calendar question), the same way
             rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r) or _V.page_line(u.name, r)
-                  or _V.discover_line(u.name, r) or _V.fine_print_line(u.name, r)) if honest else ""   # 264: + a page · 276: AgAPI's say_text, with its cards · 302: the fine print
+                  or _V.discover_line(u.name, r) or _V.fine_print_line(u.name, r) or _V.flight_line(u.name, r)) if honest else ""   # 264: + a page · 276: AgAPI's say_text, with its cards · 302: the fine print · 305: a flight's change / cancel
             if rb:
                 read_back_said = True
                 if rb not in said:

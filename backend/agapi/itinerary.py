@@ -245,7 +245,7 @@ async def of(account: str) -> List[dict]:
                     "party": v.get("party"), "id": v["id"], "source": "venue",
                     **{k: v[k] for k in ("reference", "venue_said", "map_url", "address", "platform", "url", "cancel", "change", "terms") if v.get(k)},
                     **({"trip_id": trip["trip_id"], "trip": trip.get("title")} if trip else {})})
-    seen = set()
+    seen, tied = set(), set()
     for p in plans:
         # Sasha 305 · a ticketed flight is its Duffel order read now (basket.live), never the snapshot copied at booking; one cancelled
         # after ticketing stays on, said cancelled
@@ -255,6 +255,8 @@ async def of(account: str) -> List[dict]:
             if r["id"] in seen:
                 continue
             seen.add(r["id"])
+            if r.get("trip_item_id"):
+                tied.add(str(r["trip_item_id"]))
             s = r.get("snapshot") or {}
             status = {"booked": "booked", "cancelled": "cancelled"}.get(r["state"], "awaiting payment")
             if r["kind"] == "flight":
@@ -274,6 +276,9 @@ async def of(account: str) -> List[dict]:
                             **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),
                             "id": str(r["id"]), "trip_item_id": str(r["trip_item_id"]) if r.get("trip_item_id") else None,
                             "trip": p.get("title"), "trip_id": p["trip_id"], "source": "hotel"})
+    # Sasha 305 · found live: a flight booked from the basket ALSO left the old ladder's trip item, listed again as a "dinner" — one booking,
+    # one row: the basket's (its Duffel order, read now) is it
+    out = [i for i in out if not (i["source"] == "venue" and str(i["id"]) in tied)]
     from booking_signer import rental_moments as RM   # Sasha 227 · the rentals they told her about
     for r in await RM.rentals(account):
         out.append({"kind": "car", "title": f"{r['rental_company']} car rental", "when": r["pickup_date"] + (f"T{r['pickup_time']}" if r.get("pickup_time") else ""),

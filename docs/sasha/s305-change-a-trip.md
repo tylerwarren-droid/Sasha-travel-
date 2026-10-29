@@ -42,4 +42,4 @@ So the proof books a fresh trip on a scratch TEST guest.
 
 AgAPI's `venue.change_booking` has no field for a stay's nights. A stay act (CR 102) stores `{nights, room}`, but a change takes only `at` / `party`.
 
-"Make it 3 nights instead of 4" can't be sent by the hotel's route until AgAPI takes it. The ask is **CR 136**: `venue.change_booking` accepts `stay: {nights}` on a stay act, and its read-back and message say the new check-out. Until CR 136 ships, Sasha says that plainly and sends nothing.
+"Make it 3 nights instead of 4" can't be sent by the hotel's route until AgAPI takes it. The ask is **AgAPI ask s305-1** (not "CR 136": that number is another session's Sasha CR): `venue.change_booking` accepts `stay: {nights}` on a stay act, and its read-back and message say the new check-out. Until it ships, Sasha says that plainly and sends nothing.

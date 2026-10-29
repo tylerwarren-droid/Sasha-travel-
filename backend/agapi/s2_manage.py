@@ -268,6 +268,9 @@ async def booking_meant(ctx, a: dict, what: str) -> Optional[dict]:
         return pool[0]
     if what == "flight" and len(pool) > 1:
         raise _err("which_flight", "more than one flight is booked — which one: out or back (leg), or its id from my_plans?")
+    if what == "hotel" and len(pool) > 1:   # two stays of the same name: never the first one found — ask, by their dates
+        raise _err("which_booking", "more than one stay matches — which one? " + "; ".join(
+            f"{i['title']} from {str(i.get('when') or '')[:10]} (id {i['id']})" for i in pool[:4]))
     return pool[0] if pool else None
 
 
@@ -278,7 +281,7 @@ def _act_ref(row: dict) -> dict:
 
 
 def stay_change_not_yet(title: str) -> str:
-    """Sasha 305 · a stay's nights can't go by the hotel's route until AgAPI's venue.change_booking takes them (CR 136): said, nothing sent."""
+    """Sasha 305 · a stay's nights can't go by the hotel's route until AgAPI's venue.change_booking takes them (AgAPI ask s305-1): said, nothing sent."""
     return (f"I can't change the nights at {title} through the hotel's booking route yet, so I haven't sent anything. I can ask them "
             "to cancel it and send a new request for the dates you want.")
 
@@ -384,8 +387,8 @@ async def change_booking(ctx, a: dict) -> dict:
                           {"reference": got.get("order_change_id") or held["order_id"], "said": said, "read_back_sha256": "sha256:" + held["sha"]},
                           held["title"])
             if not done:
-                return {"status": got.get("status"), "say": f"It wasn't changed: {got.get('why') or got.get('provider_words') or 'the airline system said no'}"}
-            return {"status": "changed", "order_id": got.get("order_id"), "booking_reference": got.get("booking_reference"),
+                return {"flight": True, "status": got.get("status"), "say": f"It wasn't changed: {got.get('why') or got.get('provider_words') or 'the airline system said no'}"}
+            return {"flight": True, "status": "changed", "order_id": got.get("order_id"), "booking_reference": got.get("booking_reference"),
                     "say": changed_words(got), "how": "Say this as it is: it is the order as Duffel has it now."}
         it = row if row and row.get("kind") == "flight" else (await booking_meant(ctx, a, "flight") or await _item(ctx, a, "flight"))
         if (it.get("legs") or 1) < 2:   # Sasha 305 · one flight per order (the Rio trip's out and back): the order IS the leg
@@ -403,7 +406,7 @@ async def change_booking(ctx, a: dict) -> dict:
             if q.get("why"):
                 raise _err("change_unavailable", q["why"])
             if not q.get("possible"):
-                return {"status": "not_possible", "say": q.get("say")}
+                return {"flight": True, "status": "not_possible", "say": q.get("say")}
             off = {"order_id": it["order_id"], "new_date": new_date, "leg": a.get("leg"), "options": q.get("options") or [q],
                    "default": q["change_offer_id"], "at": datetime.now(timezone.utc)}
             _CHANGE[ctx.account] = off
@@ -422,7 +425,7 @@ async def change_booking(ctx, a: dict) -> dict:
                          + ", ".join(f"{v['time']} ({v['flights']}, {v['cost']})" for v in others) + ".")
         _hold(ctx, "change_booking", lines, flight=True, change_offer_id=q["change_offer_id"], order_id=it["order_id"], title=it["title"],
               item_id=it["id"])
-        return {"status": "awaiting_yes", "read_back": lines, "options": _options_view(off["options"]),
+        return {"flight": True, "status": "awaiting_yes", "read_back": lines, "options": _options_view(off["options"]),
                 "say": "Read it back, with Duffel's price, and ask: shall I? If they pick another of these times, call change_booking "
                        "again with that new_time (HH:MM) — it is one of these options, never a new search."}
     raise _err("what_invalid", "what is venue, hotel or flight")
@@ -552,10 +555,10 @@ async def cancel_booking(ctx, a: dict) -> dict:
             from booking_signer import flight_manage as FM
             got = await FM.cancel_confirm(held["quote_id"])
             if got.get("status") != "cancelled":
-                return {"status": "not_cancelled", "say": f"It wasn't cancelled: {got.get('why') or got.get('provider_words')}"}
+                return {"flight": True, "status": "not_cancelled", "say": f"It wasn't cancelled: {got.get('why') or got.get('provider_words')}"}
             await BK.cancelled(ctx.account, held["id"])   # Activity shows it (the basket row), with Duffel's cancellation as proof
             await BK.event("duffel_cancel", got.get("cancellation_id") or held["quote_id"], "order.cancelled", got, verified=True, item_id=held["id"])
-            return {"status": "cancelled", "order_id": got.get("order_id"), "say": await cancelled_words(got),
+            return {"flight": True, "status": "cancelled", "order_id": got.get("order_id"), "say": await cancelled_words(got),
                     "how": "Say this as it is: it is Duffel's own answer and the order as it reads now."}
         await BK.cancelled(ctx.account, held["id"])
         if held.get("trip_item_id"):
@@ -586,9 +589,9 @@ async def cancel_booking(ctx, a: dict) -> dict:
         if q.get("why"):
             raise _err("cancel_unavailable", q["why"])
         if not q.get("possible"):
-            return {"status": "not_possible", "say": q.get("say")}
+            return {"flight": True, "status": "not_possible", "say": q.get("say")}
         _hold(ctx, "cancel_booking", q["lines"], kind="flight", quote_id=q["quote_id"], id=it["id"], title=it["title"])
-        return {"status": "awaiting_yes", "read_back": q["lines"], "say": "Read it back, with Duffel's refund, and ask: shall I cancel it?"}
+        return {"flight": True, "status": "awaiting_yes", "read_back": q["lines"], "say": "Read it back, with Duffel's refund, and ask: shall I cancel it?"}
     if what == "hotel":
         it = row or await _item(ctx, a, "hotel")
         if it.get("status") == "awaiting payment":   # Sasha 246 · held with the trip's payment: the held trip is dropped as one
@@ -773,14 +776,14 @@ def tools() -> List[dict]:
             "new_date": {"type": "string"}, "leg": {"enum": ["out", "back"]},
             "new_nights": {"type": "integer", "minimum": 1, "maximum": 60, "description": "a hotel stay's new number of nights"}, **appr}, ["what"],
            {"type": "object", "properties": {"status": {"type": "string"}}},
-           ["booking_unknown", "no_explicit_yes", "change_unavailable", "not_changeable", "date_missing", "what_invalid", "which_flight"], austen=True),
+           ["booking_unknown", "no_explicit_yes", "change_unavailable", "not_changeable", "date_missing", "what_invalid", "which_flight", "which_booking"], austen=True),
         _t("cancel_booking", "Austen", cancel_booking, "Cancel a hotel stay or a flight (a restaurant or spa: cancel_venue). FIRST call: the "
            "read-back (a flight's refund is Duffel's own quote); after their explicit yes in a LATER turn, call again to cancel. "
            "what=plan drops a HELD trip (waiting for payment, nothing booked): its payment closed, nothing charged.",   # Sasha 246
            {"what": {"enum": ["hotel", "flight", "plan"]}, "id": {"type": "string"}, "name": {"type": "string"},
             "leg": {"enum": ["out", "back"], "description": "a flight: the trip's outbound or its return"}, **appr}, ["what"],
            {"type": "object", "properties": {"status": {"type": "string"}}},
-           ["booking_unknown", "no_explicit_yes", "cancel_unavailable", "not_cancellable", "what_invalid", "nothing_held", "which_flight"], austen=True),
+           ["booking_unknown", "no_explicit_yes", "cancel_unavailable", "not_cancellable", "what_invalid", "nothing_held", "which_flight", "which_booking"], austen=True),
         # Sasha 253 · the WhatsApp capabilities in the one brain (S252 audit G1 · G9 · G10 · G13)
         _t("file_confirmation", "Pacioli", file_confirmation, "They forwarded or pasted a venue's booking confirmation (its email or "
            "message): file it on the ONE booking it names (their reference, or the venue's name and the day), read with the field "

@@ -871,6 +871,23 @@ def fine_print_line(tool: str, r: dict) -> str:
     return str(res.get("say") or "").strip()
 
 
+MANAGED = ("change_booking", "cancel_booking")
+CHANGE_ASK = "Shall I make this change?"
+CANCEL_ASK = "Shall I cancel it?"
+
+
+def flight_line(tool: str, r: dict) -> str:
+    """Sasha 305 · a FLIGHT's change or cancel, said by code: the read-back (the new flight, the other times with their cost, Duffel's
+    change total and penalty, or its refund) and its one question — then, after his yes, the order as Duffel has it now. Found live: she
+    offered the new times and left out the price. A venue's or a hotel's act keeps its own line (read_back_line / its tool's say)."""
+    res = (r or {}).get("result") if (r or {}).get("ok") else None
+    if tool not in MANAGED or not isinstance(res, dict) or not res.get("flight"):
+        return ""
+    if res.get("status") == "awaiting_yes" and res.get("read_back"):
+        return " ".join(res["read_back"] + [CHANGE_ASK if tool == "change_booking" else CANCEL_ASK])
+    return str(res.get("say") or "").strip()
+
+
 def page_line(tool: str, r: dict) -> str:
     """Sasha 264 · the line an in-app booking page ends on (book_venue → a platform's page, or a prepared form): the page is on their
     screen, the phone's outcome said, an unfilled form said as unfilled. Else "" (WhatsApp, and old S1: as they were)."""

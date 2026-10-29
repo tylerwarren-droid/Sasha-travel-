@@ -114,7 +114,7 @@ class Discover(unittest.TestCase):
         self.assertEqual(V.discover_line("hold_venue", r), "")
         self.assertNotIn("discover", json.dumps(AG.model_result(r, "search_venues")))      # the model gets the names and the line only
         src = (BACKEND / "app" / "agent" / "sasha.py").read_text(encoding="utf-8")
-        self.assertIn("or _V.discover_line(u.name, r) or _V.fine_print_line(u.name, r)) if honest else", src)   # 302 · + the fine print               # the turn ends on it (read_back_said)
+        self.assertIn("or _V.discover_line(u.name, r) or _V.fine_print_line(u.name, r) or _V.flight_line(u.name, r)) if honest else", src)   # 302 · + the fine print · 305 MOVED · + a flight's change / cancel               # the turn ends on it (read_back_said)
         self.assertIn('if tool == "search_venues" and isinstance(res.get("discover"), dict):', src)
 
     def test_the_next_turn_knows_the_search_ran(self):

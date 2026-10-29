@@ -183,6 +183,10 @@ class MemoryGuestStore:
         self.codes[row["code"]] = dict(row)
         return True
 
+    async def peek_code(self, code: str, now: datetime) -> Optional[dict]:   # Sasha 311 · read only: whose code is waiting
+        r = self.codes.get(code)
+        return dict(r) if r and not r.get("used_at") and r["created_at"] >= now - CODE_LIFE else None
+
     async def take_code(self, code: str, now: datetime) -> Optional[dict]:
         r = self.codes.get(code)
         if not r or r.get("used_at") or r["created_at"] < now - CODE_LIFE:
@@ -260,6 +264,11 @@ class PostgresGuestStore:
             row["code"], uuid.UUID(row["account_id"]), row["consent_at"], row["consent_wording_version"], row["consent_text_sha256"],
             row["created_at"]))
         return r.endswith(" 1")
+
+    async def peek_code(self, code, now):   # Sasha 311 · read only: whose code is waiting
+        r = await self._run(lambda c: c.fetchrow(
+            "select * from guest_link_codes where code = $1 and used_at is null and created_at >= $2", code, now - CODE_LIFE))
+        return {**dict(r), "account_id": str(r["account_id"])} if r else None
 
     async def take_code(self, code, now):
         r = await self._run(lambda c: c.fetchrow(
@@ -634,16 +643,9 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         log.info("[guest_whatsapp] a repeated MessageSid — already handled, nothing run")
         return ""
     if ch:
-        m = _LINK.match(p.get("Body") or "")
-        if m:   # Sasha 309 · a number linked BEFORE CR 100 confirms itself the CR 100 way: its own code, sent from it — only that account's
-            code = await STORE.take_code(m[1], NOW())
-            if code is not None and code["account_id"] == ch["account_id"]:
-                from agapi import venue_submit as VS
-                ok = await VS.confirm_whatsapp(code["account_id"], sender, p.get("MessageSid") or "", p.get("Body") or "")
-                verified = ok.get("ok") and ok.get("state") == "verified"
-                log.info("[guest_whatsapp] a linked number's confirmation: %s", "verified" if verified else (ok.get("error") or {}).get("code"))
-                from app.agent import voice as V
-                return _twiml_message(V.NUMBER_CONFIRMED if verified else V.NUMBER_NOT_CONFIRMED)
+        said = await confirmed_by_code(ch, sender, p)   # Sasha 309 / 311 · a linked number's own code: the number confirmed, once
+        if said is not None:
+            return _twiml_message(said)
         _spawn(_turn(ch, to, p))
         return ""
     now = NOW()
@@ -694,6 +696,44 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         return ""
     await STORE.put_state(key, {**st, "link_tries": tries + [f"onboard:{now.isoformat()}"]})
     return _twiml_message(onboard_words().format(web=web_url()))   # Sasha 249
+
+
+_CODE_ANY = re.compile(r"(?<!\d)(\d{6})(?!\d)")   # Sasha 311 · "119218", "Kanoe Link 119218", "code: 119218." — any case, any wrapping
+
+
+async def confirmed_by_code(ch: dict, sender: str, p: Dict[str, str]) -> Optional[str]:
+    """Sasha 309 / 311 · a number linked before CR 100 confirms itself the CR 100 way — the code AgAPI made, sent FROM it — and only a code
+    waiting for THIS account. → her one reply, or None (not a code of theirs: the turn runs as any message).
+    Found live (Tyler, 10:47–10:51): the bare code was refused ("send the whole message"); "confirmed" was said outside her conversation, so
+    his next "yes" got the code request again. Now: the bare code works; "confirmed" only when AgAPI's record READ BACK says verified; the
+    exchange is in her conversation; and the held read-back is marked so his very next yes sends it (sasha.turn runs book_venue by code)."""
+    body = (p.get("Body") or "").strip()
+    m = _LINK.match(body) or (_CODE_ANY.search(body) if len(body) <= 60 else None)
+    if not m:
+        return None
+    now = NOW()
+    waiting = await STORE.peek_code(m[1], now) if hasattr(STORE, "peek_code") else None
+    if waiting is None or waiting["account_id"] != ch["account_id"]:   # not a code waiting for THIS account: just a message
+        return None
+    code = await STORE.take_code(m[1], now)
+    if code is None:
+        return None
+    from agapi import venue_submit as VS, venues as VN
+    from app.agent import voice as V
+    ok = await VS.confirm_whatsapp(code["account_id"], sender, p.get("MessageSid") or "", body)
+    verified = bool(ok.get("ok") and ok.get("state") == "verified") and await VS.whatsapp_verified(code["account_id"], sender)
+    log.info("[guest_whatsapp] a linked number's confirmation: %s", "verified (read back)" if verified else (ok.get("error") or {}).get("code") or "not verified")
+    held = VN._HELD.get(code["account_id"])
+    if verified and held:
+        held["number_confirmed_at"] = now.isoformat()
+        said = V.number_confirmed_line(plain_venue(held.get("venue")) if held.get("venue") else "them")
+    else:
+        said = V.NUMBER_CONFIRMED if verified else V.NUMBER_NOT_CONFIRMED
+    st = await STORE.get_state(ch["wa_id_sha256"])   # in her conversation: the next turn knows it was confirmed
+    st["history"] = (list(st.get("history") or []) + [{"role": "user", "content": body}, {"role": "assistant", "content": said}])[-40:]
+    st["last_inbound_at"] = now
+    await STORE.put_state(ch["wa_id_sha256"], st)
+    return said
 
 
 def _dt(s: str) -> datetime:

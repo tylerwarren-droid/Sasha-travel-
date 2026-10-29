@@ -77,9 +77,18 @@ def booked_line(venue: str, when: str, ref: Optional[str]) -> str:
 
 
 # Sasha 309 · a yes that can't go yet, said by code (the turn ends on it: never "tap Yes" with nothing to tap, never a call offered on top)
-NUMBER_CONFIRMED = "Your number is confirmed now — say yes again and it goes."
+NUMBER_CONFIRMED = "Your number is confirmed now."
+
+
+def still_refused_line(venue: str) -> str:
+    return f"It still didn't go — nothing was sent to {venue}. The booking service refused it on my side, and I've flagged it."
+
+
+def number_confirmed_line(venue: str) -> str:
+    """Sasha 311 · AgAPI's record says verified, and a request is waiting: his very next yes sends it."""
+    return f"Your number is confirmed. Say yes and I'll send your request to {venue}."
 NUMBER_NOT_CONFIRMED = "It isn't sent yet: I couldn't confirm this WhatsApp number just now, so nothing went to them."
-PENDING = ("waiting_for_their_tap", "confirm_number")
+PENDING = ("waiting_for_their_tap", "confirm_number", "not_sent")
 
 
 def confirm_number_line(text: str) -> str:

@@ -772,6 +772,17 @@ async def confirm_whatsapp(account: str, wa_id: str, message_id: str, text: str,
     return {"ok": True, **(r.get("result") or {})} if r.get("ok") else {"ok": False, "error": _err(r)}
 
 
+async def whatsapp_verified(account: str, number: str) -> bool:
+    """Sasha 311 · AgAPI's record READ BACK: is this WhatsApp number a VERIFIED destination of the person (users.register, no destinations
+    given — nothing added, nothing sent)? Sasha says "confirmed" only on this."""
+    import re
+    uid = await end_user(account)
+    r = await _call(account, "users.register", {"external_ref": f"sasha:{account}", "destinations": []}) if uid else {}
+    want = re.sub(r"\D", "", str(number or ""))
+    return any(d.get("channel") == "whatsapp" and d.get("verified") and re.sub(r"\D", "", str(d.get("value") or "")) == want
+               for d in ((r.get("result") or {}).get("destinations") or []))
+
+
 async def _approval(account: str, rid: str, said: str):
     """The approval for a read-back: sandbox — their own words, as AgAPI's rules judge them; live — their tap. → the approval id, or
     the answer to give instead (not a yes / still waiting for their tap)."""

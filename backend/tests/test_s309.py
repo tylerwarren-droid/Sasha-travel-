@@ -62,11 +62,14 @@ class ALinkedNumberConfirmsItselfOnce(unittest.TestCase):
     def _dispatch(self, code_row, confirm):
         from booking_signer import guest_whatsapp as GW
         ch = {"account_id": ACCT, "wa_id_sha256": "k", "number_e164": "+34600000309"}
-        store = mock.Mock(channel_for=mock.AsyncMock(return_value=ch), take_code=mock.AsyncMock(return_value=code_row))
+        store = mock.Mock(channel_for=mock.AsyncMock(return_value=ch), take_code=mock.AsyncMock(return_value=code_row),
+                          peek_code=mock.AsyncMock(return_value=code_row), get_state=mock.AsyncMock(return_value={}),
+                          put_state=mock.AsyncMock())   # Sasha 311 MOVED: the code is peeked first; the exchange goes in her history
         p = {"From": "whatsapp:+34600000309", "To": "whatsapp:+447000000000", "Body": "Kanoe link 123456", "MessageSid": "SM1"}
         with mock.patch.object(GW, "STORE", store), mock.patch.object(GW, "guest_numbers", lambda: ["+447000000000"]), \
                 mock.patch.object(GW, "first_time", mock.AsyncMock(return_value=True)), \
-                mock.patch.object(GW, "_spawn", side_effect=lambda c: c.close()) as turn, mock.patch.object(VS, "confirm_whatsapp", confirm):
+                mock.patch.object(GW, "_spawn", side_effect=lambda c: c.close()) as turn, mock.patch.object(VS, "confirm_whatsapp", confirm), \
+                mock.patch.object(VS, "whatsapp_verified", mock.AsyncMock(return_value=True)):   # Sasha 311 · AgAPI's record read back
             out = run(GW.dispatch(p, mock.AsyncMock(return_value=None)))
         return out, turn
 

@@ -2080,13 +2080,20 @@ async def confirm_number(ctx, held: dict, venue: str) -> dict:
     read-back stays held: after that, their yes sends it. Said by code, the turn ending on it — never "tap", never a call on top."""
     from agapi import venue_submit as VS
     from app.agent import voice as V
+    if held.get("number_confirmed_at"):   # Sasha 311 · refused AGAIN after the number was confirmed: never a loop — said, the hold dropped
+        _HELD.pop(ctx.account, None)
+        log.warning("[venues] %s: the yes was refused again after the number was confirmed", venue)
+        return {"status": "not_sent", "venue": venue, "when": held["summary"], "booked": False, "line": V.still_refused_line(venue),
+                "how": "Say `line` word for word — nothing else."}
     _HELD[ctx.account] = held
     from booking_signer import guest_whatsapp as GWS
     ch = await GWS.STORE.channel_of_account(ctx.account) if GWS.STORE is not None else None
     got = await VS.link_whatsapp(ctx.account, ch["number_e164"]) if ch else {"ok": False}
     line = V.NUMBER_NOT_CONFIRMED
-    if got.get("ok") and got.get("state") == "verified":
-        line = V.NUMBER_CONFIRMED
+    if got.get("ok") and got.get("state") == "verified" and await VS.whatsapp_verified(ctx.account, ch["number_e164"]):
+        # Sasha 311 · already verified (read back): the yes was refused for another reason (a stale tap) — his next yes sends it, by code
+        held["number_confirmed_at"] = datetime.now(timezone.utc).isoformat()
+        line = V.number_confirmed_line(venue)
     elif got.get("ok") and got.get("code"):
         ok = await GWS.STORE.put_code({"code": got["code"], "account_id": ctx.account, "consent_at": ch.get("consent_at") or GWS.NOW(),
                                        "consent_wording_version": ch.get("consent_wording_version"),

@@ -943,6 +943,12 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     # answered from an earlier turn without Duffel's price. Its arguments are filled by a model that takes a forced tool choice (the
     # agent models refuse one: found live, "tool_choice … not supported for this model"); the price / refund / read-back is then said
     # by code. His yes, and everything else, run as before.
+    if wa and not tap_uses:   # Sasha 311 · his number was just confirmed (AgAPI read back: verified) with a request waiting: his very next
+        from agapi import venues as _VNy      # yes SENDS it, by code — never the model answering from its memory (found live: it repeated
+        from agapi.v0 import yes_to_book as _yes_y   # the code request, no tool called, nothing sent)
+        _hy = _VNy._HELD.get(account)
+        if _hy and _hy.get("number_confirmed_at") and _yes_y(message):
+            tap_uses = [_TapUse(f"toolu_yes_{turn_key}", "book_venue", {"name": _hy.get("venue"), "approval": {"said": message}})]
     must = _V.manage_tool(message) if honest and surface == "s2" and not tap_uses else None
     if must and any(t["name"] == must for t in tools):
         got = await quote_args(client, next(t for t in tools if t["name"] == must), msgs)

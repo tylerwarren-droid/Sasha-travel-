@@ -76,9 +76,22 @@ def booked_line(venue: str, when: str, ref: Optional[str]) -> str:
     return f"✅ Booked: {venue}, {when}" + (f" — reference {ref}." if ref else ".")
 
 
+# Sasha 309 · a yes that can't go yet, said by code (the turn ends on it: never "tap Yes" with nothing to tap, never a call offered on top)
+NUMBER_CONFIRMED = "Your number is confirmed now — say yes again and it goes."
+NUMBER_NOT_CONFIRMED = "It isn't sent yet: I couldn't confirm this WhatsApp number just now, so nothing went to them."
+PENDING = ("waiting_for_their_tap", "confirm_number")
+
+
+def confirm_number_line(text: str) -> str:
+    return f"It isn't sent yet. Once only, I need to confirm this WhatsApp number is yours — send me this message: {text} — then say yes and it goes."
+
+
 def yes_line(tool: str, r: dict) -> str:
-    """The line an in-app yes ends on (book_venue): nothing waiting, or booked + the calendar question. Else "" (WhatsApp: as it was)."""
+    """The line an in-app yes ends on (book_venue): nothing waiting, or booked + the calendar question. Else "" (WhatsApp: as it was).
+    Sasha 309 · and on EVERY surface, a yes that can't go yet (PENDING): its own line, word for word."""
     res = (r or {}).get("result") if (r or {}).get("ok") else None
+    if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("status") in PENDING and res.get("line"):
+        return res["line"]
     if tool != "book_venue" or not isinstance(res, dict) or not res.get("in_app"):
         return ""
     if res.get("status") == "nothing_waiting":

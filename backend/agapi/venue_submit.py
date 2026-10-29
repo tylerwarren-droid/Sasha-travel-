@@ -241,8 +241,13 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
                    else whatsapp_tap(account, rid, held.get("sha") or held.get("sha256") or ""))
         if not r.get("ok") and TAP.get() is None and r["error"]["code"] == "approval_untrusted_origin" and await target(account) == "live":
             # their WhatsApp number isn't a VERIFIED destination of theirs yet: AgAPI's one-tap link (which verifies it) — said, not hidden
-            await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
-            return {"ok": True, "status": "waiting_for_their_tap"}
+            q = await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
+            if q.get("ok"):
+                return {"ok": True, "status": "waiting_for_their_tap"}
+            # Sasha 309 · found live (Tyler, DiverXO): the link was REFUSED too (422: his WhatsApp number isn't verified) and she still
+            # said "tap Yes on your phone" — nothing to tap anywhere. Now: the number is confirmed once (users.link_whatsapp), said plainly
+            log.info("[venue_submit] the approval link was refused too: %s", (q.get("error") or {}).get("code"))
+            return {"ok": True, "status": "confirm_number"}
         if not r.get("ok"):
             if r["error"]["code"] in ("approval_void", "approval_expired"):   # a stale / timed-out card: a fresh read-back to show
                 fresh = await read_back(account, pid)

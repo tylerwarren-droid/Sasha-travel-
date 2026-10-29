@@ -634,6 +634,16 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         log.info("[guest_whatsapp] a repeated MessageSid — already handled, nothing run")
         return ""
     if ch:
+        m = _LINK.match(p.get("Body") or "")
+        if m:   # Sasha 309 · a number linked BEFORE CR 100 confirms itself the CR 100 way: its own code, sent from it — only that account's
+            code = await STORE.take_code(m[1], NOW())
+            if code is not None and code["account_id"] == ch["account_id"]:
+                from agapi import venue_submit as VS
+                ok = await VS.confirm_whatsapp(code["account_id"], sender, p.get("MessageSid") or "", p.get("Body") or "")
+                verified = ok.get("ok") and ok.get("state") == "verified"
+                log.info("[guest_whatsapp] a linked number's confirmation: %s", "verified" if verified else (ok.get("error") or {}).get("code"))
+                from app.agent import voice as V
+                return _twiml_message(V.NUMBER_CONFIRMED if verified else V.NUMBER_NOT_CONFIRMED)
         _spawn(_turn(ch, to, p))
         return ""
     now = NOW()

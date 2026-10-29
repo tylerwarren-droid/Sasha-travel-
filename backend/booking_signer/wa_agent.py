@@ -152,7 +152,9 @@ def _read_back(ev: dict, out) -> None:
     if ev.get("status") in ("sent", "not_sent"):   # an outcome card, not a question
         out.text("\n".join(lines))
         return
-    out.ask("\n".join(lines)[:1000], [("Yes", "yn:yes"), ("No", "yn:no")])
+    # Sasha 309 · ONE message: the request as it goes (AgAPI's lines), her one line, and its buttons — a tap or a typed yes sends it once
+    body = "\n".join(lines) + (f"\n\n{ev['ask']}" if ev.get("ask") else "")
+    out.ask(body[:1000], [("Yes", "yn:yes"), ("No", "yn:no")])
 
 
 def _card(ev: dict, out, title: str) -> None:
@@ -382,7 +384,13 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         elif t == "done":
             text = str(ev.get("text") or text)
             seen["calls"] = ev.get("tools") or []
-    for part in split(text):
+    rb_ev = next((ev for ev in renders if ev.get("kind") == "read_back" and ev.get("read_back")), None)
+    shown = text
+    if rb_ev:   # Sasha 309 · found live (DiverXO): an image card and "See the places" came with the read-back for a venue already chosen
+        renders = [ev for ev in renders if ev.get("kind") != "venues"]
+        if rb_ev.get("ask") and text.strip() == str(rb_ev["ask"]).strip():
+            shown = ""   # her line is on the read-back's own message (one message, not two); her history keeps it
+    for part in split(shown):
         out.text(part)
     if voice_in and text.strip():   # Sasha 238 · a voice note in → her answer as a voice note too (text in → text out only)
         url = await tts_note(text)

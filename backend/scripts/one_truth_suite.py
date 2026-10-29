@@ -295,6 +295,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "kind may change; the stay is said as AgAPI's record has it (no check-out computed); a change or cancel request calls its quote "
             "tool first, so the price, refund or read-back is said by code before any yes (Sasha 306)",
             ["tests.test_s306"]),
+    "T84": ("one read-back, one yes, it goes: the read-back is the complete request (AgAPI's exact message) on one card with one button, "
+            "ONE yes (tap or typed) sends it; a yes that can't go yet is said as it is (never \"tap Yes\" with nothing to tap, never a call "
+            "on top); a number linked before CR 100 is confirmed once, from itself (Sasha 309)",
+            ["tests.test_s309"]),
 }
 
 _RUNNER = """

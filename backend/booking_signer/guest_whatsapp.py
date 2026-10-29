@@ -947,8 +947,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     # CR 13 products: a product may hand Sasha a sentence ("flights from London to Madrid on 2027-03-01 for 1") — answered exactly
     # as if typed; every booking still needs its own read-back and yes. Never a button's answer: a payload is never rewritten.
     handed = (p.get("Body") or "").strip()
-    if handed and handed != body and not payload:
-        body = handed
+    if handed and handed != body and (not payload or (payload.startswith("rt:") and not p.get("ButtonPayload"))):
+        body, payload = handed, ""   # Sasha 315 · "Travel" to the router's one question: the words he sent, as he sent them
     # Sasha 238 · a PHOTO on the one brain → the same handlers as /s2 (products first, above)
     if WA.is_photo(p) and not payload:
         await WA.photo_intake(ch, p, st, out, now)

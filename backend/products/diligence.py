@@ -259,6 +259,12 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optiona
     if not t and not media:   # CR 136 · a file or a voice note with no words is evidence for a case, never "who should I investigate?"
         out.text(LINE)
         return True
+    return await hand_over(ctx, t, media)
+
+
+async def hand_over(ctx: dict, t: str, media: list) -> bool:
+    """The message to AgAPI's ONE door in AD's space — from inside the space, or (Sasha 315) handed over by the router from travel."""
+    out = ctx["out"]
     number = (ctx.get("ch") or {}).get("number_e164")
     if not number or ctx.get("frm") == "web":      # the web chat: AD's door is Kanoe's WhatsApp number
         out.text(WHATSAPP_ONLY)

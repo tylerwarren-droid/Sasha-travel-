@@ -110,6 +110,21 @@ async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = N
     return {"matched": bool(res.get("matched")), **({k: res[k] for k in ("kept", "why", "opted_out", "booking", "ad", "replied") if k in res})}
 
 
+AD_CASES_OP = "messages.ad_cases"   # Sasha 315 · asked of AgAPI (CR for AgAPI): AD's door kind case_list for a verified number
+
+
+async def ad_cases(number: str) -> Optional[List[Dict[str, Any]]]:
+    """Sasha 315 · AD's own list of the cases this WhatsApp number's AD account can see (CR 139's door kind case_list, read by AgAPI, which
+    keeps no copy) → [{case_id, name, status, opened_at}], or None: no list (AgAPI without the op yet, the number not linked to AD, AD
+    unreachable) — then nothing is guessed."""
+    r = await _call(None, AD_CASES_OP, {"from": str(number)[:24]})
+    if not r.get("ok"):
+        log.info("[venue_submit] AD's case list not read: %s", (r.get("error") or {}).get("code"))
+        return None
+    got = (r.get("result") or {}).get("cases")
+    return [c for c in got if isinstance(c, dict) and c.get("case_id")] if isinstance(got, list) else None
+
+
 # ── CR 132 · AgAPI's booking record holds every route now: a hand-over is an act (venue.handed_over), and ONE list reads them all ─────
 
 _LATER_HANDED: set = set()   # the hand-over writes in flight (held so they finish; never awaited by the answer)

@@ -80,9 +80,10 @@ class Leaving(Base):
         self.say("diligence")
         self.say("sasha")
         self.assertEqual(self.bodies()[-1].split("\n")[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")
-        self.say("investigate Lehman Brothers")
-        self.assertEqual(self.sent_to_ad(), [])
-        self.assertEqual(self.brain_saw, ["investigate Lehman Brothers"])
+        self.say("book a table for two tonight")
+        self.assertEqual(self.sent_to_ad(), [])   # Sasha 315 MOVED: after "sasha", travel is Sasha's; an AD question goes by meaning
+        self.assertEqual(self.brain_saw, ["book a table for two tonight"])
+        self.assertEqual(self.space(), "sasha")
 
 
 class WhatAgAPISays(Base):
@@ -100,11 +101,13 @@ class WhatAgAPISays(Base):
 
 
 class OutsideNothingGoesToAD(Base):
-    def test_a_never_from_sasha(self):
-        TG.stand_in_brain(self)
-        for t in ("investigate Lehman Brothers", "link tyler@example.com", "due diligence on Acme", "ad hoc meeting tomorrow"):
+    def test_a_never_from_sasha(self):   # Sasha 315 MOVED (Tyler: "the agent should know what I'm talking about"): from travel, only
+        TG.stand_in_brain(self)          # what MEANS AD reaches AD (products/router.py, tests/test_s315.py); nothing else, the space unchanged
+        for t in ("ad hoc meeting tomorrow", "book a table for two tonight"):
             self.say(t)
         self.assertEqual(self.sent_to_ad(), [])
+        self.say("due diligence on Acme")
+        self.assertEqual(self.sent_to_ad(), [("due diligence on Acme", "diligence", True)])
         self.assertEqual(self.space(), "sasha")
 
 

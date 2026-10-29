@@ -318,6 +318,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "booking\" naming exactly one) IS the approval from his verified WhatsApp / the app; a short read-back only when Sasha filled "
             "a term; no SMS-link fallback, never \"I've sent you a link\" unless one went (Sasha 314)",
             ["tests.test_s314"]),
+    "T90": ("one router: in travel, a message no space's word claimed goes where it MEANS (products/router.decide) — a case AD lists for "
+            "the number, or investigation language, to AD with one line and the space unchanged; travel to travel; both → one question "
+            "(Sasha 315)",
+            ["tests.test_s315"]),
 }
 
 _RUNNER = """

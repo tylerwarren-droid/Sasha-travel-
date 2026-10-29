@@ -182,7 +182,8 @@ def for_sasha(body: str, history: list, now) -> bool:
     try:
         if not t.strip():
             return False
-        if GW.cancel_intent(t) is not None or GW._RECEIPTS.search(t) or _FLIGHT.search(t) or GW.COMBO.search(t) \
+        # Sasha 315 · GW.COMBO was retired with the demos (Sasha 254): read here, it raised, and the except below said "Sasha's" to EVERY message
+        if GW.cancel_intent(t) is not None or GW._RECEIPTS.search(t) or _FLIGHT.search(t) \
                 or GW.ITINERARY_Q.search(t):   # CR 20 · "what do I have on 12 November?" is Sasha's itinerary, never a re-ask
             return True
         if HO.booking_handoff(t, history or []) is not None:
@@ -386,6 +387,36 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             target, entering = guess, True
             body = START_WORD.get(guess, guess)
             p["Body"] = body
+    if not target and not asked_last and frm != "web" and (payload.startswith("rt:") or not payload):
+        # Sasha 315 · THE ROUTER (products/router.py): in travel, a message no space's word claimed goes where it MEANS — AD's case
+        # question to AD with one line, never "switch"; both at once → one question, its answer (rt:) routes the words he sent
+        from . import router as RT, space as SPC
+        if await SPC.current_space(ch.get("account_id")) == "sasha":
+            asked = RT.held(st, "route_ask") if payload.startswith("rt:") else None
+            if asked:
+                RT.hold(st, route_ask=None)
+            if payload.startswith("rt:"):
+                if not asked or not asked.get("body"):
+                    out.text("OK — what would you like?")
+                    return True
+                way = "diligence" if payload == "rt:ad" else "sasha"
+                body, payload, p["ButtonPayload"] = asked["body"], "", ""
+            else:
+                way = await RT.decide(ch, body, st, now, sashas_question)
+            if way == "ask":
+                RT.hold(st, route_ask={"body": body, "at": now.isoformat()})
+                out.ask(RT.ASK, [(RT.ASK_AD, "rt:ad"), (RT.ASK_TRAVEL, "rt:sasha")])
+                return True
+            if way == "diligence":
+                RT.hold(st, ad_at=now.isoformat())
+                await (early or _no_early)(RT.LINE)
+                from . import diligence as DG
+                return await DG.hand_over({"ch": ch, "frm": frm, "out": out, "sid": p.get("MessageSid"),
+                                           "replied_to": p.get("OriginalRepliedMessageSid")}, body, [])
+            if asked:                                   # "Travel": his words, as he sent them, to Sasha
+                RT.hold(st, ad_at=None)
+                p["Body"] = body
+                return False
     if not target and not payload and (not STRICT or asked_last == "health"):   # CR 35 · "find my centre": health's (strict: in it)
         from .health import cita as CI
         if CI.AGAIN.search(body):

@@ -239,6 +239,11 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         # Sasha 265 · item 4 (CR 99 §4d): on WhatsApp, their reply (signed webhook) is the same in_app_tap, session kind "whatsapp"
         r = await (in_app_tap(account, rid, held.get("sha") or held.get("sha256") or "") if TAP.get() is not None
                    else whatsapp_tap(account, rid, held.get("sha") or held.get("sha256") or ""))
+        if not r.get("ok") and TAP.get() is None and r["error"]["code"] == "approval_untrusted_origin" and WA.get() is not None \
+                and not await whatsapp_verified(account, (WA.get() or {}).get("wa_id")):
+            # Sasha 311 · a WhatsApp yes from a number AgAPI hasn't verified (read back): its one-time code, from that number — on any
+            # target (an SMS link verifies a phone, never this WhatsApp number)
+            return {"ok": True, "status": "confirm_number"}
         if not r.get("ok") and TAP.get() is None and r["error"]["code"] == "approval_untrusted_origin" and await target(account) == "live":
             # their WhatsApp number isn't a VERIFIED destination of theirs yet: AgAPI's one-tap link (which verifies it) — said, not hidden
             q = await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})

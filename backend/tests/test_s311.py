@@ -82,6 +82,26 @@ class TheCode(unittest.TestCase):
                                                                          "please keep it, thanks a lot", "MessageSid": "SM4"})))
 
 
+class AnUnverifiedWhatsAppNumberIsAskedForItsCode(unittest.TestCase):
+    def test_on_any_target_never_an_sms_link(self):
+        async def call(account, op, body, approval=None):
+            if op == "approvals.in_app_tap":
+                return {"ok": False, "error": {"code": "approval_untrusted_origin", "message": "not verified"}}
+            if op == "users.register":   # the WhatsApp tap registers the number (unverified) before it asks
+                return {"ok": True, "result": {}}
+            raise AssertionError(f"no {op} — an SMS link never verifies this WhatsApp number")
+        wa = VS.WA.set({"wa_id": NUM, "message_id": "SM311"})
+        try:
+            for tgt in ("sandbox", "live"):
+                with mock.patch.object(VS, "_call", call), mock.patch.object(VS, "target", mock.AsyncMock(return_value=tgt)), \
+                        mock.patch.object(VS, "whatsapp_verified", mock.AsyncMock(return_value=False)), \
+                        mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s"}):
+                    r = run(VS.submit(ACCT, {"read_back_id": "rbk", "prepared_id": "p", "end_user": "eu", "sha": "f" * 64}, "Yes"))
+                self.assertEqual(r, {"ok": True, "status": "confirm_number"}, tgt)
+        finally:
+            VS.WA.reset(wa)
+
+
 class TheNextYesSends(unittest.TestCase):
     def test_the_turn_runs_book_venue_by_code(self):
         src = (ROOT / "app" / "agent" / "sasha.py").read_text()

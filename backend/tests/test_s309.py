@@ -33,6 +33,7 @@ class TheRefusedLinkIsNeverTapYes(unittest.TestCase):   # found live: 403 on his
         wa = VS.WA.set({"wa_id": "+34600000309", "message_id": "SM309"})
         try:
             with mock.patch.object(VS, "_call", call), mock.patch.object(VS, "target", mock.AsyncMock(return_value="live")), \
+                    mock.patch.object(VS, "whatsapp_verified", mock.AsyncMock(return_value=False)), \
                     mock.patch.dict(os.environ, {"SASHA_AGAPI_TAP_SECRET": "s"}):
                 r = run(VS.submit(ACCT, {"read_back_id": "rbk", "prepared_id": "p", "end_user": "eu", "sha": "f" * 64}, "Yes"))
         finally:

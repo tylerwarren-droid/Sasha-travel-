@@ -881,11 +881,47 @@ def flight_line(tool: str, r: dict) -> str:
     change total and penalty, or its refund) and its one question — then, after his yes, the order as Duffel has it now. Found live: she
     offered the new times and left out the price. A venue's or a hotel's act keeps its own line (read_back_line / its tool's say)."""
     res = (r or {}).get("result") if (r or {}).get("ok") else None
-    if tool not in MANAGED or not isinstance(res, dict) or not res.get("flight"):
+    if tool not in MANAGED or not isinstance(res, dict) or not (res.get("flight") or res.get("stay")):
         return ""
+    if res.get("stay"):   # Sasha 306 · a hotel stay on AgAPI: its record's dates, then AgAPI's read-back (the new nights and check-out)
+        if res.get("status") == "awaiting_yes" and res.get("read_back"):
+            return unchanneled(" ".join([res.get("was") or ""] + list(res["read_back"]) + [STAY_ASK]))
+        return unchanneled(str(res.get("say") or ""))
     if res.get("status") == "awaiting_yes" and res.get("read_back"):
         return " ".join(res["read_back"] + [CHANGE_ASK if tool == "change_booking" else CANCEL_ASK])
     return str(res.get("say") or "").strip()
+
+
+STAY_ASK = "Shall I ask them?"
+_BY_CHANNEL = re.compile(r"\s+by (?:email|e-mail|WhatsApp|text|SMS|phone)\b", re.I)
+
+
+def unchanneled(text: str) -> str:
+    """Sasha 306 · HER VOICE never names a channel: AgAPI's read-back says "writes to X by WhatsApp" — said without the channel."""
+    return " ".join(_BY_CHANNEL.sub("", text or "").split())
+
+
+# Sasha 306 · item 2 (305 finding (b): "move it" answered from an earlier turn, no tool, no price): a message that asks to change or
+# cancel a booking → the turn's FIRST model step calls the quote tool (tool_choice), so the price / refund / read-back is said by code.
+_BOOKED = r"flight|flights|hotel|stay|room|booking|reservation|return|outbound|night|nights|check[- ]?in|table|dinner|lunch|restaurant|spa|massage"
+_CHANGE_ASKED = re.compile(rf"\b(?:move|change|shift|shorten|extend|push|switch|reschedule)\b.*\b(?:{_BOOKED})\b"
+                           rf"|\b(?:{_BOOKED})\b.*\b(?:move|change|shift|shorten|extend|reschedule)\b"
+                           r"|\bmake it \w+ nights?\b|\b\w+\s+nights?\s+instead\b|\barrive\b.*\b(?:a day|day) (?:later|earlier)\b", re.I)
+_CANCEL_ASKED = re.compile(rf"\bcancel\b.*\b(?:{_BOOKED})\b|\b(?:{_BOOKED})\b.*\bcancel", re.I)
+_TABLE = re.compile(r"\b(?:table|dinner|lunch|restaurant|spa|massage)\b", re.I)
+_YES_ONLY = re.compile(r"^\s*(?:yes|yeah|yep|ok|okay|sure|please|go ahead|do it)\b", re.I)
+
+
+def manage_tool(message: str) -> Optional[str]:
+    """The quote tool a change / cancel request must call first — or None (his yes, or anything else, runs as before)."""
+    m = message or ""
+    if _YES_ONLY.match(m) or re.search(r"\brunning late\b|\blate for\b", m, re.I):
+        return None
+    if _CANCEL_ASKED.search(m):
+        return "cancel_venue" if _TABLE.search(m) else "cancel_booking"
+    if _CHANGE_ASKED.search(m):
+        return "change_booking"
+    return None
 
 
 def page_line(tool: str, r: dict) -> str:

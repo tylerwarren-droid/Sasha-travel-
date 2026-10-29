@@ -564,15 +564,15 @@ async def cancel_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
 
 # ── Sasha 300 · MANAGE: a change or "running late" for an act — venue.change_booking (CR 131 (c)), by the act's OWN route ──────
 
-async def change_read_back(account: str, act_id: str, kind: str, at: Optional[str] = None, party: Optional[int] = None,
-                           arrive: Optional[str] = None) -> Dict[str, Any]:
+async def change_read_back(account: str, act_id: str, kind: str, **ask: Any) -> Dict[str, Any]:
     """venue.change_booking without an approval → its read-back. AgAPI without the op yet (unknown_operation) → not_yet: said
-    plainly by the caller, nothing sent. A route that can't take it → not_allowed with their page, as a cancellation's."""
+    plainly by the caller, nothing sent. A route that can't take it → not_allowed with their page, as a cancellation's.
+    Sasha 306 · `ask` is whatever was asked (a table's at / party, a stay's check_in / nights / party, late's arrive): AgAPI's
+    booking_kinds says what this booking's kind can change and refuses anything else by name — Sasha keeps no list of it."""
     uid = await end_user(account)
     if not uid:
         return {"ok": False, "error": {"code": "no_end_user", "message": "the venue booking service doesn't know this person yet"}}
-    body = {"end_user": uid, "act_id": act_id, "kind": kind, **({"at": at} if at else {}), **({"party": int(party)} if party else {}),
-            **({"arrive": arrive} if arrive else {})}
+    body = {"end_user": uid, "act_id": act_id, "kind": kind, **{k: v for k, v in ask.items() if v not in (None, "")}}
     r = await _call(account, "venue.change_booking", body)
     e = r.get("error") or {}
     res = r.get("result") or {}
@@ -610,9 +610,9 @@ async def change_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         approval = await _approval(account, rid, said)
         if isinstance(approval, dict):
             return approval
-        # Sasha 302 · the approved call is read again (CR 132 venue_manage._ask): it carries what the read-back asked — the new time /
-        # party, or when he'll arrive — or AgAPI refuses it
-        ask = {k: v for k, v in (held.get("ask") or {}).items() if k in ("at", "party", "arrive") and v}
+        # Sasha 302 · the approved call is read again (CR 132 venue_manage._ask): it carries what the read-back asked — or AgAPI refuses
+        # it. Sasha 306 · ALL of it (a stay's nights / check_in too): the whitelist (at, party, arrive) dropped a stay's nights
+        ask = {k: v for k, v in (held.get("ask") or {}).items() if v not in (None, "")}
         body = {"end_user": uid, "act_id": act_id, "kind": held.get("kind") or "change", **ask}
         r = await _call(account, "venue.change_booking", body, approval=approval)
         if not r.get("ok"):

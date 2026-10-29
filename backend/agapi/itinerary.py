@@ -170,8 +170,19 @@ def _from_record(g: dict, a: Optional[dict] = None) -> dict:
             # Sasha 302 · the terms read the record's words IN FULL (the 160 above is the line shown): a cut sentence is never a term
             **({"terms_text": str((g.get("venue_words") or {}).get("untrusted_text") or "")[:4000]}
                if (g.get("venue_words") or {}).get("untrusted_text") else {}),
-            **({"type": "hotel"} if (a or {}).get("stay") else {}),   # Sasha 302 · a stay act (CR 102) is a hotel on the itinerary
+            **({"type": "hotel"} if (a or {}).get("stay") or isinstance(g.get("stay"), dict) else {}),   # Sasha 302 · a stay act (CR 102) is a hotel
+            # Sasha 306 · CR 137: the stay AS IT STANDS on AgAPI's record (check_in, check_out, nights — never computed here) and the
+            # hotel's answer to a change, in its own words (answers.change)
+            **({"stay": g["stay"]} if isinstance(g.get("stay"), dict) else {}),
+            **({"change_answer": _answer(g["answers"]["change"])} if isinstance((g.get("answers") or {}).get("change"), dict) else {}),
             **({"change": g["change"]} if g.get("change") else {})}
+
+
+def _answer(c: dict) -> dict:
+    """Sasha 306 · answers.change as the itinerary shows it: its state, what was asked, and the venue's words (quoted, untrusted)."""
+    w = (c.get("venue_words") or {}).get("untrusted_text") if isinstance(c.get("venue_words"), dict) else None
+    return {"state": c.get("state"), **({"asked": c["asked"]} if c.get("asked") else {}),
+            **({"venue_said": {"untrusted_text": str(w)[:400]}} if w else {})}
 
 
 async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]:
@@ -243,7 +254,10 @@ async def of(account: str) -> List[dict]:
         out.append({"kind": _venue_kind(v.get("type")), "title": v["venue"], "when": when, "status": v["status"],
                     "status_words": v["status_words"], "route": v["route"], "route_words": v["route_words"], "manage": v["manage"],
                     "party": v.get("party"), "id": v["id"], "source": "venue",
-                    **{k: v[k] for k in ("reference", "venue_said", "map_url", "address", "platform", "url", "cancel", "change", "terms") if v.get(k)},
+                    **{k: v[k] for k in ("reference", "venue_said", "map_url", "address", "platform", "url", "cancel", "change", "terms",
+                                         "change_answer") if v.get(k)},
+                    **({k: v["stay"][k] for k in ("check_in", "check_out", "nights") if v["stay"].get(k) is not None}   # Sasha 306 · AgAPI's
+                       if isinstance(v.get("stay"), dict) else {}),
                     **({"trip_id": trip["trip_id"], "trip": trip.get("title")} if trip else {})})
     seen, tied = set(), set()
     for p in plans:
@@ -292,8 +306,16 @@ async def of(account: str) -> List[dict]:
                 i["perks"] = p
     today = date.today().isoformat()
     keep = [i for i in out if (i["when"] or today)[:10] >= today or
-            (i["kind"] == "hotel" and i["when"] and (date.fromisoformat(i["when"][:10]) + timedelta(days=i.get("nights") or 1)).isoformat() > today)]
+            (i["kind"] == "hotel" and i["when"] and stay_end(i) > today)]
     return sorted(keep, key=lambda i: (i["when"] + ("T15:00" if i["kind"] == "hotel" and len(i["when"]) == 10 else "")) or "9999")   # a stay from check-in
+
+
+def stay_end(i: dict) -> str:
+    """Sasha 306 · a stay's check-out: AgAPI's record's own (check_out) when it has one; Sasha's own TEST stays (no record but their
+    basket row) from their check-in and nights, as before."""
+    if i.get("check_out"):
+        return str(i["check_out"])[:10]
+    return (date.fromisoformat(str(i["when"])[:10]) + timedelta(days=i.get("nights") or 1)).isoformat()
 
 
 def start_of(r: dict) -> Optional[datetime]:

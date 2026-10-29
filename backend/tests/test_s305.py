@@ -286,12 +286,11 @@ class OneResolver(unittest.TestCase):
             self.assertIn("2026-11-15", str(e.exception))
             self.assertEqual(run(self.M.booking_meant(Ctx(), {"id": "act_01STAY"}, "hotel"))["id"], "act_01STAY")
 
-    def test_hotel_nights_wait_for_agapi_and_nothing_is_sent(self):
-        with mock.patch.object(self.M, "_notice", mock.AsyncMock()) as sent:
-            r = run(self.M.change_booking(Ctx(), {"what": "hotel", "name": "Marriott", "new_nights": 3}))
-        sent.assert_not_called()
-        self.assertEqual((r["status"], r["sent"]), ("not_possible", False))
-        self.assertIn("haven't sent anything", r["say"])
+    def test_hotel_nights_go_by_its_route(self):   # Sasha 306 MOVED: was "wait for AgAPI" — CR 137 takes a stay's nights
+        with mock.patch.object(self.M, "_notice", mock.AsyncMock(return_value={"status": "awaiting_yes"})) as sent:
+            run(self.M.change_booking(Ctx(), {"what": "hotel", "name": "Marriott", "nights": 3}))
+        a = sent.call_args.args[1]
+        self.assertEqual((a["id"], a["nights"], sent.call_args.args[2]), ("act_01STAY", 3, "change"))
 
     def test_a_hotel_cancel_on_agapi_goes_by_its_route(self):
         from agapi import venues as VN

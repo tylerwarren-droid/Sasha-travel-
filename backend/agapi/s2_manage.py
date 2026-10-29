@@ -71,6 +71,11 @@ async def plans_of(account: str) -> List[dict]:
     return await IT.of(account)
 
 
+def _IT_stay_end(i: dict) -> str:
+    from agapi import itinerary as IT
+    return IT.stay_end(i)
+
+
 def _on(items: List[dict], day: str) -> List[dict]:
     d = date.fromisoformat(day)
     hit = []
@@ -78,7 +83,7 @@ def _on(items: List[dict], day: str) -> List[dict]:
         if not i["when"]:
             continue
         start = date.fromisoformat(i["when"][:10])
-        if start == d or (i["kind"] == "hotel" and start <= d < start + timedelta(days=i.get("nights") or 1)):
+        if start == d or (i["kind"] == "hotel" and start <= d and d.isoformat() < _IT_stay_end(i)):   # Sasha 306 · AgAPI's check-out
             hit.append(i)
     return hit
 
@@ -92,7 +97,7 @@ async def my_plans(ctx, a: dict) -> dict:
         except ValueError:
             raise _err("date_invalid", "on is YYYY-MM-DD")
     shown = [{k: i.get(k) for k in ("kind", "title", "when", "where", "status", "status_words", "route_words", "venue_said", "reference",
-                                    "id", "party", "nights", "trip", "map_url", "terms", "perks", "live") if i.get(k) is not None}   # Sasha 300 · its route, their words · 302: the fine print
+                                    "id", "party", "nights", "check_in", "check_out", "change_answer", "trip", "map_url", "terms", "perks", "live") if i.get(k) is not None}   # Sasha 300 · its route, their words · 302: the fine print
              for i in items[:20]]
     return {"items": shown, **({"on": day} if day else {}), "count": len(items),
             "say": ("Nothing booked that day." if day else "Nothing coming up.") if not items else
@@ -180,10 +185,16 @@ async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
     else:
         hm = _HHMM.search(str(a.get("new_time") or ""))
         day = str(a.get("new_date") or b.get("date") or "")[:10]
+        nights = a.get("nights") if a.get("nights") is not None else a.get("new_nights")
+        # Sasha 306 · the tool's words → AgAPI's field names (one translation, never a list of what a kind may change): AgAPI's
+        # booking_kinds takes what this booking's kind can change and refuses anything else by name — said as it says it
         args = {**({"at": f"{day}T{int(hm.group(1)):02d}:{hm.group(2)}"} if hm and day else {}),
-                **({"party": int(a["new_party"])} if str(a.get("new_party") or "").isdigit() else {})}
+                **({"party": int(a["new_party"])} if str(a.get("new_party") or "").isdigit() else {}),
+                **({"nights": int(nights)} if str(nights or "").isdigit() else {}),
+                **({"check_in": str(a["check_in"])[:10]} if a.get("check_in") else {})}
         if not args:
-            raise _err("change_missing", "what should it change to — a new time, or a different number of people?")
+            raise _err("change_missing", "what should it change to — a new time, a different number of people, or (a stay) its nights "
+                                         "or check-in day?")
     rb = await VS.change_read_back(ctx.account, b["act_id"], kind, **args)
     if not rb.get("ok"):
         e = rb["error"]
@@ -194,10 +205,26 @@ async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
             link = (e.get("details") or {}).get("link")
             return {"status": "not_possible", "venue": b["venue"], "say": e["message"], **({"open": link, "page_url": link} if link else {})}
         raise _err(e["code"], e["message"])
+    st = b.get("stay") if isinstance(b.get("stay"), dict) else None
     _hold(ctx, tool, rb["lines"], act_id=b["act_id"], read_back_id=rb["read_back_id"], read_back_sha256=rb.get("read_back_sha256"),
-          end_user=rb.get("end_user"), venue=b["venue"], kind=kind, route=b["route"], ask=args)   # Sasha 302: his yes sends it
+          end_user=rb.get("end_user"), venue=b["venue"], kind=kind, route=b["route"], ask=args, stay=bool(st))   # Sasha 302: his yes sends it
     return {"status": "awaiting_yes", "venue": b["venue"], "route": b["route"], "read_back": rb["lines"],
+            # Sasha 306 · a stay's read-back is said by code (voice.flight_line): the stay as AgAPI's record has it, then AgAPI's own
+            # read-back (the new nights and check-out are its words) — old vs new, nothing computed here
+            **({"stay": True, "was": stay_words(b["venue"], st)} if st else {}),
             "say": "Read this back in a sentence or two (its first line as it is) and ask: OK? Act only on their yes in their next turn."}
+
+
+def stay_words(venue: str, st: dict) -> str:
+    """Sasha 306 · a stay as AgAPI's record has it (venue.bookings' stay: check_in, check_out, nights) — its own dates, never computed."""
+    def d(x):
+        try:
+            return date.fromisoformat(str(x)[:10]).strftime("%a %d %b")
+        except ValueError:
+            return str(x or "")
+    n = st.get("nights")
+    return (f"Your stay at {venue} now reads {d(st.get('check_in'))} to {d(st.get('check_out'))}"
+            + (f" ({n} night{'s' if n != 1 else ''})" if n else "") + ".")
 
 
 async def _act_notice_go(ctx, held: dict, said: str, kind: str) -> dict:
@@ -221,6 +248,7 @@ async def _act_notice_go(ctx, held: dict, said: str, kind: str) -> dict:
                   {"reference": r.get("change_act_id") or held["act_id"], "said": said, "read_back_sha256": "sha256:" + held["sha"]},
                   held["venue"])
     return {"status": "requested" if r.get("status") == "sent" else r.get("status"), "venue": held["venue"],
+            **({"stay": True} if held.get("stay") else {}),   # Sasha 306 · AgAPI's own words after his yes, said by code
             "say": r.get("say") or ("I've told them. It's held once they reply." if kind == "late" else
                                     "I've asked them. It's changed only once they reply to say so; until then it stays as it was.")}
 
@@ -278,12 +306,6 @@ def _act_ref(row: dict) -> dict:
     """An itinerary venue row → how cancel_venue names it (its act, its hand-over, or the old ladder's trip item)."""
     rid = str(row.get("id") or "")
     return {"act_id": rid} if rid.startswith("act_") else {"id": rid} if rid.startswith("hand:") else {"trip_item_id": rid}
-
-
-def stay_change_not_yet(title: str) -> str:
-    """Sasha 305 · a stay's nights can't go by the hotel's route until AgAPI's venue.change_booking takes them (AgAPI ask s305-1): said, nothing sent."""
-    return (f"I can't change the nights at {title} through the hotel's booking route yet, so I haven't sent anything. I can ask them "
-            "to cancel it and send a new request for the dates you want.")
 
 
 _CHANGE: Dict[str, dict] = {}   # Sasha 246 · account → the flight-change options she offered {order_id, new_date, leg, options, default, at}
@@ -366,9 +388,7 @@ async def change_booking(ctx, a: dict) -> dict:
         return await _notice(ctx, {**a, **({"id": row["id"], "venue": row["title"]} if row else {})}, "change", "change_booking")
     if what == "hotel":
         if row and row.get("source") == "venue":   # Sasha 305 · a stay booked through AgAPI (CR 102): by the hotel's own route
-            if a.get("new_nights") or a.get("new_date"):
-                return {"status": "not_possible", "sent": False, "say": stay_change_not_yet(row["title"]),
-                        "how": "Say this as it is. Nothing was sent to the hotel."}
+            # Sasha 306 · its nights / check-in too (CR 137): AgAPI's read-back, then his yes — Sasha 305's "not yet" is retired
             return await _notice(ctx, {**a, "id": row["id"], "venue": row["title"]}, "change", "change_booking")
         it = row or await _item(ctx, a, "hotel")
         return {"status": "not_possible", "say": f"I can't change the dates of your stay at {it['title']} yet. I can cancel it — free, "
@@ -781,8 +801,8 @@ def tools() -> List[dict]:
             "minutes": {"type": "integer", "minimum": 1, "maximum": 180}, **appr}, [],
            {"type": "object", "properties": {"status": {"type": "string"}}}, ["booking_unknown", "arrive_missing", "no_explicit_yes", "not_sent"], austen=True),
         _t("change_booking", "Austen", change_booking, "Change a booking. what=venue (new_time HH:MM and/or new_party), flight (new_date "
-           "YYYY-MM-DD, leg out/back: Duffel's own quote; some fares can't be changed — say so plainly), hotel (new_nights: by the hotel's own "
-           "route when it allows it — else say what the tool says). Name the booking by its id from my_plans. FIRST call: the read-back; after their yes in a LATER turn, call again to do it. A flight's result lists the "
+           "YYYY-MM-DD, leg out/back: Duffel's own quote; some fares can't be changed — say so plainly), hotel (nights and/or check_in: by the hotel's own "
+           "route; its answer comes back on the booking). Name the booking by its id from my_plans. FIRST call: the read-back; after their yes in a LATER turn, call again to do it. A flight's result lists the "
            "times Duffel offered that day (options): if they pick another, call again with its new_time (HH:MM) or change_offer_id "
            "— only those times exist; never say one of them can't be found.",
            {"what": {"enum": ["venue", "flight", "hotel"]}, "id": {"type": "string"}, "venue": {"type": "string"}, "name": {"type": "string"},
@@ -790,7 +810,8 @@ def tools() -> List[dict]:
             "change_offer_id": {"type": "string", "description": "a flight option's id, from the options"},
             "new_party": {"type": "integer", "minimum": 1, "maximum": 20},
             "new_date": {"type": "string"}, "leg": {"enum": ["out", "back"]},
-            "new_nights": {"type": "integer", "minimum": 1, "maximum": 60, "description": "a hotel stay's new number of nights"}, **appr}, ["what"],
+            "nights": {"type": "integer", "minimum": 1, "maximum": 60, "description": "a hotel stay's new number of nights"},
+            "check_in": {"type": "string", "description": "YYYY-MM-DD — a hotel stay's new first night (\"arrive a day later\")"}, **appr}, ["what"],
            {"type": "object", "properties": {"status": {"type": "string"}}},
            ["booking_unknown", "no_explicit_yes", "change_unavailable", "not_changeable", "date_missing", "what_invalid", "which_flight", "which_booking"], austen=True),
         _t("cancel_booking", "Austen", cancel_booking, "Cancel a hotel stay or a flight (a restaurant or spa: cancel_venue). FIRST call: the "

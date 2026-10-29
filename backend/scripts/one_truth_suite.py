@@ -291,6 +291,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "snapshot kept at booking; after a change or a cancel she says the order as it reads; ONE resolver finds the booking he "
             "means and its own source answers (Duffel, AgAPI's route) — a hotel's nights wait for AgAPI (Sasha 305)",
             ["tests.test_s305"]),
+    "T83": ("a hotel stay's nights / check-in go by its own route (AgAPI CR 137) with whatever was asked — Sasha keeps no list of what a "
+            "kind may change; the stay is said as AgAPI's record has it (no check-out computed); a change or cancel request calls its quote "
+            "tool first, so the price, refund or read-back is said by code before any yes (Sasha 306)",
+            ["tests.test_s306"]),
 }
 
 _RUNNER = """

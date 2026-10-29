@@ -920,7 +920,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             final = types.SimpleNamespace(content=list(tap_uses), usage=None)
             step_ms.append({"model": "tap", "at": int((t_step - t0) * 1000), "first_token": None, "ms": 0, "cached": None})
         else:
-            async with client.messages.stream(model=model, max_tokens=900, system=system_now(), tools=tools, messages=msgs) as s:
+            # Sasha 306 · item 2: a change / cancel request's first step CALLS the quote tool (its price, refund or read-back is then said
+            # by code) — never "move it" answered from an earlier turn. His yes, and everything else, run as before.
+            must = _V.manage_tool(message) if honest and surface == "s2" and step == 0 else None
+            pick = {"tool_choice": {"type": "tool", "name": must}} if must and any(t["name"] == must for t in tools) else {}
+            async with client.messages.stream(model=model, max_tokens=900, system=system_now(), tools=tools, messages=msgs, **pick) as s:
                 async for ev in s:
                     if ttft is None and ev.type in ("text", "content_block_start"):
                         ttft = int((time.perf_counter() - t_step) * 1000)

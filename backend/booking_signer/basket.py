@@ -628,6 +628,38 @@ def words(r: Dict[str, Any]) -> str:
             "pending_payment": "waiting for your payment"}.get(r["state"], r["state"])
 
 
+LIVE_KEYS = ("owner", "flights", "from", "to", "departs", "arrives")
+
+
+async def live(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sasha 305 · NO SECOND COPY: a booked (or cancelled) flight is its Duffel order, read now (flight_manage.order_now) — its
+    flight, times, reference and whether it's cancelled replace the snapshot copied at booking, in the rows returned. Nothing is
+    written. An order that can't be read keeps the row as booked, marked live=False with why (never its old times said as now)."""
+    todo = [r for r in rows if r.get("kind") == "flight" and r.get("order_id") and r.get("state") in ("booked", "cancelled")]
+    if not todo:
+        return rows
+    import asyncio
+    from . import flight_manage as FM
+    got = await asyncio.gather(*(FM.order_now(r["order_id"]) for r in todo), return_exceptions=True)
+    now = {id(r): g for r, g in zip(todo, got)}
+    out = []
+    for r in rows:
+        g = now.get(id(r))
+        if g is None:
+            out.append(r)
+        elif isinstance(g, Exception) or g.get("why"):
+            out.append({**r, "live": False, "live_why": str(g) if isinstance(g, Exception) else g["why"]})
+        else:
+            snap = {**(r.get("snapshot") or {}), **{k: g[k] for k in LIVE_KEYS if g.get(k)}, "legs": g["legs"]}
+            # its line is built again from the order (status_line(): from the record alone) — the one kept at booking names the old flight
+            r2 = {**r, "snapshot": snap, "live": True, "booking_reference": g.get("reference") or r.get("booking_reference"),
+                  "status_line": None, **({"day": str(g["departs"])[:10]} if g.get("departs") else {})}
+            if g["cancelled"]:   # cancelled at Duffel (by us or the airline): said as it stands
+                r2["state"] = "cancelled"
+            out.append(r2)
+    return out
+
+
 def overlay(plan: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """The merged plan with the basket on it: each day's `stay` (the stay covering that night), and the trip's flights."""
     stays = sorted([r for r in rows if r["kind"] == "stay"], key=lambda r: r["state"] not in DONE)   # Sasha 230 · a booked stay wins its night
@@ -662,6 +694,6 @@ def shown_flights(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 __all__ = ["MAGELLAN", "SHERLOCK", "AUSTEN", "PACIOLI", "BasketError", "items", "item", "by_ref", "by_session", "to_book", "total",
-           "suggest", "refresh", "choose", "unchoose_flights", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay", "shown_flights",
+           "suggest", "refresh", "choose", "unchoose_flights", "hold", "remove", "status_line", "booked", "failed", "cancelled", "event", "on", "sync_stays", "words", "overlay", "shown_flights", "live",
            # Sasha 249 · one total, one currency, one party; offered == bookable
            "counted", "eur_of", "breakdown", "figures_of", "trip_figures", "card_eur", "in_eur", "ingest_flight", "supersede_plan", "superseded"]

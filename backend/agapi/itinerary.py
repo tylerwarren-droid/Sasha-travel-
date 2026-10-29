@@ -247,19 +247,26 @@ async def of(account: str) -> List[dict]:
                     **({"trip_id": trip["trip_id"], "trip": trip.get("title")} if trip else {})})
     seen = set()
     for p in plans:
-        for r in await BK.items(account, p["trip_id"], ("booked", "pending_payment")):
+        # Sasha 305 · a ticketed flight is its Duffel order read now (basket.live), never the snapshot copied at booking; one cancelled
+        # after ticketing stays on, said cancelled
+        rows = await BK.items(account, p["trip_id"], ("booked", "pending_payment", "cancelled"))
+        rows = await BK.live([r for r in rows if r["state"] != "cancelled" or (r["kind"] == "flight" and r.get("order_id"))])
+        for r in rows:
             if r["id"] in seen:
                 continue
             seen.add(r["id"])
             s = r.get("snapshot") or {}
-            status = "booked" if r["state"] == "booked" else "awaiting payment"
+            status = {"booked": "booked", "cancelled": "cancelled"}.get(r["state"], "awaiting payment")
             if r["kind"] == "flight":
                 title = " ".join(x for x in (s.get("owner"), s.get("flights")) if x) or "Flight"
                 where = f"{s.get('from') or ''} → {s.get('to') or ''}".strip(" →")
                 out.append({"kind": "flight", "title": title, "when": str(s.get("departs") or r.get("day") or ""), "where": where,
                             "status": status, **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),
                             "id": str(r["id"]), "order_id": r.get("order_id"), "trip": p.get("title"), "trip_id": p["trip_id"],
-                            "source": "flight"})
+                            "source": "flight", **({"live": r["live"]} if "live" in r else {}),
+                            **({"legs": len(s["legs"])} if s.get("legs") else {}),
+                            **({"status_words": f"booked — not re-read from the airline just now ({r['live_why']})"}
+                               if r.get("live") is False else {})})
             elif r["kind"] == "stay":
                 nights = int(s.get("nights") or 1)
                 out.append({"kind": "hotel", "title": s.get("name") or s.get("hotel") or "Your stay", "when": str(r.get("day") or ""),

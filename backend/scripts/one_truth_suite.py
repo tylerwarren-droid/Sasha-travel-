@@ -287,6 +287,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "after 60 s with nobody talking, a hidden or closed tab, or a cap (his minutes, Kanoe's — server settings), one log row each "
             "(Sasha 303)",
             ["tests.test_s303"]),
+    "T82": ("a booked flight is its Duffel order READ NOW (one reader, flight_manage.order_now) on My trips and the Trip tab, never the "
+            "snapshot kept at booking; after a change or a cancel she says the order as it reads; ONE resolver finds the booking he "
+            "means and its own source answers (Duffel, AgAPI's route) — a hotel's nights wait for AgAPI (Sasha 305)",
+            ["tests.test_s305"]),
 }
 
 _RUNNER = """

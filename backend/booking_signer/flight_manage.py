@@ -158,6 +158,49 @@ def _actions(order: dict) -> List[str]:
     return [str(a).lower() for a in order.get("available_actions") or []]
 
 
+# ── Sasha 305 · THE ORDER AS IT STANDS: the ONE reader of a booked flight (My trips, the Trip tab, what she says after a change) ─────
+
+FRESH_S = 20   # a read is reused this long (the Trip tab polls every 6 s); our own change / cancel forgets it at once
+_SEEN: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+
+
+def forget(order_id: Optional[str]) -> None:
+    _SEEN.pop(str(order_id or ""), None)
+
+
+def order_view(order: dict) -> Dict[str, Any]:
+    """A Duffel order as the booking reads now: its legs, reference, airline and whether it's cancelled — from the order alone."""
+    legs = [_slice_line(sl) for sl in order.get("slices") or [] if isinstance(sl, dict)]
+    first = legs[0] if legs else {}
+    return {"order_id": order.get("id"), "reference": order.get("booking_reference"), "owner": _owner(order), "legs": legs,
+            "flights": " + ".join(l["flights"] for l in legs) or None, "from": first.get("from"), "to": first.get("to"),
+            "departs": first.get("departs"), "arrives": first.get("arrives"), "times": first.get("times"),
+            "cancelled": bool(order.get("cancelled_at")), "cancelled_at": order.get("cancelled_at"),
+            "total_amount": order.get("total_amount"), "total_currency": order.get("total_currency")}
+
+
+async def order_now(order_id: Optional[str]) -> Dict[str, Any]:
+    """The order read from Duffel now (or within FRESH_S) → order_view(), or {why} — never a copy kept at booking."""
+    if not order_id:
+        return {"why": "no Duffel order on this booking"}
+    import time
+    hit = _SEEN.get(str(order_id))
+    if hit and time.monotonic() - hit[0] < FRESH_S:
+        return hit[1]
+    if not TR.token():
+        return dict(NO_TOKEN)
+    try:
+        order, bad = await _order(str(order_id))
+        if bad:
+            return bad
+        view = order_view(order)
+    except Exception as e:   # a shape Duffel never promised — said, never raised
+        log.warning("[flight_manage] order %s not read: %s", str(order_id)[:12], type(e).__name__)
+        return {"why": f"the booking couldn't be read from Duffel ({type(e).__name__})"}
+    _SEEN[str(order_id)] = (time.monotonic(), view)
+    return view
+
+
 # ── Sasha 226 · CANCEL ────────────────────────────────────────────────────────────────────────────────────────────────
 
 async def cancel_quote(order_id: str) -> Dict[str, Any]:
@@ -223,6 +266,7 @@ async def cancel_confirm(quote_id: str) -> Dict[str, Any]:
             return {**out, **LIVE_REFUSED}
         if not c.get("confirmed_at"):   # Sasha 226 · accepted but not confirmed is never said as cancelled
             return {**out, "why": "Duffel (test) answered without confirming the cancellation", "provider_words": "no confirmed_at"}
+        forget(c.get("order_id"))   # Sasha 305 · the next read is the order as Duffel has it now
         return {"status": "cancelled", "cancellation_id": c.get("id") or quote_id,
                 "order_id": c.get("order_id"), "refund_amount": c.get("refund_amount"), "refund_currency": c.get("refund_currency"),
                 "refund_to": c.get("refund_to"), "confirmed_at": c.get("confirmed_at"),
@@ -393,12 +437,13 @@ async def change_confirm(change_offer_id: str) -> Dict[str, Any]:
             return {**out, **LIVE_REFUSED}
         if not done.get("confirmed_at"):   # Sasha 226 · accepted but not confirmed is never said as changed
             return {**out, "why": "Duffel (test) answered without confirming the change", "provider_words": "no confirmed_at"}
-        ref, oid = None, done.get("order_id") or ch.get("order_id")
-        if oid:   # the order's reference after the change (airlines may issue a new one)
-            s2, j2 = await _call("GET", f"/air/orders/{oid}")
-            if s2 == 200 and isinstance(_data(j2), dict):
-                ref = _data(j2).get("booking_reference")
+        oid = done.get("order_id") or ch.get("order_id")
+        # Sasha 305 · the order RE-READ after the change: the new flight and the reference (airlines may issue a new one) are Duffel's
+        forget(oid)
+        now = await order_now(oid) if oid else {"why": "no order on the change"}
+        ref = None if now.get("why") else now.get("reference")
         return {"status": "changed", "order_change_id": cid, "order_id": oid, "booking_reference": ref,
+                **({"order": now} if not now.get("why") else {"order_why": now["why"]}),
                 "change_total_amount": done.get("change_total_amount", amt), "change_total_currency": done.get("change_total_currency", cur),
                 "confirmed_at": done.get("confirmed_at"),
                 "provider_words": f"confirmed_at {done['confirmed_at']}"}
@@ -407,4 +452,4 @@ async def change_confirm(change_offer_id: str) -> Dict[str, Any]:
         return {**out, "why": f"the change answer couldn't be read ({type(e).__name__})"}
 
 
-__all__ = ["cancel_quote", "cancel_confirm", "change_quote", "change_confirm", "money", "HTTP"]
+__all__ = ["cancel_quote", "cancel_confirm", "change_quote", "change_confirm", "money", "HTTP", "order_now", "order_view", "forget"]

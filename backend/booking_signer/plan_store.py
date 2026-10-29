@@ -476,7 +476,10 @@ async def view(account: Optional[str], p: dict, bookings: List[dict]) -> dict:
     m = merge(p, bookings)
     from . import basket as BK
     if account and p.get("trip_id") and BK.on():
-        m = BK.overlay(m, await BK.items(account, p["trip_id"]))
+        # Sasha 305 · a ticketed flight as Duffel has it now (BK.live) — and one cancelled after ticketing stays on, said cancelled
+        rows = await BK.items(account, p["trip_id"]) + [r for r in await BK.items(account, p["trip_id"], ("cancelled",))
+                                                         if r["kind"] == "flight" and r.get("order_id")]
+        m = BK.overlay(m, await BK.live(rows))
     return m
 
 

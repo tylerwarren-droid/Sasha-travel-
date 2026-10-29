@@ -1,0 +1,197 @@
+"""Sasha 305 · change an existing trip: a flight is its Duffel order READ NOW (never a copy kept at booking), a hotel its record on
+AgAPI, and ONE resolver finds the booking he means — its own source decides who answers. Offline: a fake Duffel.
+
+    cd backend && python -m unittest tests.test_s305 -v
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+import pathlib
+import unittest
+from unittest import mock
+
+from booking_signer import basket as BK, flight_manage as FM
+from tests.test_flight_manage_226 import FakeDuffel, order
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+NEW_SEG = {"origin": {"iata_code": "MAD"}, "destination": {"iata_code": "LGW"}, "departing_at": "2026-11-27T07:15:00",
+           "arriving_at": "2026-11-27T08:50:00", "marketing_carrier": {"iata_code": "U2"}, "marketing_carrier_flight_number": "7650"}
+
+
+def run(c):
+    return asyncio.run(c)
+
+
+class ChangingDuffel(FakeDuffel):
+    """Duffel as it is: once the change is confirmed, the ORDER reads the new flight (and, here, a new reference)."""
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.changed = self.cancelled = False
+
+    async def __call__(self, method, path, body=None, params=None):
+        if method == "GET" and path == "/air/orders/ord_1" and not any(path.startswith(p) for p in self.fail):
+            self.calls.append((method, path, body))
+            o = dict(self.order)
+            if self.changed:
+                o = {**o, "booking_reference": "NEW456", "slices": [{"id": "sli_new", "origin": {"iata_code": "MAD"},
+                                                                     "destination": {"iata_code": "LGW"}, "segments": [NEW_SEG]}]}
+            if self.cancelled:
+                o = {**o, "cancelled_at": "2026-10-10T13:40:00Z"}
+            return 200, {"data": o}
+        got = await super().__call__(method, path, body, params)
+        if path == "/air/order_changes/oce_1/actions/confirm":
+            self.changed = True
+        if path == "/air/order_cancellations/ore_1/actions/confirm":
+            self.cancelled = True
+        return got
+
+
+class Base(unittest.TestCase):
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"})
+        self.env.start()
+        self.saved = FM.HTTP
+        FM._SEEN.clear()
+        FM.HTTP = self.duffel = ChangingDuffel()
+
+    def tearDown(self):
+        FM.HTTP = self.saved
+        FM._SEEN.clear()
+        self.env.stop()
+
+
+class TheOrderIsTheTruth(Base):
+    def test_one_reader_reads_the_order_and_forgets_on_our_own_change(self):
+        v = run(FM.order_now("ord_1"))
+        self.assertEqual((v["reference"], v["flights"], v["departs"]), ("ABC123", "U2 7640", "2026-11-20T08:30:00"))
+        run(FM.order_now("ord_1"))
+        self.assertEqual(self.duffel.paths().count("/air/orders/ord_1"), 1)   # a poll inside FRESH_S reuses the read
+        q = run(FM.change_quote("ord_1", "2026-11-27", "out"))
+        c = run(FM.change_confirm(q["change_offer_id"]))
+        self.assertEqual(c["status"], "changed")
+        # the change RE-READS the order: the new flight and reference are Duffel's, never the offer's or the old read's
+        self.assertEqual((c["booking_reference"], c["order"]["flights"], c["order"]["departs"]), ("NEW456", "U2 7650", "2026-11-27T07:15:00"))
+        self.assertEqual(run(FM.order_now("ord_1"))["reference"], "NEW456")
+
+    def test_no_token_or_no_order_is_said_never_guessed(self):
+        self.assertIn("why", run(FM.order_now(None)))
+        FM._SEEN.clear()
+        with mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": ""}):
+            self.assertIn("TEST token", run(FM.order_now("ord_1"))["why"])
+
+
+class NoSecondCopy(Base):
+    ROW = {"id": "it1", "kind": "flight", "state": "booked", "order_id": "ord_1", "day": "2026-11-20", "booking_reference": "ABC123",
+           "status_line": "✈️ easyJet U2 7640 MAD→LGW · 2026-11-20 · booked · ref ABC123",
+           "snapshot": {"owner": "easyJet", "flights": "U2 7640", "from": "MAD", "to": "LGW", "departs": "2026-11-20T08:30:00", "amount": "99.00"}}
+
+    def test_a_changed_flight_reads_as_the_order_stands(self):
+        self.duffel.changed = True
+        [r] = run(BK.live([dict(self.ROW)]))
+        self.assertTrue(r["live"])
+        self.assertEqual((r["snapshot"]["flights"], r["snapshot"]["departs"], r["day"], r["booking_reference"]),
+                         ("U2 7650", "2026-11-27T07:15:00", "2026-11-27", "NEW456"))
+        self.assertEqual(r["snapshot"]["amount"], "99.00")   # what was paid at booking stays the booking's own
+        self.assertIn("U2 7650", BK.words(r))
+        self.assertNotIn("7640", BK.words(r))                # the line kept at booking named the old flight: built again
+
+    def test_cancelled_at_duffel_is_cancelled_here(self):
+        self.duffel.cancelled = True
+        [r] = run(BK.live([dict(self.ROW)]))
+        self.assertEqual(r["state"], "cancelled")
+
+    def test_unreadable_order_is_marked_never_said_as_now(self):
+        self.duffel.fail = {"/air/orders/": (503, {"errors": [{"message": "down"}]})}
+        [r] = run(BK.live([dict(self.ROW)]))
+        self.assertIs(r["live"], False)
+        self.assertIn("isn't answering", r["live_why"])
+
+    def test_both_views_read_through_it(self):
+        it = (ROOT / "agapi" / "itinerary.py").read_text()
+        ps = (ROOT / "booking_signer" / "plan_store.py").read_text()
+        self.assertIn("rows = await BK.live(", it)            # My trips
+        self.assertIn("BK.overlay(m, await BK.live(rows))", ps)   # the Trip tab
+
+
+class WhatSheSaysAfter(Base):
+    def test_change_words_are_the_order_now_and_the_charge(self):
+        from agapi import s2_manage as M
+        q = run(FM.change_quote("ord_1", "2026-11-27", "out"))
+        said = M.changed_words(run(FM.change_confirm(q["change_offer_id"])))
+        for part in ("U2 7650", "07:15", "NEW456", "€60.50 was charged to the Duffel test balance", FM.TEST_LINE):
+            self.assertIn(part, said)
+        self.assertNotIn("7640", said)
+
+    def test_cancel_words_are_the_refund_and_the_order_reading_cancelled(self):
+        from agapi import s2_manage as M
+        q = run(FM.cancel_quote("ord_1"))
+        self.assertIn("€76.41", q["say"])                     # the refund is said BEFORE anything is done
+        said = run(M.cancelled_words(run(FM.cancel_confirm(q["quote_id"]))))
+        self.assertIn("Refund: €76.41 to your original payment.", said)
+        self.assertIn("Duffel's booking ABC123 now reads cancelled.", said)
+
+
+class Ctx:
+    account, session, user_said = "acct-305", "web:1", ""
+
+    def __init__(self):
+        from datetime import datetime, timezone
+        self.started = datetime.now(timezone.utc)
+
+
+RIO = [{"kind": "flight", "title": "LATAM LA 8065", "when": "2026-11-15T10:00:00", "where": "MAD → GIG", "status": "booked",
+        "id": "f-out", "order_id": "ord_out", "trip": "7 Days in Rio", "trip_id": "t1", "source": "flight", "legs": 1},
+       {"kind": "flight", "title": "LATAM LA 8064", "when": "2026-11-21T18:00:00", "where": "GIG → MAD", "status": "booked",
+        "id": "f-back", "order_id": "ord_back", "trip": "7 Days in Rio", "trip_id": "t1", "source": "flight", "legs": 1},
+       {"kind": "hotel", "title": "Marriott Test Hotel (sandbox)", "when": "2026-11-15T15:00", "status": "confirmed",
+        "id": "act_01STAY", "source": "venue", "trip": "7 Days in Rio"},
+       {"kind": "dinner", "title": "Taverna Correo", "when": "2026-11-16T21:00", "status": "confirmed", "id": "act_01DIN", "source": "venue"}]
+
+
+class OneResolver(unittest.TestCase):
+    def setUp(self):
+        from agapi import s2_manage as M
+        self.M = M
+        self.p = mock.patch.object(M, "plans_of", mock.AsyncMock(return_value=[dict(r) for r in RIO]))
+        self.p.start()
+
+    def tearDown(self):
+        self.p.stop()
+
+    def test_its_id_decides_never_the_models_what(self):
+        self.assertEqual(run(self.M.booking_meant(Ctx(), {"id": "act_01STAY"}, "flight"))["source"], "venue")
+        self.assertEqual(run(self.M.booking_meant(Ctx(), {"id": "ord_back"}, "hotel"))["id"], "f-back")
+
+    def test_my_rio_flight_by_trip_and_leg(self):
+        self.assertEqual(run(self.M.booking_meant(Ctx(), {"name": "Rio", "leg": "out"}, "flight"))["id"], "f-out")
+        self.assertEqual(run(self.M.booking_meant(Ctx(), {"name": "rio", "leg": "back"}, "flight"))["id"], "f-back")
+        with self.assertRaises(Exception) as e:
+            run(self.M.booking_meant(Ctx(), {"name": "Rio"}, "flight"))
+        self.assertEqual(getattr(e.exception, "code", None), "which_flight")
+
+    def test_a_hotel_on_agapi_is_found_as_the_hotel(self):
+        self.assertEqual(run(self.M.booking_meant(Ctx(), {"name": "marriott"}, "hotel"))["id"], "act_01STAY")
+
+    def test_hotel_nights_wait_for_agapi_and_nothing_is_sent(self):
+        with mock.patch.object(self.M, "_notice", mock.AsyncMock()) as sent:
+            r = run(self.M.change_booking(Ctx(), {"what": "hotel", "name": "Marriott", "new_nights": 3}))
+        sent.assert_not_called()
+        self.assertEqual((r["status"], r["sent"]), ("not_possible", False))
+        self.assertIn("haven't sent anything", r["say"])
+
+    def test_a_hotel_cancel_on_agapi_goes_by_its_route(self):
+        from agapi import venues as VN
+        with mock.patch.object(VN, "cancel_venue", mock.AsyncMock(return_value={"status": "awaiting_yes"})) as cv:
+            run(self.M.cancel_booking(Ctx(), {"what": "hotel", "name": "Marriott"}))
+        self.assertEqual(cv.call_args.args[1]["act_id"], "act_01STAY")
+
+    def test_a_one_flight_order_never_asks_duffel_for_a_leg(self):
+        with mock.patch.object(FM, "change_quote", mock.AsyncMock(return_value={"why": "stop here"})) as cq:
+            with self.assertRaises(Exception):
+                run(self.M.change_booking(Ctx(), {"what": "flight", "name": "Rio", "leg": "back", "new_date": "2026-11-22"}))
+        self.assertEqual(cq.call_args.args, ("ord_back", "2026-11-22", None))
+
+
+if __name__ == "__main__":
+    unittest.main()

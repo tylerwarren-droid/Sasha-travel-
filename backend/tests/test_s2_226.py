@@ -205,7 +205,7 @@ class CancelHotelAndFlight(unittest.TestCase):
                 mock.patch.object(BK, "cancelled", mock.AsyncMock()), mock.patch.object(BK, "event", mock.AsyncMock()):
             done = run(M.cancel_booking(ctx(started=later), {"what": "flight", "approval": {"said": "Yes, cancel it."}}))
         self.assertEqual(done["status"], "cancelled")
-        self.assertIn("EUR 76.41", done["say"])
+        self.assertIn("€76.41", done["say"])   # Sasha 305 · MOVED: the refund said in the money's own words (FM.money), then the order re-read
 
 
 class NextIsUnchanged(unittest.TestCase):

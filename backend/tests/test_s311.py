@@ -108,6 +108,12 @@ class TheNextYesSends(unittest.TestCase):
         self.assertIn('if _hy and _hy.get("number_confirmed_at") and _yes_y(message):', src)
         self.assertIn('tap_uses = [_TapUse(f"toolu_yes_{turn_key}", "book_venue", {"name": _hy.get("venue"), "approval": {"said": message}})]', src)
 
+    def test_the_read_back_stands_again_when_nothing_went(self):   # found by the proof: his first yes was consumed, nothing went → no_read_back
+        src = (ROOT / "agapi" / "venues.py").read_text()
+        body = src[src.index("async def confirm_number"):src.index("async def _agapi_call")]
+        self.assertIn('YG.shown(ctx, "book_venue", {"read_back": [held.get("summary") or venue]})', body)
+        self.assertLess(body.index("_HELD[ctx.account] = held"), body.index("YG.shown("))   # shown again only once it's held again
+
     def test_refused_again_after_confirming_is_said_and_never_a_loop(self):
         held = {"venue": "DiverXO", "summary": "Fri 13 Nov 21:00, 2 people", "number_confirmed_at": "2026-10-29T10:50:52Z"}
         VN._HELD["acct-311"] = held

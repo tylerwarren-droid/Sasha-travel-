@@ -2086,6 +2086,10 @@ async def confirm_number(ctx, held: dict, venue: str) -> dict:
         return {"status": "not_sent", "venue": venue, "when": held["summary"], "booked": False, "line": V.still_refused_line(venue),
                 "how": "Say `line` word for word — nothing else."}
     _HELD[ctx.account] = held
+    # Sasha 311 · his yes was consumed at the claim (CR 76's yes gate), but nothing went: the SAME read-back (its words and sha, unchanged)
+    # stands shown again, so his next yes — from his now-verified number — counts once. Found by the proof: "no_read_back" on that yes
+    from agapi import yes_gate as YG
+    YG.shown(ctx, "book_venue", {"read_back": [held.get("summary") or venue]})
     from booking_signer import guest_whatsapp as GWS
     ch = await GWS.STORE.channel_of_account(ctx.account) if GWS.STORE is not None else None
     got = await VS.link_whatsapp(ctx.account, ch["number_e164"]) if ch else {"ok": False}

@@ -244,6 +244,7 @@ async def lookup(country: str, name: Optional[str], number: Optional[str]) -> st
 
 LINE = "Applied Diligence — who should I investigate? (Send 'link <your AD email>' first if this number isn't linked.)"
 RESUME_LINE = LINE   # its word said again (or after another space): the same one line
+EVERY_MESSAGE = True   # CR 142 · in the space every message is AD's, routed by its meaning — no resume shortcut answers for it
 CLOSED = ("Applied Diligence on WhatsApp is in a private beta, and this number isn't in it yet — nothing was sent to Applied Diligence. "
           "Say “sasha” for travel.")
 DOWN = "Applied Diligence couldn't be reached just now — nothing was sent. Try again in a minute, or say “sasha” for travel."

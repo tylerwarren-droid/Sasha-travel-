@@ -401,7 +401,9 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             if asked_last:
                 await _set_aside(st, ch)
             return False
-    if not target and not payload and _STATUS.search(body) and (not STRICT or asked_last):
+    # CR 142 · not in a space whose every message is its own (AD's: "status of the Prada case" is AD's to answer, by its meaning)
+    if not target and not payload and _STATUS.search(body) and (not STRICT or asked_last) \
+            and not getattr(_module(asked_last), "EVERY_MESSAGE", False):
         named = next((prod for prod, rx in _NAMES if rx.search(body)), None)
         waiting = [prod for prod, _ in await _waiting(ch, now)]
         prod = named if named in waiting else (asked_last or (waiting[0] if waiting and not named else None))

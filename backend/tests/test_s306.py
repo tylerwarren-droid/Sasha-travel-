@@ -95,11 +95,34 @@ class APriceBeforeEveryChange(unittest.TestCase):
                   "I'm running late for dinner", "What's booked on my Rio trip now?"):
             self.assertIsNone(V.manage_tool(m), m)
 
-    def test_the_turn_forces_it(self):
+    def test_the_turn_runs_it_first_by_code(self):   # found live: the agent models refuse a forced tool_choice (400)
         src = (ROOT / "app" / "agent" / "sasha.py").read_text()
-        self.assertIn('must = _V.manage_tool(message) if honest and surface == "s2" and step == 0 else None', src)
-        self.assertIn('pick = {"tool_choice": {"type": "tool", "name": must}}', src)
-        self.assertIn("messages=msgs, **pick) as s:", src)
+        self.assertIn('must = _V.manage_tool(message) if honest and surface == "s2" and not tap_uses else None', src)
+        self.assertIn('tap_uses = [_TapUse(f"toolu_must_{turn_key}", must, got)]', src)
+        self.assertEqual(src.count("tool_choice="), 1)   # only quote_args' own call — never the agent models' (they refuse it)
+
+    def test_its_arguments_come_from_a_forced_call_without_any_approval(self):
+        from app.agent import sasha as SA
+        seen = {}
+
+        class Use:
+            type, input = "tool_use", {"what": "flight", "name": "Rio", "leg": "back", "new_date": "2026-11-22", "approval": {"said": "x"}}
+
+        class Client:
+            class messages:
+                @staticmethod
+                async def create(**kw):
+                    seen.update(kw)
+                    return type("R", (), {"content": [Use()]})()
+        tool = {"name": "change_booking", "description": "d", "input_schema": {"type": "object"}, "cache_control": {"type": "ephemeral"}}
+        got = run(SA.quote_args(Client, tool, [{"role": "user", "content": "move my flight home to the 22nd"}]))
+        self.assertEqual(got, {"what": "flight", "name": "Rio", "leg": "back", "new_date": "2026-11-22"})
+        self.assertEqual((seen["model"], seen["tool_choice"]), (SA.QUOTE_ARGS_MODEL, {"type": "tool", "name": "change_booking"}))
+        self.assertNotIn("cache_control", seen["tools"][0])
+        Use.input = {"what": "hotel", "id": "Hotel WhatsApp", "nights": 3, "leg": "<UNKNOWN>"}   # found live (Haiku 4.5)
+        self.assertEqual(run(SA.quote_args(Client, tool, [])), {"what": "hotel", "name": "Hotel WhatsApp", "nights": 3})
+        Use.input = {"what": "flight", "id": "ord_0000BBtfNeeST96cY4vHwN", "new_date": "2026-11-22"}
+        self.assertEqual(run(SA.quote_args(Client, tool, []))["id"], "ord_0000BBtfNeeST96cY4vHwN")
 
 
 if __name__ == "__main__":

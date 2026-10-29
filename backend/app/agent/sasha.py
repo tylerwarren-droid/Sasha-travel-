@@ -507,6 +507,36 @@ def name_matches(name: str, allowed: set) -> bool:
     return False
 
 
+QUOTE_ARGS_MODEL = os.getenv("SASHA_QUOTE_ARGS_MODEL", "claude-haiku-4-5")   # Sasha 306 · takes a forced tool choice
+
+
+async def quote_args(client, tool: dict, msgs: List[dict]) -> Optional[dict]:
+    """Sasha 306 · the arguments for the quote tool a change / cancel request must call first — from the conversation, by a model forced to
+    call exactly that tool. None when it can't (the turn then runs as before; the tools still gate every act on a read-back)."""
+    from datetime import date as _date
+    t = {k: tool[k] for k in ("name", "description", "input_schema") if k in tool}
+    try:
+        r = await client.messages.create(model=QUOTE_ARGS_MODEL, max_tokens=300, tools=[t], tool_choice={"type": "tool", "name": t["name"]},
+                                         system=(f"Today is {_date.today().isoformat()}. Fill this tool's arguments for the person's LAST message, "
+                                                 "from the conversation: the booking they mean (its name, trip or leg) and what they want it "
+                                                 "changed to. Leave out approval. Dates are YYYY-MM-DD. An id only if one appears in the "
+                                                 "conversation; leave out anything you don't know — never a placeholder."),
+                                         messages=msgs[-12:])
+        use = next((b for b in r.content if getattr(b, "type", "") == "tool_use"), None)
+        args = dict(use.input) if use is not None and isinstance(use.input, dict) else None
+        if args is not None:
+            args.pop("approval", None)
+            # found live: "<UNKNOWN>" filled in, and a hotel's name given as its id — a placeholder goes, a name is a name
+            args = {k: v for k, v in args.items() if not (isinstance(v, str) and re.fullmatch(r"\s*(?:<[^>]*>|unknown|n/?a|none|null)?\s*", v, re.I))}
+            if isinstance(args.get("id"), str) and not re.match(r"^(?:act_|ord_|hand:|[0-9a-f]{8}-)", args["id"]):
+                args["name"] = args.get("name") or args.pop("id")
+                args.pop("id", None)
+        return args
+    except Exception as e:
+        log.info("[agent] quote tool's arguments not filled: %s", type(e).__name__)
+        return None
+
+
 async def named_places(text: str) -> List[str]:
     """The specific businesses a line names (restaurants, hotels, spas, studios, bars…) — never cities, areas, streets,
     airlines, dishes or people. [] when the line can't name one."""
@@ -909,6 +939,15 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from agapi import venues as _VNt
         plan = _VNt.tap_plan(account, session, API.TAP_PICK.get())
         tap_uses = [_TapUse(f"toolu_tap_{turn_key}_{i}", n, a) for i, (n, a) in enumerate(plan or [])]
+    # Sasha 306 · item 2: a change / cancel request's FIRST STEP IS ITS QUOTE TOOL, by code (the Book tap's pattern above): never "move it"
+    # answered from an earlier turn without Duffel's price. Its arguments are filled by a model that takes a forced tool choice (the
+    # agent models refuse one: found live, "tool_choice … not supported for this model"); the price / refund / read-back is then said
+    # by code. His yes, and everything else, run as before.
+    must = _V.manage_tool(message) if honest and surface == "s2" and not tap_uses else None
+    if must and any(t["name"] == must for t in tools):
+        got = await quote_args(client, next(t for t in tools if t["name"] == must), msgs)
+        if got is not None:
+            tap_uses = [_TapUse(f"toolu_must_{turn_key}", must, got)]
     for step in range(MAX_STEPS):
         # Sasha 205 · the fast model talks and summarises (incl. a proposal, a total, a booking); the big one only weighs
         # search results (flights, stays, venues) to choose among them · Sasha 299 · (4) after a tap's calls: only the words — the fast one
@@ -920,11 +959,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             final = types.SimpleNamespace(content=list(tap_uses), usage=None)
             step_ms.append({"model": "tap", "at": int((t_step - t0) * 1000), "first_token": None, "ms": 0, "cached": None})
         else:
-            # Sasha 306 · item 2: a change / cancel request's first step CALLS the quote tool (its price, refund or read-back is then said
-            # by code) — never "move it" answered from an earlier turn. His yes, and everything else, run as before.
-            must = _V.manage_tool(message) if honest and surface == "s2" and step == 0 else None
-            pick = {"tool_choice": {"type": "tool", "name": must}} if must and any(t["name"] == must for t in tools) else {}
-            async with client.messages.stream(model=model, max_tokens=900, system=system_now(), tools=tools, messages=msgs, **pick) as s:
+            async with client.messages.stream(model=model, max_tokens=900, system=system_now(), tools=tools, messages=msgs) as s:
                 async for ev in s:
                     if ttft is None and ev.type in ("text", "content_block_start"):
                         ttft = int((time.perf_counter() - t_step) * 1000)

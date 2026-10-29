@@ -190,34 +190,32 @@ FULL = "Book Casa Gate for 2 on Friday at 9pm"
 
 
 class FullRequestSendsNoQuestion(Base):
-    """Offline 1 · Sasha 309 MOVED (was: their words are the yes, sent with nothing shown): a full request is READ BACK first — the
-    complete message on its card, one button — and ONE tap sends it."""
+    """Offline 1 · their words give venue, day, time and people → sent, no question, ONE line."""
 
-    def test_a_full_request_is_read_back_then_one_tap_sends(self):
+    def test_their_words_are_the_yes(self):
         out = self.hold(FULL)
-        self.assertEqual((out["status"], out["read_back"], out["ask"]), ("awaiting_yes", LINES, "Casa Gate, Friday 21:00 for 2. Shall I send?"))
-        self.assertEqual(self.agapi.sends, [])
-        evs = self.tap()
+        self.assertEqual(out["status"], "requested")
         self.assertEqual(self.agapi.sends, ["rbk_287"])
-        self.assertEqual(_said(evs), "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you when they reply.")
+        self.assertEqual(out["line"], "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you when they reply.")
+        self.assertNotIn("ask", out)
         act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_287")
         self.assertEqual((act["channel"], act["reference"]), ("whatsapp", "SM" + "2" * 32))   # Twilio's message id, on the booking
-        self.assertEqual(act["consent"]["kind"], "in_app_tap")                                 # the tap on the card they saw
-        self.assertNotIn("approvals.request", self.agapi.ops)
+        self.assertEqual(act["consent"], {"kind": "their_words", "said": FULL})                # their words, kept as the consent
+        self.assertNotIn("approvals.request", self.agapi.ops)                                  # nothing for them to tap
 
 
 class OneDetailInferredAsksOnce(Base):
     """Offline 2 · one detail S2 filled in (no party said: the default 2) → ONE line, no message text → sent on their yes."""
 
-    def test_asks_once_with_the_message(self):   # Sasha 309 MOVED: the card IS the message as it goes (it was hidden)
+    def test_asks_once_without_the_message(self):
         out = self.hold("Book Casa Gate on Friday at 9pm")
         self.assertEqual(out["status"], "awaiting_yes")
-        self.assertEqual(out["ask"], "Casa Gate, Friday 21:00 for 2. Shall I send?")
-        self.assertEqual(out["read_back"], LINES)
+        self.assertEqual(out["ask"], "Casa Gate, Friday 21:00 for 2. Send?")
+        self.assertEqual(out["read_back"], [])                                                 # never the template's text
         self.assertEqual(out["filled_in"], ["people"])
-        self.assertNotIn("message_if_asked", out)
+        self.assertEqual(out["message_if_asked"], LINES)                                       # only if they ask to see it
         ev = S.render("hold_venue", out, {})
-        self.assertEqual((ev["kind"], ev["read_back"], ev["ask"], ev["read_back_id"]), ("read_back", LINES, out["ask"], "rbk_287"))
+        self.assertEqual((ev["kind"], ev["read_back"], ev["ask"], ev["read_back_id"]), ("read_back", [], out["ask"], "rbk_287"))
         self.assertEqual(V.read_back_line("hold_venue", {"ok": True, "result": out}), out["ask"])
         self.assertEqual(self.agapi.sends, [])
 
@@ -282,13 +280,8 @@ class GateNoAtTheReadBack(Base):
 class GateNoAtTheSend(Base):
     gate, gate_at_read, gate_at_send = True, True, False
 
-    def test_refused_at_the_send_is_the_same_hand_over(self):   # Sasha 309 MOVED: at the send = on his yes (no send unasked)
-        self.hold(FULL)
-        tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})
-        try:
-            out = run(VN.book_venue(ctx("yes, send it"), {"name": "Casa Gate", "approval": {"said": "yes, send it"}}))
-        finally:
-            VS.TAP.reset(tok)
+    def test_refused_at_the_send_is_the_same_hand_over(self):
+        out = self.hold(FULL)
         self.assertEqual(self.agapi.sends, [])
         self.assertEqual((out["status"], out["page_url"], out["line"]), ("page_link", WA, V.OWN_WHATSAPP))
 
@@ -296,12 +289,11 @@ class GateNoAtTheSend(Base):
 class RetryNoSecondSend(Base):
     """Offline 5 · consent is single-use: the same request again, a double tap, a retry at the send — never a second send."""
 
-    def test_the_same_request_again(self):   # Sasha 309 MOVED: asked again after the tap → read back again, never sent again unasked
+    def test_the_same_request_again(self):
         self.hold(FULL)
-        self.tap()
         out = self.hold(FULL)
         self.assertEqual(self.agapi.sends, ["rbk_287"])
-        self.assertNotIn(out["status"], ("requested", "confirmed", "sent"))
+        self.assertEqual(out["status"], "already_sent")
 
     def test_a_double_tap(self):
         self.hold("Book Casa Gate on Friday at 9pm")
@@ -327,7 +319,6 @@ class RepliesComeBackToTheBooking(Base):
 
     def test_one_line_for_each_answer_and_stop(self):
         self.hold(FULL)
-        self.tap()   # Sasha 309 · sent on the one yes
         row = self._row({"act_id": "act_287", "state": "sent", "venue_words": {"untrusted_text": ""}})
         self.assertEqual(row["status"], "requested")
         self.assertRegex(row["wa"], r"^Asked at \d\d:\d\d · waiting for Casa Gate\.$")
@@ -383,10 +374,11 @@ class TheirWords(unittest.TestCase):
     def test_the_card_they_tapped_is_their_venue(self):
         self.assertTrue(self.w("This one: “Casa Gate” [their tap on the card on their screen: Casa Gate · place_id ChIJ287 — use this place_id]")["venue"])
 
-    def test_s2_never_sends_unasked(self):   # Sasha 309 MOVED: the request is never the yes — the read-back comes first, always
+    def test_s2_sends_unasked_only_when_all_four_are_theirs(self):
         src = inspect.getsource(VN.kanoe_card)
-        self.assertNotIn("if all(got.values()):", src)
-        self.assertFalse(hasattr(VN, "_kanoe_now"))
+        self.assertIn("if all(got.values()):", src)
+        self.assertLess(src.index("if all(got.values()):"), src.index("_kanoe_now("))
+        self.assertEqual(src.count("_kanoe_now("), 1)
         self.assertIn("str(getattr(ctx, \"user_said\", \"\") or \"\")", src)   # THIS turn's own words — never the model's arguments
 
 

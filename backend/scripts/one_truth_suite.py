@@ -314,6 +314,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "updated or deleted in the connected calendar once per version, its Google id derived from the 312 UID; trip_items is no longer "
             "a calendar source (Sasha 313)",
             ["tests.test_s313"]),
+    "T89": ("one instruction, one action: his complete instruction (a booking naming venue, day, time and party; \"cancel my <venue> "
+            "booking\" naming exactly one) IS the approval from his verified WhatsApp / the app; a short read-back only when Sasha filled "
+            "a term; no SMS-link fallback, never \"I've sent you a link\" unless one went (Sasha 314)",
+            ["tests.test_s314"]),
 }
 
 _RUNNER = """

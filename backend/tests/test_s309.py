@@ -101,19 +101,17 @@ class OneMessageOneYes(unittest.TestCase):
         src = inspect.getsource(WA)
         self.assertIn('renders = [ev for ev in renders if ev.get("kind") != "venues"]', src)
 
-    def test_a_full_request_then_one_tap_is_one_send_and_no_second_confirmation(self):
+    def test_a_full_request_is_one_send_and_no_confirmation_at_all(self):   # Sasha 314 MOVED: his complete instruction IS the yes
         class B(T.Base):
             def runTest(self):
                 pass
         b = B()
         b.setUp()
         try:
-            first = b.hold(T.FULL)
-            self.assertEqual((first["status"], first["read_back"]), ("awaiting_yes", T.LINES))
-            evs = b.tap()
-            said = T._said(evs)
+            out = b.hold(T.FULL)
             self.assertEqual(b.agapi.sends, ["rbk_287"])
-            self.assertNotRegex(said, r"\?|Shall I|send it\b")   # the yes SENT it: no second question
+            self.assertEqual(out["status"], "requested")
+            self.assertNotIn("ask", out)
         finally:
             b.tearDown()
 

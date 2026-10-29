@@ -147,6 +147,9 @@ def _options(ev: dict, out) -> None:
 
 def _read_back(ev: dict, out) -> None:
     lines = [l for l in ev.get("read_back") or [] if str(l).strip() and not str(l).lstrip().startswith("⚠")]
+    if not lines and ev.get("ask") and ev.get("choices"):   # Sasha 314 · the SHORT read-back: its one line IS the card, with Yes / No
+        out.ask(str(ev["ask"])[:1000], [("Yes", "yn:yes"), ("No", "yn:no")])
+        return
     if not lines:
         return
     if ev.get("status") in ("sent", "not_sent"):   # an outcome card, not a question
@@ -389,7 +392,7 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         elif t == "done":
             text = str(ev.get("text") or text)
             seen["calls"] = ev.get("tools") or []
-    rb_ev = next((ev for ev in renders if ev.get("kind") == "read_back" and ev.get("read_back")), None)
+    rb_ev = next((ev for ev in renders if ev.get("kind") == "read_back" and (ev.get("read_back") or (ev.get("ask") and ev.get("choices")))), None)
     shown = text
     if rb_ev:   # Sasha 309 · found live (DiverXO): an image card and "See the places" came with the read-back for a venue already chosen
         renders = [ev for ev in renders if ev.get("kind") != "venues"]

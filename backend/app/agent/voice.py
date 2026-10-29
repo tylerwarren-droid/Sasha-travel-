@@ -163,8 +163,23 @@ def day_words(at: str, today) -> str:
     return "today" if gap == 0 else "tomorrow" if gap == 1 else d.strftime("%A") if 0 < gap <= 6 else f"{d:%a} {d.day} {d:%b}"
 
 
-def kanoe_ask(venue: str, day: str, hhmm: str, n) -> str:
-    return f"{venue}, {day} {hhmm} for {n}. Shall I send?"
+def kanoe_ask(venue: str, day: str, hhmm: str, n, by: Optional[str] = None) -> str:
+    """Sasha 314 · the short read-back when S2 filled a term (Tyler's words: "DiverXO, Fri 13 Nov 21:00 for 2, by email. Send?") — the
+    exact terms he approves, how it goes among them."""
+    # HER VOICE never names a channel (the standing rule, its suite): how it goes is on the card's own terms, never in her line
+    return f"{venue}, {day} {hhmm} for {n}. Send?"
+
+
+def cancel_sent_line(venue: str, date: Optional[str], hhmm: Optional[str], party) -> str:
+    """Sasha 314 · the cancellation went (Tyler's words): "Cancelled — I've asked DiverXO to cancel Fri 13 Nov 21:00 for 2. I'll tell you
+    when they confirm." — it's a request to them until they answer."""
+    from datetime import date as _d
+    try:
+        day = _d.fromisoformat(str(date)[:10]).strftime("%a %-d %b")
+    except (TypeError, ValueError):
+        day = ""
+    what = " ".join(x for x in (day, str(hhmm or "")[:5], f"for {party}" if party else "") if x)
+    return f"Cancelled — I've asked {venue} to cancel{(' ' + what) if what else ' it'}. I'll tell you when they confirm."
 
 
 def wa_done_line(venue: str, day: str, hhmm: str, n) -> str:

@@ -141,7 +141,8 @@ class CancelThroughAgAPI(Base):
         self.assertEqual(len(held.get("sha") or ""), 64)   # found live: without it the one-yes gate (CR 76) refused their yes (no_read_back)
         out = run(VN._cancel_act(Ctx("Yes, cancel it.", ago=5), {}, held, "Yes, cancel it.", lambda s: "yes" in s.lower()))
         self.assertEqual(out["status"], "requested")
-        self.assertIn("still booked until they confirm", out["say"])
+        self.assertTrue(out["line"].startswith("Cancelled — I've asked Taverna Correo to cancel"), out)   # Sasha 314 MOVED: Tyler's words
+        self.assertTrue(out["line"].endswith("I'll tell you when they confirm."))
         self.assertEqual(self.api.cancels, 1)
         self.api.states["act_cancel"] = "sent"
         self.assertEqual(self.rows()[0]["status"], "confirmed")                 # not cancelled until the venue says so

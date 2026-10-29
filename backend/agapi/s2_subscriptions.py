@@ -361,6 +361,8 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                            "line": f"Cancellation requested from {s['merchant']} — it's not cancelled until they confirm."}}
         st = await CALL("approvals.status", {"read_back_id": pend["read_back_id"]})   # live: their tap on AgAPI's link decides
         ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
+        if (not ap.get("approval_id") or ap.get("state") != "valid") and not pend.get("link_sent"):   # Sasha 314 · no link went
+            return {"ok": True, "result": {"status": "not_sent", "line": "I couldn't send you a way to say yes from here, so nothing has gone. Say yes in the app or on WhatsApp."}}
         if not ap.get("approval_id") or ap.get("state") != "valid":
             return {"ok": True, "result": {"status": "waiting_for_their_tap", "line": "It's on their phone: they tap Yes there, then it goes."}}
         r = await CALL("subscriptions.cancel", inp, approval=ap["approval_id"])
@@ -374,8 +376,9 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         return _fail(r) if not r.get("ok") else {"ok": True, "result": {"status": "cancel_requested"}}
     d = e.get("details") or {}
     _PENDING[key] = {"read_back_id": d["read_back_id"], "route": route, "at": time.time()}
-    if via() == "live":
-        await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
+    if via() == "live":   # Sasha 314 · the one-tap link — and whether it really went
+        q = await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
+        _PENDING[key]["link_sent"] = bool(q.get("ok"))
     return {"ok": True, "result": {"status": "awaiting_yes", "read_back": (d.get("read_back") or {}).get("lines") or [],
                                    "ask": "Read this back and ask; cancel only on their yes, in their next message."}}
 

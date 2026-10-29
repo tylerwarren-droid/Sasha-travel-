@@ -251,7 +251,8 @@ async def _act_notice_go(ctx, held: dict, said: str, kind: str) -> dict:
         raise _err(r["error"]["code"], r["error"]["message"])
     what = "venue_late" if kind == "late" else "booking_change"
     if r.get("status") == "waiting_for_their_tap":
-        return {"status": "waiting_for_their_tap", "venue": held["venue"], "say": "I've sent you the link — it goes once you tap yes there."}
+        return {"status": "not_sent", "venue": held["venue"], "sent": False,   # Sasha 314 · no link is ever sent from here now
+                "say": "It hasn't gone: I couldn't take your yes for it here. Nothing was sent to them."}
     if r.get("status") == "person_sends":   # his own WhatsApp: the message AgAPI wrote, for him to send (nothing sent by Kanoe)
         m = r.get("message") or {}
         return {"status": "yours_to_send", "venue": held["venue"], "sent": False, "say": r.get("say") or "",

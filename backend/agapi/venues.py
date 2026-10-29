@@ -951,10 +951,11 @@ def _today(country: Optional[str]) -> date:
 
 
 async def kanoe_card(ctx, out: dict, rb: dict, own: Optional[str]) -> dict:
-    """Sasha 309 · ONE READ-BACK, ONE YES (Tyler, 29 Oct: "we don't need this extra step"): the held read-back IS the complete request —
-    AgAPI's exact lines, the message as it goes to the venue — on ONE card with ONE button ("Yes, send it"), and her one line over it.
-    Their yes (the tap, or typed) sends it, once (book_venue → _agapi_send → venue_submit.submit). Sasha 287's "their own words were the
-    yes" (sent with nothing shown: found live, DiverXO went to an approval no one could give) and its hidden text are retired."""
+    """Sasha 314 · ONE INSTRUCTION, ONE ACTION (Tyler's decision; counsel 16 Oct: he knowingly approves the exact terms — his complete
+    instruction does): their own words gave venue, day, time and people and Sasha inferred nothing → that message IS the approval, sent
+    now (_kanoe_now: from their verified WhatsApp / the app). Any term S2 filled in → ONE short read-back ("DiverXO, Fri 13 Nov 21:00 for
+    2, by email. Send?") with Yes / No; their yes (tap or typed) sends it, once. (309's full message card is retired with its cause:
+    the unverified number, Sasha 311.)"""
     from agapi import said as SD
     from app.agent import voice as V
     held = _HELD.get(ctx.account)
@@ -965,12 +966,44 @@ async def kanoe_card(ctx, out: dict, rb: dict, own: Optional[str]) -> dict:
     got = SD.which(str(getattr(ctx, "user_said", "") or ""), venue, held["when"], int(held["party"]), today)
     day = V.day_words(held["when"], today)
     held.update({"kanoe": True, "own": own, "said": got, "day_words": day})
-    out.update({"read_back": list(rb["lines"]), "ask": V.kanoe_ask(venue, day, held["when"][11:16], held["party"]),
-                "choices": [dict(c) for c in V.KANOE_CHOICES], "read_back_id": rb["read_back_id"],
+    if all(got.values()):   # their own words: venue, day, time and people — the request IS the yes (Sasha 287, restored by 314)
+        return await _kanoe_now(ctx, held, venue)
+    by = "WhatsApp" if held.get("agapi_action") == "request_whatsapp" else "email"
+    out.update({"read_back": [], "ask": V.kanoe_ask(venue, day, held["when"][11:16], held["party"], by),
+                "choices": [dict(c) for c in V.KANOE_CHOICES], "read_back_id": rb["read_back_id"], "message_if_asked": list(rb["lines"]),
                 "filled_in": [k for k, v in got.items() if not v],
                 "what_happens": "on their yes (the button, or said), Kanoe sends it; it's a request until they reply",
-                "how": "Say `ask` word for word — nothing else; the card shows the message. Never say it's sent before their yes."})
+                "how": "Say `ask` word for word — nothing else. Never say it's sent before their yes."})
     held["out"] = out
+    return out
+
+
+async def _kanoe_now(ctx, held: dict, venue: str) -> dict:
+    """Sasha 287 · restored by Sasha 314 (Tyler: "just send the damn thing"): their request was the yes: sent ONCE (a durable claim on these words for this booking — a retry never sends again),
+    through the same send as a tap (book_venue's _agapi_send → venue_submit.submit → approvals.in_app_tap on the held read-back)."""
+    import hashlib as _h
+    from agapi import s2_outcomes as OC
+    from agapi.v0 import ToolError, claim
+    from booking_signer import wa_brain as WB
+    words = str(getattr(ctx, "user_said", "") or "")
+    key = "kanoe_words:" + _h.sha256(f"{ctx.account}|{_base(venue)}|{held['when']}|{held['party']}|{words.strip().casefold()}".encode()).hexdigest()
+    was = (ctx.idem, getattr(ctx, "act_name", None))
+    ctx.idem, ctx.act_name = key, None   # the words' own key: claimed once, before anything is sent
+    try:
+        await claim(ctx)
+    except ToolError as e:
+        _HELD.pop(ctx.account, None)
+        log.info("[venues] %s: the same request again (%s) — never a second send", venue, e.code)
+        return await _tap_refused(ctx, held, "approval_consumed", {}, venue)
+    finally:
+        ctx.idem, ctx.act_name = was
+    _HELD.pop(ctx.account, None)
+    held["consent"] = {"kind": "their_words", "said": words[:300]}
+    where = await WB.trip_day_words(ctx.account, held["when"][:10], venue)
+    card = card_of(ctx.account, held.get("place_id"), venue)
+    out = await _agapi_send(ctx, held, {"how": "their_words", "said": words}, venue, where)
+    if out.get("status") != "waiting_for_their_tap":
+        await OC.booked(ctx.account, held, venue, area_of(card) if card else None, result=out)
     return out
 
 
@@ -2006,6 +2039,10 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
         code = r["error"]["code"]
         if code in VS.TAP_REFUSALS:   # Sasha 258 · the in-app yes refused: one plain line, never a dead end
             return await _tap_refused(ctx, held, code, r["error"], venue)
+        if code == "no_yes_here":   # Sasha 314 · nothing was sent: the request stays held, its read-back shown again for a yes that can count
+            _HELD[ctx.account] = held
+            from agapi import yes_gate as YG
+            YG.shown(ctx, "book_venue", {"read_back": [held.get("summary") or venue]})
         raise _err("no_explicit_yes" if code == "no_explicit_yes" else "not_sent", r["error"]["message"])
     st = r.get("status")
     if st in ("confirmed", "sent"):
@@ -2073,23 +2110,24 @@ async def _kanoe_sent(ctx, held: dict, r: dict, venue: str, where) -> dict:
     return {**out, **in_app, "line": out.get("page_says") or (out.get("floor") or {}).get("say") or ""}
 
 
-async def confirm_number(ctx, held: dict, venue: str) -> dict:
+async def confirm_number(ctx, held: dict, venue: str, act: str = "book_venue") -> dict:
     """Sasha 309 · THE YES THAT COULD NEVER GO (Tyler, DiverXO): AgAPI takes a WhatsApp yes only from the person's VERIFIED number (CR 99),
     and a number linked before CR 100 never was — the one-tap link was refused too. The number is confirmed the CR 100 way, ONCE:
     users.link_whatsapp's code, which they send from it (guest_whatsapp: the code from a linked number → users.confirm_whatsapp). The
     read-back stays held: after that, their yes sends it. Said by code, the turn ending on it — never "tap", never a call on top."""
     from agapi import venue_submit as VS
     from app.agent import voice as V
+    store = _CANCEL if act == "cancel_venue" else _HELD   # Sasha 314 · a cancel's yes too
     if held.get("number_confirmed_at"):   # Sasha 311 · refused AGAIN after the number was confirmed: never a loop — said, the hold dropped
-        _HELD.pop(ctx.account, None)
+        store.pop(ctx.account, None)
         log.warning("[venues] %s: the yes was refused again after the number was confirmed", venue)
         return {"status": "not_sent", "venue": venue, "when": held["summary"], "booked": False, "line": V.still_refused_line(venue),
                 "how": "Say `line` word for word — nothing else."}
-    _HELD[ctx.account] = held
+    store[ctx.account] = held
     # Sasha 311 · his yes was consumed at the claim (CR 76's yes gate), but nothing went: the SAME read-back (its words and sha, unchanged)
     # stands shown again, so his next yes — from his now-verified number — counts once. Found by the proof: "no_read_back" on that yes
     from agapi import yes_gate as YG
-    YG.shown(ctx, "book_venue", {"read_back": [held.get("summary") or venue]})
+    YG.shown(ctx, act, {"read_back": [held.get("summary") or venue]})
     from booking_signer import guest_whatsapp as GWS
     ch = await GWS.STORE.channel_of_account(ctx.account) if GWS.STORE is not None else None
     got = await VS.link_whatsapp(ctx.account, ch["number_e164"]) if ch else {"ok": False}
@@ -2335,9 +2373,8 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
         if not r.get("ok"):
             raise _err(r["error"]["code"], r["error"]["message"])
         _CANCEL.pop(ctx.account, None)
-        if r.get("status") == "waiting_for_their_tap":
-            return {"status": "waiting_for_their_tap", "venue": held.get("venue"),
-                    "say": "I've sent you the link — the cancellation goes once you tap yes there."}
+        if r.get("status") == "confirm_number":   # Sasha 314 · their WhatsApp number isn't verified yet: its one-time code (311) — never a link
+            return await confirm_number(ctx, held, held.get("venue") or "them", act="cancel_venue")
         if r.get("status") == "person_sends":   # CR 132 (d)3 · booked from his own WhatsApp: AgAPI's words, for HIM to send there
             m = r.get("message") or {}
             return {"status": "yours_to_send", "venue": held.get("venue"), "sent": False, "say": r.get("say") or "",
@@ -2347,8 +2384,7 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
             link = tk if isinstance(tk, str) else (tk or {}).get("link")
             return {"status": "not_cancelled", "venue": held.get("venue"), "say": r.get("say") or "",
                     **({"open": link, "page_url": link} if link else {})}
-        return {"status": "requested", "venue": held.get("venue"),
-                "say": "I've asked them to cancel it. It's still booked until they confirm — I'll tell you when they do."}
+        return {"status": "requested", "venue": held.get("venue"), "line": V_cancel_line(held), "how": "Say `line` word for word — nothing else."}
     rb = await VS.cancel_read_back(ctx.account, a["act_id"])
     if not rb.get("ok"):
         e = rb["error"]
@@ -2358,9 +2394,64 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
         raise _err(e["code"], e["message"])
     venue = next((b.get("venue") for b in await VS.bookings(ctx.account) if b.get("act_id") == a["act_id"]), a.get("venue"))
     import hashlib as _hl   # the one-yes gate (CR 76) binds their yes to THIS read-back by its words
-    _CANCEL[ctx.account] = {**rb, "at": datetime.now(timezone.utc), "venue": venue,
-                            "sha": _hl.sha256("\n".join(str(x) for x in rb["lines"]).encode()).hexdigest()}
+    row = next((b for b in await VS.bookings(ctx.account) if b.get("act_id") == a["act_id"]), {})
+    _CANCEL[ctx.account] = {**rb, "at": datetime.now(timezone.utc), "venue": venue, "date": row.get("date"), "time": row.get("time"),
+                            "party": row.get("party"), "sha": _hl.sha256("\n".join(str(x) for x in rb["lines"]).encode()).hexdigest()}
+    if (VS.TAP.get() is not None or VS.WA.get() is not None) and await _cancel_named(ctx, venue):
+        # Sasha 314 · "cancel my DiverXO booking", exactly one booking, from the app or their verified WhatsApp: that message IS the approval
+        return await _cancel_now(ctx, _CANCEL[ctx.account], said)
     return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"]}
+
+
+_CANCEL_WORDS = re.compile(r"\b(?:cancel|cancela|cancelar|anula|anular|annule|annuler)\b", re.I)
+
+
+async def _cancel_named(ctx, venue: str) -> bool:
+    """Sasha 314 · their OWN words cancel exactly one booking: a cancel verb and that venue's name, and only ONE active booking of theirs
+    there — then nothing was inferred, and the message is the approval."""
+    from agapi import venue_submit as VS
+    said = str(getattr(ctx, "user_said", "") or "")
+    if not _CANCEL_WORDS.search(said) or not venue or _base(venue) not in _base(said):
+        return False
+    live = [b for b in await VS.bookings(ctx.account) if _base(b.get("venue") or "") == _base(venue)
+            and b.get("status") not in ("cancelled", "declined", "failed")]
+    return len(live) == 1
+
+
+async def _cancel_now(ctx, held: dict, said: str) -> dict:
+    """Sasha 314 · their instruction was the yes: the cancellation sent ONCE (a durable claim on these words for this booking), from
+    their verified WhatsApp / the app — the same send as a tap (venue_submit.cancel_submit)."""
+    import hashlib as _h
+    from agapi.v0 import ToolError, claim
+    from agapi import venue_submit as VS
+    words = str(getattr(ctx, "user_said", "") or "")
+    key = "cancel_words:" + _h.sha256(f"{ctx.account}|{held.get('act_id')}|{words.strip().casefold()}".encode()).hexdigest()
+    was = (ctx.idem, getattr(ctx, "act_name", None))
+    ctx.idem, ctx.act_name = key, None
+    try:
+        await claim(ctx)
+    except ToolError:
+        _CANCEL.pop(ctx.account, None)
+        return {"status": "already_sent", "venue": held.get("venue"), "line": f"I've already asked {held.get('venue')} to cancel it.",
+                "how": "Say `line` word for word — nothing else."}
+    finally:
+        ctx.idem, ctx.act_name = was
+    r = await VS.cancel_submit(ctx.account, held, words)
+    if not r.get("ok"):
+        raise _err(r["error"]["code"], r["error"]["message"])
+    _CANCEL.pop(ctx.account, None)
+    if r.get("status") == "confirm_number":
+        return await confirm_number(ctx, held, held.get("venue") or "them", act="cancel_venue")
+    if r.get("status") == "not_allowed":
+        tk = r.get("takeover")
+        link = tk if isinstance(tk, str) else (tk or {}).get("link")
+        return {"status": "not_cancelled", "venue": held.get("venue"), "say": r.get("say") or "", **({"open": link, "page_url": link} if link else {})}
+    return {"status": "requested", "venue": held.get("venue"), "line": V_cancel_line(held), "how": "Say `line` word for word — nothing else."}
+
+
+def V_cancel_line(held: dict) -> str:
+    from app.agent import voice as V
+    return V.cancel_sent_line(held.get("venue") or "them", held.get("date"), held.get("time"), held.get("party"))
 
 
 __all__ = ["read_booking_route", "hold_venue", "book_venue", "cancel_venue", "venue_bookings"]

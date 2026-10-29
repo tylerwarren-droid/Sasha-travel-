@@ -723,7 +723,7 @@ async def confirmed_by_code(ch: dict, sender: str, p: Dict[str, str]) -> Optiona
     ok = await VS.confirm_whatsapp(code["account_id"], sender, p.get("MessageSid") or "", body)
     verified = bool(ok.get("ok") and ok.get("state") == "verified") and await VS.whatsapp_verified(code["account_id"], sender)
     log.info("[guest_whatsapp] a linked number's confirmation: %s", "verified (read back)" if verified else (ok.get("error") or {}).get("code") or "not verified")
-    held = VN._HELD.get(code["account_id"])
+    held = VN._HELD.get(code["account_id"]) or VN._CANCEL.get(code["account_id"])   # Sasha 314 · a booking's yes, or a cancel's
     if verified and held:
         held["number_confirmed_at"] = now.isoformat()
         said = V.number_confirmed_line(plain_venue(held.get("venue")) if held.get("venue") else "them")

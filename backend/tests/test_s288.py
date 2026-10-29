@@ -104,16 +104,15 @@ DONE = "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you w
 class FullRequestSendsNoQuestion(Base):
     """Offline 1 · their words give venue, day, time and people → the email is sent, no question, ONE line (never "I've emailed")."""
 
-    def test_a_full_request_is_read_back_then_one_tap_sends(self):   # Sasha 309 MOVED (was: their words are the yes)
+    def test_their_words_are_the_yes(self):
         out = self.hold(T.FULL)
-        self.assertEqual((out["status"], out["read_back"]), ("awaiting_yes", LINES))
-        self.assertEqual(self.agapi.sends, [])
-        evs = self.tap()
-        self.assertEqual((self.agapi.sends, T._said(evs)), (["rbk_288"], DONE))
+        self.assertEqual((out["status"], out["line"]), ("requested", DONE))
+        self.assertEqual(self.agapi.sends, ["rbk_288"])
+        self.assertNotIn("ask", out)
         act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_288")
         self.assertEqual((act["channel"], act["reference"]), ("email", "em_288"))
-        self.assertEqual(act["consent"]["kind"], "in_app_tap")
-        self.assertNotIn("email", DONE.lower())
+        self.assertEqual(act["consent"], {"kind": "their_words", "said": T.FULL})
+        self.assertNotIn("email", out["line"].lower())
 
 
 class OneDetailInferredAsksOnce(Base):
@@ -121,8 +120,8 @@ class OneDetailInferredAsksOnce(Base):
 
     def test_asks_once(self):
         out = self.hold("Book Casa Gate on Friday at 9pm")
-        self.assertEqual((out["status"], out["ask"], out["read_back"]), ("awaiting_yes", "Casa Gate, Friday 21:00 for 2. Shall I send?", LINES))
-        self.assertEqual(out["filled_in"], ["people"])   # Sasha 309 MOVED: the message is on the card (was: only if asked)
+        self.assertEqual((out["status"], out["ask"], out["read_back"]), ("awaiting_yes", "Casa Gate, Friday 21:00 for 2. Send?", []))
+        self.assertEqual((out["filled_in"], out["message_if_asked"]), (["people"], LINES))
         self.assertEqual(self.agapi.sends, [])
 
     def test_the_tap_sends(self):
@@ -159,12 +158,10 @@ class NoYesNoSend(Base):
 class RetryNoSecondSend(Base):
     """Offline 4 · the same request again, a double tap → never a second email."""
 
-    def test_the_same_request_again(self):   # Sasha 309 MOVED: asked again after the tap → never sent again unasked
+    def test_the_same_request_again(self):
         self.hold(T.FULL)
-        self.tap()
         out = self.hold(T.FULL)
-        self.assertEqual(self.agapi.sends, ["rbk_288"])
-        self.assertNotIn(out["status"], ("requested", "confirmed", "sent"))
+        self.assertEqual((self.agapi.sends, out["status"]), (["rbk_288"], "already_sent"))
 
     def test_a_double_tap(self):
         self.hold("Book Casa Gate on Friday at 9pm")
@@ -176,13 +173,8 @@ class RetryNoSecondSend(Base):
 class NotAllowedAtTheSendIsAHandOver(Base):
     gate, gate_at_read, gate_at_send = True, True, False
 
-    def test_never_cant(self):   # Sasha 309 MOVED: the refusal at the send comes on his yes
-        self.hold(T.FULL)
-        tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})
-        try:
-            out = T.run(VN.book_venue(T.ctx("yes, send it"), {"name": "Casa Gate", "approval": {"said": "yes, send it"}}))
-        finally:
-            VS.TAP.reset(tok)
+    def test_never_cant(self):
+        out = self.hold(T.FULL)
         self.assertEqual(self.agapi.sends, [])
         self.assertEqual(out["status"], "page_link")
         self.assertTrue(out["line"])
@@ -201,7 +193,6 @@ class AnAmbiguousReplyIsNeverConfirmed(Base):
 
     def test_replies(self):
         self.hold(T.FULL)
-        self.tap()   # Sasha 309 · sent on the one yes
         row = self._row({"act_id": "act_288", "state": "sent", "venue_words": {"untrusted_text": ""}})
         self.assertRegex(row["wa"], r"^Asked at \d\d:\d\d · waiting for Casa Gate\.$")
         for words in ("ok, we'll check", "OK, we will get back to you", "Vale, lo miramos y te decimos", "ok, what time?", "To be confirmed"):
@@ -233,7 +224,7 @@ class TheRatchet(unittest.TestCase):
         self.assertEqual(va.count("kanoe_card("), 1)
 
     def test_no_email_branch_no_second_sender(self):
-        for fn in (VN.kanoe_card, VN._kanoe_sent, VN._agapi_send, VN._via_agapi):   # Sasha 309 · _kanoe_now retired
+        for fn in (VN.kanoe_card, VN._kanoe_now, VN._kanoe_sent, VN._agapi_send, VN._via_agapi):
             code = inspect.getsource(fn).replace(fn.__doc__ or "", "")
             code = "\n".join(re.sub(r"#.*$", "", x) for x in code.splitlines())
             self.assertNotRegex(code, r"""(?:==|!=|\bin)\s*\(?["']email["']""", fn.__name__)   # no `if channel == "email"` copy
@@ -241,9 +232,10 @@ class TheRatchet(unittest.TestCase):
                 self.assertNotIn(bad, code, (fn.__name__, bad))
         self.assertIn("VS.submit(", inspect.getsource(VN._agapi_send))   # the ONE send: venue.submit_booking
 
-    def test_never_a_send_unasked(self):   # Sasha 309 MOVED (was: unasked needs all four)
-        self.assertNotIn("_kanoe_now(", inspect.getsource(VN.kanoe_card))
-        self.assertFalse(hasattr(VN, "_kanoe_now"))
+    def test_the_send_unasked_needs_all_four(self):
+        src = inspect.getsource(VN.kanoe_card)
+        self.assertLess(src.index("if all(got.values()):"), src.index("_kanoe_now("))
+        self.assertEqual(src.count("_kanoe_now("), 1)
 
     def test_her_voice_never_names_the_channel(self):
         lines = [V.kanoe_ask("X", "Friday", "21:00", 2), V.wa_done_line("X", "Friday", "21:00", 2), V.wa_sent_line("21:00", "X"),

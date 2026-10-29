@@ -191,10 +191,12 @@ class Live(HandleIt):
 
     def test_live_their_tap_is_the_approval(self):
         self.handle_it()
-        self.assertEqual(self.agapi.body("approvals.request"), {"read_back_id": RB, "channel": "link_sms"})
+        self.assertNotIn("approvals.request", self.agapi.ops())   # Sasha 314 MOVED: no SMS link (it sent nothing, and she said it had)
         self.agapi.approval_state = "presented"
-        got = self.yes()
-        self.assertEqual(got["status"], "waiting_for_their_tap")
+        from agapi.v0 import ToolError
+        with self.assertRaises(ToolError) as e:   # no approval channel here: said plainly — never "waiting for your tap"
+            self.yes()
+        self.assertIn("only be taken in the app or from their own WhatsApp", e.exception.message)
         self.assertNotIn("venue.submit_booking", [o for o, _b, a in self.agapi.calls if a])        # nothing sent before the tap
         self.assertIn("00000000-0000-4000-8000-000000000254", VN._HELD)                             # still held for it
         self.agapi.approval_state = "valid"

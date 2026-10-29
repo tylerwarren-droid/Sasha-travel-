@@ -225,15 +225,15 @@ async def read_back(account: str, prepared_id: str, route: Optional[str] = None)
     rid = d.get("read_back_id")
     if not rid or not lines:
         return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
-    if TAP.get() is None and WA.get() is None and await target(account) == "live":   # not in the app, not a signed WhatsApp reply:
-        await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})          # AgAPI's one-tap link
+    # Sasha 314 · NO LINK FALLBACK: AgAPI's one-tap SMS link (approvals.request) was asked for here and sent nothing (422 — Tyler's
+    # DiverXO cancel: "I've sent you a link", none arrived). The yes is the in-app tap or a reply from their verified WhatsApp — only.
     # Sasha 258 · the card binds to AgAPI's OWN hash of these lines (CR 97: approval_required carries read_back_sha256)
     sha = d.get("read_back_sha256") or hashlib.sha256("\n".join(str(x) for x in lines).encode()).hexdigest()
     return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "sha256": sha}
 
 
 async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
-    """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|waiting_for_their_tap, …}"""
+    """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|confirm_number, …}"""
     rid, pid, uid = held["read_back_id"], held["prepared_id"], held.get("end_user") or await end_user(account)
     if TAP.get() is not None or WA.get() is not None:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
         # Sasha 265 · item 4 (CR 99 §4d): on WhatsApp, their reply (signed webhook) is the same in_app_tap, session kind "whatsapp"
@@ -243,15 +243,6 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
                 and not await whatsapp_verified(account, (WA.get() or {}).get("wa_id")):
             # Sasha 311 · a WhatsApp yes from a number AgAPI hasn't verified (read back): its one-time code, from that number — on any
             # target (an SMS link verifies a phone, never this WhatsApp number)
-            return {"ok": True, "status": "confirm_number"}
-        if not r.get("ok") and TAP.get() is None and r["error"]["code"] == "approval_untrusted_origin" and await target(account) == "live":
-            # their WhatsApp number isn't a VERIFIED destination of theirs yet: AgAPI's one-tap link (which verifies it) — said, not hidden
-            q = await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
-            if q.get("ok"):
-                return {"ok": True, "status": "waiting_for_their_tap"}
-            # Sasha 309 · found live (Tyler, DiverXO): the link was REFUSED too (422: his WhatsApp number isn't verified) and she still
-            # said "tap Yes on your phone" — nothing to tap anywhere. Now: the number is confirmed once (users.link_whatsapp), said plainly
-            log.info("[venue_submit] the approval link was refused too: %s", (q.get("error") or {}).get("code"))
             return {"ok": True, "status": "confirm_number"}
         if not r.get("ok"):
             if r["error"]["code"] in ("approval_void", "approval_expired"):   # a stale / timed-out card: a fresh read-back to show
@@ -277,8 +268,8 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     else:
         st = await _call(account, "approvals.status", {"read_back_id": rid})
         ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
-        if not ap.get("approval_id") or ap.get("state") != "valid":
-            return {"ok": True, "status": "waiting_for_their_tap"}
+        if not ap.get("approval_id") or ap.get("state") != "valid":   # Sasha 314 · no link was sent: never "waiting for their tap"
+            return {"ok": False, "error": {"code": "no_yes_here", "message": "their yes can only be taken in the app or from their own WhatsApp — nothing was sent"}}
         approval = ap["approval_id"]
     route = {"route": "call"} if held.get("rung") == "agapi_call" else {}   # a phone booking: route "call" — Sasha 272: no call object
     r = await _call(account, "venue.submit_booking", {"end_user": uid, "prepared_id": pid, **route}, approval=approval)
@@ -541,8 +532,7 @@ async def cancel_read_back(account: str, act_id: str) -> Dict[str, Any]:
     rid = d.get("read_back_id")
     if not rid or not lines:
         return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
-    if TAP.get() is None and await target(account) == "live":   # Sasha 258 · in the app the yes is in_app_tap: no link sent
-        await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
+    # Sasha 314 · no link fallback (see read_back): the yes is the in-app tap or their verified WhatsApp reply
     return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "act_id": act_id,
             **({"read_back_sha256": d["read_back_sha256"]} if d.get("read_back_sha256") else {})}
 
@@ -551,8 +541,12 @@ async def cancel_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     """On their yes (a later turn): the approval → venue.cancel_booking → {status sent, cancel_act_id}; the cancellation is kept as
     its own act (its reply comes through venue.booking_status, like any request)."""
     rid, act_id, uid = held["read_back_id"], held["act_id"], held.get("end_user") or await end_user(account)
-    if TAP.get() is not None:   # Sasha 258 · in the app: their yes is the approval (in_app_tap sends the cancellation at once)
-        r = await in_app_tap(account, rid, held.get("read_back_sha256") or held.get("sha") or "")   # AgAPI's own hash of the card
+    if TAP.get() is not None or WA.get() is not None:   # Sasha 258 · in the app / 314 · on WhatsApp: their yes IS the approval, at once
+        sha = held.get("read_back_sha256") or held.get("sha") or ""   # AgAPI's own hash of the card
+        r = await (in_app_tap(account, rid, sha) if TAP.get() is not None else whatsapp_tap(account, rid, sha))
+        if not r.get("ok") and TAP.get() is None and r["error"]["code"] == "approval_untrusted_origin" \
+                and not await whatsapp_verified(account, (WA.get() or {}).get("wa_id")):
+            return {"ok": True, "status": "confirm_number"}   # Sasha 311's one-time code, never a link
         if not r.get("ok"):
             return r
         res = r.get("result") or {}
@@ -600,8 +594,7 @@ async def change_read_back(account: str, act_id: str, kind: str, **ask: Any) -> 
     rid = d.get("read_back_id")
     if not rid or not lines:
         return {"ok": False, "error": {"code": "no_read_back", "message": "the service gave no read-back to ask them"}}
-    if TAP.get() is None and WA.get() is None and await target(account) == "live":
-        await _call(account, "approvals.request", {"read_back_id": rid, "channel": "link_sms"})
+    # Sasha 314 · no link fallback (see read_back)
     return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "act_id": act_id,
             **({"read_back_sha256": d["read_back_sha256"]} if d.get("read_back_sha256") else {})}
 
@@ -799,8 +792,8 @@ async def _approval(account: str, rid: str, said: str):
         return a["result"]["approval_id"]
     st = await _call(account, "approvals.status", {"read_back_id": rid})
     ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
-    if not ap.get("approval_id") or ap.get("state") != "valid":
-        return {"ok": True, "status": "waiting_for_their_tap"}
+    if not ap.get("approval_id") or ap.get("state") != "valid":   # Sasha 314 · no link was sent: never "waiting for their tap"
+        return {"ok": False, "error": {"code": "no_yes_here", "message": "their yes can only be taken in the app or from their own WhatsApp — nothing was sent"}}
     return ap["approval_id"]
 
 

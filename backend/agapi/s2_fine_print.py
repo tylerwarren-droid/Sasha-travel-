@@ -353,6 +353,8 @@ async def _with_yes(ctx, key: str, op: str, body: dict) -> Dict[str, Any]:
                 return await _hold(key, op, body, again=True)
         else:
             apv = await _valid_approval(pend["read_back_id"])
+            if not apv and not pend.get("link_sent"):   # Sasha 314 · no link went: said, never "waiting for their tap"
+                return {"ok": True, "result": {"status": "not_sent", "line": "I couldn't send you a way to say yes from here, so nothing has gone. Say yes in the app or on WhatsApp."}}
             if not apv:
                 return {"ok": True, "result": {"status": "waiting_for_their_tap"}}
         r = await CALL(op, body, approval=apv)
@@ -375,8 +377,9 @@ async def _hold(key: str, op: str, body: dict, again: bool = False) -> Dict[str,
     if e.get("code") == "approval_required":
         d = e.get("details") or {}
         _PEND[key] = {"read_back_id": d["read_back_id"], "at": time.time(), **({"case": body["case_id"]} if body.get("case_id") else {})}
-        if via() == "live":
-            await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
+        if via() == "live":   # Sasha 314 · the one-tap link — and whether it really went (never "it's on their phone" when it didn't)
+            q = await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
+            _PEND[key]["link_sent"] = bool(q.get("ok"))
         lines = (d.get("read_back") or {}).get("lines") or []
         ask = ("The read-back they answered can't take a yes any more, and nothing has been sent: read this one back and ask again."
                if again else "Read this back and ask; it goes only on their yes, in their next message.")

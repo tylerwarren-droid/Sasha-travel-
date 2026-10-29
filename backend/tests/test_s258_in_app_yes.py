@@ -158,7 +158,7 @@ class WhatsAppUnchanged(Base):
     def test_no_in_app_session_keeps_its_own_path(self):
         VS.TAP.set(None)
         run(VS.read_back(ACCT, "vpr_" + "1" * 32))
-        self.assertIn("approvals.request", self.ops())                       # live, not in the app: AgAPI's link, as before
+        self.assertNotIn("approvals.request", self.ops())   # Sasha 314 MOVED: no SMS link fallback (it sent nothing: Tyler's DiverXO cancel)
         self.assertNotIn("approvals.in_app_tap", self.ops())
 
 

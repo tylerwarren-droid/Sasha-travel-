@@ -110,5 +110,26 @@ class TheShortReadBack(unittest.TestCase):
         self.assertIn('"read_back": []', src)   # the short line is the card: never the whole template
 
 
+class TheShortReadBackIsShown(unittest.TestCase):   # found by the proof: the short card wasn't recorded, so his yes got a second confirmation
+    def test_the_one_yes_gate_records_it(self):
+        from agapi import yes_gate as YG
+        ctx = Ctx("Book Taverna Correo on Saturday at 21:00").c
+        VN._HELD[ACCT] = {"venue": "Taverna Correo", "sha": "a" * 64, "same": "a" * 64, "at": datetime.now(timezone.utc)}
+        YG._RB.pop((ACCT, "book_venue"), None)
+        try:
+            YG.shown(ctx, "hold_venue", {"status": "awaiting_yes", "read_back": [], "ask": "Taverna Correo, Sat 14 Nov 21:00 for 2. Send?",
+                                         "choices": [{"title": "Yes, send it"}]})
+            self.assertIn((ACCT, "book_venue"), YG._RB)
+        finally:
+            VN._HELD.pop(ACCT, None)
+            YG._RB.pop((ACCT, "book_venue"), None)
+
+
+class NoPlaceListAfterTheAct(unittest.TestCase):
+    def test_the_whatsapp_turn_drops_the_list_once_it_booked_or_cancelled(self):
+        src = (ROOT / "booking_signer" / "wa_agent.py").read_text()
+        self.assertIn('c.get("tool") in ("hold_venue", "book_venue", "cancel_venue") and c.get("ok")', src)
+
+
 if __name__ == "__main__":
     unittest.main()

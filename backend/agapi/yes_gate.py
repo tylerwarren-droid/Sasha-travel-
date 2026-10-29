@@ -58,7 +58,10 @@ def _current(act: str, h: dict) -> dict:
 def shown(ctx, name: str, result) -> None:
     """After an S2 tool answered: if it read an act back, record that read-back (once per sha — read again, it stays the first)."""
     act = FAMILY.get(name, name)
-    if act not in OPERATION or not isinstance(result, dict) or not result.get("read_back"):
+    # Sasha 314 · the SHORT read-back ("DiverXO, Fri 13 Nov 21:00 for 2. Send?" with Yes / No) is a read-back they were shown too: its
+    # one line and its buttons (found by the proof: no lines → not recorded → his yes refused, "no_read_back", a second confirmation)
+    shown_rb = isinstance(result, dict) and (result.get("read_back") or (result.get("ask") and result.get("choices")))
+    if act not in OPERATION or not shown_rb:
         return
     h = _held(act, ctx.account)
     if not h or not h.get("sha"):

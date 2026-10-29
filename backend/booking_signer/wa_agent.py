@@ -394,6 +394,10 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
             seen["calls"] = ev.get("tools") or []
     rb_ev = next((ev for ev in renders if ev.get("kind") == "read_back" and (ev.get("read_back") or (ev.get("ask") and ev.get("choices")))), None)
     shown = text
+    acted = any(isinstance(c, dict) and c.get("tool") in ("hold_venue", "book_venue", "cancel_venue") and c.get("ok")
+                for c in seen.get("calls") or [])
+    if acted:   # Sasha 314 · found by the proof: "1. Taverna Correo" (the place list) after "Done — I've asked…" — its venue is chosen
+        renders = [ev for ev in renders if ev.get("kind") != "venues"]
     if rb_ev:   # Sasha 309 · found live (DiverXO): an image card and "See the places" came with the read-back for a venue already chosen
         renders = [ev for ev in renders if ev.get("kind") != "venues"]
         if rb_ev.get("ask") and text.strip() == str(rb_ev["ask"]).strip():

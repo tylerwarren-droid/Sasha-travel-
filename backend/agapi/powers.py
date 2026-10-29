@@ -125,18 +125,49 @@ def _fold(line: str) -> str:
     return "\r\n ".join(x.decode("utf-8") for x in out)
 
 
-def ics(ev: Dict, dtstamp: str) -> str:
-    """One VEVENT, RFC 5545, CRLF line ends, folded. `dtstamp` (UTC, YYYYMMDDTHHMMSSZ) is passed in so the bytes are reproducible."""
+ORGANIZER = "mailto:sasha@booking.kanoe.ai"   # Sasha 312 · RFC 5546: a REQUEST / CANCEL names its organizer (Kanoe's booking sender)
+
+
+def ics(ev: Dict, dtstamp: str, method: str = "PUBLISH", sequence: Optional[int] = None, status: Optional[str] = None) -> str:
+    """One VEVENT, RFC 5545, CRLF line ends, folded. `dtstamp` (UTC, YYYYMMDDTHHMMSSZ) is passed in so the bytes are reproducible.
+    Sasha 312 · the same booking's calendar life by ONE UID (ev["uid"]): PUBLISH it (SEQUENCE 0), REQUEST it at its new time, CANCEL it
+    (STATUS:CANCELLED) — each later SEQUENCE higher (sequence_of: from the record's own time of the change). Defaults: the bytes as before."""
     z = lambda iso: iso.replace("-", "").replace(":", "")
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kanoe//AgAPI v1//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
-             f"UID:{ev['uid']}", f"DTSTAMP:{dtstamp}", f"DTSTART:{z(ev['starts_at'])}", f"DTEND:{z(ev['ends_at'])}",
-             f"SUMMARY:{_ics_text(ev['title'])}"]
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kanoe//AgAPI v1//EN", "CALSCALE:GREGORIAN", f"METHOD:{method}", "BEGIN:VEVENT",
+             f"UID:{ev['uid']}", *([f"SEQUENCE:{int(sequence)}"] if sequence is not None else []), f"DTSTAMP:{dtstamp}",
+             f"DTSTART:{z(ev['starts_at'])}", f"DTEND:{z(ev['ends_at'])}", f"SUMMARY:{_ics_text(ev['title'])}"]
+    if method in ("REQUEST", "CANCEL"):
+        lines.append(f"ORGANIZER;CN=Sasha (Kanoe):{ORGANIZER}")
+    if status:
+        lines.append(f"STATUS:{status}")
     if ev.get("location"):
         lines.append(f"LOCATION:{_ics_text(ev['location'])}")
     if ev.get("details"):
         lines.append(f"DESCRIPTION:{_ics_text(ev['details'])}")
     lines += ["END:VEVENT", "END:VCALENDAR"]
     return "\r\n".join(_fold(x) for x in lines) + "\r\n"
+
+
+def sequence_of(changed_at: Optional[str]) -> int:
+    """Sasha 312 · a later version's SEQUENCE, from the RECORD's own time of the change or cancel (minutes since 2026-01-01 UTC): always
+    above the first one's 0 and above any earlier change — nothing kept by Sasha to count them."""
+    try:
+        t = datetime.fromisoformat(str(changed_at).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        t = datetime.now(timezone.utc)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return max(1, int((t - datetime(2026, 1, 1, tzinfo=timezone.utc)).total_seconds() // 60))
+
+
+def ics_cancel(ev: Dict, dtstamp: str, changed_at: Optional[str]) -> str:
+    """Sasha 312 · the booking was cancelled: its event, the SAME UID, removed (METHOD:CANCEL, STATUS:CANCELLED, a higher SEQUENCE)."""
+    return ics(ev, dtstamp, method="CANCEL", sequence=sequence_of(changed_at), status="CANCELLED")
+
+
+def ics_update(ev: Dict, dtstamp: str, changed_at: Optional[str]) -> str:
+    """Sasha 312 · the booking moved: its event, the SAME UID, at its new time (METHOD:REQUEST, a higher SEQUENCE)."""
+    return ics(ev, dtstamp, method="REQUEST", sequence=sequence_of(changed_at), status="CONFIRMED")
 
 
 def calendar_links(ev: Dict, ics_url: str) -> Dict[str, str]:

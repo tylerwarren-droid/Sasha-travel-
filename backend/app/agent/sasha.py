@@ -286,8 +286,12 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "find": {"what": args.get("what") or c.get("name"), "where": args.get("city") or ""},
                 "preset": {"all": [c], "cards": [c], "show": 1}, "focus": c.get("place_id"),
                 "ribbon": f"{c.get('name')}" + (f" · {res['when']}" if res.get("when") else "")}
-    if tool == "my_plans":   # Sasha 226 · their plans, on a card (/s2)
-        return {"type": "render", "kind": "plans", "items": res.get("items") or [], **({"on": res["on"]} if res.get("on") else {})}
+    if tool == "my_plans":   # Sasha 226 · their plans, on a card (/s2) · 312: + a booking's calendar update (cancelled / changed)
+        return {"type": "render", "kind": "plans", "items": res.get("items") or [], **({"on": res["on"]} if res.get("on") else {}),
+                **({"calendar_updates": res["calendar_updates"]} if res.get("calendar_updates") else {})}
+    if tool in ("change_booking", "cancel_booking") and isinstance(res.get("calendar_update"), dict) and not res.get("read_back"):
+        u = res["calendar_update"]   # Sasha 312 · the SAME event in their calendar, removed or moved: its .ics (Apple / any app)
+        return {"type": "render", "kind": "calendar", "update": u.get("kind"), "title": u.get("line"), "links": {"apple": u["url"]}}
     if tool in ("running_late", "change_booking", "cancel_booking"):   # Sasha 226 · its own read-back, on the card
         act = {"running_late": "late", "change_booking": "change", "cancel_booking": "cancel"}[tool]   # its own card words (/s2)
         return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": act} if res.get("read_back") else None

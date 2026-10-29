@@ -19,7 +19,7 @@ import S2Hello, { type HelloCtl } from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
 import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
-import { C, Box, shrink, KeepCapture, WaOpen, Plans, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
+import { C, Box, shrink, KeepCapture, WaOpen, Plans, type CalUpdate, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
 import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
@@ -41,13 +41,13 @@ type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
   | { k: 'read_back'; lines: string[]; what?: string; live?: boolean; status?: string; total?: number; act?: string
       ask?: string; choices?: { title: string; route: string }[]; read_back_id?: string }   // Sasha 265 · item 4: the call's card IS the question
-  | { k: 'calendar'; title?: string; links: Record<string, string> }
+  | { k: 'calendar'; title?: string; links: Record<string, string>; update?: 'cancel' | 'change' }
   | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
   | { k: 'booked'; line: string }
   | { k: 'keep_capture'; what: 'passport' | 'loyalty' }
   | { k: 'wa_open'; to: { name?: string | null; number?: string }; text: string; open: string; why: string }   // Sasha 230
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
-  | { k: 'plans'; items: Plan[]; on?: string }
+  | { k: 'plans'; items: Plan[]; on?: string; updates?: CalUpdate[] }
   | { k: 'notice'; title: string; lines: string[]; status?: string }
   | { k: 'counter_card'; card: Ev }   // CR 75 · fine print: the counter card (each line quoted)
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
@@ -486,7 +486,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
             style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: b ? C.gold : 'transparent', color: b ? '#111' : C.gold, fontWeight: 700 }}>{w}</button>))}
       </div>}
     </Box>)
-  if (c.k === 'plans') return <Plans items={c.items} on={c.on} />
+  if (c.k === 'plans') return <Plans items={c.items} on={c.on} updates={c.updates} />
   if (c.k === 'notice') return (
     <Box k={c.status ? untag(c.status) : 'Update'} h={untag(c.title)}>
       {c.lines.map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
@@ -504,12 +504,13 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={pick} />   // Sasha 231 · the tap carries the card's place_id
   if (c.k === 'booked') return <><Box k={/^Partly booked/i.test(c.line) ? 'Partly booked' : 'Booked'} h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^(Partly )?Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
   if (c.k === 'calendar') return (
-    <><Box k="Add to your calendar" h={untag(c.title || 'Your booking')}>
+    <><Box k={c.update === 'cancel' ? 'Remove from your calendar' : c.update === 'change' ? 'Update your calendar' : 'Add to your calendar'} h={untag(c.title || 'Your booking')}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {(['google', 'outlook', 'apple'] as const).filter(x => c.links[x]).map(x => (
           <a key={x} href={c.links[x]} target="_blank" rel="noreferrer" style={{ padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 600, textDecoration: 'none' }}>
-            {x === 'google' ? 'Google' : x === 'outlook' ? 'Outlook' : 'Apple / other'}</a>))}
+            {x === 'google' ? 'Google' : x === 'outlook' ? 'Outlook' : c.update ? 'Open the update (.ics)' : 'Apple / other'}</a>))}
       </div>
+      {c.update ? <div style={{ fontSize: 12.5, color: C.dim, marginTop: 8 }}>In Google Calendar, delete or move it there — a Google link can&rsquo;t change an event it added.</div> : null}
     </Box><After k="calendar" /></>)
   if (c.k === 'pay') return <><div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} /></div>{!c.already_paid && <After k="pay" />}</>
   const ACT_HEAD: Record<string, string> = { late: 'Ready to call · on your yes', change: 'Ready to change · on your yes', cancel: 'Ready to cancel · on your yes' }   // Sasha 226
@@ -843,12 +844,12 @@ export default function S2App() {
               add({ k: 'discover', groups: ev.groups, options: ev.options, pick: ev.pick || null, sources_url: ev.sources_url || null })
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
               ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) })
-            else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links })
+            else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links, update: ev.update })   // Sasha 312
             else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
             else if (ev.kind === 'wa_open' && typeof ev.open === 'string' && ev.open.startsWith('https://wa.me/')) add({ k: 'wa_open', to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') })   // Sasha 230
             else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })
             else if (ev.kind === 'kind_ask' && Array.isArray(ev.choices) && ev.choices.length) add({ k: 'kind_ask', ask: String(ev.ask || ''), choices: ev.choices.map(String) })   // Sasha 297
-            else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on })
+            else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on, updates: ev.calendar_updates })   // Sasha 312
             else if (ev.kind === 'notice' && ev.title) add({ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
             else if (ev.kind === 'counter_card' && ev.card) add({ k: 'counter_card', card: ev.card })   // CR 75 · fine print

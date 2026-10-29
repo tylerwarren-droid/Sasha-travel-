@@ -175,7 +175,17 @@ def _from_record(g: dict, a: Optional[dict] = None) -> dict:
             # hotel's answer to a change, in its own words (answers.change)
             **({"stay": g["stay"]} if isinstance(g.get("stay"), dict) else {}),
             **({"change_answer": _answer(g["answers"]["change"])} if isinstance((g.get("answers") or {}).get("change"), dict) else {}),
+            # Sasha 312 · WHEN the record says it was cancelled / changed (the venue's answer's own time): a calendar update's SEQUENCE
+            **({"cancelled_at": _answered_at(g, "cancel")} if _answered_at(g, "cancel") else {}),
+            **({"changed_at": _answered_at(g, "change")} if _answered_at(g, "change") else {}),
             **({"change": g["change"]} if g.get("change") else {})}
+
+
+def _answered_at(g: dict, kind: str) -> Optional[str]:
+    a = (g.get("answers") or {}).get(kind)
+    if not isinstance(a, dict) or a.get("state") not in ("confirmed", "cancelled"):
+        return None
+    return str((a.get("venue_words") or {}).get("at") or "") or None
 
 
 def _answer(c: dict) -> dict:

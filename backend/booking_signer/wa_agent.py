@@ -166,6 +166,8 @@ def _card(ev: dict, out, title: str) -> None:
     elif k == "plans":
         for it in (ev.get("items") or [])[:8]:
             lines.append(" · ".join(x for x in (str(it.get("when") or "")[:16].replace("T", " "), it.get("title"), it.get("status")) if x))
+        for u in ev.get("calendar_updates") or []:   # Sasha 312 · a cancelled / changed booking's calendar update
+            lines.append(f"{u.get('venue') or 'A booking'}: {u.get('line')} {u.get('url')}")
         lines.append("Change or cancel: just say which.")
     elif k == "my_cards":
         lines = [f"{c.get('product')} · {c.get('network') or ''}".strip(" ·") for c in (ev.get("cards") or [])[:6]]
@@ -205,6 +207,9 @@ def _capabilities(ev: dict, out) -> None:
 
 def _calendar(ev: dict, out) -> None:
     links = ev.get("links") or {}
+    if ev.get("update"):   # Sasha 312 · a booking cancelled / changed: the SAME event's update, as a file to open
+        out.text(f"{ev.get('title') or 'Your calendar update'}\n{links.get('apple')}")
+        return
     if links.get("google") or links.get("apple"):
         out.text("\n".join(x for x in (f"Google: {links.get('google')}" if links.get("google") else "",
                                        f"Apple / other (.ics): {links.get('apple')}" if links.get("apple") else "") if x))

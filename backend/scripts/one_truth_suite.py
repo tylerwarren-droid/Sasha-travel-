@@ -306,6 +306,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "AgAPI's record read back says verified; the exchange is in her conversation; the very next yes sends the held request by code; "
             "a refusal after that is said, never asked again (Sasha 311)",
             ["tests.test_s311"]),
+    "T87": ("a cancelled or changed booking updates the calendar: the SAME event (one UID per booking), a higher SEQUENCE from the record's "
+            "own time, METHOD:CANCEL (STATUS:CANCELLED) or REQUEST at the new time — only for a booking that went in their calendar, once "
+            "per version, on the surface they're told on (her answer, My plans, their WhatsApp) (Sasha 312)",
+            ["tests.test_s312"]),
 }
 
 _RUNNER = """

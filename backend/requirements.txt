@@ -21,3 +21,4 @@ playwright==1.47.0  # CR 23 · the live hand-over drives a Browserbase browser o
 pypdfium2==5.14.0  # CR 33 · a filled official form's page 1 drawn as the chat's card (products/formcard.py)
 Pillow==12.3.0  # CR 33 · the card's highlights and strip
 reportlab==5.0.1  # CR 37 · its Bitstream Vera font: the visa pack prints accents (products/relocation/three.py)
+icalendar==6.1.0  # Sasha 312 · the standard iCalendar parser the calendar update files are validated with (tests/test_s312.py)

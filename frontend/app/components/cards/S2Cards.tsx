@@ -117,7 +117,9 @@ export function stayWhen(p: Plan): string {
 }
 const PLAN_ICON: Record<string, string> = { dinner: '🍽️', venue: '🍽️', spa: '💆', flight: '✈️', hotel: '🏨', car: '🚗' }
 
-export function Plans({ items, on }: { items: Plan[]; on?: string }) {
+export type CalUpdate = { kind: 'cancel' | 'change'; line: string; url: string; venue?: string }
+
+export function Plans({ items, on, updates }: { items: Plan[]; on?: string; updates?: CalUpdate[] }) {
   return (
     <Box k={on ? `Your plans on ${/^\d{4}-\d{2}-\d{2}/.test(on) ? fmtWhen(on.slice(0, 10)) : untag(on)}` : 'Your plans'}>
       {items.length === 0 ? <div style={{ fontSize: 14.5, color: C.dim }}>Nothing coming up.</div> : items.map((p, i) => (
@@ -135,6 +137,10 @@ export function Plans({ items, on }: { items: Plan[]; on?: string }) {
             {p.map_url ? <a href={p.map_url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: C.gold }}>Map</a> : null}
           </div>
         </div>))}
+      {(updates || []).map((u, i) => (   /* Sasha 312 · a cancelled / changed booking: the SAME calendar event, removed or moved */
+        <div key={`cal${i}`} style={{ fontSize: 12.5, color: 'rgba(255,255,255,.82)', paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
+          {u.venue ? <b>{untag(u.venue)}: </b> : null}{u.line}{' '}
+          <a href={u.url} target="_blank" rel="noreferrer" style={{ color: C.gold }}>{u.kind === 'cancel' ? 'Remove it (.ics)' : 'Update it (.ics)'}</a></div>))}
     </Box>
   )
 }
@@ -302,7 +308,7 @@ export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 
 
 export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) {
   if (ev.kind === 'keep_capture') return <KeepCapture what={ev.what === 'loyalty' ? 'loyalty' : 'passport'} />
-  if (ev.kind === 'plans' && Array.isArray(ev.items)) return <Plans items={ev.items} on={ev.on} />
+  if (ev.kind === 'plans' && Array.isArray(ev.items)) return <Plans items={ev.items} on={ev.on} updates={ev.calendar_updates} />
   if (ev.kind === 'counter_card' && ev.card) return <CounterCard card={ev.card} />
   if (ev.kind === 'my_cards') return <MyCards cards={ev.cards || []} choose={send} />
   if (ev.kind === 'accident' && ev.view) return <AccidentCard view={ev.view} send={send} />

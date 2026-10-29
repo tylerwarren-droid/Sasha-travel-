@@ -161,7 +161,7 @@ async def add_to_calendar(ctx, a: dict) -> dict:
     if ev is None:
         raise ToolError("booking_unknown", "no confirmed table or flight with that id — get_status lists them")
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    text = P.ics(ev, dtstamp)
+    text = P.ics(ev, dtstamp, sequence=0)   # Sasha 312 · the first version of this booking's event (its UID: the booking's own id)
     token = ics_token(text)
     base = os.getenv("SASHA_PUBLIC_API_URL", "https://sasha-travel-production.up.railway.app").rstrip("/")
     try:   # CR 62 · in the Activity view: the event's sha256 is its proof (nothing left the account)
@@ -171,10 +171,106 @@ async def add_to_calendar(ctx, a: dict) -> dict:
                       for r in await REC.acts(ctx.account))
         if not already:
             await REC.record(ctx.account, "calendar", "done", {"reference": P.sha256(ev), "at": dtstamp, "event_sha256": P.sha256(ev),
-                                                               "booking_id": bid}, ev["title"])
+                                                               "booking_id": bid, "uid": ev["uid"], "event": ev}, ev["title"])
     except Exception as e:
         log.info("[s2] calendar activity not recorded: %s", type(e).__name__)
     return {"event": ev, "event_sha256": P.sha256(ev), "ics": text, "links": P.calendar_links(ev, f"{base}/api/agent/ics/{token}.ics")}
+
+
+async def calendar_update(account: str, ids, kind: str, changed_at: Optional[str], ev_now: Optional[dict] = None) -> Optional[dict]:
+    """Sasha 312 · a booking that went in their calendar (its "calendar" act: the event's UID) was CANCELLED or CHANGED on its record → the
+    SAME event updated: CANCEL (STATUS:CANCELLED) or REQUEST at its new time, a higher SEQUENCE (powers.sequence_of the record's own time).
+    `ids`: the booking's ids as any surface names it (act / order / basket / trip item). None: never put in a calendar, or already
+    updated for this version (its own act says so). Sasha keeps no calendar state: the event comes from the act that recorded it, the new
+    time from the booking's record (ev_now)."""
+    from agapi import s2_records as REC
+    want = {str(x) for x in ids if x}
+    try:
+        acts = await REC.acts(account)
+    except Exception as e:
+        log.info("[s2] calendar acts not read: %s", type(e).__name__)
+        return None
+    added = next((a for a in acts if a.get("kind") == "calendar" and a.get("state") == "done"
+                  and (str((a.get("proof") or {}).get("booking_id") or "") in want
+                       or str((a.get("proof") or {}).get("uid") or "").split("@")[0] in want)), None)
+    if not added or not isinstance((added.get("proof") or {}).get("event"), dict):
+        return None
+    ev0 = added["proof"]["event"]
+    seq = P.sequence_of(changed_at)
+    if any(a.get("kind") == "calendar" and (a.get("proof") or {}).get("uid") == ev0["uid"] and
+           (a.get("proof") or {}).get("sequence") == seq for a in acts):
+        return None   # this version already sent
+    dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ev = {**ev0, **({k: ev_now[k] for k in ("starts_at", "ends_at", "title", "location") if ev_now.get(k)} if ev_now else {})}
+    text = P.ics_cancel(ev, dtstamp, changed_at) if kind == "cancel" else P.ics_update(ev, dtstamp, changed_at)
+    base = os.getenv("SASHA_PUBLIC_API_URL", "https://sasha-travel-production.up.railway.app").rstrip("/")
+    url = f"{base}/api/agent/ics/{ics_token(text)}.ics"
+    try:
+        await REC.record(account, "calendar", "cancelled" if kind == "cancel" else "changed",
+                         {"reference": P.sha256({"uid": ev["uid"], "sequence": seq}), "at": dtstamp, "uid": ev["uid"], "sequence": seq,
+                          "booking_id": added["proof"].get("booking_id")}, ev["title"])
+    except Exception as e:
+        log.info("[s2] calendar update not recorded: %s", type(e).__name__)
+    return {"kind": kind, "uid": ev["uid"], "sequence": seq, "ics": text, "url": url,
+            "line": (CAL_CANCEL_LINE if kind == "cancel" else CAL_CHANGE_LINE)}
+
+
+async def flight_event_now(account: str, item_id: str) -> Optional[dict]:
+    """Sasha 312 · a booked flight's event AS DUFFEL'S ORDER HAS IT NOW (basket.live) — the same event add_to_calendar makes."""
+    from booking_signer import basket as BK
+    try:
+        r = await BK.item(account, item_id) if item_id else None
+        if not r or r.get("kind") != "flight":
+            return None
+        [r] = await BK.live([r])
+    except Exception as e:   # the basket unreadable: no new time to give — the update waits (never a wrong time)
+        log.info("[s2] flight for the calendar not read: %s", type(e).__name__)
+        return None
+    c = r.get("snapshot") or {}
+    if not c.get("departs"):
+        return None
+    tz, mins = c.get("from_tz") or "UTC", int(c.get("minutes") or 0)
+    dep = datetime.fromisoformat(str(c["departs"])).replace(tzinfo=ZoneInfo(tz))
+    arr = (dep.astimezone(timezone.utc) + timedelta(minutes=mins or 60)).isoformat()
+    fn = [x.replace(" ", "") for x in str(c.get("flights") or "").split(" + ") if x]
+    return P.event_for_flight(f"{item_id}@sasha.kanoe", c.get("owner") or "", fn or ["FLIGHT"], c.get("from") or "", c.get("to") or "",
+                              dep.isoformat(), arr, r.get("booking_reference"))
+
+
+async def calendar_updates_due(account: str) -> List[dict]:
+    """Sasha 312 · THE WHOLE CLASS for bookings whose answer comes later (a table, a stay — any route): every booking on AgAPI's record
+    that reads CANCELLED or CHANGED since it went in their calendar → its calendar update, once per version (the record's own answer
+    time is its SEQUENCE). Called where they're told: my_plans (any surface) and the WhatsApp tick (proactive)."""
+    from agapi import itinerary as IT
+    from booking_signer import venue_read as VR
+    out: List[dict] = []
+    try:
+        rows = await IT.venue_rows(account, include_cancelled=True)
+    except Exception as e:
+        log.info("[s2] calendar updates not read: %s", type(e).__name__)
+        return out
+    for r in rows:
+        if r.get("source") != "act":
+            continue
+        ids = [r.get("id"), r.get("act_id"), r.get("reference")]
+        u = None
+        if r.get("status") == "cancelled" and r.get("cancelled_at"):
+            u = await calendar_update(account, ids, "cancel", r["cancelled_at"])
+        elif (r.get("change_answer") or {}).get("state") == "confirmed" and r.get("changed_at") and r.get("date") and r.get("time"):
+            tz = (VR.COUNTRIES.get(str(r.get("country") or "ES").upper()) or (None, None, None, "Europe/Madrid"))[3]
+            st = r.get("stay") if isinstance(r.get("stay"), dict) else None
+            ev_now = (P.event_for_stay("x", r.get("venue") or "", None, _offset_iso(st["check_in"], st.get("arrival") or r["time"], tz),
+                                       int(st["nights"]), r.get("reference")) if st and st.get("check_in") and st.get("nights") else
+                      P.event_for_table("x", r.get("venue") or "", None, _offset_iso(r["date"], r["time"], tz), int(r.get("party") or 2),
+                                        r.get("reference")))
+            u = await calendar_update(account, ids, "change", r["changed_at"], ev_now)
+        if u:
+            out.append({**u, "venue": r.get("venue")})
+    return out
+
+
+CAL_CANCEL_LINE = "To take it out of your calendar, open the calendar update below."
+CAL_CHANGE_LINE = "To move it in your calendar, open the calendar update below."
 
 
 def _ics_key() -> bytes:

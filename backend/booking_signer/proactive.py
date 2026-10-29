@@ -485,6 +485,26 @@ async def _rows(account: str) -> List[dict]:
     return await IT.upcoming(account, await GW._upcoming(account, names=False))
 
 
+async def _calendar_updates(ch: dict, now: datetime) -> List[dict]:
+    """Sasha 312 · on the channel the calendar entry went by (their WhatsApp): the SAME event's update for each booking cancelled or changed
+    on its record (s2_tools.calendar_updates_due — once per version). Only inside WhatsApp's 24-hour window: outside it nothing is taken,
+    so My plans still shows it."""
+    from . import guest_whatsapp as GW
+    out: List[dict] = []
+    try:
+        st = await GW.STORE.get_state(ch["wa_id_sha256"])
+        last, frm = st.get("last_inbound_at"), st.get("last_to")
+        if not frm or not last or now - last > GW.SESSION_WINDOW or ch.get("opted_out_at"):
+            return out
+        from agapi import s2_tools as S2T
+        for u in await S2T.calendar_updates_due(ch["account_id"]):
+            got = await GW.deliver(ch, frm, GW.Out().text(f"{u.get('venue') or 'Your booking'}: {u['line']}\n{u['url']}"), last)
+            out.append({"kind": "calendar_update", "booking": u.get("uid"), "outcome": ", ".join(str(x) for x in got)[:120]})
+    except Exception as e:   # a calendar update never stops the reminders
+        log.warning("[proactive] calendar updates not sent: %s", type(e).__name__)
+    return out
+
+
 async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
     """Every message due at `now`, sent within the rules. Returns what was done (the admin trigger shows it)."""
     from . import guest_whatsapp as GW
@@ -503,6 +523,7 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
             continue
         from agapi import person_access as PA
         await PA.warm(account)   # Sasha 254 · the one record, fresh for this account's sync checks
+        done += await _calendar_updates(ch, now)   # Sasha 312 · a booking cancelled / changed since it went in their calendar
         prefs = await STORE.get_prefs(account) or {"all_off": False, "off_kinds": []}
         reminders_ok = GW.consent_at_least(ch.get("consent_wording_version") or "v0", 3) and not prefs.get("all_off")
         rows = await _rows(account)   # Sasha 141 · names are re-read only for a message sent · Sasha 300: the ONE itinerary's

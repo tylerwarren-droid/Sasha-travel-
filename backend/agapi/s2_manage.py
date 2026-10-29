@@ -88,7 +88,14 @@ def _on(items: List[dict], day: str) -> List[dict]:
     return hit
 
 
+def _cal(u: dict) -> dict:
+    """Sasha 312 · a calendar update as a surface shows it: its line and its .ics link (never the file's text to the model)."""
+    return {k: u[k] for k in ("kind", "line", "url", "uid", "venue") if u.get(k)}
+
+
 async def my_plans(ctx, a: dict) -> dict:
+    from agapi import s2_tools as S2T   # Sasha 312 · a booking cancelled / changed since it went in their calendar: its update, once
+    cal = [_cal(u) for u in await S2T.calendar_updates_due(ctx.account)]
     items = await plans_of(ctx.account)
     day = str(a.get("on") or "").strip()[:10] or None
     if day:
@@ -99,9 +106,11 @@ async def my_plans(ctx, a: dict) -> dict:
     shown = [{k: i.get(k) for k in ("kind", "title", "when", "where", "status", "status_words", "route_words", "venue_said", "reference",
                                     "id", "party", "nights", "check_in", "check_out", "change_answer", "trip", "map_url", "terms", "perks", "live") if i.get(k) is not None}   # Sasha 300 · its route, their words · 302: the fine print
              for i in items[:20]]
-    return {"items": shown, **({"on": day} if day else {}), "count": len(items),
-            "say": ("Nothing booked that day." if day else "Nothing coming up.") if not items else
-                   "Say the first one or two in a sentence; the card lists them all. Use each item's id to change or cancel it."}
+    return {"items": shown, **({"on": day} if day else {}), "count": len(items), **({"calendar_updates": cal} if cal else {}),
+            "say": (("Nothing booked that day." if day else "Nothing coming up.") if not items else
+                    "Say the first one or two in a sentence; the card lists them all. Use each item's id to change or cancel it.")
+                   + (" A booking was cancelled or changed since it went in their calendar: say its calendar update's line once (its file is "
+                      "on the card)." if cal else "")}
 
 
 # ── RUNNING LATE (a venue) ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -426,8 +435,13 @@ async def change_booking(ctx, a: dict) -> dict:
                           held["title"])
             if not done:
                 return {"flight": True, "status": got.get("status"), "say": f"It wasn't changed: {got.get('why') or got.get('provider_words') or 'the airline system said no'}"}
+            from agapi import s2_tools as S2T   # Sasha 312 · in their calendar? the SAME event, at its new time (METHOD:REQUEST)
+            ev_now = await S2T.flight_event_now(ctx.account, held.get("item_id"))   # no new time read → no update (never the old time)
+            cal = await S2T.calendar_update(ctx.account, [held.get("item_id"), got.get("order_id")], "change", got.get("confirmed_at"),
+                                            ev_now) if ev_now else None
             return {"flight": True, "status": "changed", "order_id": got.get("order_id"), "booking_reference": got.get("booking_reference"),
-                    "say": changed_words(got), "how": "Say this as it is: it is the order as Duffel has it now."}
+                    "say": changed_words(got) + (f" {cal['line']}" if cal else ""), **({"calendar_update": _cal(cal)} if cal else {}),
+                    "how": "Say this as it is: it is the order as Duffel has it now."}
         it = row if row and row.get("kind") == "flight" else (await booking_meant(ctx, a, "flight") or await _item(ctx, a, "flight"))
         if (it.get("legs") or 1) < 2:   # Sasha 305 · one flight per order (the Rio trip's out and back): the order IS the leg
             a = {k: v for k, v in a.items() if k != "leg"}
@@ -602,7 +616,10 @@ async def cancel_booking(ctx, a: dict) -> dict:
                 return {"flight": True, "status": "not_cancelled", "say": f"It wasn't cancelled: {got.get('why') or got.get('provider_words')}"}
             await BK.cancelled(ctx.account, held["id"])   # Activity shows it (the basket row), with Duffel's cancellation as proof
             await BK.event("duffel_cancel", got.get("cancellation_id") or held["quote_id"], "order.cancelled", got, verified=True, item_id=held["id"])
-            return {"flight": True, "status": "cancelled", "order_id": got.get("order_id"), "say": await cancelled_words(got),
+            from agapi import s2_tools as S2T   # Sasha 312 · in their calendar? the SAME event removed (METHOD:CANCEL)
+            cal = await S2T.calendar_update(ctx.account, [held.get("id"), got.get("order_id")], "cancel", got.get("confirmed_at"))
+            return {"flight": True, "status": "cancelled", "order_id": got.get("order_id"),
+                    "say": await cancelled_words(got) + (f" {cal['line']}" if cal else ""), **({"calendar_update": _cal(cal)} if cal else {}),
                     "how": "Say this as it is: it is Duffel's own answer and the order as it reads now."}
         await BK.cancelled(ctx.account, held["id"])
         if held.get("trip_item_id"):

@@ -23,6 +23,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import time
 import uuid
@@ -151,6 +152,9 @@ class MemoryCalendarStore:
         if account in self.links:
             self.links[account].update(kw)
 
+    async def all_links(self):
+        return [dict(r) for r in self.links.values()]
+
     async def item(self, trip_item_id):
         return dict(self.items[trip_item_id]) if trip_item_id in self.items else None
 
@@ -213,6 +217,9 @@ class PostgresCalendarStore:
             sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(cols))
             await self._run(lambda c: c.execute(f"update calendar_links set {sets} where account_id = $1", uuid.UUID(account),
                                                 *[kw[k] for k in cols]))
+
+    async def all_links(self):
+        return [self._l(r) for r in await self._run(lambda c: c.fetch("select * from calendar_links"))]
 
     async def item(self, trip_item_id):
         r = await self._run(lambda c: c.fetchrow(
@@ -346,6 +353,137 @@ async def sync_one(row: dict) -> str:
         return f"failed: {e}"
 
 
+# ── Sasha 313 · THE SYNC FOLLOWS THE BOOKING RECORD ────────────────────────────────────────────────────────────────────────
+# S-79's outbox followed the old ladder's trip_items only — never an AgAPI act or a Duffel order, so an AgAPI booking's cancel or change
+# could never reach Google Calendar (Tyler's DiverXO). Now each connected account's bookings are read from THE ONE ITINERARY (agapi/
+# itinerary.of: AgAPI's record, the Duffel orders read now, the stays) and each is created, updated or deleted in their "Sasha bookings"
+# calendar. Its Google event id is DERIVED from Sasha 312's UID (<id>@sasha.kanoe) — no mapping kept; its version rides on the event
+# itself (extendedProperties.private.sasha_v) — once per version, nothing kept by Sasha. trip_items is no longer a calendar source.
+
+SYNC_EVERY_S = 120
+CONFIRMED_WORDS = ("confirmed", "booked", "booked_by_you")
+REQUESTED_WORDS = ("asked", "calling", "no_answer", "awaiting payment", "requested")
+GONE_WORDS = ("cancelled", "declined", "failed", "stopped")
+
+
+def google_id(uid: str) -> str:
+    """Google's event id from the booking's UID (Google's alphabet is a–v and 0–9: hex is within it), stable — the same booking is always
+    the same event."""
+    return "s" + hashlib.sha256(uid.encode()).hexdigest()[:40]
+
+
+def record_action(i: dict) -> str:
+    st = str(i.get("status") or "")
+    if st in GONE_WORDS:
+        return "delete"
+    if st in CONFIRMED_WORDS:
+        return "event"
+    if st in REQUESTED_WORDS:
+        return "requested"
+    if st == "offered":
+        return "tentative"
+    return "none"   # handed over (theirs to book there), noted elsewhere: not Sasha's to put in a calendar
+
+
+def record_event(i: dict, action: str) -> Optional[dict]:
+    """The event as the booking's RECORD has it: its own time (a stay: AgAPI's check-in / check-out), its title, its status words."""
+    from booking_signer import venue_read as VR
+    when = str(i.get("when") or "")
+    if not re.match(r"\d{4}-\d{2}-\d{2}", when):
+        return None
+    name = i.get("title") or "Booking"
+    if i.get("kind") == "hotel":
+        start_d = (i.get("check_in") or when)[:10]
+        end_d = (i.get("check_out") or "")[:10] or (datetime.fromisoformat(start_d) + timedelta(days=int(i.get("nights") or 1))).date().isoformat()
+        start, end = {"date": start_d}, {"date": end_d}
+    elif len(when) >= 16:
+        tz = i.get("tz") or (VR.COUNTRIES.get(str(i.get("country") or "ES").upper()) or (None, None, None, "Europe/Madrid"))[3]
+        t0 = datetime.fromisoformat(when[:19] if len(when) >= 19 else when[:16])
+        mins = int(i.get("minutes") or (120 if i.get("kind") == "dinner" else 60))
+        start, end = ({"dateTime": t0.isoformat(), "timeZone": tz}, {"dateTime": (t0 + timedelta(minutes=mins)).isoformat(), "timeZone": tz})
+    else:
+        start, end = {"date": when[:10]}, {"date": (datetime.fromisoformat(when[:10]) + timedelta(days=1)).date().isoformat()}
+    ref = i.get("reference")
+    if action == "event":
+        title, status, desc = name, "confirmed", f"Booked by Sasha" + (f" · ref {ref}" if ref else "") + f" · {web_url()}"
+    elif action == "tentative":
+        title, status, desc = f"(proposed) {name}", "tentative", "They offered this; not booked until you say yes."
+    else:
+        title, status, desc = f"(requested) {name}", "tentative", f"Requested by Sasha — not confirmed yet. {web_url()}"
+    if str(ref or "").startswith("TEST-") or "(TEST booking" in name or "(sandbox" in name:
+        desc = "TEST booking — nothing real is reserved. " + desc
+    body = {"summary": title, "description": desc, "status": status, "transparency": "opaque", "start": start, "end": end,
+            **({"location": i["where"]} if i.get("where") and i.get("kind") != "flight" else {})}
+    return body
+
+
+def _version(body: dict) -> str:
+    return hashlib.sha256(json.dumps({k: body.get(k) for k in ("summary", "status", "start", "end", "location")}, sort_keys=True).encode()).hexdigest()[:16]
+
+
+async def sync_account(account: str, link: Optional[dict] = None) -> List[str]:
+    """Every booking on THE ONE ITINERARY of a connected account → its Google event created / updated / deleted, once per version."""
+    from .vault.crypto import UseRefused
+    from agapi import itinerary as IT
+    link = link or await STORE.get_link(account)
+    if not link:
+        return ["no calendar connected"]
+    if link.get("needs_reconnect_at"):
+        return ["kept: the connection needs reconnecting"]
+    try:
+        token = await _token(account, link, "calendar_sync")
+    except UseRefused as e:
+        if e.rule == "connection_invalid_grant":
+            await _expired(account, link)
+            return ["kept: expired (invalid_grant)"]
+        return [f"failed: {e.rule}"]
+    cal = link.get("google_calendar_id") or "primary"
+    out: List[str] = []
+    for i in await IT.of(account):
+        uid = f"{i['id']}@sasha.kanoe"
+        legacy = await STORE.get_event(i["id"]) if re.fullmatch(r"[0-9a-f-]{36}", str(i["id"])) and i.get("source") == "venue" else None
+        gid = (legacy or {}).get("google_event_id") or google_id(uid)   # an old ladder booking keeps the event S-79 made for it
+        action = record_action(i)
+        st, cur = await GOOGLE_HTTP("GET", f"{CAL}/calendars/{cal}/events/{gid}", token)
+        live = st == 200 and (cur or {}).get("status") != "cancelled"
+        try:
+            if action in ("delete", "none"):
+                if live and action == "delete":
+                    s2, _ = await GOOGLE_HTTP("DELETE", f"{CAL}/calendars/{cal}/events/{gid}", token)
+                    if s2 not in (200, 204, 404, 410):
+                        raise RuntimeError(f"delete answered HTTP {s2}")
+                    out.append(f"deleted {uid}")
+                continue
+            body = record_event(i, action)
+            if body is None:
+                continue
+            v = _version(body)
+            body = {**body, "extendedProperties": {"private": {"sasha_v": v, "sasha_uid": uid}}}
+            if live and ((cur.get("extendedProperties") or {}).get("private") or {}).get("sasha_v") == v:
+                continue   # this version is already there
+            if st == 200:   # there (or deleted earlier and coming back): the same event, this version
+                s2, j = await GOOGLE_HTTP("PATCH", f"{CAL}/calendars/{cal}/events/{gid}", token, body)
+            else:
+                s2, j = await GOOGLE_HTTP("POST", f"{CAL}/calendars/{cal}/events", token, {**body, "id": gid, "iCalUID": uid})
+            if s2 not in (200, 201):
+                raise RuntimeError(f"Google answered HTTP {s2}")
+            out.append(f"{'updated' if st == 200 else 'created'} {uid} ({action})")
+        except Exception as e:
+            out.append(f"failed {uid}: {type(e).__name__}: {e}")
+    if not any(x.startswith("failed") for x in out):
+        await STORE.set_link(account, last_ok_at=NOW())
+    return out
+
+
+async def sync_all() -> List[str]:
+    if STORE is None:
+        return []
+    out: List[str] = []
+    for link in await STORE.all_links():
+        out += [f"{str(link['account_id'])[:8]}: {x}" for x in await sync_account(link["account_id"], link)]
+    return out
+
+
 async def drain_once() -> List[str]:
     if STORE is None:
         return []
@@ -358,7 +496,7 @@ _task: Optional[asyncio.Task] = None
 async def _forever() -> None:
     while True:
         try:
-            for what in await drain_once():
+            for what in await sync_all():   # Sasha 313 · the record, never trip_items' outbox (drain_once is kept, no longer run)
                 log.info("[calendar] %s", what)
         except StorageUnavailable as e:
             log.error("[calendar] not running: %s", e.detail)
@@ -366,7 +504,7 @@ async def _forever() -> None:
             continue
         except Exception as e:
             log.error("[calendar] drain failed: %s: %s", type(e).__name__, e)
-        await asyncio.sleep(DRAIN_EVERY_S)
+        await asyncio.sleep(SYNC_EVERY_S)
 
 
 def start() -> None:

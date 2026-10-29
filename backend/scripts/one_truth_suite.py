@@ -310,6 +310,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "own time, METHOD:CANCEL (STATUS:CANCELLED) or REQUEST at the new time — only for a booking that went in their calendar, once "
             "per version, on the surface they're told on (her answer, My plans, their WhatsApp) (Sasha 312)",
             ["tests.test_s312"]),
+    "T88": ("the Google Calendar sync follows THE BOOKING RECORD (the one itinerary: AgAPI acts, Duffel orders, stays) — each booking created, "
+            "updated or deleted in the connected calendar once per version, its Google id derived from the 312 UID; trip_items is no longer "
+            "a calendar source (Sasha 313)",
+            ["tests.test_s313"]),
 }
 
 _RUNNER = """

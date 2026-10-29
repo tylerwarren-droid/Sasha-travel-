@@ -265,7 +265,7 @@ async def of(account: str) -> List[dict]:
                     "status_words": v["status_words"], "route": v["route"], "route_words": v["route_words"], "manage": v["manage"],
                     "party": v.get("party"), "id": v["id"], "source": "venue",
                     **{k: v[k] for k in ("reference", "venue_said", "map_url", "address", "platform", "url", "cancel", "change", "terms",
-                                         "change_answer") if v.get(k)},
+                                         "change_answer", "country") if v.get(k)},
                     **({k: v["stay"][k] for k in ("check_in", "check_out", "nights") if v["stay"].get(k) is not None}   # Sasha 306 · AgAPI's
                        if isinstance(v.get("stay"), dict) else {}),
                     **({"trip_id": trip["trip_id"], "trip": trip.get("title")} if trip else {})})
@@ -291,6 +291,7 @@ async def of(account: str) -> List[dict]:
                             "id": str(r["id"]), "order_id": r.get("order_id"), "trip": p.get("title"), "trip_id": p["trip_id"],
                             "source": "flight", **({"live": r["live"]} if "live" in r else {}),
                             **({"legs": len(s["legs"])} if s.get("legs") else {}),
+                            **({"tz": s["from_tz"]} if s.get("from_tz") else {}), **({"minutes": s["minutes"]} if s.get("minutes") else {}),
                             **({"status_words": f"booked — not re-read from the airline just now ({r['live_why']})"}
                                if r.get("live") is False else {})})
             elif r["kind"] == "stay":

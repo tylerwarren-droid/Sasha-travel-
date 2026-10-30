@@ -181,7 +181,9 @@ async def prepare(place: dict, person: dict, date: str, time_: str, party: int, 
         return None   # never a booking that went out by itself; never a link that isn't one
     return {"link": res["link"], "say": res.get("say"), "human_step": res.get("human_step"), "missing": res.get("missing") or [],
             "expires_at": res.get("expires_at"),
-            **({"decision": res["decision"]} if isinstance(res.get("decision"), dict) else {})}   # Sasha 284 · its ONE decision, whole
+            **({"decision": res["decision"]} if isinstance(res.get("decision"), dict) else {}),   # Sasha 284 · its ONE decision, whole
+            # Sasha 316 · CR 107's platform-link table, as AgAPI built it: the platform's own page, what it carries, the platform
+            **({"hand_over": res["hand_over"]} if isinstance(res.get("hand_over"), dict) else {})}
 
 
 def _key_of(place: dict) -> str:

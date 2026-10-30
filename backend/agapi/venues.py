@@ -1920,6 +1920,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         prep = await VT.prepare({"name": venue, "website": held.get("website"), "place_id": held.get("place_id")},
                                 {"name": f.get("Name"), "phone": f.get("Mobile"), "email": f.get("Email")},
                                 held["when"][:10], held["when"][11:16], int(held["party"]), account=ctx.account)   # CR 89 · nothing submitted
+        if prep and one_path(ctx) and (prep.get("decision") or (held.get("follow") or {}).get("decision") or {}).get("route") == "platform":
+            return await _platform_handover(ctx, held, prep, venue, where)   # Sasha 316 · ONE message, the platform's own page
         if prep:
             held = {**held, "url": prep["link"], "human_step": prep.get("human_step"), "prep_say": prep.get("say")}
         phone_fields = await _with_loyalty(ctx, held)   # Sasha 253 · G14 — the value only here, on their phone
@@ -2027,6 +2029,53 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         return {**out, "email": "sent" if s1 == 200 and (ej or {}).get("status") == "sent" else
                 f"not sent — {(ej or {}).get('say') or GW.refusal_words(ej, s1)}"}
     return await _place(ctx, held, how, venue, where)
+
+
+def _platform_page(u) -> bool:
+    return isinstance(u, str) and u.startswith("https://") and "/prepared/" not in u
+
+
+async def _platform_handover(ctx, held: dict, prep: dict, venue: str, where) -> dict:
+    """Sasha 316 · A PLATFORM HAND-OVER IS ONE MESSAGE (La Mi Venta via CoverManager, 30 Oct 07:25: a copy card, AgAPI's /prepared/ page,
+    "Done? Back to Sasha" — then the model's "Your details are filled in", and CoverManager opened empty). ONE truth: AgAPI's decision
+    (route platform) and its hand_over (CR 107's platform-link table: the platform's own page, what it carries). The message goes to his
+    phone once and IS her answer (wa_agent sends nothing after it); its "booked" is answered on the hand-over's own record."""
+    from agapi import itinerary as IT, venue_submit as VS
+    from app.agent import voice as V
+    GW = _API()
+    fw = held.get("follow") or {}
+    dec = prep.get("decision") or fw.get("decision") or {}
+    ho = prep.get("hand_over") or {}
+    fdec = fw.get("decision") or {}
+    link = next((u for u in (ho.get("link"), (fdec.get("button") or {}).get("link"), held.get("url"), (dec.get("button") or {}).get("link"))
+                 if _platform_page(u)), None) or prep["link"]   # the platform's own page; AgAPI's /prepared/ page only if none is given
+    platform = ho.get("platform") or IT.platform_name(held.get("channel_name"), dec.get("channel"), (dec.get("button") or {}).get("label")) \
+        or "their booking page"
+    fields = await _with_loyalty(ctx, held)   # Sasha 253 · G14 — a loyalty number's value only here, on their phone
+    by = {x["label"]: x["value"] for x in fields}
+    details = [by.get("Name"), by.get("Email"), by.get("Mobile")] + \
+        [f"{x['label']}: {x['value']}" for x in fields if x["label"] not in ("Day", "Time", "People", "Name", "Email", "Mobile") and x.get("value")]
+    text = V.handover_message(venue, platform, held["when"], int(held["party"]), ho.get("carried") or [], details, link)
+    sent, ch = False, None
+    try:
+        ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
+        if ch:
+            o = await GW._tell(ch, text)
+            sent = "sent" in o and "not" not in o
+    except Exception as e:
+        log.warning("[venues] the platform hand-over was not sent to the phone: %s", type(e).__name__)
+    await note_prepared(ctx.account, venue, held["when"], held["party"], link, place_id=held.get("place_id"), route="platform",
+                        platform=platform, prepared_id=prep.get("prepared_id"))   # the row "Did it go through?" and his "booked" read
+    if sent:   # his "booked" answers it, in one line (guest_whatsapp: kind "handed")
+        await GW.await_booked(ch, venue, held["when"])
+    line = text.split("\n")[0]
+    label = V.OPEN_THEIR_PAGE if fw.get("refused") else (dec.get("button") or {}).get("label") or V.OPEN_THEIR_PAGE
+    return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
+            "booked": False, "route": "platform", **({} if sent else {"open": link}),
+            "prepared": {"venue": venue, "url": link, "fields": held["fields"], "on_phone": sent, "button": label,
+                         "platform": platform},   # never "filled": the platform was given nothing (page_line says page_says)
+            **({"in_app": True} if VS.TAP.get() is not None else {}),
+            "say": line, "page_says": line}
 
 
 async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:

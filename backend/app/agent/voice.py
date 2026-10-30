@@ -987,6 +987,23 @@ def platform_line(venue: str, party: int, when: str, filled: bool, gmail: bool) 
     return f"{venue} books on their own booking page — {slot}. Tap to book there; {then}"
 
 
+# ── Sasha 316 · A PLATFORM HAND-OVER IS ONE MESSAGE (La Mi Venta, 30 Oct 07:25: a copy card + AgAPI's /prepared/ page + "Done? Back to
+# Sasha", then "Your details are filled in" — CoverManager opened empty). Said from AgAPI's decision only: the platform its hand_over
+# names, its link (CR 107's table), and the slot as "opens on" only when the link carries date, time and party; else "pick". Never "filled".
+SLOT_ROLES = ("date", "time", "party")
+
+
+def handover_message(venue: str, platform: str, when_iso: str, party: int, carried: Iterable[str], details: Sequence[str], link: str) -> str:
+    from datetime import datetime as _dt
+    d = _dt.fromisoformat(str(when_iso)[:16])
+    slot = f"{d.strftime('%a')} {d.day} {d.strftime('%b')} {d.strftime('%H:%M')} for {int(party)}"
+    roles = set(carried or ())
+    if "datetime" in roles:
+        roles |= {"date", "time"}
+    how = f"open it — it opens on {slot} — and press Book" if roles >= set(SLOT_ROLES) else f"open it, pick {slot}, and press Book"
+    paste = " · ".join(x for x in details if x)
+    return f"{venue} books on {platform} — {how}." + (f" Your details to paste: {paste}" if paste else "") + f"\n{link}"
+
 # ── Sasha 258 · THE IN-APP YES (CR 97): her words when AgAPI refuses a tap — one plain line each, never a dead end ─────────────────
 TAP_SAYS = {
     "approval_void": "Something in it changed, so here's the card again. Shall I send it?",      # + the new read-back card
@@ -1061,7 +1078,7 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
            "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "KIND_ASK_ES", "KIND_CHOICES_ES", "kind_ask",
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
-           "page_line", "platform_line", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
+           "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
            "wa_done_line", "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]

@@ -1105,7 +1105,7 @@ async def _save_keeping_their_question(key: str, st: dict, loaded) -> None:
 # Sasha 252 · G3 — Sasha's OWN questions on the one brain: the ones she pushes (no-reply / page-not-pressed offers, a Gmail find,
 # the deposit, their page sent, an invitation's area / days / cards) and the questions they lead to (the route's choice — the
 # ladder —, the call's or the page's read-back).
-SASHAS_OWN = ("no_reply_call", "mailbox", "payment", "link", "invite_where", "invite_window", "cards", "ladder", "confirm", "plan_link")
+SASHAS_OWN = ("no_reply_call", "mailbox", "payment", "link", "handed", "invite_where", "invite_window", "cards", "ladder", "confirm", "plan_link")
 _YES_NO_KINDS = ("no_reply_call", "mailbox", "payment", "ladder", "confirm", "plan_link")
 _A_QUESTION = re.compile(r"\s*(?:what|what's|whats|where|when|how|who|why|which|can|could|would|will|is|are|do|does|did|should|"
                          r"qu[eé]|d[oó]nde|cu[aá]ndo|c[oó]mo|qui[eé]n|por qu[eé])\b", re.I)
@@ -1137,7 +1137,7 @@ def answers_sashas_question(st: dict, body: str, payload: str, now) -> bool:
         return bool(RESUME.fullmatch(t) or NO.fullmatch(t))
     if kind in _YES_NO_KINDS:
         return YS.is_yes(t) or bool(_NO.match(t)) or (kind == "ladder" and bool(_ROUTE_SAID.fullmatch(t)))
-    if kind == "link":
+    if kind in ("link", "handed"):   # Sasha 316 · "handed": a platform hand-over (no link record)
         return bool(re.match(r"^\s*booked\b", t, re.I))
     from . import invitations as IV
     plain = len(t.split()) <= 5 and "?" not in t and not _A_QUESTION.match(t)   # an answer, said plainly — never a new question
@@ -2554,6 +2554,14 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return False
         out.text("Tap Yes or No — or say \"yes\". Nothing happens until you do.")
         return True
+    if kind == "handed":   # Sasha 316 · his "booked" after a platform hand-over: ONE line, on the hand-over's own record
+        st["pending"] = None
+        if not re.match(r"^\s*booked\b", body or "", re.I):
+            return False
+        from agapi import venues as VN
+        r = await VN.answer_word(ctx["account"], pend["key"], True, "chat")
+        out.text(r["say"])
+        return True
     if kind == "link":
         if re.match(r"^\s*booked\b", body, re.I):
             st["pending"] = None
@@ -3309,6 +3317,18 @@ async def tap_platform(account: Optional[str], text: str, url: str, link_id: Opt
             if MB.STORE is not None and await MB.STORE.get_link(account):
                 _spawn(MB.watch_after_link(account, link_id))
     return out
+
+
+async def await_booked(ch: dict, venue: str, when: str) -> None:
+    """Sasha 316 · a platform hand-over went to his phone: his typed "booked" now answers it (kind "handed", the way back's row key).
+    Written to the store mid-turn — the turn's own save keeps it (_save_keeping_their_question)."""
+    try:
+        st = await STORE.get_state(ch["wa_id_sha256"])
+        st["pending"] = {"kind": "handed", "at": NOW().isoformat(), "venue": venue or "",
+                         "key": "|".join((venue or "", str(when or "")[:10], str(when or "")[11:16]))}
+        await STORE.put_state(ch["wa_id_sha256"], st)
+    except Exception as e:
+        log.warning("[guest_whatsapp] the hand-over's question not kept: %s", type(e).__name__)
 
 
 async def tap_to_finish(account: Optional[str], venue: str, url: str, what: str = "") -> str:

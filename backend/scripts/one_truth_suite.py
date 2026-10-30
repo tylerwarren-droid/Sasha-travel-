@@ -322,6 +322,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "the number, or investigation language, to AD with one line and the space unchanged; travel to travel; both → one question "
             "(Sasha 315)",
             ["tests.test_s315"]),
+    "T91": ("a platform hand-over is ONE message from AgAPI's decision (route platform + CR 107's hand_over): the platform's own page, "
+            "\"opens on\" the slot only when the link carries it, never \"filled\", no way-back line and nothing after it on WhatsApp; his "
+            "\"booked\" answered in one line on its record (Sasha 316)",
+            ["tests.test_s316"]),
 }
 
 _RUNNER = """

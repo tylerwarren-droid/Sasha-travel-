@@ -202,11 +202,14 @@ class TheHoldFollows(unittest.TestCase):
     def test_a_platform_is_prepared_by_agapi_and_handed_over_in_its_words(self):
         out = self._follow("platform")
         self.assertEqual(self.calls, ["users.register", "venue.prepare_booking"])   # the call S2 never made (row 1259); 285: the person first
-        self.assertEqual(out["say"], DECISIONS["platform"]["say_text"])
+        # Sasha 316 MOVED: a platform hand-over is ONE message from AgAPI's decision — the platform's own page (venue.profile's button,
+        # never the /prepared/ page), no "Done? Back to Sasha" (tests.test_s316); was say_text + PREP + the way back
+        self.assertTrue(out["say"].startswith("Opulence Thai Spa books on Fresha — open it, pick"))
         self.assertEqual(out["prepared"]["button"], "Book on Fresha")
-        self.assertEqual(out["prepared"]["url"], PREP)
+        self.assertEqual(out["prepared"]["url"], DECISIONS["platform"]["button"]["link"])
         self.assertFalse(out["booked"])
-        self.assertTrue(self.told and self.told[-1].endswith(V.way_back(__import__("booking_signer.wa_agent", fromlist=["x"]).s2_link())))
+        self.assertEqual(len(self.told), 1)
+        self.assertNotIn("Back to Sasha", self.told[-1])
         self.assertEqual(self.mem.kinds[VN.PREPARED_KIND][-1]["venue"], "Opulence Thai Spa")   # the row "Did it go through?" reads
 
     def test_a_whatsapp_they_send_is_written_by_agapi(self):

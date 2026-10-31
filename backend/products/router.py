@@ -45,6 +45,8 @@ def _words(text: str) -> List[str]:
 
 def named(text: str, cases: Optional[List[Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
     """A case AD lists whose name is in the message (case, punctuation and Ltd/Inc/Holdings aside), or whose id starts a word of it."""
+    if any("named" in c for c in cases or []):   # Sasha 318 · CR 148: AgAPI read the message (AD's door's one reading) — that answer is final
+        return next((c for c in cases if c.get("named")), None)
     said = set(_words(text))
     for c in cases or []:
         name = [w for w in _words(c.get("name") or "") if w not in _SUFFIXES and len(w) >= 3]
@@ -79,20 +81,22 @@ def classify(text: str, history: list, now, cases: Optional[List[Dict[str, Any]]
     return "diligence" if ad else "sasha"
 
 
-async def cases_for(number: Optional[str]) -> Optional[List[Dict[str, Any]]]:
-    """AD's own list of this number's cases, through AgAPI (None: AD gave none — then nothing is guessed)."""
+async def cases_for(number: Optional[str], text: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    """AD's own list of this number's cases, through AgAPI (None: AD gave none — then nothing is guessed). Sasha 318 · with the message, AgAPI
+    also says which of them it names (AD's door's reading); cached 2 minutes per (number, message)."""
     if not number:
         return None
-    hit = _CASES.get(number)
+    key = (number, " ".join(str(text or "").lower().split()))
+    hit = _CASES.get(key)
     if hit and time.monotonic() - hit[0] < CASES_TTL_S:
         return hit[1]
     from agapi import venue_submit as VS
     try:
-        got = await VS.ad_cases(number)
+        got = await VS.ad_cases(number, text)
     except Exception as e:
         log.warning("[router] AD's case list not read: %s", type(e).__name__)
         got = None
-    _CASES[number] = (time.monotonic(), got)
+    _CASES[key] = (time.monotonic(), got)
     return got
 
 
@@ -124,7 +128,7 @@ async def decide(ch: dict, body: str, st: dict, now, sashas_question: bool) -> s
         return "diligence"                               # AD asked last ("Send me a contact…", "Yes/No"): his answer is AD's
     got = classify(body, history, now, None)
     if got == "sasha" and not tr:                        # no investigation words: does it name one of his cases? AD's list says
-        got = classify(body, history, now, await cases_for(ch.get("number_e164")))
+        got = classify(body, history, now, await cases_for(ch.get("number_e164"), body))
     if got == "diligence" and sashas_question and not investigation(body):
         got = "ask"                                      # Sasha asked something: a bare case name answering it is asked about, once
     if got == "sasha":

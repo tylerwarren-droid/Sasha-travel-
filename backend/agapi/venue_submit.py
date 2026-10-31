@@ -128,16 +128,24 @@ async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = N
 AD_CASES_OP = "messages.ad_cases"   # Sasha 315 · asked of AgAPI (CR for AgAPI): AD's door kind case_list for a verified number
 
 
-async def ad_cases(number: str) -> Optional[List[Dict[str, Any]]]:
+async def ad_cases(number: str, text: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
     """Sasha 315 · AD's own list of the cases this WhatsApp number's AD account can see (CR 139's door kind case_list, read by AgAPI, which
     keeps no copy) → [{case_id, name, status, opened_at}], or None: no list (AgAPI without the op yet, the number not linked to AD, AD
-    unreachable) — then nothing is guessed."""
-    r = await _call(None, AD_CASES_OP, {"from": str(number)[:24]})
+    unreachable) — then nothing is guessed. CR 148 · with the message (text), each case carries named: whether the message names it, by
+    AD's door's own reading (ad_door.names_in) — Sasha never matches a case name itself."""
+    r = await _call(None, AD_CASES_OP, {"from": str(number)[:24], **({"text": str(text)[:4000]} if text else {})})
     if not r.get("ok"):
         log.info("[venue_submit] AD's case list not read: %s", (r.get("error") or {}).get("code"))
         return None
-    got = (r.get("result") or {}).get("cases")
-    return [c for c in got if isinstance(c, dict) and c.get("case_id")] if isinstance(got, list) else None
+    res = r.get("result") or {}
+    got = res.get("cases")
+    if not isinstance(got, list):
+        return None
+    out = [c for c in got if isinstance(c, dict) and c.get("case_id")]
+    if isinstance(res.get("named"), list):   # CR 148 · AgAPI read the message: its answer, never a second matcher here
+        ids = set(res["named"])
+        out = [{**c, "named": c["case_id"] in ids} for c in out]
+    return out
 
 
 # ── CR 132 · AgAPI's booking record holds every route now: a hand-over is an act (venue.handed_over), and ONE list reads them all ─────

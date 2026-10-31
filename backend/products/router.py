@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-import unicodedata
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -33,29 +32,13 @@ _INVESTIGATION = re.compile(r"(?i)\b(?:investigat\w*|due[\s-]+diligence|kyc|ques
 _DD = re.compile(r"(?:\bDD\b|(?i:\bdd\s+(?:on|for|report|check)\b))")
 _CLAIMS = re.compile(r"(?i)\b(?:claims?|compensation|refunds?|money[\s-]+back|insurance|insured|eu\s*261|chargeback|lost\s+(?:luggage|bags?)|"
                      r"delayed\s+(?:flight|bag)|receipts?|subscriptions?)\b")
-_SUFFIXES = {"ltd", "limited", "inc", "incorporated", "plc", "llc", "llp", "lp", "corp", "corporation", "co", "company", "sa", "ag", "gmbh",
-             "bv", "nv", "srl", "spa", "sl", "pty", "the", "holdings", "group", "and"}
-_CASES: Dict[str, tuple] = {}   # number → (at, AD's list): this process's 2-minute read of AD's answer, never a store
-
-
-def _words(text: str) -> List[str]:
-    t = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower().replace("&", " and ")
-    return re.sub(r"[^a-z0-9\s]", " ", t).split()
+_CASES: Dict[tuple, tuple] = {}   # (number, message) → (at, AgAPI's answer): this process's 2-minute read of AD's answer, never a store
 
 
 def named(text: str, cases: Optional[List[Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
-    """A case AD lists whose name is in the message (case, punctuation and Ltd/Inc/Holdings aside), or whose id starts a word of it."""
-    if any("named" in c for c in cases or []):   # Sasha 318 · CR 148: AgAPI read the message (AD's door's one reading) — that answer is final
-        return next((c for c in cases if c.get("named")), None)
-    said = set(_words(text))
-    for c in cases or []:
-        name = [w for w in _words(c.get("name") or "") if w not in _SUFFIXES and len(w) >= 3]
-        if name and all(w in said for w in name):
-            return c
-        cid = str(c.get("case_id") or "").lower().replace("-", "")
-        if any(len(w) >= 6 and cid.startswith(w) for w in said):
-            return c
-    return None
+    """Sasha 318 · CR 148: the case the message names, AS AGAPI READ IT (messages.ad_cases {from, text} → named: AD's door's one reading,
+    ad_door.names_in). Sasha never matches a case name itself; no answer from AgAPI → no case (the message stays where it is)."""
+    return next((c for c in cases or [] if c.get("named") is True), None)
 
 
 def investigation(text: str) -> bool:

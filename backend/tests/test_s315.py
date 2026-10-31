@@ -31,6 +31,17 @@ NOW = datetime(2026, 10, 29, 16, 54, tzinfo=timezone.utc)
 PRADA = [{"case_id": "af68eb09-0000-4000-8000-000000000315", "name": "Prada", "status": "open", "opened_at": "2026-10-28T10:00:00Z"},
          {"case_id": "53fc651b-0000-4000-8000-000000000315", "name": "Lehman Brothers Holdings Inc", "status": "open",
           "opened_at": "2026-10-27T10:00:00Z"}]
+# Sasha 318 · AgAPI's answer (messages.ad_cases {from, text} → named), stood in as DATA — the message → the case_ids AD's door's reading names.
+# Sasha has no matcher of its own to test: what the router does with AgAPI's answer is what is tested here.
+AGAPI_NAMED = {"what's the status of prada?": [PRADA[0]["case_id"]], "any news on lehman brothers?": [PRADA[1]["case_id"]]}
+
+
+def agapi(cases, text):
+    """AgAPI's answer for this message, as the op returns it (each case with named)."""
+    if cases is None:
+        return None
+    ids = AGAPI_NAMED.get(" ".join(str(text or "").lower().split()), [])
+    return [{**c, "named": c["case_id"] in ids} for c in cases]
 
 
 class TheRouterReadsMeaning(TG.unittest.TestCase):
@@ -42,8 +53,9 @@ class TheRouterReadsMeaning(TG.unittest.TestCase):
         self.assertEqual(self.d("what's the status of the Prada case?", PRADA), "diligence")
 
     def test_b_a_named_case_from_ads_list_is_ads_without_the_word_case(self):
-        self.assertEqual(self.d("what's the status of Prada?", PRADA), "diligence")
-        self.assertEqual(self.d("any news on lehman brothers?", PRADA), "diligence")   # case and "Holdings Inc" aside
+        self.assertEqual(self.d("what's the status of Prada?", agapi(PRADA, "what's the status of Prada?")), "diligence")
+        self.assertEqual(self.d("any news on lehman brothers?", agapi(PRADA, "any news on lehman brothers?")), "diligence")
+        self.assertEqual(self.d("what's the status of Prada?", PRADA), "sasha")           # AgAPI didn't read it: Sasha never guesses
         self.assertEqual(self.d("what's the status of Prada?", []), "sasha")              # no such case: travel, as before
         self.assertEqual(self.d("what's the status of Prada?", None), "sasha")            # AD gave no list: nothing guessed
 
@@ -76,7 +88,7 @@ class Base(TG.Base):
         self.addCleanup(lambda: setattr(ST, "STORE", self.saved_st))
         self.answer = {"matched": True, "kept": True, "ad": "door", "replied": True}
         self.ad = mock.AsyncMock(side_effect=lambda *a, **k: dict(self.answer))
-        self.cases = mock.AsyncMock(return_value=PRADA)
+        self.cases = mock.AsyncMock(side_effect=lambda number, text=None: agapi(PRADA, text))
         for p in (mock.patch.object(VS, "whatsapp_inbound", self.ad), mock.patch.object(VS, "ad_cases", self.cases)):
             p.start()
             self.addCleanup(p.stop)

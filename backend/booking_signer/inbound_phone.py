@@ -243,7 +243,7 @@ async def sms(request: Request):
         from . import guest_whatsapp as GW
         from agapi import venue_submit as VS
         if await GW.first_time(f"agapi-in:{sid}"):
-            if (await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender))).get("matched"):
+            if (await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p)).get("matched"):
                 await GW.first_time(f"agapi-took:{sid}")
                 return _twiml()
         elif await GW.seen(f"agapi-took:{sid}"):

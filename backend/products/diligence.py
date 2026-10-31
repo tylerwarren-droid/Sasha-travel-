@@ -273,7 +273,7 @@ async def hand_over(ctx: dict, t: str, media: list) -> bool:
     from agapi import venue_submit as VS
     r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence",
                                   media=[{"url": m["url"], "type": m.get("type") or ""} for m in media],   # CR 136 · relayed onto the case
-                                  replied_to=ctx.get("replied_to"))
+                                  replied_to=ctx.get("replied_to"), twilio=ctx.get("twilio"))
     if r.get("ad") == "closed":
         out.text(CLOSED)                           # AgAPI never writes to a number outside the beta: said here
     elif not r.get("ad"):

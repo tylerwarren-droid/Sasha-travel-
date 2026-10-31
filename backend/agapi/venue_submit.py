@@ -87,8 +87,21 @@ async def end_user(account: str, on: Optional[str] = None, via: Optional[Callabl
     return None
 
 
+def button_of(twilio: Optional[dict]) -> Optional[Dict[str, Any]]:
+    """Sasha 318 · CR 147 · a tapped WhatsApp button as Twilio delivered it → AgAPI's button {payload, permanent}: ButtonPayload (a
+    call-permission answer is ACCEPTED / REJECTED) and CallPermissionIsPermanent ("true" / "false"). None when no button was tapped.
+    The ONE place Twilio's button fields are read for AgAPI — every inbound goes through whatsapp_inbound, below."""
+    p = twilio or {}
+    payload = str(p.get("ButtonPayload") or "").strip()
+    if not payload:
+        return None
+    perm = str(p.get("CallPermissionIsPermanent") or "").strip().lower()
+    return {"payload": payload[:200], **({"permanent": perm == "true"} if perm in ("true", "false") else {})}
+
+
 async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = None, guest: bool = False,
-                           space: Optional[str] = None, media: Optional[list] = None, replied_to: Optional[str] = None) -> Dict[str, Any]:
+                           space: Optional[str] = None, media: Optional[list] = None, replied_to: Optional[str] = None,
+                           twilio: Optional[dict] = None) -> Dict[str, Any]:
     """Sasha 285 · CR 118 (b) · a WhatsApp that reached Kanoe's number from someone who is NOT a guest talking to Sasha → AgAPI's ONE
     inbound op (messages.whatsapp_inbound), exactly as it arrived: from a number Kanoe wrote to, AgAPI keeps it, records a STOP and
     files a venue's answer on ITS booking record → {"matched": True}. Anyone else → {"matched": False}: Sasha's own paths, as before.
@@ -101,7 +114,9 @@ async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = N
                                                         # the message it replies to
                                                         **({"media": [{"url": str(m["url"])[:2000], "type": str(m.get("type") or "")[:120]}
                                                                       for m in media[:10]]} if space and media else {}),
-                                                        **({"replied_to": str(replied_to)[:80]} if space and replied_to else {})})
+                                                        **({"replied_to": str(replied_to)[:80]} if space and replied_to else {}),
+                                                        # Sasha 318 · CR 147 · a tapped button ("Allow" on a call request): as Twilio gave it
+                                                        **({"button": b} if (b := button_of(twilio)) else {})})
     if not r.get("ok"):
         log.warning("[venue_submit] whatsapp_inbound not handed over: %s", (r.get("error") or {}).get("code"))
         return {"matched": False, "why": (r.get("error") or {}).get("code") or "unavailable"}

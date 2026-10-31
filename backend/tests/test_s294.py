@@ -25,7 +25,7 @@ class EveryWhatsAppGoesToAgAPIFirst(unittest.TestCase):
         p = {"From": f"whatsapp:{TYLER}", "To": "whatsapp:+447700900000", "Body": body, "MessageSid": sid}
         handed, guest_flow = [], []
 
-        async def inbound(s, t, message_id=None, guest=False):
+        async def inbound(s, t, message_id=None, guest=False, twilio=None):   # Sasha 318 · Twilio's fields go to the one mapper
             handed.append({"from": s, "text": t, "message_id": message_id, "guest": guest})
             return {"matched": matched}
 

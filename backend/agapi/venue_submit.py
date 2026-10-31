@@ -539,6 +539,8 @@ async def cancel_read_back(account: str, act_id: str) -> Dict[str, Any]:
     if r.get("ok") and str(res.get("status") or "") in ("not_allowed", "refused"):
         return {"ok": False, "error": {"code": "not_allowed", "message": res.get("say") or "that booking is cancelled on their own page",
                                        "details": {"link": res.get("link") or res.get("takeover") or res.get("prepared_link")}}}
+    if r.get("ok") and str(res.get("status") or "") == "already_cancelled":   # Sasha 317 · found by the proof: asked again → AgAPI's own line
+        return {"ok": False, "error": {"code": "already_cancelled", "message": res.get("say") or "I already asked them to cancel it."}}
     if e.get("code") != "approval_required":
         return {"ok": False, "error": _err(r)} if not r.get("ok") else \
             {"ok": False, "error": {"code": "sent_without_yes", "message": "the service didn't ask for their yes"}}

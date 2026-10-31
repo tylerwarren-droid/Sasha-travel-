@@ -109,6 +109,8 @@ class ATylersCancel(Base):
         self.assertTrue(VN.names_venue("cancel DiverXO", "DiverXO"))
         self.assertFalse(VN.names_venue("cancel the taberna", "Taberna Las Sobrinas"))          # its kind alone names no place
         self.assertFalse(VN.names_venue("cancel sobrinasx", "Taberna Las Sobrinas"))
+        self.assertTrue(VN.names_venue("cancel my correo booking", "Taverna Correo (sandbox)"))   # the proof's find: "taverna" is a kind too
+        self.assertFalse(VN.names_venue("cancel my taverna booking", "Taverna Correo (sandbox)"))
 
 
 class BEveryRouteOneRule(Base):
@@ -166,6 +168,16 @@ class BEveryRouteOneRule(Base):
         src = inspect.getsource(VN) + inspect.getsource(M)
         self.assertNotIn("_cancel_named", src)                                                    # 314's per-cancel copy is gone
         self.assertEqual(src.count("await one_instruction(") + src.count("await VN.one_instruction("), 4)   # act + reservation, cancel + notice
+
+
+class DAskedAgain(Base):
+    def test_a_cancel_already_sent_is_said_never_an_error(self):   # found by the sandbox proof (31 Oct): it raised "didn't ask for their yes"
+        async def call(op, body, approval=None, account=None):
+            return {"ok": True, "result": {"status": "already_cancelled", "say": "I already asked Taverna Correo to cancel it."}}
+        with mock.patch.object(VS, "CALL", call), mock.patch.object(VS, "end_user", mock.AsyncMock(return_value="eu")), \
+                mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=[dict(LS)])):
+            out = run(VN._cancel_act(ctx("Cancel my Las Sobrinas booking"), {"act_id": "act_LS"}, None, "x", lambda s: True))
+        self.assertEqual((out["status"], out["line"]), ("already_sent", "I already asked Taverna Correo to cancel it."))
 
 
 class COtherChannelsStillAsk(Base):

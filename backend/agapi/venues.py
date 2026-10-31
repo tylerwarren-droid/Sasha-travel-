@@ -2450,6 +2450,8 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
     rb = await VS.cancel_read_back(ctx.account, a["act_id"])
     if not rb.get("ok"):
         e = rb["error"]
+        if e["code"] == "already_cancelled":   # Sasha 317 · the same cancel asked again: AgAPI's own words, nothing sent twice
+            return {"status": "already_sent", "line": e["message"], "how": "Say `line` word for word — nothing else."}
         if e["code"] == "not_allowed":
             link = (e.get("details") or {}).get("link")
             return {"status": "not_cancelled", "say": e["message"], **({"open": link, "page_url": link} if link else {})}
@@ -2477,7 +2479,8 @@ ACTION_WORDS = {
 # 31 Oct: "Cancel my Las Sobrinas booking" asked again — the whole name was required, so only "DiverXO"-style names ever matched)
 _CATEGORY = {"taberna", "restaurante", "restaurant", "bar", "cafe", "café", "cafeteria", "cafetería", "hotel", "hostal", "meson", "mesón",
              "bistro", "bistrot", "tasca", "cerveceria", "cervecería", "marisqueria", "marisquería", "asador", "pizzeria", "trattoria",
-             "brasserie", "spa", "club", "bodega", "casa de comidas", "gastrobar", "the"}
+             "brasserie", "spa", "club", "bodega", "casa de comidas", "gastrobar", "the", "taverna", "tavern", "osteria", "ristorante",
+             "cantina", "pub", "inn", "grill", "steakhouse", "chiringuito", "bistró", "restaurant & bar"}
 
 
 def names_venue(words: str, venue: str) -> bool:

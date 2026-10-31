@@ -2,7 +2,7 @@
 sandbox (31 Oct 11:05): AgAPI's messages.ad_cases returned the case, AD's real name for it — "PRADA RETAIL UK LIMITED" — and Sasha's own
 named() needed every word of that name ("retail" too), so the message stayed in travel. Root test: (1) ONE reading of which case a message
 names — AD's door's (AgAPI ad_door.names_in), asked with the message (messages.ad_cases {from, text} → named); (2) Sasha never matches a
-case name itself when AgAPI has read the message (its word match is only the fallback for an AgAPI without the reading); (3) the whole class:
+case name itself (no fallback: no answer from AgAPI = no case, the message stays in travel); (3) the whole class:
 every routing question about AD's cases reads that one answer."""
 import unittest
 
@@ -25,10 +25,21 @@ class AgapiReadsTheMessage(T.Base):
         self.say("Lehman Brothers Holdings Inc")
         self.assertEqual(self.sent_to_ad(), [])
 
-    def test_c_an_agapi_without_the_reading_keeps_the_old_word_match(self):
-        self.cases.side_effect = lambda number, text=None: list(T.PRADA)
+    def test_c_no_reading_from_agapi_is_no_case_the_message_stays_in_travel(self):
+        self.cases.side_effect = lambda number, text=None: list(T.PRADA)                      # a list, but no named: nothing is guessed
         self.say("what's the status of Prada?")
-        self.assertEqual([t for t, _, _ in self.sent_to_ad()], ["what's the status of Prada?"])
+        self.assertEqual(self.sent_to_ad(), [])
+        self.assertEqual(self.brain_saw, ["what's the status of Prada?"])
+        self.cases.side_effect = lambda number, text=None: None                              # AgAPI didn't answer
+        self.say("any news on prada")
+        self.assertEqual(self.sent_to_ad(), [])
+
+    def test_e_sasha_has_no_name_matcher_of_its_own(self):
+        import inspect
+        src = inspect.getsource(RT)
+        self.assertNotIn("_SUFFIXES", src)
+        self.assertNotIn("def _words", src)
+        self.assertIn('c.get("named") is True', inspect.getsource(RT.named))
 
     def test_d_the_cache_is_per_message(self):
         n = []

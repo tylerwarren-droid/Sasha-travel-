@@ -141,24 +141,7 @@ async def _notice(ctx, a: dict, kind: str, tool: str) -> dict:
         return await _act_notice_go(ctx, held, said, kind)
     if held and said and _yes(said, ok=True):   # anything but their yes is a NEW read-back below (nothing is sent)
         await claim(ctx)
-        _HELD.pop(ctx.account, None)
-        s, j = await GW.api(ctx.account, "POST", f"/api/booking/reservations/{held['tid']}/notice",
-                            {"kind": kind, **held["args"], "read_back_sha256": held["notice_sha"], "approval": {"how": "voice", "said": said}}, timeout=60)
-        if s != 200:
-            raise _err((j or {}).get("rule") or "not_sent", GW.refusal_words(j or {}, s))
-        what = "venue_late" if kind == "late" else "booking_change"
-        if j.get("status") == "call_prepared":
-            s2, j2 = await GW.api(ctx.account, "POST", f"/api/booking/calls/{j['call_id']}/place",
-                                  {"read_back_sha256": j["call_read_back_sha256"], "approval": {"how": "voice", "said": said}}, timeout=60)
-            ok = s2 == 200 and (j2 or {}).get("status") in ("placed", "uncertain", "scheduled")
-            await _record(ctx.account, what, "requested" if ok else "failed", {"reference": j["call_id"], "said": said,
-                                                                               "read_back_sha256": "sha256:" + held["sha"]}, held["venue"])
-            return {"status": "calling" if ok else "not_placed", "venue": held["venue"],
-                    "say": (f"Calling {held['venue']} now — I'll tell you here exactly what they say." if ok else
-                            f"I couldn't place the call: {(j2 or {}).get('why') or GW.refusal_words(j2 or {}, s2)}")}
-        await _record(ctx.account, what, "requested" if j.get("status") == "requested" else "failed",
-                      {"reference": j.get("email_id") or held["tid"], "said": said, "read_back_sha256": "sha256:" + held["sha"]}, held["venue"])
-        return {"status": j.get("status"), "venue": held["venue"], "say": j.get("say")}
+        return await _reservation_notice_go(ctx, held, said, kind)
     b = await _venue_target(ctx, a)
     from agapi import itinerary as IT
     if b["source"] == "handover":   # Sasha 300 · handed over (their page / his own WhatsApp): his, there, by that route — nothing sent
@@ -177,8 +160,38 @@ async def _notice(ctx, a: dict, kind: str, tool: str) -> dict:
         return {"status": "not_possible", "venue": b["venue"], "say": " ".join(lines)}
     _hold(ctx, tool, lines, tid=b["trip_item_id"], args={k: str(v) for k, v in args.items() if v}, notice_sha=j["read_back"]["sha256"],
           venue=b["venue"])
+    if await VN.one_instruction(ctx, b["venue"], kind, rows=await VN.venue_bookings(ctx.account)):
+        # Sasha 317 · THE ONE RULE on this route too: his complete instruction naming exactly one booking IS the yes — sent once, now
+        if not await VN.claim_words(ctx, f"{kind}|{b['trip_item_id']}|{sorted(args.items())}"):
+            _HELD.pop(ctx.account, None)
+            return {"status": "already_sent", "venue": b["venue"], "say": f"I've already sent that to {b['venue']}."}
+        return await _reservation_notice_go(ctx, _HELD[ctx.account], str(getattr(ctx, "user_said", "") or ""), kind)
     return {"status": "awaiting_yes", "venue": b["venue"], "route": j["route"], "read_back": lines,
             "say": "Read this back in a sentence or two (its first line as it is) and ask: OK? Act only on their yes in their next turn."}
+
+
+async def _reservation_notice_go(ctx, held: dict, said: str, kind: str) -> dict:
+    """A change or "running late" for a reservation (the booking_signer route), sent — on his yes, or (Sasha 317) on his instruction."""
+    from agapi import venues as VN
+    GW = VN._API()
+    _HELD.pop(ctx.account, None)
+    s, j = await GW.api(ctx.account, "POST", f"/api/booking/reservations/{held['tid']}/notice",
+                        {"kind": kind, **held["args"], "read_back_sha256": held["notice_sha"], "approval": {"how": "voice", "said": said}}, timeout=60)
+    if s != 200:
+        raise _err((j or {}).get("rule") or "not_sent", GW.refusal_words(j or {}, s))
+    what = "venue_late" if kind == "late" else "booking_change"
+    if j.get("status") == "call_prepared":
+        s2, j2 = await GW.api(ctx.account, "POST", f"/api/booking/calls/{j['call_id']}/place",
+                              {"read_back_sha256": j["call_read_back_sha256"], "approval": {"how": "voice", "said": said}}, timeout=60)
+        ok = s2 == 200 and (j2 or {}).get("status") in ("placed", "uncertain", "scheduled")
+        await _record(ctx.account, what, "requested" if ok else "failed", {"reference": j["call_id"], "said": said,
+                                                                           "read_back_sha256": "sha256:" + held["sha"]}, held["venue"])
+        return {"status": "calling" if ok else "not_placed", "venue": held["venue"],
+                "say": (f"Calling {held['venue']} now — I'll tell you here exactly what they say." if ok else
+                        f"I couldn't place the call: {(j2 or {}).get('why') or GW.refusal_words(j2 or {}, s2)}")}
+    await _record(ctx.account, what, "requested" if j.get("status") == "requested" else "failed",
+                  {"reference": j.get("email_id") or held["tid"], "said": said, "read_back_sha256": "sha256:" + held["sha"]}, held["venue"])
+    return {"status": j.get("status"), "venue": held["venue"], "say": j.get("say")}
 
 
 async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
@@ -220,6 +233,14 @@ async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
     st = b.get("stay") if isinstance(b.get("stay"), dict) else None
     _hold(ctx, tool, rb["lines"], act_id=b["act_id"], read_back_id=rb["read_back_id"], read_back_sha256=rb.get("read_back_sha256"),
           end_user=rb.get("end_user"), venue=b["venue"], kind=kind, route=b["route"], ask=args, stay=bool(st))   # Sasha 302: his yes sends it
+    from agapi import venues as VN
+    if await VN.one_instruction(ctx, b["venue"], kind):
+        # Sasha 317 · THE ONE RULE (314's, for cancel): "move my Las Sobrinas booking to 22:00" / "I'm running 20 minutes late to Las
+        # Sobrinas", naming exactly one booking, from the app or his verified WhatsApp, IS the approval — never "OK?" again
+        if not await VN.claim_words(ctx, f"{kind}|{b['act_id']}|{sorted(args.items())}"):
+            _HELD.pop(ctx.account, None)
+            return {"status": "already_sent", "venue": b["venue"], "say": f"I've already sent that to {b['venue']}."}
+        return await _act_notice_go(ctx, _HELD[ctx.account], str(getattr(ctx, "user_said", "") or ""), kind)
     return {"status": "awaiting_yes", "venue": b["venue"], "route": b["route"], "read_back": rb["lines"],
             # Sasha 306 · a stay's read-back is said by code (voice.flight_line): the stay as AgAPI's record has it, then AgAPI's own
             # read-back (the new nights and check-out are its words) — old vs new, nothing computed here

@@ -2390,21 +2390,34 @@ async def cancel_venue(ctx, a: dict) -> dict:
         if not explicit_yes(said):
             raise _err("no_explicit_yes", "cancelling needs their explicit yes — ask them")
         await claim(ctx)
-        _CANCEL.pop(ctx.account, None)
-        status, j = await GW.api(ctx.account, "POST", f"/api/booking/reservations/{held['id']}/cancel",
-                                 {"read_back_sha256": held["sha"], "approval": {"how": "voice", "said": said}}, timeout=120)
-        if status != 200:
-            raise _err("not_cancelled", GW.refusal_words(j, status))
-        if j.get("status") in ("requested", "not_confirmed"):   # Sasha 253 · G2 — "cancelled" pushed to WhatsApp on their words
-            await _push_later(ctx.account, trip_item_id=held["id"], venue=GW.plain_venue(held["venue"]))
-        return {"status": j.get("status"), "say": j.get("say"), "venue": held["venue"]}
+        return await _cancel_reservation(ctx, held, said)
     if not tid:
         raise _err("booking_unknown", "which booking? get_status lists them")
     status, j = await GW.api(ctx.account, "GET", f"/api/booking/reservations/{tid}/cancel")
     if status != 200:
         raise _err((j or {}).get("rule") or "booking_unknown", GW.refusal_words(j, status))
     _CANCEL[ctx.account] = {"id": tid, "sha": j["read_back"]["sha256"], "at": datetime.now(timezone.utc), "venue": j.get("venue")}
+    if await one_instruction(ctx, GW.plain_venue(j.get("venue")) or "", "cancel", rows=await venue_bookings(ctx.account)):
+        # Sasha 317 · the same rule on this route: his "cancel my <venue> booking" naming exactly one IS the yes — sent once, now
+        if not await claim_words(ctx, f"cancel|{tid}"):
+            _CANCEL.pop(ctx.account, None)
+            return {"status": "already_sent", "venue": GW.plain_venue(j.get("venue")),
+                    "line": f"I've already asked {GW.plain_venue(j.get('venue'))} to cancel it.", "how": "Say `line` word for word — nothing else."}
+        return await _cancel_reservation(ctx, _CANCEL[ctx.account], str(getattr(ctx, "user_said", "") or said))
     return {"status": "awaiting_yes", "venue": GW.plain_venue(j.get("venue")), "route": j.get("route"), "read_back": j["read_back"]["lines"]}
+
+
+async def _cancel_reservation(ctx, held: dict, said: str) -> dict:
+    """The cancellation of a reservation (the booking_signer route) — sent on his yes, or (Sasha 317) on his instruction that was it."""
+    GW = _API()
+    _CANCEL.pop(ctx.account, None)
+    status, j = await GW.api(ctx.account, "POST", f"/api/booking/reservations/{held['id']}/cancel",
+                             {"read_back_sha256": held["sha"], "approval": {"how": "voice", "said": said}}, timeout=120)
+    if status != 200:
+        raise _err("not_cancelled", GW.refusal_words(j, status))
+    if j.get("status") in ("requested", "not_confirmed"):   # Sasha 253 · G2 — "cancelled" pushed to WhatsApp on their words
+        await _push_later(ctx.account, trip_item_id=held["id"], venue=GW.plain_venue(held["venue"]))
+    return {"status": j.get("status"), "say": j.get("say"), "venue": held["venue"]}
 
 
 async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_yes) -> dict:
@@ -2446,45 +2459,78 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
     row = next((b for b in await VS.bookings(ctx.account) if b.get("act_id") == a["act_id"]), {})
     _CANCEL[ctx.account] = {**rb, "at": datetime.now(timezone.utc), "venue": venue, "date": row.get("date"), "time": row.get("time"),
                             "party": row.get("party"), "sha": _hl.sha256("\n".join(str(x) for x in rb["lines"]).encode()).hexdigest()}
-    if (VS.TAP.get() is not None or VS.WA.get() is not None) and await _cancel_named(ctx, venue):
-        # Sasha 314 · "cancel my DiverXO booking", exactly one booking, from the app or their verified WhatsApp: that message IS the approval
+    if await one_instruction(ctx, venue, "cancel"):
+        # Sasha 314 / 317 · "cancel my DiverXO booking", exactly one booking, from the app or their verified WhatsApp: that message IS the approval
         return await _cancel_now(ctx, _CANCEL[ctx.account], said)
     return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"]}
 
 
 _CANCEL_WORDS = re.compile(r"\b(?:cancel|cancela|cancelar|anula|anular|annule|annuler)\b", re.I)
+# Sasha 317 · the verb of each manage action — the action his words ask for (the venue is found by name, below)
+ACTION_WORDS = {
+    "cancel": _CANCEL_WORDS,
+    "change": re.compile(r"\b(?:change|move|switch|reschedule|push|bring\s+(?:it\s+)?forward|make\s+it|cambia(?:r)?|mueve|mover|"
+                         r"modifica(?:r)?|d[ée]place[rz]?|change[rz]?)\b", re.I),
+    "late": re.compile(r"\b(?:late|running\s+behind|delayed|held\s+up|retras\w*|tarde|en\s+retard)\b", re.I),
+}
+# Sasha 317 · words that say what KIND of place it is, not which one: "Taberna Las Sobrinas" is named by "Las Sobrinas" (found live,
+# 31 Oct: "Cancel my Las Sobrinas booking" asked again — the whole name was required, so only "DiverXO"-style names ever matched)
+_CATEGORY = {"taberna", "restaurante", "restaurant", "bar", "cafe", "café", "cafeteria", "cafetería", "hotel", "hostal", "meson", "mesón",
+             "bistro", "bistrot", "tasca", "cerveceria", "cervecería", "marisqueria", "marisquería", "asador", "pizzeria", "trattoria",
+             "brasserie", "spa", "club", "bodega", "casa de comidas", "gastrobar", "the"}
 
 
-async def _cancel_named(ctx, venue: str) -> bool:
-    """Sasha 314 · their OWN words cancel exactly one booking: a cancel verb and that venue's name, and only ONE active booking of theirs
-    there — then nothing was inferred, and the message is the approval."""
+def names_venue(words: str, venue: str) -> bool:
+    """Sasha 317 · his words NAME this venue: its whole name, or its name without the words for its kind ("Las Sobrinas" for "Taberna
+    Las Sobrinas") — whole words, at least four letters. Nothing fuzzy: a misspelling is a read-back, never a guess."""
+    said, full = f" {_base(words)} ", _base(venue)
+    core = _base(" ".join(t for t in full.split() if t not in _CATEGORY))
+    return bool(full) and (f" {full} " in said or (len(core) >= 4 and f" {core} " in said))
+
+
+async def one_instruction(ctx, venue: str, kind: str, rows: Optional[List[dict]] = None) -> bool:
+    """Sasha 314 · 317 · THE ONE RULE for every manage action (cancel, change, late) on every route: his OWN words — the action's verb and a
+    name that names exactly ONE active booking of his, this one — from the app or his verified WhatsApp, ARE the approval. Nothing was
+    inferred, so nothing is asked again. Anything less (two bookings there, no name, no verb, another channel) is a read-back."""
     from agapi import venue_submit as VS
-    said = str(getattr(ctx, "user_said", "") or "")
-    if not _CANCEL_WORDS.search(said) or not venue or _base(venue) not in _base(said):
+    if VS.TAP.get() is None and VS.WA.get() is None:
         return False
-    live = [b for b in await VS.bookings(ctx.account) if _base(b.get("venue") or "") == _base(venue)
-            and b.get("status") not in ("cancelled", "declined", "failed")]
-    return len(live) == 1
+    said = str(getattr(ctx, "user_said", "") or "")
+    if not ACTION_WORDS[kind].search(said) or not venue or not names_venue(said, venue):
+        return False
+    if rows is None:
+        rows = await VS.bookings(ctx.account)
+    live = [b for b in rows if b.get("status") not in ("cancelled", "declined", "failed") and names_venue(said, b.get("venue") or "")]
+    return len({_base(b.get("venue") or "") for b in live}) == 1 and len(live) == 1 and _base(live[0].get("venue") or "") == _base(venue)
+
+
+async def claim_words(ctx, booking: str) -> bool:
+    """Sasha 314 · 317 · his instruction is sent ONCE: a durable claim on these words for this booking (a retried turn sends nothing).
+    False → already sent."""
+    import hashlib as _h
+    from agapi.v0 import ToolError, claim
+    words = str(getattr(ctx, "user_said", "") or "")
+    key = "manage_words:" + _h.sha256(f"{ctx.account}|{booking}|{words.strip().casefold()}".encode()).hexdigest()
+    was = (ctx.idem, getattr(ctx, "act_name", None))
+    ctx.idem, ctx.act_name = key, None
+    try:
+        await claim(ctx)
+        return True
+    except ToolError:
+        return False
+    finally:
+        ctx.idem, ctx.act_name = was
 
 
 async def _cancel_now(ctx, held: dict, said: str) -> dict:
     """Sasha 314 · their instruction was the yes: the cancellation sent ONCE (a durable claim on these words for this booking), from
     their verified WhatsApp / the app — the same send as a tap (venue_submit.cancel_submit)."""
-    import hashlib as _h
-    from agapi.v0 import ToolError, claim
     from agapi import venue_submit as VS
     words = str(getattr(ctx, "user_said", "") or "")
-    key = "cancel_words:" + _h.sha256(f"{ctx.account}|{held.get('act_id')}|{words.strip().casefold()}".encode()).hexdigest()
-    was = (ctx.idem, getattr(ctx, "act_name", None))
-    ctx.idem, ctx.act_name = key, None
-    try:
-        await claim(ctx)
-    except ToolError:
+    if not await claim_words(ctx, f"cancel|{held.get('act_id')}"):
         _CANCEL.pop(ctx.account, None)
         return {"status": "already_sent", "venue": held.get("venue"), "line": f"I've already asked {held.get('venue')} to cancel it.",
                 "how": "Say `line` word for word — nothing else."}
-    finally:
-        ctx.idem, ctx.act_name = was
     r = await VS.cancel_submit(ctx.account, held, words)
     if not r.get("ok"):
         raise _err(r["error"]["code"], r["error"]["message"])

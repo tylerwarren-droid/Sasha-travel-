@@ -5,8 +5,8 @@
   place(...)    their yes → venue.submit_booking (the WhatsApp reply / the app tap is the approval, as every act's) → AgAPI's call_plan →
                 Sasha dials ONLY that plan (agapi.venue_calls.dial; simulated on the sandbox). AgAPI's rules decide when (R10, opening
                 hours) and its words are what is said.
-No venues key on this server, or a clinic AgAPI can't put on a booking record (it needs the clinic's own website, its listing or a
-booking link — a phone number alone isn't one yet, asked of AgAPI) → nothing is prepared or dialled: Tyler takes it (agapi.venues.TO_TYLER)."""
+CR 149 · a clinic known only by its phone is a venue AgAPI records (proved on agapi-sandbox, 1 Nov). No venues key on this server, or a
+clinic AgAPI still can't record → nothing is prepared or dialled: Tyler takes it (agapi.venues.TO_TYLER)."""
 from __future__ import annotations
 
 import logging

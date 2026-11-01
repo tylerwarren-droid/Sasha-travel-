@@ -168,7 +168,9 @@ async def no_act(account: Optional[str], tool: str, why: str, out: Any = None, a
     a = args or {}
     venue = str(o.get("venue") or a.get("name") or a.get("venue") or "unknown")[:120]
     kind = {"cancel_venue": "cancel", "cancel_booking": "cancel", "change_booking": "change", "running_late": "change"}.get(tool, "booking")
-    body = {"ref": f"sasha:noact:{secrets.token_hex(8)}", "venue": venue, "rung": "human_tap", "channel": "handover", "state": "failed",
+    # Sasha 324 (2) · AgAPI's ledger takes ONLY its own channels (outcomes.CHANNELS) — "handover" was refused (invalid_input, the gate's log):
+    # an attempt that ended before an act is a human hand-over: page_handover, the reason saying whose
+    body = {"ref": f"sasha:noact:{secrets.token_hex(8)}", "venue": venue, "rung": "human_tap", "channel": "page_handover", "state": "failed",
             "failure_reason": f"{why} ({kind})"[:300],
             **({"sector": str(a.get("what") or a.get("category") or "")[:40]} if (a.get("what") or a.get("category")) else {}),
             **({"city": str(a.get("city"))[:80]} if a.get("city") else {})}

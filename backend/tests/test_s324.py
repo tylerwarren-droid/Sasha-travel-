@@ -52,7 +52,10 @@ class OneLedgerNeverTwice(unittest.TestCase):
             body.update(b, op=op)
         with mock.patch.object(OC, "_send", send):
             asyncio.run(OC.no_act("acct", "cancel_venue", "handed to Tyler", {"venue": "Botín"}, {"what": "restaurant"}))
-        self.assertEqual((body["op"], body["state"], body["channel"], body["venue"]), ("outcomes.record", "failed", "handover", "Botín"))
+        self.assertEqual((body["op"], body["state"], body["channel"], body["venue"]), ("outcomes.record", "failed", "page_handover", "Botín"))
+        # AgAPI's own lists (agapi_service/outcomes.py RUNGS / CHANNELS, v1.52.0): anything else is refused as invalid_input
+        self.assertIn(body["channel"], ("api", "web_form", "page_handover", "whatsapp", "instagram", "email", "phone", "sms"))
+        self.assertIn(body["rung"], ("api", "zero_touch", "human_tap", "request_reply", "phone"))
         self.assertEqual(body["failure_reason"], "handed to Tyler (cancel)")
 
     def test_the_one_choke_point(self):
@@ -98,7 +101,7 @@ class TheWeek(unittest.TestCase):
     def test_where_it_is_read(self):
         self.assertIn('@router.get("/outcomes/week")', (ROOT / "backend/booking_signer/routes.py").read_text())
         self.assertIn('"booking_outcomes"', (ROOT / "backend/app/agent/s2.py").read_text())
-        self.assertIn('log.info("[outcomes] week: %s"', (ROOT / "backend/agapi/measure.py").read_text())
+        self.assertIn('log.warning("[outcomes] week: %s"', (ROOT / "backend/agapi/measure.py").read_text())
 
 
 class NoAnswerYetOnce(unittest.TestCase):

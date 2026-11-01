@@ -721,7 +721,7 @@ async def daily_forever() -> None:
             said_on = today
             try:
                 from agapi import outcomes_week as OW
-                log.info("[outcomes] week: %s", (await OW.week(7)).get("say"))
+                log.warning("[outcomes] week: %s", (await OW.week(7)).get("say"))   # warning: production's log drops info lines
             except Exception as e:
                 log.warning("[outcomes] week not read: %s", type(e).__name__)
         await asyncio.sleep(3600)

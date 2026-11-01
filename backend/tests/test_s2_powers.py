@@ -125,10 +125,11 @@ class LiveEmailAllowList(unittest.TestCase):
     def send(self, account):
         S._HELD.clear()
         S.OUTBOX.clear()
-        got = mock.MagicMock(sent=True, provider_id="re_123", http_status=200, why=None)
+        got = {"ok": True, "reference": "re_123", "words": "Accepted for delivery by the mail service (Resend id re_123)."}
         with self.env(), mock.patch("booking_signer.basket.event", mock.AsyncMock()), \
                 mock.patch("agapi.v0.claim", mock.AsyncMock()), \
-                mock.patch("booking_signer.emailing.send", mock.AsyncMock(return_value=got)) as em:
+                mock.patch.object(S, "agapi_email", mock.AsyncMock(return_value=got)) as em, \
+                mock.patch("booking_signer.emailing.send", mock.AsyncMock(side_effect=AssertionError("Sasha's own email"))):   # Sasha 319: AgAPI sends it
             t0 = datetime.now(timezone.utc)
             run(API.call(API.Ctx(account=account, user_said="email Marta", started=t0), "send_email",
                          {**Email.MSG, "idempotency_key": f"a-{account}-{t0.timestamp()}", "approval": {"said": "email Marta"}}))

@@ -52,31 +52,20 @@ class OldFlowRecordsAtTheMomentItsSent(unittest.TestCase):
     PEND = {"id": "f1", "sha": "x", "venue": "Casa Lucio", "summary": "Saturday at 21:00, 2 people", "trip_item_id": "ti-1",
             "draft": {"what": {"category": "restaurant"}}, "read": {"city": "Madrid"}}
 
-    def test_a_form_that_confirmed(self):
-        got = self.approve({**self.PEND, "rung": "form"}, (200, {"status": "sent", "reading": {"result": "confirmed"}, "booking_reference": "AB12"}))
-        self.assertEqual(len(got), 1)
-        b = got[0]
-        self.assertEqual((b["ref"], b["rung"], b["channel"], b["state"]), ("sasha:ti-1", "zero_touch", "web_form", "confirmed"))
-        self.assertEqual((b["venue"], b["sector"], b["city"]), ("Casa Lucio", "restaurant", "Madrid"))
-        self.assertEqual(b["confirmation_quote"], "Their reference: AB12")
-        self.assertNotIn("said", str(b))                                   # never the person's words or details
+    def test_the_old_flows_own_sends_are_gone_nothing_sent_nothing_recorded(self):
+        """Sasha 319 · the form / email / call this recorded were Sasha's own sends to a venue — gone (AgAPI is the one sender): the yes
+        reaches no venue, records no outcome, and the guest is told Tyler takes it."""
+        for rung in ("form", "email", "call", "call_email", "handover"):
+            calls = []
 
-    def test_an_email_request_is_sent(self):
-        b = self.approve({**self.PEND, "rung": "email"}, (200, {"status": "sent"}))[0]
-        self.assertEqual((b["rung"], b["channel"], b["state"]), ("request_reply", "email", "sent"))
-
-    def test_asked_at_is_when_they_were_asked(self):   # CR, live: a median time-to-confirm of 0 s
-        b = self.approve({**self.PEND, "rung": "email", "at": "2026-10-12T08:00:05+00:00"}, (200, {"status": "sent"}))[0]
-        self.assertEqual(b["asked_at"], "2026-10-12T08:00:05Z")
-
-    def test_a_call_placed(self):
-        b = self.approve({**self.PEND, "rung": "call"}, (200, {"status": "placed"}))[0]
-        self.assertEqual((b["rung"], b["channel"], b["state"]), ("phone", "phone", "sent"))
-
-    def test_a_refused_form_is_failed_with_its_reason(self):
-        b = self.approve({**self.PEND, "rung": "form"}, (409, {"rule": "form_changed", "message": "their form changed"}))[0]
-        self.assertEqual(b["state"], "failed")
-        self.assertTrue(b["failure_reason"])
+            async def api(account, method, path, body=None, timeout=None):
+                calls.append(path)
+                return 200, {"status": "sent"}
+            out = _Out()
+            ctx = {"out": out, "account": ACCOUNT, "st": {}, "now": datetime.now(timezone.utc), "ch": {}, "frm": "+0"}
+            with mock.patch.object(GW, "api", api):
+                run(GW._approve(ctx, {**self.PEND, "rung": rung}, {"said": "yes"}))
+            self.assertEqual((calls, [b for op, b in self.sent if op == "outcomes.record"]), ([], []), rung)
 
     def test_their_page_sent(self):
         async def api(account, method, path, body=None, timeout=None):

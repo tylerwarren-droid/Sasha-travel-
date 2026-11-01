@@ -49,7 +49,7 @@ class TheirOwnWhatsApp(unittest.TestCase):
     def test_s1_unchanged(self):
         with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"}):   # Sasha 285 · old S1 = parity off (its own path, byte for byte)
             out = self.send("s1", live=False, window=False)
-        self.assertNotEqual(out["status"], "open_in_their_whatsapp")
+        self.assertEqual(out["status"], "open_in_their_whatsapp")   # Sasha 319 · old S1's own Twilio send is deleted: the same everywhere
 
     def test_never_the_set_up_line(self):
         for line in WA.WHY_THEIRS.values():

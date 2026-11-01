@@ -605,7 +605,7 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         return [b for m, u, b in self.web.requests if u == E.RESEND_SEND_URL and b["to"] == ["reservas@lacontra.test"]
                 and b["subject"].startswith("Re:")]   # not Sasha's own booking email to them
 
-    def test_a_stop_reply_is_recorded_verbatim_ends_every_channel_acks_once_and_tells_the_guest(self):
+    def test_a_stop_reply_is_recorded_verbatim_ends_every_channel_and_tells_the_guest(self):
         v, p = self.sent_email()
         r = self.reply(p, "rcv_stop", "PARA\n\nEl mar, 29 sept 2026, Sasha <sasha@kanoe.test> escribió:\n> Hola, soy Sasha…")
         self.assertEqual(r.json(), {"ok": True, "matched": True})
@@ -614,11 +614,8 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
                          ("withdrawn", "email", "reservas@lacontra.test", "said stop by email"))
         self.assertEqual(row["withdrawn_evidence"]["verbatim"], "PARA")
         self.assertEqual(row["withdrawn_evidence"]["provider_id"], "rcv_stop")
-        # one acknowledgement, in the venue's language, as a reply
-        a = self.acks()
-        self.assertEqual(len(a), 1)
-        self.assertTrue(a[0]["text"].startswith("Hecho: Sasha no volverá a contactaros."))
-        self.assertEqual(a[0]["subject"], "Re: Solicitud")
+        # Sasha 319 · no acknowledgement email back to the venue: recorded and every channel ended — Sasha sends no email of its own
+        self.assertEqual(self.acks(), [])
         # the guest's pending request says so
         self.assertEqual(self.trip_status_of_email(p["email_id"]), "escalated")
         # every channel ends: a call to them is refused now
@@ -626,7 +623,7 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         self.assertEqual((call.status_code, call.json()["rule"]), (403, "venue_opted_out"))
         # a second stop is recorded but gets no second reply: then nothing more
         self.reply(p, "rcv_stop2", "Unsubscribe")
-        self.assertEqual(len(self.acks()), 1)
+        self.assertEqual(self.acks(), [])
 
     def test_an_ordinary_reply_is_not_a_stop(self):
         v, p = self.sent_email()

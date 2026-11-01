@@ -154,38 +154,6 @@ async def after_call(call: dict, reading, venue: str) -> Optional[dict]:
     return {**row, "id": pid} if pid else None
 
 
-async def ask_venue_for_link(call: dict, pr: dict) -> str:
-    """On the guest's yes: the venue asked, IN WRITING, to send the guest their own payment link. Returns how."""
-    from . import cancel_routes as CNR, contacts, emailing as E, guest_receipt as GR, ladder_routes as LR
-    from .ladder import best_email, emails_ready
-    brief = call.get("brief") or {}
-    vk = str(brief.get("venue_key") or "")
-    row = await LR.LADDER_STORE.get_read(str(call["account_id"]), vk[5:]) if vk.startswith("read:") else None
-    facts = ((row or {}).get("read") or {}).get("facts") or []
-    contact = await contacts.STORE.get(str(call["account_id"])) if contacts.STORE else None
-    guest = (contact or {}).get("mobile_e164")
-    es = (brief.get("language") or "en").startswith("es")
-    text = (f"Hola, soy Sasha (Kanoe Technologies SL), de parte de {brief.get('name') or 'la familia'}: para la reserva del "
-            f"{brief.get('date')} a las {brief.get('time')}, ¿pueden enviar el enlace de pago de la señal"
-            + (f" al {guest}" if guest else "") + "? El cliente paga directamente. Gracias.") if es else \
-           (f"Hello, this is Sasha (Kanoe Technologies SL) for {brief.get('name') or 'the guest'}: for the booking on "
-            f"{brief.get('date')} at {brief.get('time')}, could you send the deposit payment link"
-            + (f" to {guest}" if guest else "") + "? The guest pays you directly. Thank you.")
-    mob = CNR._mobile(facts)
-    if mob:
-        r = await GR.send_sms(mob, text, "SASHA_SMS_TO_VENUES")
-        if r == "sms sent":
-            return "sms"
-    em = best_email(facts)
-    if em and not emails_ready():
-        import os
-        sent = await E.send(LR.HTTP, {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": em[1]["value"],
-                                      "subject": "Enlace de pago / payment link", "text": text})
-        if getattr(sent, "sent", False):
-            return "email"
-    return "none"
-
-
 router = APIRouter(prefix="/payments", tags=["booking-payments"])
 
 
@@ -195,36 +163,10 @@ def _refuse(status: int, rule: str, message: str) -> JSONResponse:
 
 @router.post("/{pid}/approve")
 async def approve(pid: str, request: Request):
-    """The guest's ONE yes to the ONE sentence — hash-bound; then the venue is asked for its own link."""
-    from . import yes as YS, call_routes as CR
-    from .account import account_for
-    account = account_for(request)
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    if not YS.approval_ok(body.get("approval")):
-        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
-    try:
-        pr = await STORE.get(account, pid)
-    except (StorageUnavailable, ValueError):
-        pr = None
-    if pr is None:
-        return _refuse(404, "payment_unknown", "no such payment request of yours")
-    if body.get("read_back_sha256") != pr["read_back_sha256"]:
-        return _refuse(422, "read_back_mismatch", "the yes was to different words — the amount may have changed; look again")
-    now = NOW()
-    approval = {"by": account, **body["approval"], "at": now.isoformat(), "read_back_sha256": pr["read_back_sha256"]}
-    if not await STORE.approve(account, pid, approval, now):
-        return _refuse(409, "payment_already_answered", "this was already answered")
-    rows = await CR.CALL_STORE.receipt_rows(account, pr["trip_item_id"])
-    how = await ask_venue_for_link((rows or {}).get("call") or {}, pr) if rows else "none"
-    await STORE.set(pid, status="link_sent" if how != "none" else "approved", link_asked_by=how)
-    say = (f"Done — I've asked {pr['payee']} to send you their payment link by {'text' if how == 'sms' else 'email'}. You pay them "
-           f"directly; it's confirmed once they say so." if how != "none" else
-           f"I couldn't reach {pr['payee']} in writing (they publish no mobile or email I may use). Ask them for the link "
-           f"when you speak to them — you pay them directly.")
-    return {"status": "link_sent" if how != "none" else "approved", "payer": "guest_direct", "say": say}
+    """Sasha 319 · retired: on the guest's yes it asked the VENUE (Sasha's own text / email) for its payment link — Sasha's own send to a
+    venue, gone. Nothing is sent. (S-81 tier 0's question was already retired, Sasha 254 R8: nothing creates these any more.)"""
+    from .retired import refusal
+    return refusal("a payment-link request to the venue")
 
 
 __all__ = ["after_call", "amount_of", "deposit_asked", "read_back", "router", "MemoryPaymentStore", "PostgresPaymentStore"]

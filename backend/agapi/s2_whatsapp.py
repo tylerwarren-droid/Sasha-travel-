@@ -14,11 +14,9 @@ messages.send_whatsapp (agapi/powers.py). Wiring is the Sasha tab's (docs/sasha/
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import re
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -45,33 +43,8 @@ def _from() -> str:
     return GW.sender_for(None) if GW.guest_numbers() else ""
 
 
-async def _twilio(frm: str, to: str, *, body: Optional[str] = None, content_sid: Optional[str] = None,
-                  variables: Optional[dict] = None) -> dict:
-    """→ {"sid": "SM…"} or {"why": …}. The provider's own message id is the proof; Sasha 162's Sender doesn't return it."""
-    from booking_signer import guest_whatsapp as GW
-    auth = GW.SENDER._auth()
-    if not auth:
-        return {"why": "no Twilio account"}
-    data = {"From": f"whatsapp:{frm}", "To": f"whatsapp:{to}"}
-    if content_sid:
-        data["ContentSid"] = content_sid
-        data["ContentVariables"] = __import__("json").dumps({str(k): str(v) for k, v in (variables or {}).items()})
-    else:
-        data["Body"] = (body or "")[:1500]
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
-            r = await client.post(f"https://api.twilio.com/2010-04-01/Accounts/{auth[0]}/Messages.json",
-                                  headers={"authorization": f"Basic {auth[1]}"}, data=data)
-        sid = (r.json() or {}).get("sid") if r.status_code in (200, 201) else None
-        return {"sid": sid} if sid else {"why": f"Twilio answered HTTP {r.status_code}", "http_status": r.status_code}
-    except Exception as e:
-        return {"why": type(e).__name__}
-
-
 async def send_whatsapp(ctx, a: dict) -> dict:
-    from agapi.v0 import ToolError, claim
-    from agapi.s2_tools import live_for, strict_yes
+    from agapi.v0 import ToolError
     to = a.get("to") or {}
     try:
         number = P._phone(to.get("number", ""))
@@ -80,71 +53,12 @@ async def send_whatsapp(ctx, a: dict) -> dict:
     c = await REC.contact(ctx.account, number)
     if c and c.get("opted_out_at"):
         raise ToolError("recipient_opted_out", "they replied STOP to Sasha — she never writes to them again. Nothing was sent.")
-    from agapi.venues import one_path
-    if one_path(ctx):   # Sasha 285 · CR 118 (c) · ONE WHATSAPP PATH: a WhatsApp to a third party leaves Kanoe's number only through AgAPI
-        # (messages.send_whatsapp / the send gate). Not wired here yet → OFF: the message in THEIR OWN WhatsApp, pre-filled — they send it.
-        # Old S1 (parity off) keeps its own path below, byte for byte.
-        return _in_their_whatsapp(number, to.get("name"), a.get("text"), "agapi_only")
-    now = datetime.now(timezone.utc)
-    live, frm = live_for(ctx.account), _from() or "Sasha's WhatsApp"
-    free = bool(c) and P.window_open(c.get("last_inbound_at"), now.isoformat())
-    if getattr(ctx, "surface", "s1") == "s2" and not (free and live):   # Sasha 230 · /s2: their OWN WhatsApp, pre-filled
-        return _in_their_whatsapp(number, to.get("name"), a.get("text"), "no_window" if live else "not_live")
-    try:
-        if free:
-            if not a.get("text"):
-                raise ToolError("invalid_input", "they wrote to Sasha in the last 24 hours: send the person's own words (text)")
-            msg = P.whatsapp_message(frm, number, to.get("name"), text=a["text"])
-        else:
-            if live and not template_sid():
-                return {"status": "not_possible_yet", "say": P.NO_TEMPLATE_YET}
-            if not a.get("on_behalf_of"):
-                return {"status": "needs_first_contact", "say": P.NO_FREE_TEXT + " Ask what name to sign it with, then call again "
-                        "with on_behalf_of.", "template": P.ON_BEHALF["body"]}
-            msg = P.whatsapp_message(frm, number, to.get("name"), template=P.ON_BEHALF["name"], on_behalf_of=a["on_behalf_of"])
-    except P.Refused as e:
-        raise ToolError("invalid_input", e.message)
-    sha, lines = P.sha256(msg), P.whatsapp_read_back(msg)
-    held = _HELD.get(ctx.account)
-    said = ((a.get("approval") or {}).get("said")) or ""
-    fresh = held and held["sha"] == sha and now - held["at"] <= YES_WINDOW
-    if not fresh or held["at"] >= ctx.started:
-        if not fresh:   # a new message, or the last read-back went stale: read THIS one back; nothing is sent
-            _HELD[ctx.account] = {"sha": sha, "at": now, "msg": msg}
-        return {"status": "awaiting_yes", "read_back": lines, "read_back_sha256": sha, "kind": msg["kind"], "live": live,
-                "say": "Read it back exactly, then ask: shall I send it?"}
-    if not strict_yes(said):
-        raise ToolError("no_explicit_yes", "sending needs their explicit yes to exactly this message — a question isn't a yes")
-    await claim(ctx)   # durable: this message is sent once, across restarts and workers
-    _HELD.pop(ctx.account, None)
-    body_sha, sent_at = P.whatsapp_body_sha256(msg), now.isoformat(timespec="seconds").replace("+00:00", "Z")
-    about = msg["to"].get("name") or number
-    proof = {"reference": None, "at": sent_at, "said": said[:300], "read_back_sha256": sha, "body_sha256": body_sha, "kind": msg["kind"],
-             **({"template": msg["template"]["name"]} if msg["kind"] == "template" else {})}
-    if not live:   # not the founder / Jon: captured, and SAID so (never "sent" for a message that didn't leave)
-        OUTBOX.append({"account": ctx.account, "message": msg, "at": sent_at})
-        await REC.record(ctx.account, "whatsapp", "not_sent", {**proof, "captured": True}, about)
-        return {"status": "not_sent", "outcome": {"kind": "NOT_SENT", "target_words": "Not sent: real WhatsApp isn't open on this account yet. "
-                                                  "Nothing left Sasha."},
-                "say": "Tell them plainly it was NOT sent — nothing has left Sasha.", "message": {"to": msg["to"], "body_sha256": body_sha}}
-    if msg["kind"] == "template":
-        got = await _twilio(msg["from"], number, content_sid=template_sid(),
-                            variables={"1": msg["template"]["params"][0], "2": msg["template"]["params"][1]})
-    else:
-        got = await _twilio(msg["from"], number, body=msg["text"])
-    if not got.get("sid"):
-        await REC.record(ctx.account, "whatsapp", "failed", {**proof, "why": got.get("why")}, about)
-        raise ToolError("upstream_refused" if got.get("http_status") else "upstream_unreachable",
-                        f"WhatsApp didn't accept it ({got.get('why')}) — nothing was sent")
-    await REC.wrote_to(ctx.account, number, msg["to"].get("name"), a.get("on_behalf_of"))
-    await REC.record(ctx.account, "whatsapp", "done", {**proof, "reference": got["sid"]}, about)
-    return {"status": "sent", "outcome": {"kind": "CONFIRMED", "reference": got["sid"], "target_words": "Accepted by WhatsApp's provider."},
-            "message": {"to": msg["to"], "kind": msg["kind"], "body_sha256": body_sha, "sent_at": sent_at},
-            **({"say": "Only the approved first message went. Their note goes after they reply — and their yes again."}
-               if msg["kind"] == "template" else {})}
+    # Sasha 285 · CR 118 (c) · ONE WHATSAPP PATH: a WhatsApp to a third party leaves Kanoe's number only through AgAPI (messages.send_whatsapp,
+    # its send gate — and CR 121 refuses a venue's number there). Sasha 319: old S1's own Twilio send is deleted too — every surface: the
+    # message in THEIR OWN WhatsApp, pre-filled; they send it.
+    return _in_their_whatsapp(number, to.get("name"), a.get("text"), "agapi_only")
 
 
-# Sasha 230 · when she can't send it from her number, the ONE line that says exactly why — never "it has to be set up first"
 WHY_THEIRS = {
     "no_window": "WhatsApp only lets me write first to someone who's messaged my number in the last 24 hours — so it's ready in "
                  "your WhatsApp: press send.",

@@ -73,6 +73,65 @@ class TheOldSendersAreGone(unittest.TestCase):
             self.assertNotRegex(body, r"E\.send|send_sms|place_call", f)
 
 
+# Sasha 319 (2) · THE WHOLE CLASS: every raw sender in Sasha — Resend, Twilio SMS / WhatsApp, Bland — is listed here with WHO it reaches.
+# A venue is reached only through AgAPI (its acts, its call plan). A new call site anywhere fails this test until it is read and placed.
+SENDER = re.compile(r"(?<![\w.])(?:E|EM|emailing)\.send\(|(?<!def )\bsend_sms\(|\.place_call\(|\bSENDER\.send\(|Sender\(\)\.send\("
+                    r"|api\.twilio\.com/[^\"']*Messages|api\.resend\.com/emails|api\.bland\.ai|\bLE\.send_email\("
+                    r"|(?<!def )\bsend_email\(msg|(?<!def )\bsend_email\(compose_email")
+WHO = {
+    "booking_signer/emailing.py": "the email transport itself (Resend) — every caller is listed here",
+    "booking_signer/calls.py": "the call transport itself (Bland) — every caller is listed here",
+    "agapi/venue_calls.py": "a venue — ONLY the call AgAPI's act planned (its call_plan), the one way Sasha dials a venue",
+    "booking_signer/call_routes.py": "a venue — place_due dials only a scheduled call that belongs to an AgAPI act (_no_act stops the rest)",
+    "booking_signer/guest_receipt.py": "the GUEST — their receipt (email / text to their own address and phone)",
+    "booking_signer/guest_whatsapp.py": "the GUEST — their own WhatsApp (Sasha's Sender to ch.number_e164)",
+    "booking_signer/proactive.py": "the GUEST — their own WhatsApp reminder",
+    "booking_signer/invitations.py": "a person the guest invites to their trip — never a venue",
+    "booking_signer/live_events.py": "the person — their own email of a live event",
+    "booking_signer/ops.py": "a new Sasha user — their sign-in invitation (founder op)",
+    "booking_signer/ops_log.py": "the founder's own test line (a test call, never a venue)",
+    "booking_signer/demo_ops.py": "the person's own Gmail — Kanoe's own test venue's confirmation (a demo; never a real venue)",
+    "booking_signer/perf_ops.py": "nobody — the providers' base URLs for a health ping",
+    "agapi/agapi_health.py": "the founder — an alert",
+    "app/services/model_health.py": "the founder — an alert",
+    "app/api/payments.py": "the GUEST — their payment confirmation",
+    "scripts/live_suite.py": "the founder — a manual suite's own mail",
+    # PATCH (OPEN): a venue that asked, on Sasha's public "work with Sasha" page, gets ITS confirmation link by email (double opt-in).
+    # AgAPI keeps venue consents but has no opt-in-request operation to send it — asked of AgAPI; until then this one stays.
+    "booking_signer/optin_page.py": "PATCH (OPEN) · a venue that opted in on Sasha's page — its own confirmation link (needs an AgAPI op)",
+}
+
+
+class NoVenueSenderOutsideAgAPI(unittest.TestCase):
+    def test_every_raw_sender_is_read_and_none_reaches_a_venue_but_through_agapi(self):
+        found = {}
+        for f in sorted(BACKEND.rglob("*.py")):
+            rel = f.relative_to(BACKEND).as_posix()
+            if rel.startswith(("tests/", "venv/", ".venv/")) or "site-packages" in rel:
+                continue
+            for n, line in enumerate(f.read_text(errors="ignore").splitlines(), 1):
+                if SENDER.search(line) and not line.lstrip().startswith(("#", "def ", "async def ")):
+                    found.setdefault(rel, []).append(n)
+        unknown = {f: ns for f, ns in found.items() if f not in WHO}
+        self.assertEqual(unknown, {}, "a sender nobody has read: say who it reaches (a venue: through AgAPI only)")
+        venue_facing = [f for f, why in WHO.items() if why.startswith("a venue") or "PATCH" in why]
+        self.assertEqual(sorted(venue_facing), ["agapi/venue_calls.py", "booking_signer/call_routes.py", "booking_signer/optin_page.py"])
+
+    def test_the_last_old_senders_are_gone(self):
+        from agapi import s2_hotel as H, s2_tools as S2, s2_whatsapp as SW
+        from app.services import golf_agent as G
+        from booking_signer import payments_t0 as PT0
+        self.assertFalse(hasattr(PT0, "ask_venue_for_link"))                      # a payment-link request to the venue
+        self.assertFalse(hasattr(SW, "_twilio"))                                    # old S1's own WhatsApp to a third party
+        self.assertNotRegex(inspect.getsource(H), r"send_email\(|_desk\(")         # a hotel desk's email
+        self.assertNotIn("EM.send", inspect.getsource(S2))                          # the person's email: AgAPI's messages.send_email
+        self.assertIn("messages.send_email", inspect.getsource(S2.agapi_email))
+        self.assertNotIn("api.resend.com", inspect.getsource(G))                    # the golf course's email
+        lr = (BACKEND / "booking_signer/ladder_routes.py").read_text()
+        stop = lr[lr.index("async def _stop_by_email("):lr.index("# ── S-37")]
+        self.assertNotIn("E.send", stop)                                            # a venue's STOP: recorded, never answered by email
+
+
 class TheCallersAreAgAPIsOrTylers(unittest.TestCase):
     def test_no_key_or_no_slot_is_tylers(self):
         d = {"action": "request_email", "say": "request_email", "say_text": "x", "takeover": {"say": "Or take it over yourself."}, "channels": []}

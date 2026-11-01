@@ -2,7 +2,6 @@ import anthropic
 from app.services.llm import SPECIALIST_MODEL
 import json
 import os
-import httpx
 from typing import Any
 from app.services.vietnam_golf_database import (
     search_courses_by_region,
@@ -98,111 +97,10 @@ GOLF_TOOLS = [
 
 
 async def send_booking_email(course: dict, booking_details: dict) -> dict:
-    """Send real booking request email to the golf course via Resend."""
-    if not RESEND_API_KEY:
-        return {"error": "Resend API key not configured"}
-
-    guest_name = booking_details.get("guest_name", "Guest")
-    guest_email = booking_details.get("guest_email", "")
-    guest_phone = booking_details.get("guest_phone", "Not provided")
-    date = booking_details.get("date")
-    time = booking_details.get("time")
-    num_players = booking_details.get("num_players")
-    include_cart = booking_details.get("include_cart", False)
-    special_requests = booking_details.get("special_requests", "None")
-
-    green_fee_total = course["green_fee_usd"] * num_players
-    cart_note = f"Golf cart requested (+${course['cart_fee_usd']} per cart)" if include_cart else "No cart (caddies carrying)"
-
-    # Email to the golf course
-    course_email_body = f"""
-Dear {course['name']} Reservations Team,
-
-We would like to request a tee time booking on behalf of our guest. Please confirm availability and revert to both the guest and ourselves.
-
-BOOKING REQUEST DETAILS
-━━━━━━━━━━━━━━━━━━━━━━
-Course:       {course['name']}
-Date:         {date}
-Tee Time:     {time}
-Players:      {num_players}
-Cart:         {cart_note}
-Caddies:      {num_players} caddies (mandatory)
-Green Fee:    ${course['green_fee_usd']} USD per player (${green_fee_total} USD total)
-
-GUEST DETAILS
-━━━━━━━━━━━━━━━━━━━━━━
-Name:         {guest_name}
-Email:        {guest_email}
-Phone:        {guest_phone}
-Special Requests: {special_requests}
-
-Please send confirmation to both:
-- Guest: {guest_email}
-- Sasha Travel: {SASHA_NOTIFY_EMAIL}
-
-This booking request was submitted via Sasha Travel — an AI-powered travel platform.
-
-Thank you,
-Sasha Travel Concierge
-golf@sasha-travel.com
-    """
-
-    # Email to the guest
-    guest_email_body = f"""
-Hi {guest_name},
-
-Your tee time request has been submitted to {course['name']}. Here's a summary:
-
-BOOKING SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━
-Course:    {course['name']}
-Date:      {date}
-Time:      {time}
-Players:   {num_players}
-Fee:       ${course['green_fee_usd']} USD per player
-
-COURSE CONTACT
-━━━━━━━━━━━━━━━━━━━━━━
-Phone:  {course['phone']}
-Email:  {course['booking_email']}
-
-The course typically confirms within 2-4 hours during business hours. We'll follow up if you don't hear back.
-
-Caddy tip reminder: $15-25 USD per caddy per round (cash, paid on the day).
-
-Safe travels,
-Sasha — Your AI Travel Concierge
-    """
-
-    try:
-        async with httpx.AsyncClient() as http_client:
-            # Send to course
-            await http_client.post(
-                "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "from": SASHA_FROM_EMAIL,
-                    "to": [course["booking_email"]],
-                    "reply_to": guest_email,
-                    "subject": f"Tee Time Request — {guest_name} — {date} at {time} — {num_players} players",
-                    "text": course_email_body
-                }
-            )
-            # Send confirmation to guest
-            await http_client.post(
-                "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "from": SASHA_FROM_EMAIL,
-                    "to": [guest_email, SASHA_NOTIFY_EMAIL],
-                    "subject": f"Your Golf Booking Request — {course['name']} — {date}",
-                    "text": guest_email_body
-                }
-            )
-        return {"sent": True, "course_email": course["booking_email"], "guest_email": guest_email}
-    except Exception as e:
-        return {"sent": False, "error": str(e)}
+    """Sasha 319 · ONE SENDER TO VENUES: this emailed the course itself (Resend, on a model's decision — S-32 already took golf out of the
+    registry and unmounted its route). Sasha's own send to a venue is gone: AgAPI's acts are the one sender; nothing is sent from here.
+    (A CTO drop that restores it fails tests/test_s319's scan.)"""
+    return {"sent": False, "error": "I'll hand this to Tyler — nothing was sent to them."}
 
 
 def execute_tool_sync(tool_name: str, tool_input: dict) -> Any:

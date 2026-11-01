@@ -82,10 +82,12 @@ class Tier0(unittest.TestCase):
         self.assertNotEqual(PT0.sha(other), pr["read_back_sha256"])                  # another amount, another yes
         self.assertIsNone(run(PT0.after_call(self.call, Reading("Sí, 20 euros de señal."), "Casa Lucio")))   # once per booking
 
-    def test_3_tier0_flow(self):
+    def test_3_the_venue_is_never_asked_for_a_link_from_here(self):
+        """Sasha 319 · the approve route asked the VENUE (Sasha's own text / email) for its payment link — Sasha's own send to a venue,
+        retired: whatever the yes, nothing is sent (410). Its row-maker (after_call) stays a reading only."""
         from fastapi import FastAPI, Request
         from fastapi.testclient import TestClient
-        from booking_signer import call_routes as CR, gate
+        from booking_signer import gate
         pr = run(PT0.after_call(self.call, Reading("Hace falta una señal de 20 €."), "Casa Lucio"))
         app = FastAPI()
         app.include_router(PT0.router, prefix="/api/booking")
@@ -93,21 +95,10 @@ class Tier0(unittest.TestCase):
         async def as_account(request: Request):
             request.state.account = ACCOUNT
         app.dependency_overrides[gate.require_booking_key] = as_account
-        call = self.call
-
-        class Rows:
-            async def receipt_rows(self, a, t):
-                return {"call": call}
-        with mock.patch.object(CR, "CALL_STORE", Rows()), mock.patch("booking_signer.account.account_for", lambda r: ACCOUNT), \
-                mock.patch.object(PT0, "ask_venue_for_link", mock.AsyncMock(return_value="sms")):
-            c = TestClient(app)
-            bad = c.post(f"/api/booking/payments/{pr['id']}/approve", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})
-            self.assertEqual(bad.json()["rule"], "read_back_mismatch")
-            r = c.post(f"/api/booking/payments/{pr['id']}/approve",
-                       json={"read_back_sha256": pr["read_back_sha256"], "approval": {"how": "whatsapp_button"}})
-        self.assertEqual((r.json()["status"], r.json()["payer"]), ("link_sent", "guest_direct"))
-        row = PT0.STORE.rows[pr["id"]]
-        self.assertEqual((row["status"], row["link_asked_by"], row["approval"]["read_back_sha256"]), ("link_sent", "sms", pr["read_back_sha256"]))
+        r = TestClient(app).post(f"/api/booking/payments/{pr['id']}/approve",
+                                 json={"read_back_sha256": pr["read_back_sha256"], "approval": {"how": "whatsapp_button"}})
+        self.assertEqual((r.status_code, r.json()["rule"], r.json()["sent"]), (410, "venue_send_retired", False))
+        self.assertFalse(hasattr(PT0, "ask_venue_for_link"))
 
     def test_6_no_column_holds_a_card_number(self):
         import re

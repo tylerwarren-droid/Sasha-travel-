@@ -39,10 +39,10 @@ VENUE = "+34611222333"
 class TheOnePathNeverPostsAThirdPartyWhatsApp(unittest.TestCase):
     def _send(self, surface, live=True, window=True, parity="on"):
         contact = {"last_inbound_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()} if window else None
-        tw = mock.AsyncMock(return_value={"sid": "SMx"})
+        tw = mock.AsyncMock(return_value={"sid": "SMx"})   # Sasha 319: no Twilio post of Sasha's own exists to be called
         ctx = API.Ctx(account=ACCT, user_said="yes send it", surface=surface)
         with mock.patch.object(REC, "contact", mock.AsyncMock(return_value=contact)), mock.patch("agapi.s2_tools.live_for", lambda a: live), \
-                mock.patch.object(WA, "_twilio", tw), mock.patch.dict(os.environ, {"SASHA_S1_PARITY": parity}):
+                mock.patch.dict(os.environ, {"SASHA_S1_PARITY": parity}):
             out = run(WA.send_whatsapp(ctx, {"to": {"number": "+447700900123", "name": "Marta"}, "text": "Running late"}))
         return out, tw
 
@@ -61,9 +61,9 @@ class TheOnePathNeverPostsAThirdPartyWhatsApp(unittest.TestCase):
                 run(WA.send_whatsapp(ctx, {"to": {"number": "+447700900123"}, "text": "x"}))
         self.assertEqual(e.exception.code, "recipient_opted_out")
 
-    def test_old_s1_keeps_its_own_path(self):
+    def test_old_s1_too_is_their_whatsapp(self):   # Sasha 319 · old S1's own Twilio post is deleted: the same answer everywhere
         out, _ = self._send("s1", parity="off")
-        self.assertEqual(out["status"], "awaiting_yes")   # its read-back, as before (CR 62) — parity off only
+        self.assertEqual(out["status"], "open_in_their_whatsapp")
 
     def test_the_tool_says_so_on_the_one_path(self):
         from app.agent import s2 as S2
@@ -174,7 +174,6 @@ class NoSecondTwilioSender(unittest.TestCase):
     ALLOWED = {
         "booking_signer/guest_whatsapp.py": "the guest's OWN conversation with Sasha (Sender)",
         "booking_signer/guest_receipt.py": "SMS (send_sms) — not WhatsApp",
-        "agapi/s2_whatsapp.py": "OLD S1 only (parity off): _twilio, behind the one path's return",
     }
 
     def test_only_these_post_to_twilio(self):
@@ -185,11 +184,10 @@ class NoSecondTwilioSender(unittest.TestCase):
                 found.add(str(f.relative_to(BACKEND)))
         self.assertEqual(found, set(self.ALLOWED))
 
-    def test_the_one_path_returns_before_sashas_own_post(self):
+    def test_there_is_no_post_of_sashas_own(self):   # Sasha 319 · s2_whatsapp._twilio deleted: every surface is their own WhatsApp
         src = inspect.getsource(WA.send_whatsapp)
-        self.assertLess(src.index('if one_path(ctx):'), src.index("await _twilio("))
-        self.assertIn('return _in_their_whatsapp(number, to.get("name"), a.get("text"), "agapi_only")',
-                      src[src.index('if one_path(ctx):'):src.index("await _twilio(")])
+        self.assertNotIn("_twilio", src)
+        self.assertIn('return _in_their_whatsapp(number, to.get("name"), a.get("text"), "agapi_only")', src)
 
     def test_whatsapp_through_the_guest_sender_goes_only_to_people_talking_to_sasha(self):
         users = set()

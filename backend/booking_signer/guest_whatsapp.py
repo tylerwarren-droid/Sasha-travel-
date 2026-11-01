@@ -37,6 +37,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from xml.sax.saxutils import escape
 
+from . import retired as RT   # Sasha 319 · "I'll hand this to Tyler"
 from . import handoff as HO
 from . import places_terms as PT
 from . import sentences as SN
@@ -2952,31 +2953,6 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
         return
     keep = {"read": rd, "draft": d, "invite_code": pend.get("invite_code")}   # so "call them instead" can re-decide
     for route in order:
-        if route == "form" and "form" in rungs:
-            # Sasha 117 · a form wants an email: the account's own (the one receipts go to), shown in the read-back the yes approves
-            from . import guest_receipt as GR, ladder_routes as LR
-            email = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
-            res_form = {**reservation, "who": {**reservation["who"], "contact": {**reservation["who"]["contact"], **({"email": email} if email else {})}}}
-            from . import loyalty as LY   # Sasha 131 (3) · a matching loyalty number from the vault, under this yes
-            ly = await LY.find_for(ctx["account"], rd["venue"], (d.get("what") or {}).get("category"))
-            status, j = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form,
-                                                                                 **({"loyalty_item_id": str(ly["id"])} if ly else {})})
-            if status == 200:
-                await _ask_yes(ctx, "form", j["form_id"], j["read_back"], SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
-                               extra={"summary": summary(reservation), "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
-                return
-            if j.get("rule") == "form_challenge" and "(TEST stand-in)" in str(rd.get("venue") or ""):
-                # Sasha 172 · the demo's CAPTCHA (our own test page): Sasha fills everything else, the guest ticks it on the phone
-                s2, j2 = await api(ctx["account"], "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": res_form, "handover": True})
-                if s2 == 200:
-                    # Sasha 173 · the founder's words: conversational, not technical
-                    ctx["route_line"] = "Stand by — a human is required for this one. A CAPTCHA will appear on your phone. Shall I go ahead?"
-                    await _ask_yes(ctx, "handover", j2["form_id"], j2["read_back"], ctx["route_line"], rd["venue"],
-                                   extra={"summary": summary(reservation), **keep})
-                    return
-                j, status = j2, s2
-            why = refusal_words(j, status)
-            log.warning("[guest_whatsapp] form rung refused (%s: %s); trying the next route", status, j.get("rule"))
         if route == "one_tap" and ("link" in rungs or "own_page" in rungs or ("form" in rungs and lr == "page") or ("form" in rungs and _founder_demo(ctx.get("account"))
                                                           and "(TEST stand-in)" not in str(rd.get("venue") or ""))) \
                 and reservation["when"]["mode"] == "at":   # Sasha 187 · or their own booking page, on the founder's phone
@@ -2995,71 +2971,11 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
             if await _send_link(ctx, rd, reservation, contact["name"], None, keep):
                 return
             log.info("[guest_whatsapp] one-tap link refused; trying the next route")
-        if route == "call_email" and "phone" in rungs and "email" in rungs and reservation["when"]["mode"] == "at":
-            # Sasha 131 · URGENT: the call AND the email, both read back, on ONE yes
-            fi = rungs["phone"].get("fact_index")
-            from . import guest_receipt as GR, ladder_routes as LR
-            mine = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
-            at = reservation["when"]["at"]
-            s1, cj = await api(ctx["account"], "POST", "/api/booking/calls",
-                               {"reservation": reservation, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
-            s2, ej = await api(ctx["account"], "POST", "/api/booking/emails",
-                               {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": reservation["how_many"]["count"],
-                                "name": contact["name"], "email": mine or ""})
-            if s1 == 200 and s2 == 200:
-                both = hashlib.sha256(f"{cj['read_back']['sha256']}|{ej['read_back']['sha256']}".encode()).hexdigest()
-                lines = ["The call:"] + cj["read_back"]["lines"] + ["The email, sent at the same time:"] + ej["read_back"]["lines"]
-                await _ask_yes(ctx, "call_email", cj["call_id"], {"lines": lines, "sha256": both},
-                               "Call and email them now? " + SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
-                               extra={"summary": summary(reservation), "trip_item_id": cj.get("trip_item_id"), "call_sha": cj["read_back"]["sha256"],
-                                      "email_id": ej["email_id"], "email_sha": ej["read_back"]["sha256"], **keep})
-                return
-            why = refusal_words(cj if s1 != 200 else ej, s1 if s1 != 200 else s2)
-            log.info("[guest_whatsapp] call+email refused (%s/%s); trying the next route", s1, s2)
-        if route == "call" and "phone" in rungs:
-            fi = rungs["phone"].get("fact_index")
-            status, j = await api(ctx["account"], "POST", "/api/booking/calls",
-                                  {"reservation": reservation, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
-            if status == 200:
-                await _ask_yes(ctx, "call", j["call_id"], j["read_back"], j.get("sentence") or SN.confirm_sentence(reservation, rd["venue"]), rd["venue"],
-                               extra={"summary": summary(reservation), "invite_code": pend.get("invite_code"), "trip_item_id": j.get("trip_item_id"),
-                                      "read": rd, "draft": d})
-                return
-            why = refusal_words(j, status)
-            log.info("[guest_whatsapp] call refused (%s); trying the next route", status)
-        if route == "email" and "email" in rungs and reservation["when"]["mode"] == "at":
-            from . import guest_receipt as GR, ladder_routes as LR
-            mine = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
-            at = reservation["when"]["at"]
-            from . import proactive as PR
-            plan = dv.then if dv.route == "email" and PR.no_reply_call_on() else None   # Sasha 132 · in the email's own read-back
-            status, j = await api(ctx["account"], "POST", "/api/booking/emails",
-                                  {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": reservation["how_many"]["count"],
-                                   "name": contact["name"], "email": mine or "", **({"plan_line": plan} if plan else {}),
-                                   **({"nights": d["nights"]} if d.get("nights") else {})})   # Sasha 132 · a hotel room
-            if status == 200:
-                sentence = SN.confirm_sentence(reservation, rd["venue"])
-                if d.get("nights"):   # Sasha 135 · a hotel: a REQUEST for a room, said as one — never "book … at 15:00"
-                    sentence = room_email_sentence(rd["venue"], reservation["how_many"]["count"], at[:10], int(d["nights"]))
-                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"],
-                               extra={"summary": summary(reservation), "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
-                return
-            why = refusal_words(j, status)
-            log.info("[guest_whatsapp] email refused (%s); trying the next route", status)
-        elif route == "email" and "email" in rungs:
-            # Sasha 170 · no slot to book (a tattoo, custom work): their email asks for a date and a quote — as the web does
-            from . import guest_receipt as GR, ladder_routes as LR
-            mine = await GR.address_of(ctx["account"]) if LR.LADDER_STORE is not None else None
-            day = d.get("day") or ((reservation.get("when") or {}).get("at") or "")[:10]
-            want = d.get("quote_what") or (d.get("what") or {}).get("activity")
-            status, j = await api(ctx["account"], "POST", "/api/booking/emails", quote_email(rd["read_id"], contact["name"], mine, want, day))
-            if status == 200:
-                sentence = quote_sentence(rd["venue"], day)
-                await _ask_yes(ctx, "email", j["email_id"], j["read_back"], sentence, rd["venue"],
-                               extra={"summary": "", "trip_item_id": j.get("trip_item_id"), **keep})   # Sasha 247 · the ledger's key
-                return
-            why = refusal_words(j, status)
+        # Sasha 319 · the form, call, call+email and email routes were Sasha's own sends to the venue — gone (AgAPI is the one sender)
     st["pending"] = None
+    if any(r in ("form", "call", "call_email", "email") for r in order):   # Sasha 319 · a route only Sasha's own sender took: Tyler's
+        out.text(RT.TO_TYLER)
+        return
     said = f"I can't book {rd['venue']} from here right now" + (f" — {why}" if why else "")
     out.text(said + ("" if said.endswith(("?", ".")) else ".") + " Nothing was sent.")
 
@@ -3147,87 +3063,10 @@ async def _outcome(account: str, pend: dict, rung: str, status: Optional[str] = 
 
 
 async def _approve(ctx: dict, pend: dict, how: dict) -> None:
-    out, account, venue = ctx["out"], ctx["account"], pend["venue"]
-    if pend["rung"] == "form":
-        status, j = await api(account, "POST", f"/api/booking/forms/{pend['id']}/send", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
-        if status != 200:
-            out.text(f"❌ Not sent to {venue}: {refusal_words(j, status)}.")
-            await _outcome(account, pend, "form", error=refusal_words(j, status), j=j)   # Sasha 247
-            return
-        # Sasha 117 · the send is "sent"; what the venue's page SAID is the reading — "confirmed" was never the status
-        result = (j.get("reading") or {}).get("result") if j.get("status") == "sent" else None
-        await _outcome(account, pend, "form", status="confirmed" if result == "confirmed" else "requested", j=j,   # Sasha 247
-                       reference=j.get("booking_reference") if result == "confirmed" else None)
-        ref = f" Their reference: {j['booking_reference']}." if j.get("booking_reference") and result == "confirmed" else ""
-        shown = plain_venue(venue)   # Sasha 171 · the stand-in was said once, before the yes — not again
-        out.text({"confirmed": f"✅ Booked: {shown}, {pend.get('summary', '')}.{ref}",
-                  "proposed": f"⚠ Not confirmed yet: {venue}'s page offers something different — read it below.",
-                  "declined": f"❌ They said no: {venue}'s page turned it down."}.get(result) or
-                 (DONE_ASKED if j.get("status") == "sent"   # Sasha 158 · one sentence after
-                  else f"⚠ Not confirmed yet: {j.get('say') or 'their site did not answer clearly'}"))
-        if j.get("their_page"):   # Sasha 171 · their words, without a raw link: cancelling is the Cancel button below
-            words = re.sub(r"\s*(?:Para cancelar|To cancel|Cancel)[^:]*:\s*https?://\S+", "", str(j["their_page"]), flags=re.I)
-            words = re.sub(r"https?://\S+", "", words).strip()
-            if words:
-                out.text(f"Their page said: “{words[:500]}”")
-        note = _receipt_note(venue, j.get("status") == "sent")
-        if result == "confirmed":
-            from . import wa_brain as WB
-            at = ((pend.get("draft") or {}).get("when") or {}).get("at") or ""
-            where = await WB.trip_day_words(account, at[:10], shown)
-            emailed = note.strip() == "Your receipt is in your email."
-            nonce = secrets.token_hex(3)
-            out.ask(f"{where} — receipt sent to your email." if emailed else f"{where}.",
-                    [("Cancel", f"cxl:{nonce}")])
-            ctx["st"]["pending"] = {"kind": "booked", "at": ctx["now"].isoformat(), "nonce": nonce, "venue": shown}
-        elif note:   # Sasha 147 · a refused send has no receipt
-            out.text(note.strip())
-        if result == "confirmed" and venue == "Sasha Test Venue" and os.getenv("SASHA_TEST_VENUE_DEPOSIT", "") == "1":
-            await _test_deposit(ctx)   # Sasha 131 (4) · one touch, on their page — a TEST payment
-        return
-    if pend["rung"] == "handover":   # Sasha 172 · filled in the cloud browser; the guest ticks the CAPTCHA and presses, on the phone
-        status, j = await api(account, "POST", f"/api/booking/forms/{pend['id']}/handover", {}, timeout=120)
-        if status != 200:
-            out.text(f"❌ I couldn't open {plain_venue(venue)}'s page for you: {j.get('say') or refusal_words(j, status)}. Nothing was sent.")
-            await _outcome(account, pend, "handover", error=j.get("say") or refusal_words(j, status), j=j)   # Sasha 247
-            return
-        await _outcome(account, pend, "handover", status="tap_to_finish", j=j)   # Sasha 247
-        sent = (j.get("phone") or {}).get("sent")
-        out.text("📲 It's on your phone — tick the box, then press Reservar. I'll confirm here."
-                 if sent else f"Open this, tick the box, then press Reservar: {j.get('view_url')}")
-        return
-    if pend["rung"] == "call_email":   # Sasha 131 · URGENT: both on the one yes — the email first (it can't be refused by a ring)
-        s2, ej = await api(account, "POST", f"/api/booking/emails/{pend['email_id']}/send", {"read_back_sha256": pend["email_sha"], "approval": how}, timeout=60)
-        out.text(f"✉️ Emailed {venue}." if s2 == 200 and ej.get("status") == "sent" else f"❌ The email to {venue} wasn't sent: {ej.get('say') or refusal_words(ej, s2)}.")
-        pend = {**pend, "rung": "call", "sha": pend["call_sha"]}
-    if pend["rung"] == "email":   # Sasha 130 · the email route: sent is "requested", never "booked"
-        status, j = await api(account, "POST", f"/api/booking/emails/{pend['id']}/send", {"read_back_sha256": pend["sha"], "approval": how}, timeout=60)
-        if status != 200 or j.get("status") != "sent":
-            out.text(f"❌ Not sent to {venue}: {j.get('say') or refusal_words(j, status)}.")
-            await _outcome(account, pend, "email", error=j.get("say") or refusal_words(j, status), j=j)   # Sasha 247
-            return
-        await _outcome(account, pend, "email", status="requested", j=j)   # Sasha 247
-        out.text(DONE_ASKED)   # Sasha 158 · one sentence after; the itinerary says "Requested — waiting for <venue>"
-        return
-    status, j = await api(account, "POST", f"/api/booking/calls/{pend['id']}/place", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
-    if status != 200:
-        out.text(f"❌ Not called: {refusal_words(j, status)}. Nothing was dialled.")
-        await _outcome(account, pend, "call", error=refusal_words(j, status), j=j)   # Sasha 247
-        return
-    await _outcome(account, pend, "call", status=j.get("status") if j.get("status") in ("scheduled", "placed") else
-                   ("placed" if j.get("status") == "uncertain" else None), error=None if j.get("status") in ("scheduled", "placed", "uncertain")
-                   else (j.get("why") or "not placed"), j=j)   # Sasha 247
-    if j.get("status") == "scheduled":   # Sasha 108 · the venue's own name, never the search words
-        at = str(j.get("scheduled_for") or "")[11:16]
-        out.text(f"{venue} is closed right now, so I'll call them at {at} — your yes covers that call.")
-        return
-    if pend.get("invite_code") and pend.get("trip_item_id"):   # S-80 · the invitation follows the inviter's booking
-        from . import invitations as IV
-        await IV.STORE.update(pend["invite_code"], trip_item_id=pend["trip_item_id"])
-    out.text(f"📞 Calling {venue} now — I'll tell you what they say." if j.get("status") in ("placed", "uncertain") else f"❌ I couldn't call {venue}: {j.get('why') or 'not placed'}.")
-    if j.get("status") in ("placed", "uncertain"):
-        _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], venue, "book", pend.get("summary", "")))
-
+    """Sasha 319 · every rung this answered (the venue's form, its CAPTCHA hand-over, the call, the email, both) was Sasha's own send to a
+    venue — gone: AgAPI's acts are the one sender. Nothing is sent; Tyler takes it."""
+    ctx["st"]["pending"] = None
+    ctx["out"].text(RT.TO_TYLER)
 
 DONE_ASKED = "Done — I've asked them and I'll confirm here as soon as they reply."
 
@@ -3644,63 +3483,15 @@ async def _cancel_find(ctx: dict, asked: Optional[str]) -> None:
 
 
 async def _cancel_row(ctx: dict, r: dict) -> None:
-    out, account = ctx["out"], ctx["account"]
-    status, plan = await api(account, "GET", f"/api/booking/reservations/{r['id']}/cancel")
-    if status != 200:
-        out.text(f"I can't cancel it right now — {refusal_words(plan, status)}.")
-        return
-    if plan.get("route") is None:
-        out.text(plan["read_back"]["lines"][0])
-        return
-    sentence = plan.get("sentence") or f"Cancel {plan.get('venue') or r['venue']}?"
-    if plan["route"] == "call":
-        s2, j = await api(account, "POST", "/api/booking/calls", {"cancels_call_id": plan["call_id"]})
-        if s2 != 200:
-            out.text(f"I can't cancel it by phone right now — {refusal_words(j, s2)}. Nothing was dialled.")
-            return
-        await _ask_yes(ctx, "call", j["call_id"], j["read_back"], sentence, plan.get("venue") or r["venue"], kind="cancel_confirm",
-                       extra={"trip_item_id": r["id"]})
-        return
-    await _ask_yes(ctx, plan["route"], r["id"], plan["read_back"], sentence, plan.get("venue") or r["venue"], kind="cancel_confirm",
-                   extra={"trip_item_id": r["id"]})
-
+    """Sasha 319 · the old route's cancellation (their link, an email, a text, a call) was Sasha's own send to a venue — gone. Tyler takes
+    it; nothing is sent."""
+    ctx["st"]["pending"] = None
+    ctx["out"].text(RT.TO_TYLER)
 
 async def _cancel_approve(ctx: dict, pend: dict, how: dict) -> None:
-    out, account, venue = ctx["out"], ctx["account"], pend["venue"]
-    if pend["rung"] == "call":
-        status, j = await api(account, "POST", f"/api/booking/calls/{pend['id']}/place", {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
-        if status != 200:
-            out.text(f"Not cancelled — {refusal_words(j, status)}. Nothing was dialled.")
-            return
-        if j.get("status") == "scheduled":   # Sasha 109 · closed now: the cancelling call waits for them to open
-            out.text(f"{venue} is closed right now, so I'll call them to cancel at {str(j.get('scheduled_for') or '')[11:16]} — "
-                     f"I'll tell you here what they say.")
-            return
-        out.text(f"📞 Calling {venue} now to cancel.")
-        _spawn(watch_call(ctx["ch"], ctx["frm"], account, pend["id"], venue, "cancel"))
-        return
-    status, j = await api(account, "POST", f"/api/booking/reservations/{pend['trip_item_id']}/cancel",
-                          {"read_back_sha256": pend["sha"], "approval": how}, timeout=120)
-    if status != 200:
-        out.text(f"Not cancelled — {refusal_words(j, status)}.")
-        return
-    if j.get("status") == "guest_presses" and j.get("url"):
-        out.text(f"Their cancel link is on a booking platform, so you press it: {j['url']}\nIt's cancelled once their page or "
-                 f"their email says so.")
-        return
-    if j.get("status") == "cancelled":   # ONLY on their words (cancel_routes)
-        out.text(f"{venue} has cancelled your booking.")
-        if j.get("their_words"):
-            out.text(f"Their words: “{j['their_words']}”")
-        return
-    if j.get("status") == "not_confirmed" and j.get("their_words"):   # Sasha 117 · "their words are below" — and they are
-        out.text(f"⚠ Not cancelled yet: {venue}'s page didn't say it's cancelled.")
-        out.text(f"Their page said: “{str(j['their_words'])[:500]}”")
-        out.text("I'll tell you here if they confirm it in writing.")
-    else:
-        out.text(f"Cancelling with {venue} now. {j.get('say') or ''}".strip() + " I'll tell you here once they confirm it in writing.")
-    _spawn(watch_cancel(ctx["ch"], ctx["frm"], account, pend["trip_item_id"], venue))
-
+    """Sasha 319 · as _cancel_row: nothing is cancelled from here — Tyler takes it."""
+    ctx["st"]["pending"] = None
+    ctx["out"].text(RT.TO_TYLER)
 
 async def watch_cancel(ch: dict, frm: str, account: str, trip_item_id: str, venue: str) -> None:
     """A written cancellation: "cancelled" is said ONLY once the reservation reads cancelled (their words, cancel_routes)."""

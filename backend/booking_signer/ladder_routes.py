@@ -899,29 +899,15 @@ async def _reply_text(pid: str):
 
 
 async def _stop_by_email(email_id: str, sender: Optional[str], text: Optional[str], pid: str, data: dict, now: datetime) -> None:
-    """S-56 · a reply that says stop: recorded, every channel ended, guests told — and ONE acknowledgement, by email."""
+    """S-56 · a reply that says stop: recorded, every channel ended, guests told. Sasha 319: no acknowledgement email to the venue."""
     if S.STOP_STORE is None or not S.detect(text):
         return
     v = await S.STOP_STORE.email_venue(email_id)
     stopped = await S.on_venue_words(v["venue_ids"] if v else None, "email", sender or "unknown",
                                      text, {"provider_id": pid, "email_id": email_id, "from": data.get("from"),
                                             "subject": data.get("subject")}, now)
-    if not (stopped and stopped.first and sender):
-        return   # not a stop, or already stopped: then nothing more
-    if not (os.getenv("SASHA_RESEND_API_KEY", "").strip() and os.getenv("SASHA_EMAIL_FROM", "").strip()):
-        log.error("[stop] %s said stop; recorded, but no acknowledgement could be sent (the mail service is not configured)", sender)
-        return
-    country = (v or {}).get("country")
-    lang = V.COUNTRIES[country][2] if country in V.COUNTRIES else "en"
-    subject = str(data.get("subject") or "").strip()
-    sent = await E.send(HTTP, {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": sender,
-                               "subject": subject if subject.lower().startswith("re:") else f"Re: {subject or 'Sasha'}",
-                               "text": S.ack_email_text(lang)})
-    if sent.sent:
-        log.info("[stop] acknowledgement sent to %s (%s)", sender, sent.provider_id)
-    else:
-        log.error("[stop] %s said stop; recorded, but the acknowledgement was not sent: %s", sender, sent.why)
-
+    if stopped and stopped.first:   # Sasha 319 · recorded and every channel ended — no acknowledgement email to the venue from here
+        log.info("[stop] %s said stop: recorded (no email back: AgAPI's acts are the one sender to venues)", sender or "a venue")
 
 # ── S-37 · the slot link ──────────────────────────────────────────────────────────────────────
 

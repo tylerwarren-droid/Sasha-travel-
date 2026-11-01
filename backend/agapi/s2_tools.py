@@ -5,7 +5,8 @@ Sasha tab's (docs/sasha/s2-powers-wiring.md); nothing here is imported by the ag
     send_email      [Austen]  from Sasha's own address (SASHA_EMAIL_FROM — never the person's mailbox) to one person they name.
                     First call: the exact message read back (awaiting_yes). A LATER turn, the person's explicit yes (the loop fills
                     approval.said from their real words; a question is never a yes), the SAME message, within 15 minutes → sent once.
-                    Any change to to/subject/body → a new read-back. TEST mode: captured (OUTBOX), never sent.
+                    Any change to to/subject/body → a new read-back. TEST mode: captured (OUTBOX), never sent. Sasha 319: a live send
+                    is AgAPI's messages.send_email (agapi_email) — the one sender; Sasha sends no email of its own.
     add_to_calendar [Pacioli] a CONFIRMED booking (a table, a flight) → an .ics + Google/Outlook/Apple links. Free, no yes: nothing
                     leaves the person's account.
 """
@@ -83,14 +84,13 @@ async def send_email(ctx, a: dict) -> dict:
                                                    "target_words": "Not sent: real email isn't open on this account yet. Nothing left Sasha."},
                 "say": "Tell them plainly it was NOT sent: real email isn't open on their account yet. Never say it was sent.",
                 "message": {"from": msg["from"], "to": msg["to"], "subject": msg["subject"], "body_sha256": P.email_body_sha256(msg)}}
-    else:   # ⛔ live: only the founder and the allow-listed accounts (Sasha 216) — the S-36 rung's Resend send, its answer READ
-        from booking_signer import emailing as EM
-        from booking_signer.ladder_routes import HTTP
-        got = await EM.send(HTTP, {"from": msg["from"], "to": msg["to"]["address"], "subject": msg["subject"], "text": msg["body"]})
-        if not got.sent:
+    else:   # ⛔ live: only the founder and the allow-listed accounts (Sasha 216). Sasha 319 · sent by AgAPI's messages.send_email — the
+        # one sender (Sasha's own Resend send is gone): its read-back, this yes as its approval, its answer READ
+        got = await agapi_email(ctx.account, msg, said)
+        if not got.get("ok"):
             await _activity(ctx.account, "failed", msg, sha, said, None, sent_at)
-            raise ToolError("upstream_refused" if got.http_status else "upstream_unreachable", got.why or "the mail service didn't accept it")
-        provider_id, words = got.provider_id, "Accepted for delivery by the mail service."
+            raise ToolError(got["error"]["code"], got["error"]["message"])
+        provider_id, words = got["reference"], got["words"]
     try:
         from booking_signer import basket as BK      # Pacioli: the proof, in the same event log as every act
         await BK.event("agapi", hashlib.sha256(f"{ctx.account}:{provider_id}".encode()).hexdigest()[:40], "send_email",
@@ -101,6 +101,38 @@ async def send_email(ctx, a: dict) -> dict:
     return {"status": "sent", "outcome": {"kind": "CONFIRMED", "reference": provider_id, "target_words": words},
             "message": {"from": msg["from"], "to": msg["to"], "subject": msg["subject"], "body_sha256": P.email_body_sha256(msg),
                         "sent_at": sent_at}}
+
+
+async def agapi_email(account: str, msg: dict, said: str) -> Dict[str, Any]:
+    """Sasha 319 · ONE SENDER: AgAPI's messages.send_email — its read-back (approval_required), the person's yes as its approval (the
+    in-app tap / their verified WhatsApp reply; the sandbox's own rule elsewhere), then the send with it. → {ok, reference, words}."""
+    from agapi import venue_submit as VS
+    uid = await VS.end_user(account)
+    if not uid:
+        return {"ok": False, "error": {"code": "no_end_user", "message": "the sending service doesn't know this person yet"}}
+    body = {"end_user": uid, "to": {"address": msg["to"]["address"], **({"name": msg["to"]["name"]} if msg["to"].get("name") else {})},
+            "subject": msg["subject"], "body": msg["body"]}
+    r = await VS._call(account, "messages.send_email", body)
+    e = r.get("error") or {}
+    if e.get("code") != "approval_required":
+        return {"ok": False, "error": VS._err(r) if not r.get("ok") else {"code": "sent_without_yes", "message": "it went without the yes"}}
+    d = e.get("details") or {}
+    rid, rsha = d.get("read_back_id"), d.get("read_back_sha256") or ""
+    if VS.TAP.get() is not None or VS.WA.get() is not None:
+        t = await (VS.in_app_tap(account, rid, rsha) if VS.TAP.get() is not None else VS.whatsapp_tap(account, rid, rsha))
+        if not t.get("ok"):
+            return t
+        approval = t.get("approval_id")
+    else:
+        approval = await VS._approval(account, rid, said)
+        if isinstance(approval, dict):
+            return approval
+    r = await VS._call(account, "messages.send_email", body, approval=approval)
+    if not r.get("ok"):
+        return {"ok": False, "error": VS._err(r)}
+    out = (r.get("result") or {}).get("outcome") or {}
+    tw = out.get("target_words")
+    return {"ok": True, "reference": out.get("reference"), "words": (tw.get("text") if isinstance(tw, dict) else tw) or "Accepted for delivery by the mail service."}
 
 
 async def _activity(account: str, state: str, msg: dict, sha: str, said: str, provider_id: Optional[str], at: str) -> None:

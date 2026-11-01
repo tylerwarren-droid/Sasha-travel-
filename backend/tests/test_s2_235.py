@@ -181,8 +181,7 @@ if __name__ == "__main__":
 
 
 class UpgradeMyRoom(unittest.TestCase):
-    """Sasha 235 · 'Upgrade my room': the TEST stay's request goes to OUR test hotel at the address its own page lists (read through
-    the ladder), read back, sent only on a later yes — captured — and the test hotel's reply comes back in its words."""
+    """Sasha 235 · 'Upgrade my room'. Sasha 319: handed to Tyler — never an email of Sasha's own to the hotel."""
     STAY = {"kind": "hotel", "title": "Madrid Marriott Auditorium Hotel (TEST booking — no hotel contacted)", "when": "2026-11-02",
             "where": "Madrid", "nights": 2, "status": "booked", "reference": "TEST-ABC123", "id": "b1"}
 
@@ -212,33 +211,14 @@ class UpgradeMyRoom(unittest.TestCase):
         return run(API.call(API.Ctx(account=ACCT, user_said=said, started=started), "hotel_request",
                             {"ask": "upgrade", "idempotency_key": f"k-{said}-{started.timestamp()}", **a}))
 
-    def test_read_back_then_yes_then_their_words(self):
-        r = self.turn("Upgrade my room", self.t0)["result"]
-        self.assertEqual(r["status"], "awaiting_yes")
-        self.assertIn("Kanoe Test Hotel's own website lists recepcion-prueba@booking.kanoe.ai", r["read_back"][0])
-        self.assertIn("captured, it never leaves Kanoe", r["read_back"][0])
-        self.assertTrue(any("mejora de habitación" in l for l in r["read_back"]))
-        self.assertTrue(any("TEST-ABC123" in l for l in r["read_back"]))
-        self.assertTrue(self.reads[0]["website"].endswith("/api/booking/test-venue/hotel"))   # the address READ from its own page
-        self.assertEqual(self.S.OUTBOX, [])                                               # nothing yet
-        done = self.turn("Yes, send it.", self.later())["result"]
-        self.assertEqual(done["status"], "not_sent")                                       # captured — never "sent"
-        self.assertIn("our test hotel inside Kanoe", done["outcome"]["target_words"])       # said as delivered to OUR test hotel
-        self.assertIn("Never say it reached the real hotel", done["say"])
-        self.assertEqual(len(self.S.OUTBOX), 1)
-        self.assertEqual(self.S.OUTBOX[0]["message"]["to"]["address"], "recepcion-prueba@booking.kanoe.ai")
-        self.assertIn("habitación superior", done["their_reply"]["text"])
-        self.assertIn("no es un hotel real", done["their_reply"]["text"])
-        again = self.turn("Did they answer?", self.later(), check_reply=True)["result"]
-        self.assertEqual(again["their_reply"]["text"], done["their_reply"]["text"])
-
-    def test_a_question_is_not_a_yes(self):
-        self.turn("Upgrade my room", self.t0)
-        from agapi import v0 as API
-        r = run(API.call(API.Ctx(account=ACCT, user_said="Yes — how much will it cost?", started=self.later()), "hotel_request",
-                         {"ask": "upgrade", "idempotency_key": "k-q"}))
-        self.assertEqual(r["error"]["code"], "no_explicit_yes")
-        self.assertEqual(self.S.OUTBOX, [])
+    def test_it_is_tylers_nothing_is_written_to_the_hotel(self):
+        """Sasha 319 · an email to the hotel's desk was Sasha's own send to a venue — gone (AgAPI is the one sender, and has no such act
+        yet). Nothing is read back, read off their site or sent; Tyler takes it — a yes after it changes nothing."""
+        for said in ("Upgrade my room", "Yes, send it."):
+            r = self.turn(said, self.later())["result"]
+            self.assertEqual((r["status"], r["sent"]), ("to_tyler", False))
+            self.assertIn("I'll hand this to Tyler", r["line"])
+        self.assertEqual((self.reads, self.S.OUTBOX, self.H.REPLIES), ([], [], {}))
 
     def test_s2_only(self):
         from agapi import v0 as API

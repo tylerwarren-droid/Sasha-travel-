@@ -17,7 +17,7 @@ from scripts.whatsapp_suite import _RUNNER  # noqa: E402
 
 MODULES = ["tests.test_booking_calls", "tests.test_booking_ladder", "tests.test_booking_routes", "tests.test_calendar_s79",
            "tests.test_contacts", "tests.test_followup", "tests.test_form_rung", "tests.test_guest_whatsapp_s75",
-           "tests.test_inbound_phone", "tests.test_optin_page", "tests.test_proactive_s83", "tests.test_products_pg_cr1",
+           "tests.test_inbound_phone", "tests.test_proactive_s83", "tests.test_products_pg_cr1",
            "tests.test_places_terms", "tests.test_retention", "tests.test_stop", "tests.test_written_s118", "tests.test_vault_s78"]
 PROD_REF = "yjafyzywzbmhlilxhzuz"   # sasha-prod
 

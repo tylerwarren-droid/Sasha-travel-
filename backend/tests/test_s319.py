@@ -96,9 +96,6 @@ WHO = {
     "app/services/model_health.py": "the founder — an alert",
     "app/api/payments.py": "the GUEST — their payment confirmation",
     "scripts/live_suite.py": "the founder — a manual suite's own mail",
-    # PATCH (OPEN): a venue that asked, on Sasha's public "work with Sasha" page, gets ITS confirmation link by email (double opt-in).
-    # AgAPI keeps venue consents but has no opt-in-request operation to send it — asked of AgAPI; until then this one stays.
-    "booking_signer/optin_page.py": "PATCH (OPEN) · a venue that opted in on Sasha's page — its own confirmation link (needs an AgAPI op)",
 }
 
 
@@ -115,13 +112,16 @@ class NoVenueSenderOutsideAgAPI(unittest.TestCase):
         unknown = {f: ns for f, ns in found.items() if f not in WHO}
         self.assertEqual(unknown, {}, "a sender nobody has read: say who it reaches (a venue: through AgAPI only)")
         venue_facing = [f for f, why in WHO.items() if why.startswith("a venue") or "PATCH" in why]
-        self.assertEqual(sorted(venue_facing), ["agapi/venue_calls.py", "booking_signer/call_routes.py", "booking_signer/optin_page.py"])
+        self.assertEqual(sorted(venue_facing), ["agapi/venue_calls.py", "booking_signer/call_routes.py"])   # AgAPI's call plan only
+        self.assertFalse([f for f, why in WHO.items() if "PATCH" in why])                       # ZERO open PATCH (Tyler, 1 Nov)
 
     def test_the_last_old_senders_are_gone(self):
         from agapi import s2_hotel as H, s2_tools as S2, s2_whatsapp as SW
         from app.services import golf_agent as G
         from booking_signer import payments_t0 as PT0
         self.assertFalse(hasattr(PT0, "ask_venue_for_link"))                      # a payment-link request to the venue
+        self.assertFalse((BACKEND / "booking_signer/optin_page.py").exists())       # the Work-with-Sasha page and its venue email (retired)
+        self.assertFalse((BACKEND.parent / "frontend/app/work-with-sasha").exists())
         self.assertFalse(hasattr(SW, "_twilio"))                                    # old S1's own WhatsApp to a third party
         self.assertNotRegex(inspect.getsource(H), r"send_email\(|_desk\(")         # a hotel desk's email
         self.assertNotIn("EM.send", inspect.getsource(S2))                          # the person's email: AgAPI's messages.send_email

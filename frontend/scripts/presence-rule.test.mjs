@@ -260,8 +260,6 @@ test('286 · the floor: no line the page shows asks for a link (frontend half of
     }
   }
   for (const d of ['app', 'lib']) walk(join(root, d))
-  // the sign-up page's own button and label: the PERSON asks us for a confirmation link — never Sasha asking them for one
-  const ALLOWED = new Set(['app/work-with-sasha/copy.ts: Your email: we send the confirmation link here',
-                           'app/work-with-sasha/copy.ts: Send me the confirmation link'])
-  assert.deepEqual(bad.filter(b => !ALLOWED.has(b)), [])
+  // Sasha 319 · the Work-with-Sasha sign-up page (its only allowed lines) is retired: nothing is allowed now
+  assert.deepEqual(bad, [])
 })

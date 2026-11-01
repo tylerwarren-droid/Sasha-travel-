@@ -69,7 +69,7 @@ const DG_LANG: Record<string, string> = {
 // scoped key (see getDeepgramKey) so a long-lived key never sits in the browser.
 import { keyOrFail, RECONNECTS_BEFORE_SAYING } from '@/lib/mic-fail.mjs'   // Sasha 215 · the mic never fails silently
 import { micLog } from '@/lib/mic-log'   // Sasha 213 · the mic's state machine, logged
-import { BLOCKED, micPermission, stepsFor } from '@/lib/mic-state'   // Sasha 266 · "on" only when it hears; blocked said, with its steps
+import { BLOCKED, micPermission } from '@/lib/mic-state'   // Sasha 266 · "on" only when it hears; blocked said, with its steps
 import { holdPlayAndRecord, audioSessionType } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session
 import { makeDownsampler, sendRate } from '@/lib/downsample.mjs'   // Sasha 215 (d) · the mic at 16 kHz
 
@@ -316,7 +316,11 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   useEffect(() => { onMicErrorRef.current = onMicError }, [onMicError])
   // Single place that records a mic failure: keeps the local composer line and the page-level
   // call panel in sync, so the error can never be visible in one and invisible in the other.
+  // Sasha 320 · THE ONE TRUTH is the browser's answer AFTER HIS TAP on the mic: a mic started without a tap (autoStart, on load) may be
+  // refused or suspended, and that is never said — nothing shows until he taps. Clearing a line always goes through.
+  const tappedRef = useRef(false)
   const reportMicError = useCallback((m: string | null) => {
+    if (m && !tappedRef.current) { micLog('held', { why: 'no tap yet — nothing said on the page', message: m }); return }
     setMicError(m)
     onMicErrorRef.current?.(m)
   }, [])
@@ -842,6 +846,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   }, [connect, notHearing])
 
   const toggleListening = () => {
+    tappedRef.current = true   // Sasha 320 · from now on the browser's answer is his to hear
     if (asleepRef.current) {   // Sasha 246 · pressing the mic wakes her — and she listens
       asleepRef.current = false; resumeRef.current = false
       onWakeRef.current?.()
@@ -986,7 +991,6 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
           : <Mic className="w-4 h-4 text-white" />}
       </button>
       {!quiet && micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
-      {!quiet && micError === BLOCKED && <p className="text-xs text-white/60 text-center max-w-[220px]">{stepsFor()}</p>}{/* Sasha 266 */}
       {!quiet && asleep && <p className="text-xs text-white/50 text-center">Asleep — not listening</p>}
       {/* Sasha 257 · Tyler (row 860): the red "Not…" was this — the mic resting while she answers, said as an error. Said plainly now */}
       {!quiet && !asleep && muted && <p className="text-xs text-white/50 text-center">Mic paused while Sasha answers</p>}

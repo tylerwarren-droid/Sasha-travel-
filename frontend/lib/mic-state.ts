@@ -4,14 +4,23 @@
  * (VoiceButton's `hearing`). Anything else is the plain stuck state, said on the page with the steps for THIS browser.
  *
  *   micPermission()   navigator.permissions' microphone state ("granted" | "denied" | "prompt" | null when the browser can't say)
- *   BLOCKED           the stuck line
+ *   BLOCKED           the one line after his tap was refused (Sasha 320: never before a tap)
  *   stepsFor(ua)      how to allow the microphone for this site, in this browser
  *   report(ev, data)  the mic's own state changes to the server (POST /api/voice/mic-event: no audio, no words, never a transcript) —
  *                     so a device that fails says how; at most REPORT_MAX per page
  */
 import { apiUrl } from '@/lib/api'
 
-export const BLOCKED = 'I can’t hear you — allow the microphone for this site'
+/** Sasha 320 · ONE short line, and only after HIS tap on the mic was refused (never on load): what to do now, and where to allow it. */
+export const BLOCKED = `Microphone is off — type instead, or allow it in ${browserName()} settings`
+
+function browserName(ua: string = typeof navigator !== 'undefined' ? navigator.userAgent : ''): string {
+  if (/CriOS|Chrome\//.test(ua) && !/Edg\//.test(ua)) return 'Chrome'
+  if (/FxiOS|Firefox\//.test(ua)) return 'Firefox'
+  if (/Edg\//.test(ua)) return 'Edge'
+  if (/Safari\//.test(ua)) return 'Safari'
+  return 'your browser'
+}
 
 export async function micPermission(): Promise<'granted' | 'denied' | 'prompt' | null> {
   try {

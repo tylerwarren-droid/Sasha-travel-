@@ -46,8 +46,18 @@ async def submit_answer(op: str, body: dict, approval=None, account=None) -> dic
         return {"ok": True, "result": {"read_back_id": "rbk_gate", "presentation": {"channel": body.get("channel")}}}
     if op == "approvals.status":
         return {"ok": True, "result": {"read_back_id": "rbk_gate", "approval": {"approval_id": "apv_gate", "state": "valid"}}}
+    if op == "venue.submit_booking" and body.get("route") == "call":   # Sasha 319 · the call act: AgAPI's plan, simulated (never dialled)
+        return {"ok": True, "result": {"prepared_id": "vpr_gate", "status": "calling", "submitted": True, "act_id": "act_gate_call",
+                                       "say": "On it — I'll call them now and let you know.",
+                                       "call_plan": {"call_id": "cpl_gate", "phone": "+34910000000", "simulate": True}}}
     if op == "venue.submit_booking":
         return {"ok": True, "result": {"prepared_id": "vpr_gate", "status": "sent", "submitted": True, "act_id": "act_gate", "say": "Sent."}}
+    if op == "venue.cancel_booking" and not approval:   # Sasha 319 · a cancellation is AgAPI's act too: its read-back first
+        return {"ok": False, "error": {"code": "approval_required", "message": "the person's yes first", "retryable": False,
+                                       "details": {"read_back_id": "rbk_gate_c", "read_back": {"lines": [
+                                           "Cancel: the booking, by the route it was made."]}}}}
+    if op == "venue.cancel_booking":
+        return {"ok": True, "result": {"status": "sent", "cancel_act_id": "act_gate_c", "say": "I've asked them to cancel it."}}
     if op == "venue.booking_status":
         return {"ok": True, "result": {"act_id": body.get("act_id"), "state": "sent", "say": "sent"}}
     return {"ok": False, "error": {"code": "unknown_op", "message": op}}

@@ -649,6 +649,9 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
         SEARCH_SLOT[ctx.account] = {"session": ctx.session, "at": time.time(), "open_at": str(a.get("open_at") or "")[:16],
                                     "party": a.get("party"), "where": str(a.get("where") or "")[:120], "country": a.get("country")}
     res = r.get("result") or {}
+    kd = res.get("kind") if isinstance(res.get("kind"), dict) else {}
+    if kd.get("family") and kd["family"] != "venue":   # Sasha 320 · CR 150: a train, tickets, an unknown — AgAPI's kind and hand-over, as given
+        return kind_answer(kd, res, a)
     checks = res.get("checks") if isinstance(res.get("checks"), dict) else None
     refused = bool(res.get("refused"))
     options = [] if refused else [{k: o[k] for k in DISCOVER_CARD if k in o} for o in res.get("options") or [] if isinstance(o, dict)]
@@ -678,6 +681,53 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
                          "refused": refused, "checks": checks, "say_text": say, "agapi": r.get("agapi"),
                          # Sasha 293 · CR 125 · AgAPI's public page crediting every source ("Our sources") — when its answer carries one
                          **({"sources_url": res["sources_url"]} if str(res.get("sources_url") or "").startswith("https://") else {})}}
+
+
+def kind_answer(kd: dict, res: dict, a: dict) -> dict:
+    """Sasha 320 · THE ONE TRUTH is AgAPI's kind + hand-over (CR 150, kinds/1): every kind it hands over (a train's operators, a museum's
+    official ticketing) is drawn as ONE line and one button per page it gives — each opens that page as AgAPI gives it (it says
+    `filled: never`, so nothing is claimed filled). A kind with no seller, an unknown, a flight: AgAPI's own words, no card. No kind's
+    words are S2's: the line is the trip as asked (AgAPI's trip; the day, time and party from this search's own inputs)."""
+    pages = [h for h in res.get("handover") or [] if isinstance(h, dict) and str(h.get("page") or "").startswith("https://") and h.get("operator")]
+    nxt = res.get("next")
+    if not pages:
+        say = str(res.get("say_text") or res.get("say") or "").strip()
+        return {"venues": [], "say": say, "kind": kd.get("kind"), "operators": {"line": say, "buttons": []},
+                "how": "Said for you already: say nothing more this turn."
+                       + (" It's a flight — call search_flights for it." if nxt == "travel.find_flights" else "")}
+    line = trip_line(kd, res.get("trip") if isinstance(res.get("trip"), dict) else {}, a, pages)
+    return {"venues": [], "say": line, "kind": kd.get("kind"),
+            "operators": {"line": line, "of": kd.get("kind"), "buttons": [{"label": str(h["operator"])[:60], "url": h["page"]} for h in pages]},
+            "how": ("Said for you already — the line and one button per page are on their screen: say nothing more this turn. They choose "
+                    "and book there; you fill in and book nothing. If they ask anything after (\"are you there?\"), answer in one short line "
+                    "— never repeat the line or the buttons, never search again for it.")}
+
+
+def trip_line(kd: dict, trip: dict, a: dict, pages: List[dict]) -> str:
+    """Sasha 320 · from → to · day date · time · passengers — AgAPI's trip, with the day / time / party this search was given (open_at, party).
+    Tickets: the place, then the same day / time / people. Only what is known is said; nothing is guessed."""
+    parts: List[str] = []
+    if kd.get("family") == "transport":
+        if trip.get("from") and trip.get("to"):
+            parts.append(f"{trip['from']} → {trip['to']}")
+    else:
+        parts.append(str(pages[0]["operator"]))
+    at = None
+    try:
+        at = datetime.fromisoformat(str(a.get("open_at") or "")[:16]) if a.get("open_at") else None
+    except ValueError:
+        at = None
+    if at:
+        parts.append(f"{at:%a} {at.day} {at:%b}")
+        if at.strftime("%H:%M") != "00:00":
+            parts.append(at.strftime("%H:%M"))
+    else:
+        parts += [str(x).capitalize() for x in (trip.get("day"), trip.get("time_of_day")) if x]
+    n = int(trip.get("passengers") or a.get("party") or 0)
+    if n:
+        one, many = ("passenger", "passengers") if kd.get("family") == "transport" else ("person", "people")
+        parts.append(f"{n} {one if n == 1 else many}")
+    return " · ".join(parts) or str(pages[0]["operator"])
 
 
 def place_links(o: dict) -> dict:
@@ -1518,7 +1568,9 @@ TOOLS: List[dict] = [
        {"city": {"type": "string"}, "preference": {"type": "string", "description": "e.g. on the beach, boutique"}}, ["city"],
        {"type": "object", "properties": {"stays": {"type": "array"}}}, ["city_not_covered"]),
     _t("search_venues", "Magellan", search_venues, "Restaurants, spas or other places in a city (Google listings; nothing contacted). "
-       "The person sees them as photo cards and picks one by tap or voice; booking it goes through that venue's own route.",
+       "The person sees them as photo cards and picks one by tap or voice; booking it goes through that venue's own route. "
+       "Also a train, bus or ferry, or tickets (a museum, a concert): put their WHOLE request in `what` with the route as they said it "
+       "(e.g. \"train Madrid to Barcelona\"), the day and time in open_at, how many in party — the operators' own pages come back as buttons.",
        {"what": {"type": "string"}, "where": {"type": "string"}, "country": {"type": "string", "pattern": "^[A-Z]{2}$"},
         "open_at": {"type": "string", "description": "the local date-time wanted, YYYY-MM-DDTHH:MM (on the trip's day)"},
         "party": {"type": "integer", "minimum": 1, "maximum": 20}}, ["what", "where"],

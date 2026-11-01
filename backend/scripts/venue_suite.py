@@ -42,7 +42,7 @@ async def real_test_venue(a: str) -> None:
        r.get("ok") and "form" in r["result"]["routes"], str(r.get("error") or r.get("result"))[:200])
     turn1 = _ctx(a, "Book it, the form please")
     h = await API.call(turn1, "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form", "idempotency_key": "venue-suite-h1"})
-    ok("VENUE 2 (Austen): hold_venue → the read-back, nothing sent", h.get("ok") and h["result"]["status"] == "awaiting_yes" and h["result"]["route"] == "form",
+    ok("VENUE 2 (Austen): hold_venue → AgAPI's read-back, nothing sent", h.get("ok") and h["result"]["status"] == "awaiting_yes" and h["result"]["route"] == "agapi",
        str(h.get("error") or h.get("result"))[:200])
     same = await API.call(turn1, "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": "venue-suite-b0"})
     ok("VENUE 3: a yes in the SAME turn as the read-back books nothing", (same.get("error") or {}).get("code") == "read_back_first", str(same)[:160])
@@ -50,15 +50,16 @@ async def real_test_venue(a: str) -> None:
     ok("VENUE 4: without an explicit yes, nothing is sent", (no.get("error") or {}).get("code") == "no_explicit_yes", str(no)[:160])
     b = await API.call(_ctx(a, "Yes, book it"), "book_venue", {"approval": {"said": "Yes, book it"}, "idempotency_key": "venue-suite-b2"})
     res = b.get("result") or {}
-    ok("VENUE 5 (the form route, REAL — our test venue): the yes in the next turn → sent → their page confirms → CONFIRMED",
-       b.get("ok") and res.get("status") == "confirmed", str(b.get("error") or res)[:220])
+    # Sasha 319 · ONE SENDER: the yes goes through AgAPI's act (venue.submit_booking) — never Sasha's own form send
+    ok("VENUE 5 (our test venue): the yes in the next turn → AgAPI's act → requested, until the venue's answer says more",
+       b.get("ok") and res.get("status") in ("requested", "confirmed") and bool(res.get("act_id")), str(b.get("error") or res)[:220])
     st = await API.call(_ctx(a), "get_status", {})
     vb = (st.get("result") or {}).get("venues") or []
-    ok("VENUE 6 (Pacioli): get_status lists it on its day, Confirmed — and only then does anything count as booked",
-       st.get("ok") and any(x["date"] == day and x["status"] == "confirmed" for x in vb) and st["result"]["anything_booked"],
+    ok("VENUE 6 (Pacioli): get_status lists it on its day as AgAPI's act — never booked before the venue says so",
+       st.get("ok") and any(x["date"] == day and x.get("act_id") and x["status"] in ("requested", "confirmed") for x in vb),
        str(vb)[:220])
-    tid = next((x["trip_item_id"] for x in vb if x["date"] == day), None)
-    c1 = await API.call(_ctx(a, "Cancel it"), "cancel_venue", {"trip_item_id": tid, "idempotency_key": "venue-suite-c1"})
+    act = next((x["act_id"] for x in vb if x["date"] == day and x.get("act_id")), None)
+    c1 = await API.call(_ctx(a, "Cancel it"), "cancel_venue", {"act_id": act, "idempotency_key": "venue-suite-c1"})
     ok("VENUE 7: cancel_venue → its read-back first, back the way it was made; nothing sent yet",
        c1.get("ok") and c1["result"]["status"] == "awaiting_yes", str(c1.get("error") or c1.get("result"))[:200])
 
@@ -104,6 +105,8 @@ async def routes_offline(a: str) -> None:
     taps = []
     fake = FakeApi()
 
+    PHONE = [{"kind": "phone", "value": "+34910000000", "source_kind": "site", "source_label": "their website", "source_url": "https://casagate.example/"}]
+
     def read_with(rungs: dict, facts=None):
         async def rd(ctx, args):
             return {"read_id": "r-1", "country": "ES", "venue": "Casa Gate", "facts": facts or [], "rungs": rungs,
@@ -135,6 +138,8 @@ async def routes_offline(a: str) -> None:
     v = {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": "dinner", "party": 2}
 
     async def two_turns(args: dict, key: str) -> tuple:
+        VN._SENT.pop(a, None)   # Sasha 319 · each route is its own booking here (AgAPI's path answers a repeated yes "already sent")
+        VN._HELD.pop(a, None)
         h = await API.call(_ctx(a, "book it"), "hold_venue", {**v, **args, "idempotency_key": key + "h"})
         b = await API.call(_ctx(a, "Yes"), "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": key + "b"})
         return h, b
@@ -148,14 +153,15 @@ async def routes_offline(a: str) -> None:
     try:
         # Sasha 254 · every route below is the BOOKING RULES' answer (agapi/booking_rules through agapi.booking_decide)
         VN._HELD.pop(a, None)
-        VN._read = read_with({"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})   # a platform venue + its own email
+        VN._read = read_with({"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}}, PHONE)   # a platform venue + its own email
         q = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-q1"})
-        ok("VENUE ROUTE · more than 48 h, their own email AND a platform → the email first (R1), read back, nothing sent",
-           q.get("ok") and q["result"]["status"] == "awaiting_yes" and q["result"]["route"] == "email"
+        ok("VENUE ROUTE · more than 48 h, their own email AND a platform → the request (R1) as AgAPI's read-back, nothing sent",
+           q.get("ok") and q["result"]["status"] == "awaiting_yes" and q["result"]["route"] == "agapi"
            and not any(p.endswith("/send") for _m, p, _b in fake.calls), str(q.get("result"))[:200])
+        VN._HELD.pop(a, None)
         q2 = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": soon[0], "time": soon[1], "idempotency_key": "vo-q2"})
-        ok("VENUE ROUTE · within 48 h → a call (R4), read back first", q2.get("ok") and q2["result"]["status"] == "awaiting_yes"
-           and q2["result"]["route"] == "call", str(q2.get("result"))[:200])
+        ok("VENUE ROUTE · within 48 h → AgAPI's call act (R4), its read-back first", q2.get("ok") and q2["result"]["status"] == "awaiting_yes"
+           and q2["result"]["route"] == "agapi_call", str(q2.get("error") or q2.get("result"))[:200])
         VN._read = read_with({"form": {}, "link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
         d = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-q3"})
         ok("VENUE ROUTE · their own form → the rules' ONE question (R2), word for word",
@@ -166,23 +172,23 @@ async def routes_offline(a: str) -> None:
         ok("VENUE ROUTE · page (a platform only): its page goes to the phone on the yes — never booked by Sasha (R14)",
            h.get("ok") and b.get("ok") and b["result"]["status"] == "page_on_phone" and taps == ["https://www.thefork.es/restaurante/x-r1"],
            f"{b.get('error') or b.get('result')} taps={taps}")
-        VN._read = read_with({"email": {}, "phone": {"fact_index": 0}})
+        own = lambda: [p for _m, p, _b in fake.calls if p.startswith(("/api/booking/emails", "/api/booking/calls", "/api/booking/forms"))]
+        VN._read = read_with({"email": {}, "phone": {"fact_index": 0}}, PHONE)
         h, b = await two_turns({"day": later, "time": "21:00", "route": "email"}, "vo-e")
-        ok("VENUE ROUTE · email: sent on the yes, Requested until they reply",
-           b.get("ok") and b["result"]["status"] == "requested" and ("POST", "/api/booking/emails/e-1/send") in [(m, p) for m, p, _ in fake.calls],
-           str(b.get("error") or b.get("result"))[:160])
+        ok("VENUE ROUTE · the request: AgAPI's act on the yes, Requested until they reply — never Sasha's own email (319)",
+           b.get("ok") and b["result"]["status"] == "requested" and b["result"].get("act_id") and not own(), str(b.get("error") or b.get("result"))[:160])
         h, b = await two_turns({"day": soon[0], "time": soon[1], "route": "call"}, "vo-c")
-        ok("VENUE ROUTE · call: placed on the yes (its reading decides)", b.get("ok") and b["result"]["status"] == "placed",
-           str(b.get("error") or b.get("result"))[:160])
-        VN._read = read_with({"form": {}, "link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
+        ok("VENUE ROUTE · call: AgAPI's call act on the yes, dialled only from its plan (simulated here)",
+           b.get("ok") and b["result"]["status"] == "calling" and not own(), str(b.get("error") or b.get("result"))[:160])
+        VN._read = read_with({"form": {}, "link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}}, PHONE)
         h, b = await two_turns({"day": later, "time": "21:00", "route": "form"}, "vo-f")
-        ok("VENUE ROUTE · “handle it” — the form (the founder's override): filled in the cloud browser; the human step → Tap to finish",
-           h.get("ok") and h["result"]["route"] == "handover" and b.get("ok") and b["result"]["status"] == "tap_to_finish" and b["result"]["on_phone"],
-           f"{h.get('error') or h.get('result', {}).get('route')} · {b.get('error') or b.get('result')}")
+        ok("VENUE ROUTE · “handle it” — their form: AgAPI's act sends it (never Sasha's cloud-browser fill, 319)",
+           b.get("ok") and b["result"]["status"] in ("requested", "confirmed") and not own(), str(b.get("error") or b.get("result"))[:160])
+        VN._HELD.pop(a, None)
         VN._read = read_with({"whatsapp": {"value": "+34 600 000 211"}})
         w = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-w"})
-        ok("VENUE ROUTE · WhatsApp-only: the drafted message (they send it), nothing sent by Sasha",
-           w.get("ok") and w["result"]["status"] == "draft_message" and "wa.me/34600000211" in w["result"].get("open_in_whatsapp", ""),
+        ok("VENUE ROUTE · WhatsApp-only: AgAPI's read-back for Kanoe's WhatsApp request — nothing sent by Sasha",
+           w.get("ok") and w["result"]["status"] == "awaiting_yes" and w["result"]["route"] == "agapi" and not own(),
            str(w.get("error") or w.get("result"))[:200])
         # Sasha 212 · a SPA on a platform (Fresha): its page to the phone; a spa with its own form behind a CAPTCHA: Tap to finish
         VN._read = read_with({"link": {"value": "Fresha"}})
@@ -191,9 +197,9 @@ async def routes_offline(a: str) -> None:
         ok("VENUE ROUTE · a spa on Fresha: its page to the phone on the yes (she never books on a platform)",
            b.get("ok") and b["result"]["status"] == "page_on_phone" and len(taps) == nt + 1, str(b.get("error") or b.get("result"))[:160])
         VN._read = read_with({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}])
-        h, b = await two_turns({"day": later, "time": "11:00", "route": "form", "what": "a massage", "name": "Spa Gate"}, "vo-spa2")
-        ok("VENUE ROUTE · a spa's own form behind a CAPTCHA: never zero-touch (R13) — Sasha fills it, the CAPTCHA → Tap to finish",
-           b.get("ok") and b["result"]["status"] == "tap_to_finish", str(b.get("error") or b.get("result"))[:160])
+        h, b = await two_turns({"day": later, "time": "11:00", "route": "page", "what": "a massage", "name": "Spa Gate"}, "vo-spa2")
+        ok("VENUE ROUTE · a spa's own form behind a CAPTCHA: never zero-touch (R13) — their page, never a form Sasha fills (319)",
+           h.get("ok") and h["result"].get("status") != "tap_to_finish" and not own(), str(h.get("error") or h.get("result"))[:160])
         # a TATTOO studio that books only on Instagram: no way the rules book by — said, with the take-over; nothing sent
         VN._read = read_with({"instagram": {"value": "inkgate.madrid"}})
         h = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "17:00", "what": "a tattoo consultation",

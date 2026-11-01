@@ -184,7 +184,7 @@ RENDER.update({"call_again": "inline"})
 RENDER.update({"booking_fine_print": "inline", "keep_note": "inline"})   # Sasha 301 · the fine print, said; a card / loyalty number, saved   # Sasha 269 · "try once more": the act's own words, said
 RENDER.update({"my_plans": "plans", "running_late": "read_back", "change_booking": "read_back", "cancel_booking": "read_back"})   # Sasha 226   # Sasha 224 · CR 63 + the photo capture   # CR 62   # CR 60 / Sasha 216 · the email read back on its card
 KINDS_S2 = {"calendar", "pay_here"}   # Sasha 220 · the pay card in the conversation   # Sasha 217 · the calendar links on a card (she says they're on the card — so there is one)
-KINDS_S2_PAGE = {"discover", "kind_ask"}   # Sasha 297 · + her one question before a vague search ·   # Sasha 276 · venue.discover's groups + pick: /s2's page only (via "page") — never /next (s1) or WhatsApp (via "wa", until 277)
+KINDS_S2_PAGE = {"discover", "kind_ask", "operators"}   # Sasha 297 · + her one question before a vague search ·   # Sasha 276 · venue.discover's groups + pick: /s2's page only (via "page") — never /next (s1) or WhatsApp (via "wa", until 277)
 KINDS_S2_ONLY = {"keep_capture", "capabilities", "plans", "notice"}   # Sasha 224 · rendered by /s2 only (S2App): the Keep's photo picker — /next's UI is unchanged
 KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}
 KINDS_S2_ONLY |= {"prepared"}   # Sasha 248 · their own booking page + the details to copy (components/cards, /s2 and /next)
@@ -277,6 +277,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": kind, "card": stays_card(res)}
     if tool == "search_venues" and isinstance(res.get("kind_ask"), dict):   # Sasha 297 · her ONE question before a vague search: three taps
         return {"type": "render", "kind": "kind_ask", **res["kind_ask"]}
+    if tool == "search_venues" and isinstance(res.get("operators"), dict):   # Sasha 320 · CR 150's hand-over: the trip line + one button a page
+        return {"type": "render", "kind": "operators", **res["operators"]} if res["operators"].get("buttons") else None
     if tool == "search_venues" and isinstance(res.get("discover"), dict):   # Sasha 276 · AgAPI venue.discover: its groups, options, pick
         return {"type": "render", "kind": "discover", **res["discover"]}
     if kind == "venues" and res.get("preset"):   # Sasha 213 · the search's OWN cards — the card never searches again
@@ -630,7 +632,7 @@ _TEST_TAG = [(re.compile(r"\s*\((?:Duffel )?TEST[^)]*\)"), ""), (re.compile(r",?
 _MODEL_DROP_KEYS = {"note", "notes", "prices", "test", "prefetched", "flight_note", "total_note", "breakdown",   # Sasha 212 · one total
                     "preset", "find", "card", "ribbon",   # Sasha 213 · the screen's copy; she gets the cards as `venues` only
                     "checkout_url", "view_url", "page_url", "checkout", "client_secret",
-                    "discover", "kind_ask"}   # Sasha 297 · her question's card is the screen's · Sasha 276 · AgAPI's grouped answer is the screen's; she gets the names and the line   # Sasha 220 · the pay card's, never hers   # Sasha 214 · links for the page, never words for her
+                    "discover", "kind_ask", "operators"}   # Sasha 320 · the hand-over's buttons are the screen's · Sasha 297 · her question's card is the screen's · Sasha 276 · AgAPI's grouped answer is the screen's; she gets the names and the line   # Sasha 220 · the pay card's, never hers   # Sasha 214 · links for the page, never words for her
 
 
 def clean_for_model(obj: Any) -> Any:

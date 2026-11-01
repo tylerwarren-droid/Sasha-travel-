@@ -113,13 +113,15 @@ async def restaurant(a: str) -> None:
                 ok("REST typed: the rules' one question — “I'll book it. Want a prefilled form you just confirm, or shall I handle it…?”",
                    BR.PHRASES["ask_book"] in _said(v), _said(v)[:120])
         # Sasha 254 · "Handle it" on a venue with its own form is the rules' fill_form_zero_touch: the choice is the yes (Sasha 195)
-        ok("REST typed → booked at the test venue, with its reference", any(re.search(r"✅|[Bb]ooked|confirmed", x) for x in seen), " | ".join(seen)[:160])
+        # Sasha 319 · the old flow's own form send is gone (AgAPI is the one sender; REST can't take a yes AgAPI accepts): Tyler's
+        ok("REST typed → the test venue is handed to Tyler — never Sasha's own form send", any("hand this to Tyler" in x for x in seen)
+           and not any(re.search(r"✅|[Bb]ooked", x) for x in seen), " | ".join(seen)[:160])
         h = []
         for said in ("Uh, a table for two in Chamberí, Madrid, Saturday at nine at night, please.", "the third one", "yes"):
             v = await VT.turn(a, said, h)
             print(f"   REST voice · {said!r} → {_said(v)[:140]!r}", flush=True)
             h = (v or {}).get("messages") or h
-        ok("REST voice phrasing → booked at the test venue", re.search(r"✅|[Bb]ooked|confirmed", _said(v)) is not None, _said(v)[:120])
+        ok("REST voice phrasing → handed to Tyler, nothing sent (319)", re.search(r"✅|[Bb]ooked", _said(v)) is None, _said(v)[:120])
     finally:
         GW.rehearsal = real
 
@@ -238,8 +240,8 @@ async def guided(a: str, conduct) -> None:
     await JN.file(a)   # as every itinerary view does before showing it
     rows = await IQ._rows(a)
     din = next((x for x in rows if "Sasha Test Venue" in str(x.get("venue")) and x.get("date") == "2026-11-13"), None)
-    ok("GUIDED 7: a restaurant added via the ladder, on the trip's 13th, in the trip", bool(din) and din.get("date") == "2026-11-13"
-       and str(din.get("trip_id")) == str((p or {}).get("trip_id")), str({k: (din or {}).get(k) for k in ("date", "status")}))
+    ok("GUIDED 7: the ladder's restaurant is never sent by Sasha's own form (319) — nothing added on the 13th", din is None,
+       str({k: (din or {}).get(k) for k in ("date", "status")}))
     r = await say("no")
     ok("GUIDED 8: “Any changes?”", _said(r) == CD.S199_CHANGES, _said(r)[:90])
     r = await say("change the hotel in Hoi An to something on the beach")
@@ -264,9 +266,9 @@ async def guided(a: str, conduct) -> None:
         ACC.account_for = real_acc
     rows = await IQ._rows(a)
     fl = [x for x in rows if str(x.get("venue") or "").startswith("Flight ")]
-    ok("GUIDED 12: booked — the flight HE picked (only it), the hotels, the dinner kept apart",
-       len(fl) == 1 and sum(1 for x in rows if "TEST booking" in str(x.get("venue")) and not str(x.get("venue")).startswith("Flight")) >= 4
-       and any("Sasha Test Venue" in str(x.get("venue")) for x in rows), f"{len(fl)} flight(s), {len(rows)} rows")
+    ok("GUIDED 12: booked — the flight HE picked (only it), the hotels",
+       len(fl) == 1 and sum(1 for x in rows if "TEST booking" in str(x.get("venue")) and not str(x.get("venue")).startswith("Flight")) >= 4,
+       f"{len(fl)} flight(s), {len(rows)} rows")
 
 
 async def tabs(a: str) -> None:

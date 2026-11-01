@@ -683,6 +683,8 @@ def discover_line(tool: str, r: dict) -> str:
     res = (r or {}).get("result") if (r or {}).get("ok") else None
     if tool == "search_venues" and isinstance(res, dict) and isinstance(res.get("kind_ask"), dict):   # Sasha 297 · her ONE question
         return str(res["kind_ask"].get("ask") or KIND_ASK)   # Sasha 298 · in the page's language (kind_ask)
+    if tool == "search_venues" and isinstance(res, dict) and isinstance(res.get("operators"), dict):   # Sasha 320 · the trip line (or AgAPI's
+        return str(res.get("say") or "").strip()                                                      # own words for a kind it can't hand over)
     if tool != "search_venues" or not isinstance(res, dict) or not isinstance(res.get("discover"), dict):
         return ""
     return str(res.get("say") or "").strip()

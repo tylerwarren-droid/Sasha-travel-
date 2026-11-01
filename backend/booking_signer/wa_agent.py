@@ -267,6 +267,8 @@ KIND_MAP = {
     "keep_handoff": _nothing,                # WhatsApp takes the photo directly
     "focus": _nothing, "trip": _nothing, "inline": _nothing,
     "kind_ask": _nothing,   # Sasha 297 · her one question before a vague search: /s2's page only (v0._discover via "page") — never on WhatsApp
+    "operators": lambda ev, out: out.text("\n".join([str(ev.get("line") or "")] + [f"{b.get('label')}: {b.get('url')}"   # Sasha 320 · the line,
+                                                                                 for b in ev.get("buttons") or []])),        # then each page
     "discover": _nothing,   # Sasha 276 · never reaches WhatsApp: its brain searches via "wa" (its list cards) until Sasha 277 — tests.test_s276
 }
 

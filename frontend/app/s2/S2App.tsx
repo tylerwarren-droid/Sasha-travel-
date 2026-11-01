@@ -30,7 +30,7 @@ import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
 import { loadFirstLine, isWork, takeFirstLine, forgetAcks } from '@/lib/first-line'
-import { BLOCKED, stepsFor } from '@/lib/mic-state'
+import { BLOCKED } from '@/lib/mic-state'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
@@ -53,7 +53,8 @@ type Card =
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
   | { k: 'claim_status'; claim: Ev }
-  | { k: 'handover'; url: string; external: boolean; label?: string; alts?: { label: string; link: string }[] }   // Sasha 236 · Tap to finish · 286: the floor's button + alternatives
+  | { k: 'handover'; url: string; external: boolean; label?: string; alts?: { label: string; link: string }[] }
+  | { k: 'operators'; line: string; buttons: { label: string; url: string }[] }   // Sasha 320 · CR 150: the trip line + one button per page   // Sasha 236 · Tap to finish · 286: the floor's button + alternatives
   | { k: 'trip' }                                        // Sasha 236 · the trip changed: one tap to the Trip board · 283: it says what the trip is
   | { k: 'did_it'; key: string; venue: string; done?: boolean }   // Sasha 283 · item 4c · the way back: her ONE question, its two answers
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
@@ -477,6 +478,14 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
       {(c.alts || []).map(x => (   /* Sasha 286 · the floor: the listing's WhatsApp / number beside their website */
         <a key={x.link} href={x.link} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, marginLeft: 8, padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, color: C.gold, fontWeight: 700, textDecoration: 'none' }}>{untag(x.label)}</a>))}
     </Box>)
+  if (c.k === 'operators') return (   // Sasha 320 · ONE line (the trip as asked), then one button per page AgAPI handed over — each opens it
+    <Box k="Book it on their site" h={untag(c.line)}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        {c.buttons.map(b => (
+          <a key={b.url} href={b.url} target="_blank" rel="noreferrer" data-operator
+            style={{ padding: '10px 16px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>{untag(b.label)}</a>))}
+      </div>
+    </Box>)
   if (c.k === 'trip') return <TripCard />
   if (c.k === 'did_it') return (   // Sasha 283 · item 4c · the tap IS his answer (on the hand-over's one record)
     <Box k="Your booking" h={untag(c.venue)}>
@@ -856,6 +865,8 @@ export default function S2App() {
             else if (ev.kind === 'my_cards') add({ k: 'my_cards', cards: ev.cards || [] })
             else if (ev.kind === 'accident' && ev.view) add({ k: 'accident', view: ev.view })
             else if (ev.kind === 'claim_status' && ev.claim) add({ k: 'claim_status', claim: ev.claim })
+            else if (ev.kind === 'operators' && Array.isArray(ev.buttons) && ev.buttons.length)   // Sasha 320 · AgAPI's hand-over, every kind
+              add({ k: 'operators', line: String(ev.line || ''), buttons: ev.buttons.filter((b: { url?: unknown; label?: unknown }) => typeof b?.url === 'string' && String(b.url).startsWith('https://') && typeof b?.label === 'string') })
             else if (ev.kind === 'handover' && typeof ev.url === 'string' && (ev.url.startsWith('https://') || (ev.external && ev.url.startsWith('http://'))))   // Sasha 286 · a venue's own site may be http
               add({ k: 'handover', url: ev.url, external: !!ev.external, label: typeof ev.label === 'string' ? ev.label : undefined,
                     alts: Array.isArray(ev.alternatives) ? ev.alternatives.filter((x: { link?: unknown }) => typeof x?.link === 'string' && /^(https:\/\/|tel:)/.test(String(x.link))) : undefined })   // Sasha 236
@@ -1120,8 +1131,7 @@ export default function S2App() {
             <div role="status" data-no-sound style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: `1px solid ${C.gold}`, background: 'rgba(232,185,49,.08)', fontSize: 14, lineHeight: 1.4, fontWeight: 600 }}>{soundNote}</div>) : null}
           {micNote ? (   /* Sasha 266 · the mic is "on" only when it hears; otherwise this, plainly, with how to allow it */
             <div role="status" data-mic-stuck style={{ margin: '0 16px 8px', padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(240,120,120,.45)', background: 'rgba(240,120,120,.08)', fontSize: 14, lineHeight: 1.4 }}>
-              <div style={{ fontWeight: 700 }}>{micNote}</div>
-              {micNote === BLOCKED ? <div style={{ color: C.dim, marginTop: 4 }}>{stepsFor()}</div> : null}
+              <div style={{ fontWeight: micNote === BLOCKED ? 600 : 700 }}>{micNote}</div>
             </div>) : null}
           {/* Sasha 259 · Tyler (row 884): ONE row of ordinary controls — the moon, her voice, her face — nothing floating over send */}
           {/* Sasha 273 · item 5: the row fits a 390 px phone with nothing shrunk under its words (found at 390: the Pause button squeezed to

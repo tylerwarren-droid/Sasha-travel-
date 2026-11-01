@@ -173,7 +173,7 @@ Places to stay in a city, best rated first: real hotels (Google), each with an E
 
 ### `search_venues`
 
-Restaurants, spas or other places in a city (Google listings; nothing contacted). The person sees them as photo cards and picks one by tap or voice; booking it goes through that venue's own route.
+Restaurants, spas or other places in a city (Google listings; nothing contacted). The person sees them as photo cards and picks one by tap or voice; booking it goes through that venue's own route. Also a train, bus or ferry, or tickets (a museum, a concert): put their WHOLE request in `what` with the route as they said it (e.g. "train Madrid to Barcelona"), the day and time in open_at, how many in party — the operators' own pages come back as buttons.
 
 **Errors:** `what_invalid`, `where_invalid`, `places_not_configured`, `already_on_screen`, `missing_input`, `internal`
 

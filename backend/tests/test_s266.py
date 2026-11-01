@@ -55,9 +55,9 @@ class OnOnlyWhenItHears(unittest.TestCase):
         app = _tsx(self, "app/s2/S2App.tsx")
         self.assertIn("onMicError={setMicNote}", app)                                     # /s2's quiet mic: said on the page
         self.assertIn("data-mic-stuck", app)
-        self.assertIn("micNote === BLOCKED ? <div style={{ color: C.dim, marginTop: 4 }}>{stepsFor()}</div>", app)
-        steps = _tsx(self, "lib/mic-state.ts")
-        self.assertIn("Website Settings › Microphone › Allow", steps)                     # his browser: iPhone Safari
+        # Sasha 320 · ONE short line, only after his tap was refused — never the long steps, never before a tap
+        self.assertNotIn("stepsFor()", app)
+        self.assertIn("Microphone is off — type instead, or allow it in ${browserName()} settings", _tsx(self, "lib/mic-state.ts"))
 
     def test_the_mic_reports_itself_without_words(self):
         app = FastAPI()

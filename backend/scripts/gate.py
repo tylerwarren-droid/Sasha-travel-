@@ -81,6 +81,11 @@ async def main() -> int:
     # Sasha 249 · ONE VERDICT: the line printed and the exit code are the same expression (the safety suite was printed, never failed)
     bad = bool(a or b or c or d or v or w or e or f or s or t or h or o)
     print(f"\nDEPLOY GATE: {'PASS' if not bad else 'FAIL'}")
+    if not bad and os.getenv("SASHA_GATE_LOOP5_PROBE", "on") != "off":   # Sasha 323 · after the verdict, never part of it: VOICE LOOP 5
+        try:                                                                 # run until it fails once — its whole conversation printed
+            await VS.probe("5 ·", int(os.getenv("SASHA_GATE_LOOP5_RUNS", "6")))
+        except Exception as e:
+            print(f"loop 5 probe: ⚠ {type(e).__name__}: {e}")
     if not bad:   # Sasha 321 · after the verdict, never part of it: one voice-avatar booking at the test venue on the REAL sandbox
         from scripts import voice_proof
         try:

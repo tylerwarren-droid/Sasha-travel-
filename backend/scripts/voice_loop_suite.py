@@ -226,6 +226,59 @@ async def cleanup(a: str) -> None:
         print(f"   voice-loop {a[:8]} NOT deleted: {type(e).__name__}")
 
 
+def print_transcript(r: dict, why: str = "") -> None:
+    """Sasha 323 · the WHOLE conversation of a check, in the log: each turn — his words, her tools, a link on the phone, her words."""
+    print(f"   ── transcript · VOICE LOOP {r['name']}{' · ' + why if why else ''}", flush=True)
+    for i, t in enumerate(r.get("turns") or []):
+        print(f"   {i + 1:>2} ▸ {t['user']!r}", flush=True)
+        print(f"      tools: {', '.join(t['tools']) or '—'}{'   📱 PAYMENT LINK' if t.get('links') else ''}", flush=True)
+        print(f"      her: {str(t.get('text') or '')[:600]!r}", flush=True)
+
+
+def install_phone() -> tuple:
+    """The phone, captured (never sent) — (captured, undo)."""
+    from booking_signer import guest_whatsapp as GW
+    captured: dict = {}
+    real_tell = GW._tell
+
+    async def capture(ch, text, template=None):   # the phone: captured, never sent
+        if ch.get("wa_id_sha256") not in captured:
+            return "not sent: not a voice-loop number"
+        captured[ch["wa_id_sha256"]].append(text)
+        return "sent (captured)"
+    GW._tell = capture
+
+    def undo():
+        GW._tell = real_tell
+    return captured, undo
+
+
+async def probe(prefix: str = "5 ·", times: int = 6) -> dict:
+    """Sasha 323 · ONE check, run again and again until it fails once (or `times` runs): the first failing run's whole conversation and
+    one passing run's, printed. Never part of the gate's verdict (gate.py runs it after)."""
+    s = next(x for x in SCENARIOS if x[0].startswith(prefix))
+    captured, undo = install_phone()
+    shown_pass, fails = False, 0
+    try:
+        for k in range(times):
+            try:
+                r = await one(*s, n=400 + k, captured=captured)
+            except Exception as e:
+                print(f"   probe run {k + 1}: {type(e).__name__}: {e}", flush=True)
+                continue
+            if r["fail"]:
+                fails += 1
+                print_transcript(r, f"probe run {k + 1}/{times} FAILED: {'; '.join(r['fail'])[:200]}")
+                break
+            if not shown_pass:
+                shown_pass = True
+                print_transcript(r, f"probe run {k + 1}/{times} passed")
+    finally:
+        undo()
+    print(f"   probe {s[0]}: {fails} failure(s) in {k + 1} run(s)", flush=True)
+    return {"runs": k + 1, "fails": fails}
+
+
 def write_report(results: list, path: str) -> None:
     lines = [f"# Sasha 210 · the full loop — ten scripted voice conversations ({datetime.now(timezone.utc):%d %b %Y %H:%M} UTC)", "",
              "| # | conversation | turns | result | retried | first sound, median ms |", "|---|---|---|---|---|---|"]
@@ -261,17 +314,8 @@ async def main() -> int:
         from scripts import duffel_fake
         duffel_fake.install()
     from booking_signer import routes  # noqa: F401
-    from booking_signer import guest_whatsapp as GW
     t0, start = time.time(), len(RESULTS)
-    captured: dict = {}
-    real_tell = GW._tell
-
-    async def capture(ch, text, template=None):   # the phone: captured, never sent
-        if ch.get("wa_id_sha256") not in captured:
-            return "not sent: not a voice-loop number"
-        captured[ch["wa_id_sha256"]].append(text)
-        return "sent (captured)"
-    GW._tell = capture
+    captured, undo = install_phone()
     sem = asyncio.Semaphore(int(os.getenv("VOICE_LOOP_PARALLEL", "5")))
 
     async def run(i, s):
@@ -295,8 +339,10 @@ async def main() -> int:
     try:
         results = await asyncio.gather(*[run(i, s) for i, s in enumerate(SCENARIOS)])
     finally:
-        GW._tell = real_tell
+        undo()
     for r in results:
+        if r["fail"]:
+            print_transcript(r, "FAILED")   # Sasha 323 · the whole conversation, never only its last two lines
         ok(f"VOICE LOOP {r['name']}" + (" (passed on its second run)" if r.get("retried") and not r["fail"] else ""), not r["fail"],
            "; ".join(r["fail"])[:240])
     out = os.getenv("VOICE_LOOP_REPORT", "")

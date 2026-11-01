@@ -1525,7 +1525,8 @@ async def booking_outcomes(ctx: Ctx, a: dict) -> dict:
     w = await OW.week(int(a.get("days") or 7))
     if not w.get("ok"):
         raise ToolError("ledger_unreachable", w.get("say") or "the outcomes ledger didn't answer")
-    return {k: w[k] for k in ("count", "outcomes", "no_answer", "handed_to_tyler", "by_channel", "by_kind", "unhandled", "excluded_test", "say")}
+    return {k: w[k] for k in ("count", "outcomes", "no_answer", "handed_to_tyler_unrecorded", "by_channel", "by_kind", "unhandled",
+                              "excluded_test", "say")}
 
 
 async def get_trip(ctx: Ctx, a: dict) -> dict:

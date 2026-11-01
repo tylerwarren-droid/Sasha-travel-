@@ -45,6 +45,7 @@ STOP_OF = {
     "draft_message": "guest_session", "guest": "guest_session", "calls_cap": "calls_cap", "too_soon": "too_soon",
     "declined": "venue_declined", "refused": "venue_declined", "failed": "failed", "cancelled": "cancelled",
     "no_answer": "no_answer", "expired": "unresolved", "unknown": "unresolved", "proposed": "venue_proposed_other",
+    "to_tyler": "handed_to_tyler",   # Sasha 324 · ended before any act: handed to Tyler (not yet recorded in AgAPI — CR 155)
 }
 FINAL_OUTCOME = {"confirmed": "confirmed", "booked": "confirmed", "declined": "refused", "refused": "refused", "failed": "refused",
                  "not_allowed": "refused", "cancelled": "cancelled", "expired": "unresolved", "unknown": "unresolved"}
@@ -304,7 +305,8 @@ def _booking(account: Optional[str], place: Optional[str], venue_type: Optional[
         b = {"cid": cid, "account": h(account), "venue": place, "venue_type": venue_type, "surface": surface, "started": _now(),
              "stages": {}, "stop": None, "yes_at": None, "action_at": None, "outcome": None, "outcome_at": None, "acts": [],
              "submits": 0, "duplicates": 0, "cancel_at": None, "after_cancel": 0, "profile_ms": [], "submit_ms": [],
-             "cost": {"tokens": {}, "places": 0, "searches": 0, "call_minutes": 0.0}, "closed": False, "agapi": None}
+             "cost": {"tokens": {}, "places": 0, "searches": 0, "call_minutes": 0.0}, "closed": False, "agapi": None,
+             "real": _real(account)}   # Sasha 324 · a real person (their record is live): the week's count leaves test and scratch out
         _BOOKINGS[cid] = b
         _OF[k] = cid
     if venue_type and not b.get("venue_type"):
@@ -313,6 +315,23 @@ def _booking(account: Optional[str], place: Optional[str], venue_type: Optional[
     if t is not None and cid not in t["cids"]:
         t["cids"].append(cid)
     return b
+
+
+def _real(account: Optional[str]) -> bool:
+    try:
+        from agapi import person_access as PA
+        return bool(account) and (PA.cached(account) or {}).get("mode") == "live"
+    except Exception:
+        return False
+
+
+def handed(account: Optional[str], venue: Optional[str], kind: str, surface: str = "s2") -> None:
+    """Sasha 324 · a booking / change / cancel that ENDED before any act — handed to Tyler. Kept here (the turn's measure, an observation)
+    until CR 155 gives AgAPI an honest handed_to_person outcome; never sent to AgAPI under another channel's name."""
+    b = _booking(account, venue, kind, surface)
+    _stop(b, "to_tyler")
+    b["outcome"] = b.get("outcome") or "handed_to_tyler"
+    _save(b)
 
 
 def _reach(b: dict, stage: str) -> None:
@@ -337,6 +356,7 @@ def derive(b: dict) -> dict:
     reached = [s for s in STAGES if s in st]
     out = {k: b[k] for k in ("cid", "account", "venue", "venue_type", "surface", "stop", "outcome", "submits", "duplicates",
                              "after_cancel", "cost")}
+    out["real"] = bool(b.get("real"))
     out["acts"] = list(b["acts"])   # already hashed (_bind)
     out["furthest"] = reached[-1] if reached else None
     out["stages_ms"] = {s: int((st[s] - b["started"]) * 1000) for s in reached}

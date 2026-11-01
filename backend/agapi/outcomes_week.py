@@ -84,8 +84,15 @@ async def week(days: int = 7, now: Optional[datetime] = None) -> Dict[str, Any]:
     for it in items:
         k = str(it.get("kind_guess") or "unknown")
         by_kind[k] = by_kind.get(k, 0) + 1
+    handed = 0
+    try:   # Sasha 324 · endings before any act: kept out of AgAPI until CR 155 — counted from the turn's measure, real people only
+        from agapi import measure as MS
+        handed = sum(1 for x in await MS.read_rows(days) if x["kind"] == "booking" and (x["data"].get("real"))
+                     and ((x["data"].get("stop") or {}).get("why") == "handed_to_tyler"))
+    except Exception as e:
+        log.info("[outcomes_week] hand-offs not read: %s", type(e).__name__)
     o = r.get("overall") or {}
-    out = {"ok": True, "window": {"from": since, "days": days}, "count": int(o.get("attempts") or 0), "overall": o,
+    out = {"ok": True, "handed_to_tyler_unrecorded": handed, "window": {"from": since, "days": days}, "count": int(o.get("attempts") or 0), "overall": o,
            "outcomes": outcomes, "no_answer": outcomes.get("no_answer", 0), "handed_to_tyler": outcomes.get("handed_to_tyler", 0),
            "by_channel": r.get("by_channel") or [], "by_kind": r.get("by_sector") or [], "excluded_test": r.get("excluded_test", 0),
            "unhandled": {"count": unhandled.get("count", sum(by_kind.values())), "by_kind": by_kind,
@@ -101,8 +108,9 @@ def line(w: Dict[str, Any]) -> str:
     rate = f"{round(o['success_rate'] * 100)}% of those decided confirmed" if o.get("success_rate") is not None else "none decided yet"
     ch = "; ".join(f"{c.get('channel')}: {c.get('confirmed', 0)}/{c.get('attempts', 0)}" for c in (w.get("by_channel") or [])[:6])
     return (f"{w['count']} real booking(s) in the last {w['window']['days']} days — {o.get('confirmed', 0)} confirmed, {o.get('declined', 0)} declined, "
-            f"{o.get('failed', 0)} failed ({w.get('handed_to_tyler', 0)} handed to Tyler), {w.get('no_answer', 0)} no answer yet, "
+            f"{o.get('failed', 0)} failed, {w.get('no_answer', 0)} no answer yet, "
             f"{o.get('open', 0)} still open; {rate}." + (f" By channel (confirmed/asked): {ch}." if ch else "")
+            + f" Handed to Tyler (not yet recorded in AgAPI): {w.get('handed_to_tyler_unrecorded', 0)}."
             + f" Couldn't handle: {w['unhandled']['count']}." + (f" ({w['excluded_test']} test attempt(s) left out.)" if w.get("excluded_test") else ""))
 
 

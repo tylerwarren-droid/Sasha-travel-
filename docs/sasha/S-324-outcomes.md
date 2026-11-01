@@ -62,3 +62,16 @@ Where to read it:
 
 An AgAPI booking still requested after its channel's wait reads "No answer yet" on the trip and in get_status, never a silent
 "requested". It is said once, on WhatsApp and /s2, and the act remembers that it was said.
+
+## 1 Nov, Tyler: no relabelling
+
+An attempt that ended before any act ("handed to Tyler", refused, not prepared) is **never** sent to AgAPI under another channel's name. A
+hand-off to Tyler isn't a page hand-over, and relabelling it would corrupt the channel numbers.
+
+Until CR 155 is live (AgAPI's honest `handed_to_person` outcome, and outcomes for changes and cancels), these endings are kept **out of
+AgAPI**:
+- they are noted in the turn's measure (`measure.handed`, an observation, with a real person flagged);
+- they are logged (`[outcomes] not recorded in AgAPI yet (CR 155)`);
+- the week lists them as **"handed to Tyler (not yet recorded in AgAPI)"**.
+
+When CR 155 is live, `s2_outcomes.no_act` records them with AgAPI's own outcome.

@@ -218,9 +218,7 @@ class Summary(Base):
 class NeverAnAuthority(unittest.TestCase):
     def test_no_behaviour_code_reads_the_store(self):
         readers = re.compile(r"\b(?:MS|_MS|measure)\.(?:read_week|read_rows|summarise|call_minutes)\b|from agapi\.measure import .*read_")
-        allowed = {BACKEND / "agapi" / "measure.py", BACKEND / "app" / "agent" / "sasha.py", BACKEND / "tests" / "test_s275.py",
-                   # Sasha 324 · the founder's week (read-only, decides nothing): the hand-offs not yet in AgAPI (until CR 155), counted
-                   BACKEND / "agapi" / "outcomes_week.py", BACKEND / "tests" / "test_s324.py"}
+        allowed = {BACKEND / "agapi" / "measure.py", BACKEND / "app" / "agent" / "sasha.py", BACKEND / "tests" / "test_s275.py"}
         hits = [str(p.relative_to(BACKEND)) for p in BACKEND.rglob("*.py") if p not in allowed and "node_modules" not in str(p)
                 and readers.search(p.read_text(encoding="utf-8", errors="ignore"))]
         self.assertEqual(hits, [])

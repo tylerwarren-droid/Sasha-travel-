@@ -46,18 +46,28 @@ class OneLedgerNeverTwice(unittest.TestCase):
         self.assertIsNone(E("hold_venue", False, None, "missing_input"))                   # a question back: the attempt goes on
         self.assertIsNone(E("book_venue", True, {"status": "requested", "act_id": "act_1"}, None))   # an act: AgAPI records it
         self.assertIsNone(E("search_venues", True, {"status": "to_tyler"}, None))          # not a booking tool
-        # Tyler (1 Nov): a hand-off to Tyler is NEVER sent to AgAPI under another channel's name (until CR 155): the turn's measure only
-        sent, noted = [], []
+        # CR 155 (AgAPI v1.54.0): every ending as what it IS — AgAPI's own rule (outcomes.honest), applied here to what Sasha sends
+        def honest(b):
+            if b["state"] == "handed_to_person":
+                return bool(b.get("failure_reason")) and b["channel"] == "none" and b["rung"] == "person"
+            if b["channel"] == "none" and b["state"] not in ("asked", "failed"):
+                return False
+            return not (b["rung"] == "person" and b["state"] != "asked")
+        sent = []
 
         async def send(op, b, account=None):
-            sent.append(op)
-        with mock.patch.object(OC, "_send", send), mock.patch("agapi.measure.handed", lambda a, v, k, surface="s2": noted.append((v, k))):
+            sent.append(b)
+        with mock.patch.object(OC, "_send", send):
             asyncio.run(OC.no_act("acct", "cancel_venue", "handed to Tyler", {"venue": "Botín"}, {"what": "restaurant"}))
-        self.assertEqual(sent, [])                                                         # nothing to AgAPI
-        self.assertEqual(noted, [("Botín", "cancel")])
-        src = (ROOT / "backend/agapi/s2_outcomes.py").read_text()
-        self.assertNotIn('"channel": "handover"', src)
-        self.assertNotIn('"channel": "page_handover", "state": "failed"', src)             # never relabelled as a page hand-over
+            asyncio.run(OC.no_act("acct", "book_venue", "not allowed to contact venues", {"venue": "Casa"}, {}))
+            asyncio.run(OC.no_act("acct", "running_late", "handed to Tyler — not sent", {"venue": "Lhardy"}, {}))
+        h, f, late = sent
+        self.assertEqual((h["kind"], h["rung"], h["channel"], h["state"], h["failure_reason"]), ("cancel", "person", "none", "handed_to_person", "handed to Tyler"))
+        self.assertEqual((f["kind"], f["channel"], f["state"]), ("booking", "none", "failed"))
+        self.assertEqual((late["kind"], late["state"]), ("late", "handed_to_person"))
+        self.assertTrue(all(honest(b) for b in sent))
+        self.assertTrue(all(b["channel"] in ("api", "web_form", "page_handover", "whatsapp", "instagram", "email", "phone", "sms", "none") for b in sent))
+        self.assertNotIn("page_handover", (ROOT / "backend/agapi/s2_outcomes.py").read_text().split("async def no_act(")[1].split("async def basket_booked(")[0])
 
     def test_the_one_choke_point(self):
         v0 = (ROOT / "backend/agapi/v0.py").read_text()
@@ -71,7 +81,7 @@ class TheWeek(unittest.TestCase):
             {"state": "sent", "rung": "request_reply", "created_at": ago(3)},               # still within its wait → open
             {"state": "sent", "rung": "phone", "created_at": ago(3)},                       # a call past 2 h → no answer
             {"state": "sent", "rung": "human_tap", "created_at": ago(90)},                  # a page handed over: his — never "no answer"
-            {"state": "failed", "rung": "human_tap", "failure_reason": "handed to Tyler (booking)", "created_at": ago(5)},
+            {"state": "handed_to_person", "rung": "person", "channel": "none", "failure_reason": "handed to Tyler", "created_at": ago(5)},
             {"state": "declined", "rung": "request_reply", "created_at": ago(40)},
             {"state": "confirmed", "rung": "zero_touch", "created_at": ago(2), "test": True}]
 
@@ -79,32 +89,31 @@ class TheWeek(unittest.TestCase):
         got = [OW.classify(r, NOW) for r in self.ROWS[:7]]
         self.assertEqual(got, ["confirmed", "no_answer", "open", "no_answer", "open", "handed_to_tyler", "declined"])
 
-    def test_week_reads_the_one_ledger_and_the_couldnt_handle_list(self):
+    def test_week_reads_everything_from_the_one_ledger(self):
         calls = []
 
         async def call(op, body):
             calls.append(op)
-            if op == "outcomes.report":   # AgAPI's schema: by ⊂ {rung, sector, city} — anything else is refused
-                assert set(body["by"]) <= {"rung", "sector", "city"}, body["by"]
-                return {"ok": True, "result": {"overall": {"attempts": 7, "confirmed": 1, "declined": 1, "failed": 1, "open": 4, "success_rate": 0.333},
-                                               "by_rung": [{"rung": "request_reply", "attempts": 4, "confirmed": 1}], "by_sector": [{"sector": "restaurant", "attempts": 7}],
+            if op == "outcomes.report":   # AgAPI's schema (v1.54.0): by ⊂ {rung, sector, city, kind, channel}
+                assert set(body["by"]) <= {"rung", "sector", "city", "kind", "channel"}, body["by"]
+                return {"ok": True, "result": {"overall": {"attempts": 9, "confirmed": 2, "declined": 1, "failed": 1, "handed_to_person": 2, "open": 3},
+                                               "by_kind": [{"kind": "booking", "attempts": 7, "confirmed": 1, "declined": 1, "failed": 1, "handed_to_person": 1,
+                                                            "open": 3, "success_rate": 0.333},
+                                                           {"kind": "cancel", "attempts": 2, "confirmed": 1, "handed_to_person": 1, "open": 0}],
+                                               "by_channel": [{"channel": "email", "attempts": 4, "confirmed": 1}, {"channel": "none", "attempts": 2, "confirmed": 0}],
                                                "excluded_test": 1}}
             if op == "outcomes.list":
                 return {"ok": True, "result": {"outcomes": self.ROWS}}
             return {"ok": True, "result": {"count": 2, "items": [{"kind_guess": "bus", "request": "a bus to Toledo"}, {"kind_guess": "unknown", "request": "hire a yacht crew"}]}}
-        rows = [{"kind": "booking", "data": {"real": True, "stop": {"why": "handed_to_tyler"}}},
-                {"kind": "booking", "data": {"real": False, "stop": {"why": "handed_to_tyler"}}},   # a test person: left out
-                {"kind": "booking", "data": {"real": True, "stop": None}}]
-        with mock.patch.object(OW, "CALL", call), mock.patch("agapi.measure.read_rows", mock.AsyncMock(return_value=rows)):
+        with mock.patch.object(OW, "CALL", call):
             w = asyncio.run(OW.week(7, now=NOW))
-        self.assertEqual(calls, ["outcomes.report", "outcomes.list", "venue.unhandled"])     # read-only: nothing written
-        self.assertIn("request_reply: 1/4", w["say"])
-        self.assertEqual((w["count"], w["no_answer"], w["handed_to_tyler"], w["unhandled"]["count"]), (7, 2, 1, 2))
-        self.assertEqual(w["unhandled"]["by_kind"], {"bus": 1, "unknown": 1})
+        self.assertEqual(calls, ["outcomes.report", "outcomes.list", "venue.unhandled"])     # read-only, AgAPI only (no stopgap)
+        self.assertEqual((w["handed_to_tyler"], w["unhandled"]["count"]), (2, 2))
         self.assertIn("7 real booking(s)", w["say"])
-        self.assertIn("2 no answer yet", w["say"])
-        self.assertEqual(w["handed_to_tyler_unrecorded"], 1)
-        self.assertIn("Handed to Tyler (not yet recorded in AgAPI): 1.", w["say"])
+        self.assertIn("1 handed to Tyler", w["say"])
+        self.assertIn("cancels 2 (1 done, 1 handed to Tyler, 0 open)", w["say"])
+        self.assertIn("email: 1/4", w["say"])
+        self.assertNotIn("not yet recorded in AgAPI", w["say"])
 
     def test_where_it_is_read(self):
         self.assertIn('@router.get("/outcomes/week")', (ROOT / "backend/booking_signer/routes.py").read_text())

@@ -75,3 +75,13 @@ AgAPI**:
 - the week lists them as **"handed to Tyler (not yet recorded in AgAPI)"**.
 
 When CR 155 is live, `s2_outcomes.no_act` records them with AgAPI's own outcome.
+
+## CR 155 is live (AgAPI v1.54.0, main 7a5ac1e): every ending on AgAPI's ledger, honestly
+
+The stopgap is gone (`measure.handed`, and the week's read of the measure).
+
+- **A hand-off to Tyler** is recorded as `rung person · channel none · state handed_to_person · failure_reason` (why) · `kind`.
+- **Any other ending before an act** (refused, not prepared) is recorded as `channel none · state failed` · why. Nothing reached a venue.
+- **Changes, late notices and cancels** sent through AgAPI write their own rows (`kind` change / late / cancel).
+- **The week reads only AgAPI:** bookings with their rate, hand-offs from `handed_to_person`, changes and cancels by kind, and every
+  kind by channel.

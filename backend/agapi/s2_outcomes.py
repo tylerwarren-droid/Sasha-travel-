@@ -159,23 +159,26 @@ def ended_without_act(tool: str, ok: bool, out: Any, code: Optional[str]) -> Opt
     return NO_ACT.get(st)
 
 
+#: the endings that are a hand-off to Tyler (a person of Kanoe's) — every other ending before an act is a failure
+HANDED = ("handed to Tyler",)
+KIND_OF = {"cancel_venue": "cancel", "cancel_booking": "cancel", "change_booking": "change", "running_late": "late"}
+
+
 async def no_act(account: Optional[str], tool: str, why: str, out: Any = None, args: Optional[dict] = None) -> None:
-    """The ending of an attempt that never became an act (handed to Tyler, refused, not prepared). Tyler (1 Nov): NOT on AgAPI's ledger under
-    another channel's name — a hand-off to Tyler isn't a page hand-over, and it would corrupt the channel numbers. Until CR 155 (AgAPI's
-    honest handed_to_person outcome, and outcomes for changes and cancels) is live, it is kept OUT of AgAPI: noted in the turn's measure
-    (measure.handed, a real person flagged) and counted in the week as "handed to Tyler (not yet recorded in AgAPI)". Never raises."""
+    """The ending of an attempt that never became an act, on AgAPI's ledger as what it IS (CR 155, AgAPI v1.54.0 — outcomes.honest):
+    a hand-off to Tyler → rung person · channel none · state handed_to_person · failure_reason why; any other (refused, not prepared, not
+    possible) → channel none (nothing reached a venue) · state failed · why. Its kind: booking / change / late / cancel. Never raises."""
     if not account:
         return
     o = out if isinstance(out, dict) else {}
     a = args or {}
-    venue = str(o.get("venue") or a.get("name") or a.get("venue") or "unknown")[:120]
-    kind = {"cancel_venue": "cancel", "cancel_booking": "cancel", "change_booking": "change", "running_late": "change"}.get(tool, "booking")
-    try:
-        from agapi import measure as MS
-        MS.handed(account, venue, kind)
-    except Exception as e:
-        log.warning("[outcomes] the hand-off wasn't noted: %s", type(e).__name__)
-    log.warning("[outcomes] not recorded in AgAPI yet (CR 155): %s — a %s", why, kind)
+    handed = why.startswith(HANDED)
+    body = {"ref": f"sasha:noact:{secrets.token_hex(8)}", "venue": str(o.get("venue") or a.get("name") or a.get("venue") or "unknown")[:120],
+            "kind": KIND_OF.get(tool, "booking"), "rung": "person" if handed else "api", "channel": "none",
+            "state": "handed_to_person" if handed else "failed", "failure_reason": why[:300],
+            **({"sector": str(a.get("what") or a.get("category") or "")[:40]} if (a.get("what") or a.get("category")) else {}),
+            **({"city": str(a.get("city"))[:80]} if a.get("city") else {})}
+    await _send("outcomes.record", body, account)
 
 
 async def basket_booked(account: str, rows: list) -> int:

@@ -28,7 +28,7 @@ One contract for every client.
 | **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
 | **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email`, `send_whatsapp` |
-| **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
+| **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
 
 ## Magellan
 
@@ -1272,7 +1272,7 @@ What is booked, failed, cancelled or awaiting payment — the ONLY source for bo
 
 ### `booking_outcomes`
 
-FOUNDER ONLY, read-only: this week's REAL bookings and their outcomes — confirmed, declined, failed (handed to Tyler), no answer yet — the rate per channel and per kind, and the couldn't-handle list with its counts. Say its `say` as it is.
+FOUNDER ONLY, read-only: this week's REAL bookings and their outcomes — confirmed, declined, failed (handed to Tyler), no answer yet — the rate per channel and per kind, and the couldn't-handle list with its counts. Say its `say` as it is. Counted from the day the founder started the count.
 
 **Errors:** `founder_only`, `ledger_unreachable`, `missing_input`, `internal`
 
@@ -1301,6 +1301,43 @@ FOUNDER ONLY, read-only: this week's REAL bookings and their outcomes — confir
  "properties": {
   "count": {
    "type": "integer"
+  },
+  "say": {
+   "type": "string"
+  }
+ }
+}
+```
+
+### `start_count`
+
+FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookings before it aren't counted and aren't changed. Only when the founder says to start it.
+
+**Errors:** `founder_only`, `invalid_input`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "from": {
+   "type": "string"
+  }
+ },
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "from": {
+   "type": "string"
   },
   "say": {
    "type": "string"

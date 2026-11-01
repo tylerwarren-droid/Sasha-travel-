@@ -509,13 +509,13 @@ def status_words(status: str, request, venue: Optional[str] = None, venue_words:
 
 
 @router.get("/outcomes/week")
-async def outcomes_week(request: Request, days: int = 7):
+async def outcomes_week(request: Request, days: int = 0):
     """Sasha 324 · the founder's week, read-only: real bookings and their outcomes, from the one ledger (agapi.outcomes_week)."""
     from app.services.accounts import is_founder
     from agapi import outcomes_week as OW
     if not is_founder(account_for(request)):
         return JSONResponse({"ok": False, "rule": "founder_only", "message": "the founder's view of every booking"}, status_code=403)
-    return await OW.week(max(1, min(31, int(days))))
+    return await OW.week(max(1, min(31, int(days))) if days else None)   # 0: the whole count, from Tyler's start
 
 
 @router.get("/reservations")

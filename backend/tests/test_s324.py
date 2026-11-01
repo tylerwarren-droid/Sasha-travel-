@@ -102,12 +102,15 @@ class TheWeek(unittest.TestCase):
                                                            {"kind": "cancel", "attempts": 2, "confirmed": 1, "handed_to_person": 1, "open": 0}],
                                                "by_channel": [{"channel": "email", "attempts": 4, "confirmed": 1}, {"channel": "none", "attempts": 2, "confirmed": 0}],
                                                "excluded_test": 1}}
-            if op == "outcomes.list":
+            if op == "outcomes.list":   # AgAPI's schema: limit 1–500 — 1,000 was refused, and "no answer yet" silently read 0
+                assert 1 <= body["limit"] <= 500, body["limit"]
                 return {"ok": True, "result": {"outcomes": self.ROWS}}
             return {"ok": True, "result": {"count": 2, "items": [{"kind_guess": "bus", "request": "a bus to Toledo"}, {"kind_guess": "unknown", "request": "hire a yacht crew"}]}}
-        with mock.patch.object(OW, "CALL", call):
-            w = asyncio.run(OW.week(7, now=NOW))
+        with mock.patch.object(OW, "CALL", call), mock.patch.object(OW, "count_from", mock.AsyncMock(return_value="2026-11-01")):
+            w = asyncio.run(OW.week(now=NOW))
         self.assertEqual(calls, ["outcomes.report", "outcomes.list", "venue.unhandled"])     # read-only, AgAPI only (no stopgap)
+        self.assertEqual(w["since"], "2026-11-01T00:00:00Z")                               # from Tyler's start, never before
+        self.assertEqual(w["no_answer"], 2)                                                 # the flag fires: two past their wait
         self.assertEqual((w["handed_to_tyler"], w["unhandled"]["count"]), (2, 2))
         self.assertIn("7 real booking(s)", w["say"])
         self.assertIn("1 handed to Tyler", w["say"])
@@ -115,10 +118,32 @@ class TheWeek(unittest.TestCase):
         self.assertIn("email: 1/4", w["say"])
         self.assertNotIn("not yet recorded in AgAPI", w["say"])
 
+    def test_not_started_until_tyler_says_go(self):
+        called = []
+
+        async def call(op, body):
+            called.append(op)
+            return {"ok": True, "result": {}}
+        with mock.patch.object(OW, "CALL", call), mock.patch.object(OW, "count_from", mock.AsyncMock(return_value=None)):
+            w = asyncio.run(OW.week(now=NOW))
+        self.assertEqual((w["started"], called), (False, []))                              # nothing read, nothing settled
+        self.assertIn("count not started", w["say"])
+
+    def test_a_list_that_cant_be_read_is_never_a_zero(self):
+        async def call(op, body):
+            if op == "outcomes.list":
+                return {"ok": False, "error": {"code": "invalid_input", "message": "The input doesn't match outcomes.list's schema"}}
+            return {"ok": True, "result": {"overall": {"attempts": 3, "open": 3}, "by_kind": [{"kind": "booking", "attempts": 3, "open": 3}]}}
+        with mock.patch.object(OW, "CALL", call), mock.patch.object(OW, "count_from", mock.AsyncMock(return_value="2026-11-01")):
+            w = asyncio.run(OW.week(now=NOW))
+        self.assertIn("no answer: not read", w["say"])
+        self.assertNotIn("0 no answer yet", w["say"])
+
     def test_where_it_is_read(self):
         self.assertIn('@router.get("/outcomes/week")', (ROOT / "backend/booking_signer/routes.py").read_text())
         self.assertIn('"booking_outcomes"', (ROOT / "backend/app/agent/s2.py").read_text())
-        self.assertIn('log.warning("[outcomes] week: %s"', (ROOT / "backend/agapi/measure.py").read_text())
+        self.assertIn('log.warning("[outcomes] real count: %s"', (ROOT / "backend/agapi/measure.py").read_text())
+        self.assertIn('"start_count"', (ROOT / "backend/app/agent/s2.py").read_text())
 
 
 class NoAnswerYetOnce(unittest.TestCase):

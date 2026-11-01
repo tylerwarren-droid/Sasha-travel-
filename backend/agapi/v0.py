@@ -1522,11 +1522,28 @@ async def booking_outcomes(ctx: Ctx, a: dict) -> dict:
     from agapi import outcomes_week as OW
     if not is_founder(ctx.account):
         raise ToolError("founder_only", "this is the founder's view of every booking — not for this account")
-    w = await OW.week(int(a.get("days") or 7))
+    w = await OW.week(int(a["days"]) if a.get("days") else None)
+    if not w.get("started", True):
+        return {"count": 0, "say": w["say"]}
     if not w.get("ok"):
         raise ToolError("ledger_unreachable", w.get("say") or "the outcomes ledger didn't answer")
-    return {k: w[k] for k in ("count", "outcomes", "no_answer", "handed_to_tyler", "by_channel", "by_kind", "by_kind_of_attempt", "unhandled",
-                              "excluded_test", "say")}
+    return {k: w[k] for k in ("count", "since", "outcomes", "no_answer", "handed_to_tyler", "by_channel", "by_kind", "by_kind_of_attempt",
+                              "unhandled", "excluded_test", "say")}
+
+
+async def start_count(ctx: Ctx, a: dict) -> dict:
+    """Sasha 324 (6) · FOUNDER ONLY: the real-booking count begins (today, or the day he names) — kept on his record; never moves a booking."""
+    from app.services.accounts import is_founder
+    from agapi import outcomes_week as OW
+    if not is_founder(ctx.account):
+        raise ToolError("founder_only", "only the founder starts the real count")
+    day = str(a.get("from") or datetime.now(timezone.utc).date().isoformat())[:10]
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        raise ToolError("invalid_input", "from is a day: YYYY-MM-DD")
+    await OW.start_count(day)
+    return {"from": day, "say": f"The real-booking count starts {day}. Everything before it stays as it is and isn't counted."}
 
 
 async def get_trip(ctx: Ctx, a: dict) -> dict:
@@ -1660,8 +1677,11 @@ TOOLS: List[dict] = [
        {}, [], {"type": "object", "properties": {"booked": {"type": "array"}, "anything_booked": {"type": "boolean"}}}, ["no_trip"]),
     _t("booking_outcomes", "Pacioli", booking_outcomes, "FOUNDER ONLY, read-only: this week's REAL bookings and their outcomes — confirmed, "
        "declined, failed (handed to Tyler), no answer yet — the rate per channel and per kind, and the couldn't-handle list with its counts. "
-       "Say its `say` as it is.", {"days": {"type": "integer", "minimum": 1, "maximum": 31}}, [],
+       "Say its `say` as it is. Counted from the day the founder started the count.", {"days": {"type": "integer", "minimum": 1, "maximum": 31}}, [],
        {"type": "object", "properties": {"count": {"type": "integer"}, "say": {"type": "string"}}}, ["founder_only", "ledger_unreachable"]),
+    _t("start_count", "Pacioli", start_count, "FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookings before it "
+       "aren't counted and aren't changed. Only when the founder says to start it.", {"from": {"type": "string"}}, [],
+       {"type": "object", "properties": {"from": {"type": "string"}, "say": {"type": "string"}}}, ["founder_only", "invalid_input"]),
     _t("get_trip", "Pacioli", get_trip, "The trip as it stands: days and stays, the chosen flights, each item's state.", {}, [],
        {"type": "object"}, ["no_trip"]),
     _t("get_total", "Pacioli", get_total, "The whole trip's total from the basket (what booking would charge).", {}, [], TOTAL, ["no_trip"]),

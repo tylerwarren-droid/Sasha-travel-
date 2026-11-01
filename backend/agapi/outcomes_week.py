@@ -64,19 +64,62 @@ async def _live(op: str, body: dict) -> Dict[str, Any]:
 
 CALL = _live   # tests replace it
 
+#: the founder's record kind holding the day the real count began (Tyler says go: the start_count tool)
+START_KIND = "real_count_from"
+LIST_MAX = 500   # AgAPI's outcomes.list limit (its schema: 1–500) — 1,000 was refused, and "no answer yet" silently read 0
 
-async def week(days: int = 7, now: Optional[datetime] = None) -> Dict[str, Any]:
+
+async def count_from() -> Optional[str]:
+    """The day the real count began (YYYY-MM-DD), kept on the founder's record — None until Tyler starts it."""
+    from app.services.accounts import founder_account
+    from agapi import s2_memory as M
+    acct = founder_account()
+    v = await M.kind(acct, START_KIND) if acct else None
+    return str(v)[:10] if v else None
+
+
+async def start_count(day: str) -> str:
+    from app.services.accounts import founder_account
+    from agapi import s2_memory as M
+    acct = founder_account()
+    if not acct:
+        raise RuntimeError("FOUNDER_ACCOUNT_ID isn't set")
+    await M.put_kind(acct, START_KIND, day[:10])
+    return day[:10]
+
+
+async def _rows(since: str) -> tuple:
+    """Every attempt from `since`, newest first, paged at AgAPI's own limit → (rows, None) or (rows so far, why it couldn't read)."""
+    out: List[dict] = []
+    until = None
+    for _ in range(20):
+        r = await CALL("outcomes.list", {"from": since, "limit": LIST_MAX, **({"to": until} if until else {})})
+        if not r.get("ok"):
+            return out, (r.get("error") or {}).get("message") or "outcomes.list didn't answer"
+        page = (r.get("result") or {}).get("outcomes") or []
+        out += page
+        if len(page) < LIST_MAX:
+            return out, None
+        until = page[-1].get("created_at")
+    return out, None
+
+
+async def week(days: Optional[int] = None, now: Optional[datetime] = None, before_count: bool = False) -> Dict[str, Any]:
+    """The REAL count, from its start (Tyler's go — start_count) to now; `days` narrows it to the last N days. Not started → {started: False,
+    say: "count not started"}. before_count=True: the last `days` (default 7) regardless of the start — a diagnosis, never the count."""
     now = now or datetime.now(timezone.utc)
-    since = (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    # AgAPI's report groups by its own fields only (rung · sector · city — "by":["channel"] was refused at /by/0, 3c3a70e's log): per
-    # channel = per rung (AgAPI's channel family: request_reply · phone · zero_touch · human_tap · api), per kind = per sector
+    start = None if before_count else await count_from()
+    if not start and not before_count:
+        return {"ok": True, "started": False, "say": "Real-booking count not started — Tyler says when (start_count)."}
+    recent = (now - timedelta(days=days or 7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since = recent if before_count else (max(f"{start}T00:00:00Z", recent) if days else f"{start}T00:00:00Z")
     rep = await CALL("outcomes.report", {"from": since, "by": ["kind", "channel", "rung", "sector"]})   # CR 155 · kind and channel too
     if not rep.get("ok"):
-        return {"ok": False, "why": (rep.get("error") or {}).get("message") or "the outcomes ledger didn't answer",
-                "say": "I couldn't read this week's bookings — " + ((rep.get("error") or {}).get("message") or "the ledger didn't answer") + "."}
+        return {"ok": False, "started": True, "why": (rep.get("error") or {}).get("message") or "the outcomes ledger didn't answer",
+                "say": "I couldn't read the real bookings — " + ((rep.get("error") or {}).get("message") or "the ledger didn't answer") + "."}
     r = rep["result"]
-    lst = await CALL("outcomes.list", {"from": since, "limit": 1000})
-    rows = [x for x in ((lst.get("result") or {}).get("outcomes") or []) if not x.get("test")] if lst.get("ok") else []
+    rows, unread = await _rows(since)
+    rows = [x for x in rows if not x.get("test")]
     outcomes: Dict[str, int] = {}
     for x in rows:
         k = classify(x, now)
@@ -89,8 +132,9 @@ async def week(days: int = 7, now: Optional[datetime] = None) -> Dict[str, Any]:
         k = str(it.get("kind_guess") or "unknown")
         by_kind[k] = by_kind.get(k, 0) + 1
     o = r.get("overall") or {}
-    out = {"ok": True, "window": {"from": since, "days": days}, "count": int(o.get("attempts") or 0), "overall": o,
-           "outcomes": outcomes, "no_answer": outcomes.get("no_answer", 0), "handed_to_tyler": int(o.get("handed_to_person") or 0),
+    out = {"ok": True, "started": True, "since": since, "window": {"from": since, "days": days}, "count": int(o.get("attempts") or 0), "overall": o,
+           "outcomes": outcomes, "no_answer": outcomes.get("no_answer", 0), "no_answer_unread": unread,
+           "handed_to_tyler": int(o.get("handed_to_person") or 0),
            "by_kind_of_attempt": r.get("by_kind") or [], "by_rung": r.get("by_rung") or [],
            "by_channel": r.get("by_channel") or [], "by_kind": r.get("by_sector") or [], "excluded_test": r.get("excluded_test", 0),
            "unhandled": {"count": unhandled.get("count", sum(by_kind.values())), "by_kind": by_kind,
@@ -101,7 +145,7 @@ async def week(days: int = 7, now: Optional[datetime] = None) -> Dict[str, Any]:
 
 def line(w: Dict[str, Any]) -> str:
     """The week in one line, numbers only — every figure from AgAPI's ledger (CR 155: hand-offs and changes / cancels are its own rows)."""
-    if not w.get("ok"):
+    if not w.get("ok") or not w.get("started"):
         return w.get("say") or "This week's bookings couldn't be read."
     kinds = {str(k.get("kind")): k for k in w.get("by_kind_of_attempt") or []}
     bk = kinds.get("booking") or w.get("overall") or {}
@@ -110,12 +154,13 @@ def line(w: Dict[str, Any]) -> str:
     other = "; ".join(f"{n} {k.get('attempts', 0)} ({k.get('confirmed', 0)} done, {k.get('handed_to_person', 0)} handed to Tyler, "
                       f"{k.get('open', 0)} open)" for n, k in (("changes", kinds.get("change")), ("late notices", kinds.get("late")),
                                                                ("cancels", kinds.get("cancel"))) if k)
-    return (f"{bk.get('attempts', 0)} real booking(s) in the last {w['window']['days']} days — {bk.get('confirmed', 0)} confirmed, "
+    return (f"{bk.get('attempts', 0)} real booking(s) since {w['since'][:10]} — {bk.get('confirmed', 0)} confirmed, "
             f"{bk.get('declined', 0)} declined, {bk.get('failed', 0)} failed, {bk.get('handed_to_person', 0)} handed to Tyler, "
-            f"{w.get('no_answer', 0)} no answer yet, {bk.get('open', 0)} still open; {rate}."
+            + (f"no answer: not read ({w['no_answer_unread']}), " if w.get("no_answer_unread") else f"{w.get('no_answer', 0)} no answer yet, ")
+            + f"{bk.get('open', 0)} still open; {rate}."
             + (f" Changes and cancels: {other}." if other else " No changes or cancels.")
             + (f" By channel (confirmed/asked, every kind): {ch}." if ch else "")
             + f" Couldn't handle: {w['unhandled']['count']}." + (f" ({w['excluded_test']} test attempt(s) left out.)" if w.get("excluded_test") else ""))
 
 
-__all__ = ["WAIT_H", "classify", "week", "line"]
+__all__ = ["WAIT_H", "classify", "week", "line", "count_from", "start_count"]

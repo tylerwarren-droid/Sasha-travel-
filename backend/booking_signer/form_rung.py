@@ -35,7 +35,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from . import formfill as FF
-from . import yes as YS
+
 from . import reservation as RS
 from . import venue_read as V
 from .account import account_for
@@ -660,155 +660,9 @@ async def prepare(request: Request):
 
 @router.post("/forms/{form_id}/send")
 async def send(form_id: str, request: Request):
-    from . import followup as FU
-    try:
-        body = await request.json()
-    except Exception:
-        body = None
-    if not isinstance(body, dict) or not isinstance(body.get("approval"), dict):
-        return _refuse(400, "approval_void", "send {read_back_sha256, approval: {how, said}}")
-    if not YS.approval_ok(body["approval"]):   # S-75 step 2 · the same rule as a call's yes (yes.py)
-        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
-    account = account_for(request)
-    from .limits import check
-    over = check(account, "form_send")   # Sasha 120 · a real submission to a venue: capped per guest
-    if over:
-        return over
-    try:
-        f = await STORE.get(account, form_id)
-    except StorageUnavailable as e:
-        return _refuse(503, e.rule, e.detail)
-    if f is None:
-        return _refuse(404, "form_unknown", "no prepared form with that id for this account")
-    if body.get("read_back_sha256") != f["read_back_sha256"]:
-        return _refuse(422, "read_back_mismatch", "that yes was to different words; prepare it again")
-    m = form_map(f["page_url"])
-    if m is None or (not m["test"] and os.getenv("SASHA_FORMS_ENABLED", "").strip() != "1"):
-        return _refuse(422, "form_not_approved", "this form is no longer approved to send; nothing was sent")
-    from .guest_accounts import real_contact_refusal   # Sasha 153 · a real venue's form: the founder's account only, for now
-    no = real_contact_refusal(account, bool(m["test"]))
-    if no is not None:
-        return no
-    now = NOW()
-    approval = {"how": body["approval"].get("how"), "said": body["approval"].get("said"), "at": now.isoformat(),
-                "read_back_sha256": f["read_back_sha256"]}
-    claimed = await STORE.claim(account, form_id, approval, now, now - APPROVAL_WINDOW)
-    if claimed != "claimed":
-        return _refuse(409 if claimed == "already" else 422, f"form_{claimed}",
-                       {"already": "this form was already sent (or is being sent) — once per yes",
-                        "expired": "that read-back is more than 15 minutes old; prepare it again",
-                        "unknown": "no prepared form with that id"}[claimed])
-
-    async def not_sent(why: str):
-        await STORE.finish(form_id, {"status": "not_sent", "not_sent_why": why}, "failed", "failed", now)
-        return {"status": "not_sent", "say": f"I didn't send it: {why}. Nothing reached them."}
-
-    # re-read the live form: the page's hidden values are fresh (a token changes per visit), and nothing may have moved
-    try:
-        live = await _live(f["page_url"])
-    except V.ReadRefused as e:
-        return await not_sent(f"their form could not be read again ({e})")
-    if "why" in live:
-        return await not_sent(live["why"])
-    fields = roles_for(live, m)
-    names = {x["name"] for x in fields}
-    if any(x["role"] == "challenge" for x in fields):
-        return await not_sent("their form now has a CAPTCHA — Sasha never solves one")
-    if any(x["role"] == "consent" and x["required"] for x in fields):
-        return await not_sent("their form now asks you to accept its terms — that box is yours, not Sasha's")
-    missing = [x["name"] for x in f["fields"] if x.get("step", 1) == 1 and x["name"] not in names]   # step 2 is checked after step 1
-    unmapped = [x["name"] for x in fields if x["role"] == "other" and x["required"]]
-    live = {**live, "action": effective_action(live, m) or "(no approved endpoint)"}
-    if missing or unmapped or live["action"] != f["action_url"]:
-        return await not_sent("their form changed since you approved it" + (f" (gone: {', '.join(missing)})" if missing else "")
-                              + (f" (new required: {', '.join(unmapped)})" if unmapped else ""))
-    wizard = any(x.get("step") == 2 for x in f["fields"])
-    number = None
-    lf = next((x for x in f["fields"] if x.get("loyalty_item")), None)
-    if lf:   # Sasha 131 (3) · the loyalty number, opened ONCE under this yes, logged; written in, never shown back
-        from . import loyalty as LY
-        from .vault import crypto as VC
-        try:
-            async with VC.use(account, lf["loyalty_item"], approval={"read_back_sha256": f["read_back_sha256"], "at": now.isoformat()},
-                              approved_lines=list(f["read_back_lines"]), action_kind="loyalty_number", action_ref=form_id) as secret:
-                number = (secret.get("value") or "").strip() or None
-        except VC.UseRefused as e:
-            return await not_sent(f"your loyalty number couldn't be used ({e})")
-        for x in f["fields"]:
-            if x is lf:
-                x["value"] = x["value"].replace(LY.TOKEN, number or "")
-    data = {x["name"]: x.get("value", "") for x in fields if x["role"] == "hidden"}
-    data.update({x["name"]: x["value"] for x in f["fields"] if x.get("step", 1) == 1})
-    try:
-        r, final = await _post(f["action_url"], data, f["page_url"])
-    except Exception as e:
-        await STORE.finish(form_id, {"status": "failed", "not_sent_why": f"{type(e).__name__}: {e}"[:300]}, "unclear", "unclear", now)
-        return {"status": "failed", "say": "I sent it, but their site didn't answer clearly — it may or may not have arrived. Check with them before relying on it."}
-    if wizard:
-        # Sasha 94 · step 1 has gone (the day, how many): step 2 is read, checked against the map, and only then sent
-        async def stopped(why: str):
-            await STORE.finish(form_id, {"status": "not_sent", "not_sent_why": f"step 2: {why}", "http_status": r.status_code},
-                               "failed", "failed", now)
-            return {"status": "not_sent", "say": f"I stopped at step 2: {why}. Only the day and the number of people reached "
-                                                 "them; nothing is booked."}
-        page2 = read_form(r.text or "", final) if r.status_code < 400 else {"why": f"their site answered HTTP {r.status_code}"}
-        if "why" in page2:
-            return await stopped(f"no details page came back ({page2['why']})")
-        if reg_host(page2["action"]) != reg_host(f["page_url"]) or page2["method"] != "post":
-            return await stopped("the details page sends somewhere else (another site, or not a booking post)")
-        fields2 = roles_for(page2, m)
-        names2 = {x["name"] for x in fields2}
-        if any(x["role"] == "challenge" for x in fields2):
-            return await stopped("it has a CAPTCHA — Sasha never solves one")
-        if any(x["role"] == "consent" and x["required"] for x in fields2):
-            return await stopped("it asks you to accept its terms — that box is yours, not Sasha's")
-        gone = [x["name"] for x in f["fields"] if x.get("step") == 2 and x["name"] not in names2]
-        extra = [x["name"] for x in fields2 if x["role"] == "other" and x["required"]]
-        if gone or extra:
-            return await stopped("it isn't the page you approved" + (f" (missing: {', '.join(gone)})" if gone else "")
-                                 + (f" (it also requires: {', '.join(extra)})" if extra else ""))
-        data2 = {x["name"]: x.get("value", "") for x in fields2 if x["role"] == "hidden"}
-        data2.update({x["name"]: x["value"] for x in f["fields"] if x.get("step") == 2})
-        try:
-            r, final = await _post(page2["action"], data2, final)
-        except Exception as e:
-            await STORE.finish(form_id, {"status": "failed", "not_sent_why": f"step 2: {type(e).__name__}: {e}"[:300]}, "unclear", "unclear", now)
-            return {"status": "failed", "say": "I sent step 2, but their site didn't answer clearly — it may or may not have arrived. Check with them."}
-    text = " ".join(" ".join(_LiveForm_text(r.text or "")).split())[:RESPONSE_CHARS]
-    if number:   # their page may echo the comments: the number is kept out of the stored words
-        text = text.replace(number, "…" + number[-4:])
-    reading = FU.reply_reading(text, (await _request_of(f)) or {}) if text else {"result": "none", "why": "their answer page had no text"}
-    ref_m = _REF.search(text)
-    trip, attempt = {"confirmed": ("confirmed", "confirmed"), "proposed": ("proposed", "unclear"),
-                     "declined": ("declined", "declined")}.get(reading.get("result"), ("requested", "requested"))
-    if r.status_code >= 400:
-        trip, attempt = "failed", "failed"
-    outcome = {"status": "sent" if r.status_code < 400 else "failed", "sent_at": now, "http_status": r.status_code, "final_url": final,
-               "response_text": text, "response_sha256": _sha(text), "reading": reading,
-               "booking_reference": ref_m.group(1) if ref_m else None}
-    await STORE.finish(form_id, outcome, trip, attempt, now)
-    # Sasha 99 · the guest's receipt after the form, too
-    from . import guest_receipt as GR
-    o = (await _request_of(f)) or {}
-    when = (o.get("when") or {}).get("at", "").replace("T", " at ")
-    from . import ladder_routes as LR   # Sasha 117 · the receipt names the VENUE, not its web host (Sasha 108's rule)
-    rd = await LR.LADDER_STORE.get_read(account, str(f["read_id"])) if LR.LADDER_STORE is not None and f.get("read_id") else None
-    log.info("[form_rung] %s guest receipt: %s", form_id, await GR.send_for_route(
-        account, (rd or {}).get("venue_name") or urlsplit(f["page_url"]).hostname or "the venue", "their own booking form, sent by Sasha after your yes",
-        {"confirmed": "Confirmed by the venue", "proposed": "They offered something else", "declined": "They said no"}.get(
-            reading.get("result"), "Requested — not confirmed until they confirm"),
-        {"what": (o.get("what") or {}).get("activity"), "when": when, "party": (o.get("how_many") or {}).get("count"),
-         "name": (o.get("who") or {}).get("name"), "venue_reference": outcome.get("booking_reference"), "their_words": text,
-         "trip_item_id": f.get("trip_item_id"),   # Sasha 144 · the receipt is recorded against its booking
-         "test": urlsplit(f["page_url"]).hostname == urlsplit(test_venue_url()).hostname}))   # Sasha 147 · our test venue: never emailed
-    say = {"confirmed": "Sent. Their page confirms it, word for word below.",
-           "proposed": "Sent. Their page offers something different — read it below before relying on anything.",
-           "declined": "Sent. Their page says no — their words are below."}.get(reading.get("result"),
-           "Sent. Their page doesn't say it's confirmed — their words are below; it's a request until they confirm.")
-    if r.status_code >= 400:
-        say = f"Their site answered HTTP {r.status_code}; it may not have arrived. Their words are below."
-    return {"status": outcome["status"], "say": say, "their_page": text, "reading": reading,
-            "booking_reference": outcome["booking_reference"], "http_status": r.status_code}
+    """Sasha 319 · retired: this sent to the venue directly. AgAPI's acts are the one sender — nothing is sent here."""
+    from .retired import refusal
+    return refusal("the venue's form, sent")
 
 
 def reg_host(url: str) -> str:

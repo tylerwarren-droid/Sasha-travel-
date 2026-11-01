@@ -86,8 +86,7 @@ class Base(T.Base):
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(T.RD, rungs={"email": {"value": TO}}))), \
                 mock.patch.object(VN, "_reservation", mock.AsyncMock(return_value=RES)), \
                 mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), \
-                mock.patch.object(VN, "rules_for", mock.AsyncMock(return_value=dict(RULES))), \
-                mock.patch.object(VN, "_email", mock.AsyncMock(side_effect=AssertionError("never S2's own email sender"))):
+                mock.patch.object(VN, "rules_for", mock.AsyncMock(return_value=dict(RULES))):   # Sasha 319: no S2 email sender exists
             out = T.run(VN.hold_venue(T.ctx(words), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
                                                      "time": "21:00", "party": 2}))
         if ACCT in VN._HELD:

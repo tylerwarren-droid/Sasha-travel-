@@ -48,32 +48,6 @@ class Receipt(unittest.TestCase):
                                "received_at": "2026-10-01T18:05:00Z"}]
         return prep
 
-    def test_the_receipt_names_the_place_and_carries_both_references_the_transcript_and_the_proof(self):
-        prep = self.booked()
-        r = self.c.get(f"/api/booking/reservations/{prep['trip_item_id']}/receipt")
-        self.assertEqual(r.status_code, 200, r.text)
-        rc = r.json()
-        self.assertEqual(rc["venue"]["name"], BOTAVARA)                                      # never "dinner in Chamberí"
-        self.assertNotIn("dinner", rc["venue"]["name"])
-        self.assertEqual((rc["what"], rc["count"], rc["date"], rc["time"], rc["for_whom"]), ("a table", 2, "2026-10-10", "21:00", "Warren"))
-        self.assertEqual(rc["references"]["venue"], "4417")                                  # theirs, as they said it
-        self.assertRegex(rc["references"]["sasha"], SP.REF_RX)                               # hers, as she said it
-        self.assertEqual([t["who"] for t in rc["transcript"]], ["Sasha", "Venue", "Sasha", "Venue", "Sasha", "Venue", "Sasha", "Venue"])
-        self.assertNotIn("Ended call", json.dumps(rc["transcript"]))
-        self.assertEqual(rc["recording"], {"kept": False, "why": RC.RECORDING_NOT_KEPT})
-        self.assertEqual(rc["written"][0]["text"], "Confirmada mesa sábado 21h Warren")
-        self.assertEqual(rc["proof"]["read_back_sha256"], prep["read_back"]["sha256"])        # the yes it rests on
-        self.assertEqual(rc["proof"]["read_back"], prep["read_back"]["lines"])               # exactly the words approved
-        self.assertEqual((rc["proof"]["approved"]["how"], rc["proof"]["approved"]["said"]), ("chat", "Yeah."))
-        self.assertIn(rc["references"]["sasha"], " ".join(rc["proof"]["read_back"]))
-        self.assertNotIn(BOTAVARA, json.dumps(self.calls.calls[prep["call_id"]], default=str))   # shown, never stored
-
-    def test_another_accounts_reservation_has_no_receipt(self):
-        prep = self.booked()
-        self.calls.calls[prep["call_id"]]["account_id"] = "22222222-2222-4222-8222-222222222222"
-        self.assertEqual(self.c.get(f"/api/booking/reservations/{prep['trip_item_id']}/receipt").status_code, 404)
-
-
 if __name__ == "__main__":
     unittest.main()
 
@@ -89,27 +63,6 @@ class GuestReceipt(Receipt):
         from booking_signer import guest_receipt as GR
         with mock.patch.dict(os.environ, self.ENV):
             return asyncio.run(GR.send_after_call(self.calls.calls[prep["call_id"]]))
-
-    def test_the_guest_gets_the_receipt_with_both_references_and_their_words(self):
-        prep = self.booked()
-        self.assertEqual(self.send(prep), "sent")
-        mail = [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]
-        ref = self.calls.calls[prep["call_id"]]["brief"]["own_reference"]
-        self.assertEqual((mail["from"], mail["to"]), ("Sasha <sasha@booking.kanoe.ai>", ["founder@kanoe.test"]))
-        self.assertEqual(mail["subject"], f"Your booking at {BOTAVARA}: Confirmed by the restaurant · Ref. {ref}")
-        for must in (BOTAVARA, "a table · 2 people", "Under the name: Warren", "Their reference: 4417", f"Sasha's reference: {ref}",
-                     "Mesa reservada, gracias."):
-            self.assertIn(must, mail["text"])
-
-    def test_an_unclear_call_still_gets_its_receipt_and_never_without_an_address(self):
-        prep = self.booked()
-        self.calls.calls[prep["call_id"]].update(outcome="unclear", reading={"outcome": "unclear", "why": "not confirmed — \"Ok.\""})
-        self.calls.trip_items[prep["trip_item_id"]]["status"] = "unclear"
-        self.assertEqual(self.send(prep), "sent")
-        self.assertIn("How it was read: not confirmed", [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]["text"])
-        self.ENV = {**self.ENV, "SASHA_FOUNDER_EMAIL": ""}
-        self.assertEqual(self.send(prep), "not sent: the guest has no email address on their account")
-
 
 class WrittenPromise(unittest.TestCase):
     """Sasha 90 (a) · what the venue said when asked to confirm in writing — verbatim, on the receipt."""
@@ -178,23 +131,6 @@ class Cancelling(Receipt):
         turn = H.booking_handoff("cancel Botavara")
         self.assertEqual(turn["booking_cancel"], {"venue": "Botavara"})
         self.assertIn("I'll ask you once before I cancel anything", turn["response"])
-
-    def test_the_guest_gets_the_cancellation_copy_with_their_words(self):
-        import asyncio, os
-        from unittest import mock
-        from booking_signer import guest_receipt as GR
-        prep = self.booked()
-        booking = self.calls.calls[prep["call_id"]]
-        self.calls.calls["cx"] = {"call_id": "cx", "account_id": booking["account_id"], "trip_item_id": prep["trip_item_id"],
-                                  "status": "answered", "outcome": "yes", "venue_words": "Vale, queda anulada.",
-                                  "brief": {"purpose": "cancel", "venue_key": booking["brief"]["venue_key"], "venue_name": "dinner in Chamberí",
-                                            "date": "2026-10-10", "time": "21:00", "party": 2, "name": "Warren", "phone": "+34608445715"}}
-        with mock.patch.dict(os.environ, self.ENV):
-            self.assertEqual(asyncio.run(GR.send_after_call(self.calls.calls["cx"])), "sent")
-        mail = [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]
-        self.assertEqual(mail["subject"], f"Cancelled: your booking at {BOTAVARA}")
-        for must in ("Your reservation is cancelled.", "Was: 2026-10-10 at 21:00, for 2, under Warren", '"Vale, queda anulada."'):
-            self.assertIn(must, mail["text"])
 
     def test_no_text_to_the_guest_unless_switched_on(self):
         import asyncio

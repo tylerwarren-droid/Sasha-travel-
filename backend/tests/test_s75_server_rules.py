@@ -81,22 +81,18 @@ class OneYes(unittest.TestCase):
 
 
 class WhatsAppYes(unittest.TestCase):
-    """S-75 step 2 · at the place route: the typed WhatsApp yes needs its words; WhatsApp's button does not."""
+    """S-75 step 2 · the place route took a WhatsApp yes. Sasha 319: it's retired — whatever the yes, nothing is dialled from it."""
     make_store, setUp, tearDown, prepare = BC.OnMemory.make_store, BC.CallRoutes.setUp, BC.CallRoutes.tearDown, BC.CallRoutes.prepare
 
     def place(self, prep, approval):
         return self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
                            json={"read_back_sha256": prep["read_back"]["sha256"], "approval": approval})
 
-    def test_typed_on_whatsapp_needs_the_words(self):
+    def test_no_yes_places_sashas_own_call(self):   # Sasha 319 · the place route is retired: AgAPI's call act is the one way to call
         prep = self.prepare()
-        r = self.place(prep, {"how": "whatsapp_text", "said": ""})
-        self.assertEqual((r.status_code, r.json()["rule"]), (422, "approval_void"))
-        self.assertEqual(self.place(prep, {"how": "whatsapp_text", "said": "vale"}).json()["status"], "placed")
-
-    def test_the_whatsapp_button_is_a_yes(self):
-        self.assertEqual(self.place(self.prepare(), {"how": "whatsapp_button", "said": "Yes, book it"}).json()["status"], "placed")
-
+        for approval in ({"how": "whatsapp_text", "said": "vale"}, {"how": "whatsapp_button", "said": "Yes, book it"}):
+            r = self.place(prep, approval)
+            self.assertEqual((r.status_code, r.json()["rule"], r.json()["sent"]), (410, "venue_send_retired", False))
 
 if __name__ == "__main__":
     unittest.main()

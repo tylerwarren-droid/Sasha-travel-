@@ -37,7 +37,7 @@ from . import venue_read as V
 from . import yes as YS
 from .account import account_for
 from .call_store import cap_window
-from .store import AlreadyRecorded, StorageUnavailable, UnknownTrip
+from .store import StorageUnavailable, UnknownTrip
 
 log = logging.getLogger("sasha.booking_ladder")
 router = APIRouter(tags=["booking-ladder"])
@@ -766,80 +766,9 @@ async def prepare_email(request: Request):
 
 @router.post("/emails/{email_id}/send")
 async def send_email(email_id: str, request: Request):
-    why = L.emails_ready()
-    if why:
-        return _refuse(422, "emails_disabled", f"{why}; nothing was sent")
-    body = await _json(request)
-    if body is None:
-        return _refuse(400, "approval_void", "send {read_back_sha256, approval: {how, said}} as a JSON object")
-    account = account_for(request)
-    try:
-        e = await LADDER_STORE.get_email(account, email_id)
-    except StorageUnavailable as ex:
-        return _refuse(503, ex.rule, ex.detail)
-    if e is None:
-        return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
-    if body.get("read_back_sha256") != e["read_back_sha256"]:
-        return _refuse(422, "approval_void", "the approval was given to different words from this email's read-back")
-    a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
-    if a.get("how") == "escalation_plan":   # Sasha 132 · under the guest's ONE yes to the whole plan — verified from our records
-        from . import escalation as ESC
-        why_not = await ESC.verify(account, a, str(e.get("read_id")))
-        if why_not:
-            return _refuse(422, "approval_void", why_not)
-    # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
-    elif not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
-        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
-    if E.email_sha256(e["email"]) != e["email_sha256"]:
-        return _refuse(409, "email_changed", "the stored email no longer matches what was read back; nothing was sent")
-    from .guest_accounts import real_contact_refusal   # Sasha 153 · a real venue's inbox: the founder's account only, for now
-    to = str((e.get("email") or {}).get("to") or "").lower()
-    no = real_contact_refusal(account, to.endswith("kanoe.ai") or to.endswith("@" + os.getenv("SASHA_INBOUND_DOMAIN", "booking.kanoe.ai").lower()))
-    if no is not None:
-        return no
-    # S-54 · checked again at the send: a venue can withdraw between the read-back and the yes
-    try:
-        r = await LADDER_STORE.get_read(account, str(e["read_id"])) if e.get("read_id") else None
-    except StorageUnavailable as ex:
-        return _refuse(503, ex.rule, ex.detail)
-    refused = await _optin_refusal(O.venue_ids_of(r["read"]) if r else None, "email")
-    if refused:
-        return refused
-    now = NOW()
-    approval = {"by": account, "how": a["how"], "said": a.get("said"), "at": now.isoformat(),
-                "read_back_sha256": e["read_back_sha256"], "email_sha256": e["email_sha256"],
-                **({"from": a.get("from")} if a.get("how") == "escalation_plan" else {})}   # Sasha 132 · which yes covered it
-    try:
-        claimed = await LADDER_STORE.claim_email(account, email_id, approval, now, now - APPROVAL_WINDOW, email_cap(), cap_window(now),
-                                                 account_email_cap())
-    except StorageUnavailable as ex:
-        return _refuse(503, ex.rule, ex.detail)
-    if claimed == "taken":
-        return _refuse(409, "email_already_sent", "this email was already approved; another is a new read-back and a new yes")
-    if claimed == "stale":
-        return _refuse(422, "read_back_expired", "that read-back is more than 15 minutes old; prepare the email again")
-    if claimed == "cap":
-        return _refuse(429, "daily_email_limit", f"{email_cap()} emails have been sent in the last 24 hours, the most this server allows")
-    if claimed == "account_cap":
-        return _refuse(429, "account_daily_email_limit", f"this account has sent {account_email_cap()} emails in the last 24 hours, the most one account may")
-    if claimed != "claimed":
-        return _refuse(404, "email_unknown", "no email with that id was prepared for this account")
-    sent = await E.send(HTTP, e["email"])
-    try:
-        await LADDER_STORE.mark_sent(email_id, sent, NOW())
-    except (StorageUnavailable, AlreadyRecorded) as ex:
-        log.error("[booking_ladder] email %s: Resend answered sent=%s (%s) but it could not be recorded: %s", email_id, sent.sent, sent.provider_id, ex)
-        return _refuse(503, getattr(ex, "rule", "not_recorded"), f"the mail service answered {'accepted' if sent.sent else 'not accepted'}, but it could not be recorded: {ex}")
-    if not sent.sent:
-        return {"ok": False, "status": "not_sent", "rule": "email_not_sent", "why": sent.why, "say": f"I couldn't send it: {sent.why}"}
-    # Sasha 99 · the guest's receipt after the email booking, too
-    from . import guest_receipt as GR
-    read = await LADDER_STORE.get_read(account, str(e.get("read_id"))) if e.get("read_id") else None
-    log.info("[booking_ladder] email %s guest receipt: %s", email_id, await GR.send_for_route(
-        account, (read or {}).get("venue_name") or e["email"]["to"], f"an email from Sasha to {e['email']['to']}",
-        "Requested — waiting for their reply", {"their_words": None, "trip_item_id": e.get("trip_item_id")}))
-    return {"ok": True, "status": "sent",
-            "say": f"Sent to {e['email']['to']} — our mail service accepted it. I'll show you their reply the moment it arrives."}
+    """Sasha 319 · retired: this sent to the venue directly. AgAPI's acts are the one sender — nothing is sent here."""
+    from .retired import refusal
+    return refusal("an email to the venue")
 
 
 @router.get("/emails/{email_id}")

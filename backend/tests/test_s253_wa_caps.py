@@ -65,36 +65,29 @@ class OnTheBrain(ScriptedBrain):
 # ── cancelling (guest_whatsapp_s75 Turns: cancel by email, the founder's cancels, cancel wins over search / while cards show) ──
 
 class Cancel(OnTheBrain):
-    def test_cancel_by_email_says_cancelling_never_cancelled_until_their_words(self):
-        claim = mock.patch("agapi.v0.claim", mock.AsyncMock())   # the durable once-only claim (its own tests: test_safety_215)
+    def test_cancel_on_the_old_route_is_handed_to_tyler_never_sent(self):
+        """Sasha 319 · Botavara was booked on the old reservation route (no AgAPI act): AgAPI is the one sender to venues, so her cancel
+        is never Sasha's own email — "I'll hand this to Tyler", and nothing is sent, before or after a yes."""
+        claim = mock.patch("agapi.v0.claim", mock.AsyncMock())
         claim.start()
         self.addCleanup(claim.stop)
-        self.brain([tool("cancel_venue", venue="Botavara", idempotency_key="k1"), says("Cancel Botavara Chamberí on Saturday? I'll email them."),
-                    tool("cancel_venue", approval={"said": "yes, cancel it"}, idempotency_key="k2"), says("Cancelling with Botavara Chamberí now.")])
+        self.brain([tool("cancel_venue", venue="Botavara", idempotency_key="k1"), says("I'll hand this to Tyler — nothing was sent to them."),
+                    tool("cancel_venue", approval={"said": "yes, cancel it"}, idempotency_key="k2"), says("Tyler has it.")])
         self.say("cancel Botavara")
-        self.assertIn("awaiting_yes", self.tool_results())                     # the read-back first …
-        self.assertIn("I'll email them to cancel.", self.tool_results())
-        self.assertEqual(self.posted_cancels(), [])                               # … nothing sent before the yes
+        self.assertIn("to_tyler", self.tool_results())
         self.say("yes, cancel it")
-        (post,) = self.posted_cancels()
-        self.assertEqual(post[2], "/api/booking/reservations/t-1/cancel")
-        self.assertEqual(post[3]["read_back_sha256"], "e" * 64)                  # bound to what was read back
-        self.assertIn('status\\": \\"requested', self.tool_results())                        # asked — never "cancelled" on our word
+        self.assertEqual(self.posted_cancels(), [])
+        self.assertFalse(any("/cancel" in c[2] for c in GW.api.calls))         # not even its read-back
         self.assertFalse(any("has cancelled" in b for b in self.bodies()))
-        self.assertIn("watch_cancel", self.spawned)                              # their written words are watched for (G2)
 
-    def test_the_founders_cancels_and_a_no_cancels_nothing(self):
+    def test_the_founders_no_cancels_nothing(self):
         GW.api.reservations = [{**BASE, "id": "t-2", "venue": "Restaurante Yatri", "date": SOON, "status": "unclear"}]
-        self.brain([tool("cancel_venue", trip_item_id="t-2", idempotency_key="k3"), says("Cancel Restaurante Yatri?"),
-                    tool("cancel_venue", approval={"said": "No"}, idempotency_key="k4"), says("OK — nothing was cancelled."),   # a model that tries anyway
-                    tool("cancel_venue", venue="Yatri", idempotency_key="k5"), says("Cancel Restaurante Yatri?")])
+        self.brain([tool("cancel_venue", trip_item_id="t-2", idempotency_key="k3"), says("Tyler has it."),
+                    tool("cancel_venue", approval={"said": "No"}, idempotency_key="k4"), says("OK — nothing was cancelled.")])
         self.say("Please cancel")
         self.say("No")
-        self.assertIn("no_explicit_yes", self.tool_results())                    # a No is never a yes, whatever the model does
         self.assertEqual(self.bodies()[-1], "OK — nothing was cancelled.")
-        self.say("No Please Cancel Yatri")
-        self.assertIn("Restaurante Yatri", self.tool_results())
-        self.assertEqual(self.posted_cancels(), [])                               # nothing until a yes
+        self.assertEqual(self.posted_cancels(), [])
 
     def cancel_wins(self, pend, key):
         run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": pend, "last_inbound_at": NOW, "link_tries": []}))
@@ -102,7 +95,7 @@ class Cancel(OnTheBrain):
         self.say("Cancel the Botavara dinner.")
         paths = [c[2] for c in GW.api.calls]
         self.assertNotIn("/api/booking/venues/find", paths)                      # never a search
-        self.assertIn("/api/booking/reservations/t-1/cancel", paths)             # its cancellation, read back
+        self.assertIn("to_tyler", self.tool_results())                           # its cancellation: Tyler's (Sasha 319), nothing sent
         self.assertEqual(self.posted_cancels(), [])
         self.assertEqual(self.bodies()[-1], "Cancel Botavara Chamberí?")
 

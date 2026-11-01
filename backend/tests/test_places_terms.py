@@ -74,38 +74,6 @@ class PlacesTerms(unittest.TestCase):
         again = self.c.get(f"/api/booking/venues/read/{v['read_id']}").json()      # re-read from Google, not from storage
         self.assertIn(NUMBER, [f["value"] for f in again["facts"]])
 
-    def test_a_listing_number_is_dialled_never_stored_never_shown_never_spoken(self):
-        v = self.pick()
-        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
-        self.assertEqual(prep.status_code, 200, prep.text)
-        lines = prep.json()["read_back"]["lines"]
-        # Sasha 86 · the chosen place is named by its listing's name, re-read now — shown and hashed, never stored
-        self.assertEqual(lines[0], f"I'll phone {NAME} on the number its Google Maps listing gives.")
-        call = self.calls.calls[prep.json()["call_id"]]
-        self.assert_no_listing_content({k: call[k] for k in ("brief", "read_back_lines", "dialled_number")}, "the call")
-        self.assertEqual(call["dialled_number"], PT.number_key(NUMBER))
-        self.assertEqual((call["brief"]["number_source_kind"], call["brief"]["number_ref"]["place_id"]), ("places", PID))
-        self.assert_no_listing_content(self.calls.trip_items, "the reservation")
-        r = self.c.post(f"/api/booking/calls/{prep.json()['call_id']}/place",
-                        json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual(r.json()["status"], "placed", r.text)
-        bland = [b for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")][0]
-        self.assertEqual(bland["phone_number"], NUMBER)                                          # dialled
-        for spoken in (bland["task"], bland["first_sentence"]):                                  # never spoken
-            for s in (NAME, ADDRESS, NUMBER):
-                self.assertNotIn(s, spoken)
-        self.assert_no_listing_content(self.calls.calls[prep.json()["call_id"]], "the placed call")
-
-    def test_a_changed_listing_number_is_not_dialled(self):
-        v = self.pick()
-        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-        self.web.listing = listing(phone="+34 999 00 00 00")
-        r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
-                        json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual((r.status_code, r.json()["rule"]), (422, "listing_number_changed"))
-        self.assertFalse([u for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")])
-        self.assertEqual(self.calls.calls[prep["call_id"]]["status"], "awaiting_approval")
-
     def test_a_cancellation_re_reads_the_listing_number_and_stores_it_the_same_way(self):
         v = self.pick()
         prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()

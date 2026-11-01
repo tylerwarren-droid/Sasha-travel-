@@ -87,9 +87,8 @@ class ChannelNeverLimited(unittest.TestCase):
         src = inspect.getsource(AG)
         self.assertIn("if honest and _V.limits_channel(x) and not _V.is_told(x, told):", src)
         self.assertIn('internal_log.append(f"channel limited: {x[:60]}")', src)
-        ex = inspect.getsource(VN._execute)
-        self.assertIn('o["say"] = o["say"].replace(BR.PHRASES["wait_to_call"], V.WAIT_TO_CALL)', ex)
-        self.assertIn("if one_path(ctx):", ex.split("WAIT_TO_CALL")[0][-400:])
+        ex = inspect.getsource(VN._execute)   # Sasha 319 · R3's wait is the call act's on every surface: Sasha's own scheduled call is gone
+        self.assertNotIn("await _call(", ex)
 
 
 class TheTurnNeverSaysIt(unittest.TestCase):

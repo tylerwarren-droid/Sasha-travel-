@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 
 from . import sentences as SN
 from . import venue_read as V
-from . import yes as YS
+
 from .account import account_for
 from .store import StorageUnavailable
 
@@ -229,72 +229,9 @@ async def cancel_plan(trip_item_id: str, request: Request):
 
 @router.post("/{trip_item_id}/cancel")
 async def cancel_go(trip_item_id: str, request: Request):
-    from . import call_routes as CRT, emailing as E, followup as FU, guest_receipt as GR, ladder_routes as LR
-    try:
-        body = await request.json()
-    except Exception:
-        body = None
-    if not isinstance(body, dict) or not isinstance(body.get("approval"), dict):
-        return _refuse(400, "approval_void", "send {read_back_sha256, approval: {how, said}}")
-    if not YS.approval_ok(body["approval"]):   # S-75 step 2 · the same rule as a call's yes (yes.py)
-        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
-    account = account_for(request)
-    b = await _booking(account, trip_item_id)
-    if b is None:
-        return _refuse(404, "booking_unknown", "no booking of yours with that id")
-    p = plan(b)
-    w = words(b, p)
-    if body.get("read_back_sha256") != w["sha256"]:
-        return _refuse(422, "read_back_mismatch", "what I'd do has changed since you said yes; look at it again")
-    now = NOW()
-    if p["route"] is None:
-        return _refuse(422, "no_cancel_route", w["lines"][0])
-    if p["route"] == "call":
-        return {"status": "call", "call_id": p["call_id"], "say": "I'll phone them — here is the call to approve."}
-    if p["route"] == "link" and p["platform"]:
-        return {"status": "guest_presses", "url": p["url"], "say": f"Press their {p['platform']} cancel link; {p['platform']} confirms to you."}
-    if p["route"] == "link":
-        try:
-            if not await V._allowed(LR.HTTP, p["url"], LR.RESOLVE):
-                return {"status": "not_done", "say": "Their site's robots.txt doesn't let me open that link — press it yourself."}
-            final, r = await V._get(LR.HTTP, p["url"], LR.RESOLVE)
-        except Exception as e:
-            return {"status": "not_done", "say": f"I couldn't open their cancel link ({type(e).__name__}) — press it yourself."}
-        from .form_rung import _LiveForm_text
-        text = " ".join(" ".join(_LiveForm_text(r.text or "")).split())[:4000]
-        reading = cancel_reading(text)
-        await _record(account, trip_item_id, "web_form", reading, text, "their cancel link, opened by Sasha after your yes", now)
-        done = reading["result"] == "cancelled"
-        await GR.send_for_route(account, b["venue"], "their own cancel link", "Cancelled by the venue" if done else "Not cancelled yet",
-                                {"their_words": text[:1500], "trip_item_id": b.get("id")})
-        return {"status": "cancelled" if done else "not_confirmed", "say": "Reservation cancelled." if done else
-                "Their page doesn't say it's cancelled — their words are below.", "their_words": text, "reading": reading}
-    if p["route"] == "email":
-        email_id = str(uuid.uuid4())
-        email = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": p["to"], "reply_to": E.act_address(email_id),
-                 "subject": w["email"]["subject"], "text": w["email"]["text"]}
-        row = {"email_id": email_id, "account_id": account, "read_id": (b["read_row"] or {}).get("read_id"), "email": email,
-               "email_sha256": E.email_sha256(email), "read_back_lines": w["lines"], "read_back_sha256": w["sha256"], "created_at": now}
-        await LR.LADDER_STORE.put_followup_email(row, trip_item_id)
-        claimed = await LR.LADDER_STORE.claim_email(account, email_id, {"how": body["approval"].get("how"), "kind": "cancel",
-                                                                          "read_back_sha256": w["sha256"], "at": now.isoformat()},
-                                                    now, now - LR.APPROVAL_WINDOW, LR.email_cap(), LR.cap_window(now), LR.account_email_cap())
-        if claimed != "claimed":
-            return _refuse(429 if "cap" in claimed else 409, f"email_{claimed}", "the cancellation email was not sent")
-        sent = await E.send(LR.HTTP, email)
-        await LR.LADDER_STORE.mark_sent(email_id, sent, now)
-        if not sent.sent:
-            return {"status": "not_done", "say": f"I couldn't send it: {sent.why}"}
-        await GR.send_for_route(account, b["venue"], f"an email from Sasha to {p['to']}", "Cancellation requested — waiting for their reply",
-                                {"their_words": None, "trip_item_id": b.get("id")})
-        return {"status": "requested", "say": f"Sent to {p['to']}. It's cancelled once their reply says so — I'll show it the moment it arrives."}
-    if p["route"] == "sms":
-        sent = await GR.send_sms(p["to"], w["sms"], switch="SASHA_SMS_TO_VENUES")
-        if not sent.startswith("sms sent"):
-            return {"status": "not_done", "say": f"I couldn't text them: {sent}"}
-        await _record(account, trip_item_id, "phone", {"result": "requested"}, w["sms"], CANCEL_REQUESTED + " Sasha's text to their mobile", now)
-        return {"status": "requested", "say": "Texted. It's cancelled once their reply says so."}
-    return _refuse(422, "no_cancel_route", "no route")
+    """Sasha 319 · retired: this sent to the venue directly. AgAPI's acts are the one sender — nothing is sent here."""
+    from .retired import refusal
+    return refusal("a cancellation to the venue")
 
 
 async def _record(account: str, trip_item_id: str, method: str, reading: Mapping[str, Any], text: str, observed: str, now) -> None:

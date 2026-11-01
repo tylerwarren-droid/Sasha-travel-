@@ -117,6 +117,7 @@ class Base(unittest.TestCase):
         GW._spawn = lambda coro: (self.spawned.append(coro.__name__), coro.close())   # watchers are tested on their own
         self.now = NOW
         GW.NOW = lambda: self.now
+        import app.services.llm  # noqa: F401  (patched below by its path: imported here, not by whatever module happened to load it)
         self.model = mock.patch("app.services.llm.client.messages.create", side_effect=AssertionError("the model was called"))
         self.model.start()
         # Sasha 253 · item 5 — every account's WhatsApp reaches the one brain now: its live model is never called from a test

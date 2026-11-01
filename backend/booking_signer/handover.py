@@ -44,7 +44,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from . import form_rung as FR
 from . import venue_read as V
-from .account import account_for
+
 
 log = logging.getLogger("booking_signer.handover")
 router = APIRouter(tags=["booking-handover"])
@@ -634,46 +634,9 @@ def _no(status: int, rule: str, say: str) -> JSONResponse:
 
 @router.post("/forms/{form_id}/handover")
 async def from_prepared_form(form_id: str, request: Request):
-    """A prepared form (its read-back) → Sasha fills it in the cloud browser and the guest gets ONE link with ONE press left."""
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    account = account_for(request)
-    f = await FR.STORE.get(account, form_id) if FR.STORE is not None else None
-    if f is None:
-        return _no(404, "form_unknown", "no prepared form with that id for this account")
-    if f.get("status") != "awaiting_approval":
-        return _no(409, "form_already", "this form was already sent or handed over")
-    m = FR.form_map(f["page_url"])
-    if m is None:
-        return _no(422, "form_not_approved", "Sasha only hands over a form that's mapped and approved")
-    if not await _robots_ok(f["page_url"]):
-        return _no(422, "robots", "their robots.txt does not allow it")
-    from .form_rung import _request_of
-    o = await _request_of(f)
-    step1 = [x for x in f["fields"] if x.get("step", 1) == 1]
-    step2 = [x for x in f["fields"] if x.get("step") == 2]
-    # claimed NOW: no second send (a yes, or another hand-over) can race the guest's press
-    claimed = await FR.STORE.claim(account, form_id, {"how": "live_handover", "said": "the guest presses Book in the live view",
-                                                      "at": NOW().isoformat(), "read_back_sha256": f["read_back_sha256"]},
-                                   NOW(), NOW() - FR.APPROVAL_WINDOW)
-    if claimed != "claimed":
-        return _no(409 if claimed == "already" else 422, f"form_{claimed}", "this form can't be handed over now (" + claimed + ")")
-    try:
-        rec = await open_handover(page_url=f["page_url"], m=m, step1=step1, step2=step2, venue=_venue(f), account=account,
-                                  form_id=form_id, read_only=False, return_to=(body or {}).get("return_to"), request=o)
-    except Refused as e:
-        await FR.STORE.finish(form_id, {"status": "not_sent", "not_sent_why": f"live hand-over refused: {e.say}"}, "failed", "failed", NOW())
-        return _no(422, e.rule, e.say)
-    two = rec.get("taps_left") == 2
-    phone = await tap_phone(account, rec)
-    return {"ok": True, "phone": phone, "handover_id": rec["id"], "view_url": view_url(rec), "ready_ms": rec["ready_ms"], "taps_left": 2 if two else 1,
-            "book_label": rec.get("book_label"), "filled": rec["filled"], "box_left_for_you": rec.get("box_label"),
-            "say": (f"I've filled in {rec['venue']}'s own booking form — every field. Two taps left: open it, tick "
-                    f"“{rec.get('box_label')}” and press “{rec.get('book_label') or 'Book'}”. {view_url(rec)}") if two else
-                   (f"I've filled in {rec['venue']}'s own booking form — every field. One tap left: open it and press "
-                    f"“{rec.get('book_label') or 'Book'}”. {view_url(rec)}")}
+    """Sasha 319 · retired: this sent to the venue directly. AgAPI's acts are the one sender — nothing is sent here."""
+    from .retired import refusal
+    return refusal("the venue's form, filled")
 
 
 async def tap_phone(account: Optional[str], rec: dict) -> dict:

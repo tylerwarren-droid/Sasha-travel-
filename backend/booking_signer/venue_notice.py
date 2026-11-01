@@ -16,16 +16,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import re
-import uuid
 from datetime import datetime, time, timezone
 from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import yes as YS
+
 from .account import account_for
 from .store import StorageUnavailable
 
@@ -182,80 +180,8 @@ async def notice_plan(trip_item_id: str, request: Request):
 
 @router.post("/{trip_item_id}/notice")
 async def notice_go(trip_item_id: str, request: Request):
-    from . import call_routes as CRT, emailing as E, ladder_routes as LR
-    try:
-        body = await request.json()
-    except Exception:
-        body = None
-    if not isinstance(body, dict) or not isinstance(body.get("approval"), dict) or body.get("kind") not in KINDS:
-        return _refuse(400, "approval_void", "send {kind, …, read_back_sha256, approval: {how, said}}")
-    if not YS.approval_ok(body["approval"]):
-        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
-    account = account_for(request)
-    b = await _booking(account, trip_item_id)
-    if b is None:
-        return _refuse(404, "booking_unknown", "no booking of yours with that id")
-    kind = body["kind"]
-    p = await plan(account, b, kind, body)
-    if body.get("read_back_sha256") != _sha(p["lines"]):
-        return _refuse(422, "read_back_mismatch", "what I'd do has changed since you said yes; look at it again")
-    if p["route"] is None:
-        return _refuse(422, "no_route", p["lines"][0])
-    now = NOW()
-    if p["route"] == "call":
-        c = p["call"]
-        row = {"request": None, "call_id": str(uuid.uuid4()), "account_id": account, "venue_key": c["venue"].key,
-               "dialled_number": c["built"]["brief"]["number"], "language": c["built"]["brief"]["language"], "guest_name": c["particulars"].name,
-               "guest_phone": c["particulars"].phone, "brief": {**c["built"]["brief"], "notice_trip_item_id": trip_item_id,
-                                                                **({"fallback_email": p["email"]} if p.get("email") else {})},
-               "read_back_lines": c["built"]["read_back_lines"], "read_back_sha256": c["built"]["read_back_sha256"], "created_at": now}
-        from . import calls as C
-        row["brief_sha256"] = C._sha256hex(C._canonical(row["brief"]))   # the brief as stored (with its trip item and fallback)
-        try:
-            await CRT.CALL_STORE.put_cancel_call(row, trip_item_id)   # a notice call sits on the SAME reservation (as a cancel call does)
-        except StorageUnavailable as e:
-            return _refuse(503, e.rule, e.detail)
-        return {"status": "call_prepared", "call_id": row["call_id"], "call_read_back_sha256": row["read_back_sha256"]}
-    # email
-    mail = p["email"]
-    email_id = str(uuid.uuid4())
-    email = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": mail["to"], "reply_to": E.act_address(email_id),
-             "subject": mail["subject"], "text": mail["text"]}
-    row = {"email_id": email_id, "account_id": account, "read_id": (b.get("read_row") or {}).get("read_id"), "email": email,
-           "email_sha256": E.email_sha256(email), "read_back_lines": p["lines"], "read_back_sha256": _sha(p["lines"]), "created_at": now}
-    await LR.LADDER_STORE.put_followup_email(row, trip_item_id)
-    claimed = await LR.LADDER_STORE.claim_email(account, email_id, {"how": body["approval"].get("how"), "kind": kind,
-                                                                      "read_back_sha256": row["read_back_sha256"], "at": now.isoformat()},
-                                                now, now - LR.APPROVAL_WINDOW, LR.email_cap(), LR.cap_window(now), LR.account_email_cap())
-    if claimed != "claimed":
-        return _refuse(429 if "cap" in claimed else 409, f"email_{claimed}", "the email was not sent")
-    sent = await E.send(LR.HTTP, email)
-    await LR.LADDER_STORE.mark_sent(email_id, sent, now)
-    if not sent.sent:
-        return {"status": "not_done", "say": f"I couldn't send it: {sent.why}"}
-    return {"status": "requested", "email_id": sent.email_id if hasattr(sent, "email_id") else None,
-            "say": f"Emailed {b['venue']} at {mail['to']}. " + ("It's held once they reply to say so." if kind == "late" else
-                                                                 "It's changed once their reply says so; until then it stays as it was.")}
+    """Sasha 319 · retired: this sent to the venue directly. AgAPI's acts are the one sender — nothing is sent here."""
+    from .retired import refusal
+    return refusal("a change or running-late notice to the venue")
 
 
-async def after_call(account: str, call: Mapping[str, Any], reading) -> None:
-    """call_routes._follow_up, for a LATE or CHANGE call: the outcome told on their page in the venue's own words; nobody
-    answered → the email named in the same read-back goes instead (covered by that yes)."""
-    from . import calls as C, emailing as E, live_events as LE, ladder_routes as LR
-    brief = call.get("brief") or {}
-    purpose, venue = brief.get("purpose"), brief.get("venue_name") or "the venue"
-    say = C.say_for(venue, reading, purpose)
-    lines = [say]
-    fb = brief.get("fallback_email")
-    if reading.state == "not_reached" and fb:
-        email = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": fb["to"], "subject": fb["subject"], "text": fb["text"]}
-        try:
-            sent = await E.send(LR.HTTP, email)
-            lines.append(f"So I emailed them at {fb['to']} instead." if sent.sent else f"I couldn't email them either: {sent.why}")
-        except Exception as e:
-            lines.append(f"I couldn't email them either ({type(e).__name__}).")
-    LE.publish(account, {"type": "venue_notice", "purpose": purpose, "venue": venue, "state": reading.state, "outcome": reading.outcome,
-                         "say": " ".join(lines), "lines": lines, "trip_item_id": brief.get("notice_trip_item_id")})
-
-
-__all__ = ["router", "plan", "particulars", "after_call", "KINDS"]

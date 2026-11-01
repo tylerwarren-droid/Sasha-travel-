@@ -82,56 +82,12 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
         form = next(r for r in v["rungs"] if r["rung"] == "form")
         self.assertTrue(form["available"], form)
 
-    def test_the_read_back_shows_every_field_and_the_yes_sends_it_once(self):
-        v = self.read()
-        prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()})
-        self.assertEqual(prep.status_code, 200, prep.text)
-        lines = prep.json()["read_back"]["lines"]
-        for must in ("· Día: 2026-10-10", "· Hora: 21:00", "· Personas: 2", "· Nombre: Tyler Warren", "· Email: tyler@kanoe.test",
-                     "· Teléfono: +34608445715", "hidden fields, sent with the page's values: token",
-                     "I won't tick any box agreeing to their terms, and I stop at any CAPTCHA."):
-            self.assertIn(must, "\n".join(lines))
-        self.assertNotIn("website_url", "\n".join(lines))                       # the honeypot is never touched
-        self.assertEqual(self.posts, [])                                        # nothing sent before the yes
-        sha = prep.json()["read_back"]["sha256"]
-        bad = self.c.post(f"/api/booking/forms/{prep.json()['form_id']}/send", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})
-        self.assertEqual(bad.json()["rule"], "read_back_mismatch")
-        sent = self.c.post(f"/api/booking/forms/{prep.json()['form_id']}/send", json={"read_back_sha256": sha, "approval": {"how": "button"}})
-        self.assertEqual(sent.status_code, 200, sent.text)
-        j = sent.json()
-        self.assertEqual((j["status"], j["reading"]["result"]), ("sent", "confirmed"), j)
-        self.assertIn("Confirmado: mesa para 2 personas el sábado 10 de octubre a las 21:00, a nombre de Tyler Warren.", j["their_page"])
-        self.assertRegex(j["booking_reference"], r"^TV-[0-9A-F]{6}-[0-9A-F]{2}$")
-        url, data = self.posts[0]
-        self.assertEqual(url, f"{BASE}/api/booking/test-venue/plain")
-        self.assertTrue(data["token"]) and self.assertNotIn("website_url", data)
-        self.assertEqual(len(FR.TEST_SUBMISSIONS), 1)                           # the venue's own book has it, once
-        item = self.calls.trip_items[prep.json()["trip_item_id"]]
-        self.assertEqual((item["status"], item["booking_reference"]), ("confirmed", j["booking_reference"]))
-        again = self.c.post(f"/api/booking/forms/{prep.json()['form_id']}/send", json={"read_back_sha256": sha, "approval": {"how": "button"}})
-        self.assertEqual((again.status_code, again.json()["rule"]), (409, "form_already"))   # once per yes
-        self.assertEqual(len(self.posts), 1)
-
     def test_a_consent_box_or_a_captcha_stops_it_before_anything_is_filled(self):
         for variant, rule in (("consent", "form_consent"), ("captcha", "form_challenge")):
             v = self.read(variant)
             prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()})
             self.assertEqual((prep.status_code, prep.json()["rule"]), (422, rule), variant)
         self.assertEqual(self.posts, [])
-
-    def test_a_comments_box_asks_the_venue_to_copy_sasha_and_the_guests_email_stays(self):
-        # Sasha 99 · the guest keeps the reminder; a copy (and any cancel link) reaches Sasha through the comments box
-        env = {"SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>", "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai",
-               "SASHA_RESEND_API_KEY": "k", "RESEND_WEBHOOK_SECRET": "w"}
-        with mock.patch.dict(os.environ, env):
-            v = self.read()
-            prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
-            self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-        text = "\n".join(prep["read_back"]["lines"])
-        self.assertIn("· Comentarios: Por favor, envíen también una copia de la confirmación a sasha@booking.kanoe.ai.", text)
-        self.assertIn("· Email: tyler@kanoe.test", text)
-        data = self.posts[0][1]
-        self.assertEqual((data["email"], data["comentarios"]), ("tyler@kanoe.test", "Por favor, envíen también una copia de la confirmación a sasha@booking.kanoe.ai."))
 
     def test_sasha121_no_email_given_the_accounts_own_is_used_and_shown(self):
         v = self.read()
@@ -140,23 +96,6 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
                                                                                                             "contact": {"mobile_e164": "+34608445715"}})})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertTrue(any("founder@kanoe.test" in ln for ln in r.json()["read_back"]["lines"]), r.json()["read_back"]["lines"])
-
-    def test_the_guest_gets_a_receipt_after_the_form_too(self):
-        # Sasha 99 · a receipt after EVERY route, not only a call
-        env = {"SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "k", "SASHA_EMAIL_FROM": "Sasha <sasha@booking.kanoe.ai>",
-               "SASHA_INBOUND_DOMAIN": "booking.kanoe.ai", "SASHA_FOUNDER_EMAIL": "founder@kanoe.test"}
-        from booking_signer import guest_receipt as GR
-        # Sasha 147 · our test venue's receipt is never emailed — so to check the real email path end to end, this test
-        # treats it as a real venue (test_the_test_venue_s_receipt_is_never_emailed holds the opposite)
-        with mock.patch.dict(os.environ, env), mock.patch.object(GR, "test_reason", lambda *a, **k: None):
-            v = self.read()
-            prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
-            self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-        mail = [b for m, u, b in self.web.requests if u == "https://api.resend.com/emails"][-1]
-        self.assertEqual((mail["to"], mail["subject"]), (["founder@kanoe.test"], "Your booking at Sasha Test Venue: Confirmed by the venue"))   # Sasha 117 · the venue, not its host
-        for must in ("How: their own booking form, sent by Sasha after your yes", "When: 2026-10-10 at 21:00", "Their reference: TV-",
-                     "What they answered, word for word:"):
-            self.assertIn(must, mail["text"])
 
     def test_the_test_venue_s_receipt_is_never_emailed(self):
         # Sasha 147 · 4 Oct: five of these reached the founder's inbox from the speed harness
@@ -167,44 +106,6 @@ class FormRung(unittest.TestCase):   # LadderRoutes' set-up, not its tests
             prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
             self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
         self.assertEqual([u for m, u, b in self.web.requests if u == "https://api.resend.com/emails"], [])
-
-    def test_the_wizard_reads_back_both_steps_and_sends_step_two_only_after_step_one(self):
-        # Sasha 94 · the day on one page, the details on the next
-        v = self.read("wizard")
-        prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()})
-        self.assertEqual(prep.status_code, 200, prep.text)
-        text = "\n".join(prep.json()["read_back"]["lines"])
-        one, two = text.split("Step 2")
-        for must in ("· Día: 2026-10-10", "· Hora: 21:00", "· Personas: 2"):
-            self.assertIn(must, one)
-        for must in ("· Nombre: Tyler Warren", "· Email: tyler@kanoe.test", "· Teléfono: +34608445715"):
-            self.assertIn(must, two)
-        self.assertIn("only the day and the number of people will have reached them", text)
-        self.assertEqual(self.posts, [])
-        sent = self.c.post(f"/api/booking/forms/{prep.json()['form_id']}/send",
-                           json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}}).json()
-        self.assertEqual((sent["status"], sent["reading"]["result"]), ("sent", "confirmed"), sent)
-        (u1, d1), (u2, d2) = self.posts
-        self.assertEqual((u1, set(d1) - {"token"}), (f"{BASE}/api/booking/test-venue/wizard/step2", {"fecha", "hora", "personas"}))
-        self.assertTrue(u2.endswith("/api/booking/test-venue/wizard/confirm"))
-        self.assertEqual((d2["nombre"], d2["fecha"]), ("Tyler Warren", "2026-10-10"))   # its own hidden fields carried the day
-        self.assertNotIn("website_url", d2)
-        self.assertEqual([x["variant"] for x in FR.TEST_SUBMISSIONS], ["wizard"])
-
-    def test_the_wizard_stops_at_a_step_two_it_was_not_approved_for(self):
-        v = self.read("wizard")
-        prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
-        saved = FR._WIZARD_TWO
-        FR._WIZARD_TWO = saved.replace('<button type="submit">', '<input id="acepto" name="acepto" type="checkbox" required><button type="submit">')
-        try:
-            sent = self.c.post(f"/api/booking/forms/{prep['form_id']}/send",
-                               json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}).json()
-        finally:
-            FR._WIZARD_TWO = saved
-        self.assertEqual(sent["status"], "not_sent")
-        self.assertIn("Only the day and the number of people reached them; nothing is booked", sent["say"])
-        self.assertEqual(len(self.posts), 1)                                    # step 1 only
-        self.assertEqual(FR.TEST_SUBMISSIONS, [])
 
     def test_our_test_venue_is_never_looked_up_on_google(self):
         # Sasha 94 · 2 Oct: "Sasha Test Venue, Madrid" pulled a real restaurant's listing and phone into the read
@@ -320,20 +221,6 @@ class Hanakura(unittest.TestCase):
                      "· Menús degustación (their default, \"No deseo menú degustación\"): degustacion"):
             self.assertIn(must, text)
 
-    def test_it_is_sent_once_over_https_to_their_endpoint_and_not_without_approval(self):
-        prep = self.prep().json()
-        with mock.patch.dict(os.environ, {"SASHA_FORM_HOSTS": "www.hanakura.es", "SASHA_FORMS_ENABLED": "1"}):
-            sent = self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"],
-                                                                                   "approval": {"how": "button"}}).json()
-        self.assertEqual(sent["status"], "sent", sent)
-        url, data = self.posts[0]
-        self.assertEqual(url, "https://www.hanakura.es/formularios/reservar.php")
-        self.assertEqual(data, {"nombre": "Tyler Warren", "telefono": "608445715", "email": "tyler@kanoe.test", "comensales": "2",
-                                "fecha": "03/10/2026", "hora": "21:00", "menu": "degustacion"})
-        self.assertEqual(sent["reading"]["result"] in ("none", "confirmed", "proposed", "declined"), True)
-        self.assertIn("Su petición de reserva se ha enviado correctamente", sent["their_page"])
-        self.assertIsNone(FR.form_map("http://www.hanakura.es/solicitar-reserva.html"))   # outside the approval: not sendable
-
     def test_a_time_their_form_does_not_offer_stops_before_anything_is_sent(self):
         with mock.patch.dict(os.environ, {"SASHA_FORM_HOSTS": "www.hanakura.es", "SASHA_FORMS_ENABLED": "1"}):
             r = self.c.post("/api/booking/venues/read", json={"name": "Hanakura", "city": "Madrid", "country": "ES",
@@ -357,33 +244,6 @@ class CancelRoutes(unittest.TestCase):
         prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
         self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
         return prep["trip_item_id"]
-
-    def test_their_own_cancel_link_is_used_and_cancelled_only_on_their_words(self):
-        item = self.booked()
-        plan = self.c.get(f"/api/booking/reservations/{item}/cancel").json()
-        self.assertEqual((plan["route"], plan["platform"]), ("link", None), plan)
-        self.assertTrue(plan["url"].startswith(f"{BASE}/api/booking/test-venue/cancel/TV-"))
-        self.assertIn("I'll open it once and keep their page word for word", "\n".join(plan["read_back"]["lines"]))
-        self.assertEqual(self.calls.trip_items[item]["status"], "confirmed")                         # nothing done by asking
-        bad = self.c.post(f"/api/booking/reservations/{item}/cancel", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})
-        self.assertEqual(bad.json()["rule"], "read_back_mismatch")
-        done = self.c.post(f"/api/booking/reservations/{item}/cancel",
-                           json={"read_back_sha256": plan["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes"}}).json()
-        self.assertEqual((done["status"], done["say"]), ("cancelled", "Reservation cancelled."), done)
-        self.assertIn("queda cancelada", done["their_words"])
-        self.assertEqual(self.calls.trip_items[item]["status"], "cancelled")
-        self.assertTrue(FR.TEST_SUBMISSIONS[-1].get("cancelled_at"))                                  # the venue's own book agrees
-
-    def test_sasha117_the_test_venue_still_knows_its_reference_after_a_redeploy(self):
-        """Live, 2 Oct: a redeploy emptied the test venue's in-memory book, so its cancel page said "No encontramos"."""
-        item = self.booked()
-        plan = self.c.get(f"/api/booking/reservations/{item}/cancel").json()
-        FR.TEST_SUBMISSIONS.clear()                                                                  # the redeploy
-        done = self.c.post(f"/api/booking/reservations/{item}/cancel",
-                           json={"read_back_sha256": plan["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes"}}).json()
-        self.assertEqual(done["status"], "cancelled", done)
-        ref = plan["url"].rsplit("/", 1)[1]
-        self.assertEqual(self.c.get(f"/api/booking/test-venue/cancel/{ref[:-1]}{'0' if ref[-1] != '0' else '1'}").status_code, 404)   # not a forged one
 
     def test_sasha119_a_form_booking_can_be_cancelled_by_phone_on_their_own_number(self):
         """Hanakura, 3 Oct: booked by their form, no call — if the email gets no answer, a call cancels it."""
@@ -441,17 +301,6 @@ class CancelRoutes(unittest.TestCase):
         self.assertEqual(CX.cancel_reading("Lo sentimos, no se puede cancelar con tan poca antelación.")["result"], "not_confirmed")
         self.assertEqual(CX.cancel_reading("Recibido, gracias.")["result"], "not_confirmed")
         self.assertEqual(CX.cancel_links(["Para anular: https://x.es/reservas/anular?id=1 · web: https://x.es/"]), ["https://x.es/reservas/anular?id=1"])
-
-    def test_a_reply_to_her_cancel_email_cancels_only_when_it_says_so(self):
-        import asyncio
-        from booking_signer import followup as FU, ladder_routes as LR
-        item = self.booked()
-        for eid, text, want in (("e-no", "Recibido, lo miramos.", "confirmed"), ("e-yes", "Hecho, su reserva queda cancelada.", "cancelled")):
-            LR.LADDER_STORE.emails[eid] = {"email_id": eid, "account_id": "11111111-1111-4111-8111-111111111111", "trip_item_id": item,
-                                           "approval": {"kind": "cancel"}, "email": {"to": "reservas@venue.test"}, "status": "sent"}
-            r = asyncio.run(FU.on_reply(eid, text, datetime_now()))
-            self.assertEqual(self.calls.trip_items[item]["status"], want, (eid, r))
-
 
 def datetime_now():
     from datetime import datetime, timezone

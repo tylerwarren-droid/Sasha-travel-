@@ -36,12 +36,12 @@ from . import followup as FU
 from . import render as R
 from . import reservation as RS
 from . import sentences as SN
-from . import yes as YS
+
 from . import ladder_routes
 from . import stop as S
 from .account import account_for
 from .call_store import PostgresCallStore, cap_window
-from .store import AlreadyRecorded, StorageUnavailable, UnknownTrip
+from .store import StorageUnavailable, UnknownTrip
 
 log = logging.getLogger("sasha.booking_calls")
 
@@ -180,12 +180,8 @@ async def _follow_up(call: dict, reading) -> None:
         except Exception as e:
             log.error("[booking_calls] act call %s: the attempt was not reported: %s: %s", call.get("call_id"), type(e).__name__, e)
         return
-    if (call.get("brief") or {}).get("purpose") in ("late", "change"):   # Sasha 226 · said on their page; no answer → the email
-        from . import venue_notice as VNT
-        try:
-            await VNT.after_call(str(call.get("account_id")), call, reading)
-        except Exception as e:
-            log.error("[booking_calls] notice follow-up for %s failed: %s: %s", call.get("call_id"), type(e).__name__, e)
+    if (call.get("brief") or {}).get("purpose") in ("late", "change"):   # Sasha 319 · no email to the venue after it: read, kept, that's all
+        log.info("[booking_calls] notice call %s read: %s", call.get("call_id"), reading.outcome or reading.state)
         return
     if call.get("is_test"):   # Sasha 144 · a test-line call: logged and read like any call, but no venue to follow up, no receipt
         log.info("[booking_calls] test call %s read: %s", call.get("call_id"), reading.outcome or reading.state)
@@ -217,16 +213,7 @@ async def _follow_up(call: dict, reading) -> None:
                 log.info("[booking_calls] call %s: money or another time asked — the call ended; told: %s", call.get("call_id"), d.get("told"))
             except Exception as e:
                 log.error("[booking_calls] the person was not told of call %s's stop: %s: %s", call.get("call_id"), type(e).__name__, e)
-    try:
-        what = await FU.after_call(call, reading.outcome, NOW())
-        if what:
-            log.info("[followup] call %s: %s", call.get("call_id"), what)
-        # Sasha 108 · unclear and no email went: a text to the venue's own mobile, where they publish one
-        if (reading.outcome == "unclear" or (reading.state == "not_reached" and (call.get("brief") or {}).get("confirms_call_id"))) \
-                and (call.get("brief") or {}).get("purpose") == "book" and what != "sent":
-            log.info("[followup] call %s: %s", call.get("call_id"), await FU.sms_ask(call))
-    except Exception as e:
-        log.error("[followup] call %s: the follow-up email failed: %s: %s", call.get("call_id"), type(e).__name__, e)
+    # Sasha 319 · no confirmation email or text to the venue after the call: AgAPI's acts are the one sender to venues
     # Sasha 90 · the guest's receipt, after EVERY booking call, whatever the outcome — awaited, its failure logged
     try:
         from . import guest_receipt as GR
@@ -648,112 +635,9 @@ async def _prepare_cancel(account: str, booking_call_id: str, body: dict):
 
 @router.post("/{call_id}/place")
 async def place(call_id: str, request: Request):
-    off = _off() or _off(account_for(request))
-    if off:
-        return off
-    body = await _json(request)
-    if body is None:
-        return _refuse(400, "approval_void", "send {read_back_sha256, approval: {how, said}} as a JSON object")
-    account = account_for(request)
-    try:
-        call = await CALL_STORE.get_call(account, call_id)
-    except StorageUnavailable as e:
-        return _refuse(503, e.rule, e.detail)
-    if call is None:
-        return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
-    # ⚠ The page must name the read-back it showed; the server holds the lines and their hash.
-    if body.get("read_back_sha256") != call["read_back_sha256"]:
-        return _refuse(422, "approval_void", "the approval was given to different words from this call's read-back")
-    a = body.get("approval") if isinstance(body.get("approval"), dict) else {}
-    if a.get("how") == "escalation_plan":   # Sasha 132 · under the guest's ONE yes to the whole plan — verified from our records
-        from . import escalation as ESC
-        vk = str((call.get("brief") or {}).get("venue_key") or "")
-        why_not = await ESC.verify(account, a, vk[5:] if vk.startswith("read:") else None)
-        if why_not:
-            return _refuse(422, "approval_void", why_not)
-    # S-66 (EU) step 6 · a yes TYPED in the chat counts too — with the guest's exact words, kept with the approval
-    elif not YS.approval_ok(a):   # S-75 step 2 · WhatsApp's button and typed yes too (yes.py)
-        return _refuse(422, "approval_void", YS.APPROVAL_VOID)
-    brief = call["brief"]
-    if C._sha256hex(C._canonical(brief)) != call["brief_sha256"]:
-        return _refuse(409, "brief_changed", "the stored brief no longer matches what was read back; nothing was dialled")
-    if _no_act(call):   # Sasha 265 · item 4: Sasha's own booking call (no act) — retired; the act's call is placed by agapi.venue_calls
-        return _refuse(409, "no_act", NO_ACT)
-    # S-54 · checked again at the dial, before the claim: a venue can withdraw between the read-back and the yes
-    refused = await ladder_routes._optin_refusal(brief.get("venue_ids"), "phone")
-    if refused:
-        return refused
-    # Sasha 254 · the booking rules said WAIT (no form, more than 48 h away, a phone only — R3): the call is scheduled for when the
-    # booking comes within the rules' threshold, covered by this yes; place_due asks the rules again when it is due
-    later = _later(body.get("scheduled_for"))
-    if later and brief.get("purpose") == "book":
-        return await _schedule(account, call_id, call, body, a, {"call_at": later.isoformat(), "opens_at": later.isoformat(),
-                                                                "basis": "the booking rules: a call closer to the day (R3)", "notes": []},
-                               rules_wait=True)
-    # S-66 · CLOSED NOW by its listed hours → no call now: scheduled for opening + 10 minutes, covered by this yes
-    # (Sasha 109 · a cancelling call too: a closed venue's answering machine cancels nothing)
-    if brief.get("purpose") in ("book", "cancel"):
-        try:
-            read = await _read_of(account, brief)
-        except StorageUnavailable as e:
-            return _refuse(503, e.rule, e.detail)
-        st = H.status(read, NOW(), brief["timezone"]) if read else {"known": False}
-        if st.get("known") and st.get("open_now") is False and st.get("call_at"):
-            return await _schedule(account, call_id, call, body, a, st)
-    # Sasha 64 · a listing number is re-read now and must be the one approved — before the claim, so a refusal costs nothing
-    try:
-        dial = await PT.dialable(HTTP, brief, NOW())
-    except PT.ListingUnavailable as e:
-        return _refuse(422, e.rule, str(e))
-    # S-57 · never a second call while an earlier one to this number may have been placed
-    try:
-        if await CALL_STORE.unresolved_to(call["dialled_number"]):
-            return _refuse(409, "previous_call_unresolved", "an earlier call to this number may have been placed and Bland's "
-                                                            "log has not said yet; nothing was dialled — try again in a minute")
-    except StorageUnavailable as e:
-        return _refuse(503, e.rule, e.detail)
-    now = NOW()
-    soon = await too_soon(account, call, now) if call.get("status") == "awaiting_approval" and not call.get("approval") else None
-    if soon:   # Sasha 254 · R10: 30 minutes between two calls to the same venue (a call already approved: the claim says "taken")
-        return _refuse(429, "too_soon", soon)
-    approval = {"by": account, "how": a["how"], "said": a.get("said"), **({"from": a.get("from")} if a.get("how") == "escalation_plan" else {}), "at": now.isoformat(),
-                "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"]}
-    try:
-        claimed = await CALL_STORE.claim(account, call_id, approval, now, now - APPROVAL_WINDOW, cap(), cap_window(now), account_cap())
-    except StorageUnavailable as e:
-        return _refuse(503, e.rule, e.detail)
-    if claimed == "taken":
-        return _refuse(409, "call_already_placed", "this call was already approved; a second call is a new read-back and a new yes")
-    if claimed == "stale":
-        return _refuse(422, "read_back_expired", "that read-back is more than 15 minutes old; prepare the call again")
-    if claimed == "cap":
-        return _refuse(429, "daily_call_limit", f"{cap()} calls have been placed in the last 24 hours, the most this server allows")
-    if claimed == "account_cap":
-        return _refuse(429, "account_daily_call_limit", f"this account has placed {account_cap()} calls in the last 24 hours, the most one account may")
-    if claimed != "claimed":
-        return _refuse(404, "call_unknown", "no call with that id was prepared for this account")
-
-    placed = await C.place_call(HTTP, C.bland_key(), C.bland_payload(dial, call_id))
-    placed = dataclasses.replace(placed, answer=PT.scrub_bland(placed.answer, brief))
-    if placed.uncertain:
-        try:
-            await CALL_STORE.mark_placed(call_id, placed, NOW())
-        except StorageUnavailable as e:
-            log.error("[booking_calls] call %s: %s — and it could not be recorded: %s", call_id, placed.why, e)
-        return {"ok": True, "status": "uncertain", "why": placed.why,
-                "say": "Bland didn't answer in time, so the call may have been placed. I'm checking Bland's own call log "
-                       "and will show what happened here — don't call them again until it does."}
-    try:
-        await CALL_STORE.mark_placed(call_id, placed, NOW())
-    except (StorageUnavailable, AlreadyRecorded) as e:
-        # ⚠ Bland may have queued it and we could not record that. Say so; never pretend either way.
-        log.error("[booking_calls] call %s: Bland answered placed=%s (%s) but it could not be recorded: %s",
-                  call_id, placed.placed, placed.bland_call_id, e)
-        return _refuse(503, getattr(e, "rule", "not_recorded"), f"Bland answered {'placed' if placed.placed else 'not placed'}, but it could not be recorded: {e}")
-    if not placed.placed:
-        return {"ok": False, "status": "not_placed", "rule": "call_not_placed", "why": placed.why,
-                "say": f"I couldn't place the call: {placed.why}"}
-    return {"ok": True, "status": "placed", "say": f"Calling {_name(call)} now."}
+    """Sasha 319 · retired: this sent to the venue directly. AgAPI's acts are the one sender — nothing is sent here."""
+    from .retired import refusal
+    return refusal("a call to the venue")
 
 
 def _later(v: Any) -> Optional[datetime]:

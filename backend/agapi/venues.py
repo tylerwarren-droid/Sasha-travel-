@@ -444,6 +444,16 @@ def chosen_route(said: Optional[str]) -> Optional[str]:
     return next(iter(named)) if len(named) == 1 else None
 
 
+TO_TYLER = "I'll hand this to Tyler — nothing was sent to them."   # Sasha 319 · = booking_signer.retired.TO_TYLER
+
+
+def _to_tyler(venue: str, d: dict) -> dict:
+    """Sasha 319 · AgAPI is the ONE sender to venues: where it can't send (no venues key on this server, no slot to ask for), nothing is
+    sent — Tyler takes it from here. Said by code."""
+    return _said({"status": "to_tyler", "venue": venue, "booked": False, "sent": False, "line": TO_TYLER,
+                  "how": "Say `line` word for word — nothing else."}, d)
+
+
 def one_path(ctx) -> bool:
     """Sasha 251 · the one path's SCHEMA and asks (under / open_slot / nights, the contact asked once, a Keep loyalty number) on /s2,
     WhatsApp's brain and /next under S1 parity; old S1 (SASHA_S1_PARITY=off) keeps its own schema byte-identical. Sasha 254 · the
@@ -1201,7 +1211,7 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
     nights, open_slot = _nights(ctx, a), _open_slot(ctx, a)
     venue = GW.plain_venue(rd["venue"])
     kinds = {c["kind"] for c in d.get("channels") or []}
-    if one_path(ctx) and action == "call_and_email" and "email" in rungs:
+    if action == "call_and_email" and "email" in rungs:
         # Sasha 269 · R6 (CR 100): the email is the act. Sasha 271 · CR 102: a hotel stay is an act too — and the call that goes with
         # the email is the ENGINE's (venue.submit_booking returns its call_plan R6 under the same yes); Sasha dials only that plan
         if at and not open_slot:
@@ -1210,8 +1220,8 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
                 return got
         if nights:   # no booking service here: a stay is never Sasha's own email (its call would be nobody's)
             return await _no_engine(ctx, rd, d, venue)
-        return _said(await _email(ctx, a, rd, res, at, d), d, when="after_yes", account=ctx.account)
-    if one_path(ctx) and (key == "ask_page_or_call" or action in ("ask_call", "call", "call_and_email", "wait")):
+        return _to_tyler(venue, d)   # Sasha 319 · AgAPI is the one sender: no key here (or no slot) → Tyler, nothing sent
+    if key == "ask_page_or_call" or action in ("ask_call", "call", "call_and_email", "wait"):
         # Sasha 265 · item 4 (CR 99, booking-rules/2): a call is an ACT — the ONE question is its read-back, on a card. Sasha 269: every
         # call (R3's wait and R6's call too) is the act's — Sasha's own call (/api/booking/calls, never placed without an act) is not used
         if action == "wait" and not _wait_until(d):
@@ -1226,29 +1236,23 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
                       "options": [dict(o) for o in BD.CHOICES],
                       "how": "Say `say` word for word, then hold_venue again with the route they chose (Prefilled form → page; "
                              "Handle it → form)."}, d)
-    if action in ("fill_form_zero_touch", "request_email", "request_whatsapp") and one_path(ctx) and at and not open_slot \
+    if action in ("fill_form_zero_touch", "request_email", "request_whatsapp") and at and not open_slot \
             and not (nights and action == "fill_form_zero_touch"):
         # Sasha 254 · item 3 — "I'll handle it", LIVE: AgAPI sends it (venue.prepare_booking → the read-back → on their yes,
-        # venue.submit_booking). Sasha's own senders stay only where it doesn't reach: no AgAPI key on this server (below), a
-        # request with no slot (G7), a call, and old S1. Sasha 271 · CR 102: a hotel stay's request is the engine's act too (its
-        # R5 call, when the rules say, comes from booking_status.follow_up); a hotel's own booking engine stays their page
+        # venue.submit_booking). Sasha 319 · AgAPI is the ONE sender: where it doesn't reach (no key here, no slot) nothing is sent —
+        # it's handed to Tyler. Sasha 271 · CR 102: a hotel stay's request is the engine's act too (its R5 call, when the rules say,
+        # comes from booking_status.follow_up); a hotel's own booking engine stays their page
         got = await _via_agapi(ctx, a, rd, res, at, now, d, card, **({"stay": _stay(ctx, a)} if nights else {}))
         if got is not None:
             return got
         if nights:   # no booking service here: never Sasha's own room email for a stay
             return await _no_engine(ctx, rd, d, venue)
-    if action == "fill_form_zero_touch":   # R2 · "handle it": the form, filled and sent on their yes
-        if "form" in rungs and not one_path(ctx):   # Sasha 270 · Sasha's own form reading/sender: old S1 only
-            return _said(await _form(ctx, a, rd, res), d, when="after_yes", account=ctx.account)
+    if action == "fill_form_zero_touch":   # R2 · "handle it": AgAPI's (above); else
         # the venue engine's form (no form in Sasha's own read): Sasha can't submit it from here yet — their page, prepared, and said so
         return await _prepared_now(ctx, a, rd, res, at, now, eng, card, BD.redecide(d, "page"))
     if action == "prepared_link":
         if key in ("prepared_link", "prepared_link_captcha") and nights and ({"link", "own_page"} & set(rungs)):
             return _said(await _page(ctx, a, rd, res, at), d)   # a hotel's own engine with the stay in its link (G8)
-        if key == "prepared_link_captcha" and "form" in rungs and not one_path(ctx) and (await _founder(ctx)):
-            got = await _form(ctx, a, rd, res, handover=True)   # R13 · Sasha fills the rest; the CAPTCHA is theirs (Tap to finish)
-            if got.get("status") == "awaiting_yes":
-                return _said(got, d)
         return await _prepared_now(ctx, a, rd, res, at, now, eng, card, d)
     if action == "hand_over_platform_link":   # R14 · their page, handed over — never booked on a platform
         if {"link", "own_page"} & set(rungs) and not open_slot:
@@ -1265,34 +1269,13 @@ async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng
             return _said(got, d)
         url = d["takeover"].get("link") or next((c.get("url") for c in d.get("channels") or [] if c["kind"] == "platform" and c.get("url")), None)
         return _said({"status": "page_link", "venue": venue, "booked": False, **_link_out(url)}, d)
-    if action == "request_email":
-        if "email" not in rungs:
-            raise _err("no_route", f"{venue}'s email isn't in what I read of them — " + BD.say(d))
-        return _said(await _email(ctx, a, rd, res, at, d), d, when="after_yes", account=ctx.account)
+    if action == "request_email":   # Sasha 319 · AgAPI's (above); with no key here or no slot, Tyler — never Sasha's own email
+        return _to_tyler(venue, d)
     if action == "request_whatsapp":
         if eng and eng.get("from") != "read" and eng.get("kind") == "whatsapp":
             held = await _prepared(ctx, a, rd, res, at, now, eng, card)   # a prepared WhatsApp THEY send (venue.prepare_booking)
             return _said(held, d, when="after_yes")
         return _said(_draft(ctx, a, rd, res, at, now, "whatsapp"), d, when="after_yes")
-    if action == "wait":   # R3 · a phone only, more than 48 h away: no call now — a call closer to the day, on their yes
-        due = _wait_until(d)
-        if not due:
-            return _said({"status": "need_day", "venue": rd["venue"],
-                          "how": "There's no day to call closer to: ask them which day (one short question), then hold_venue again."}, d)
-        got = await _call(ctx, a, rd, res, extra={"scheduled_for": due})
-        got["what_happens"] = "on their yes, Sasha calls them closer to the day (it's scheduled); booked only if they say yes on the call"
-        out = _said(got, d)
-        if one_path(ctx):   # Sasha 273 · rule 15: the rules' R3 words without "their only way to book is by phone" (voice.WAIT_TO_CALL)
-            from agapi.booking_rules import booking_rules as BR
-            from app.agent import voice as V
-            for o in (out, out.get("rules") or {}):
-                if isinstance(o.get("say"), str):
-                    o["say"] = o["say"].replace(BR.PHRASES["wait_to_call"], V.WAIT_TO_CALL)
-        return out
-    if action in ("call", "call_and_email"):
-        if action == "call_and_email" and "email" in rungs:   # R6 · the call AND the email at once: one read-back, one yes
-            return _said(await _call_and_email(ctx, a, rd, res, at, d), d)
-        return _said(await _call(ctx, a, rd, res), d, when="after_yes", account=ctx.account)
     # refuse (and anything the rules add later): said, nothing prepared
     return _said({"status": "refused", "venue": venue}, d)
 
@@ -1494,11 +1477,6 @@ def _wait_until(d: dict) -> Optional[str]:
     return due.astimezone(timezone.utc).isoformat()
 
 
-async def _founder(ctx) -> bool:
-    from booking_signer import guest_accounts as GA
-    return bool(GA.founder(ctx.account))
-
-
 async def _prepared_now(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: Optional[dict], card: Optional[dict], d: dict) -> dict:
     """prepared_link (the person's choice, a CAPTCHA, or one of the rules' refusals): their own page, prefilled, on their screen at
     once — nothing reaches the venue (Sasha 249: the prefilled form IS their go-ahead). No page to prepare: the rules' words and the
@@ -1544,26 +1522,6 @@ def _link_out(link: Optional[str]) -> dict:
                        "never say a page is on their screen"}
 
 
-async def _form(ctx, a: dict, rd: dict, res: dict, handover: bool = False) -> dict:
-    """Their own form (Sasha's read): filled, read back; on the yes, sent (the founder's override: the cloud browser, a human step
-    to the phone as Tap to finish)."""
-    from booking_signer import guest_accounts as GA, guest_receipt as GR
-    GW = _API()
-    email = await GR.address_of(ctx.account)
-    rf = {**res, "who": {**res["who"], "contact": {**res["who"]["contact"], **({"email": email} if email else {})}}}
-    ly = await _loyalty(ctx, rd, res)   # Sasha 253 · G14 — a matching loyalty number from the Keep, under this yes
-    status, j, rung = 0, {}, "form"
-    if not handover:
-        status, j = await GW.api(ctx.account, "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": rf,
-                                                                             **({"loyalty_item_id": str(ly["id"])} if ly else {})})
-    if handover or (status != 200 and GA.founder(ctx.account)):   # the founder's override: the cloud browser fills it
-        status, j = await GW.api(ctx.account, "POST", "/api/booking/forms", {"read_id": rd["read_id"], "reservation": rf, "handover": True})
-        rung = "handover"
-    if status == 200:
-        return _hold(ctx, rung, j["form_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id")})
-    raise _err("no_route", f"{GW.plain_venue(rd['venue'])} can't be booked from here right now — {GW.refusal_words(j, status)}")
-
-
 async def _page(ctx, a: dict, rd: dict, res: dict, at: str) -> dict:
     """Their booking page (a platform's, or their own engine with a hotel stay in the link): read back; on the yes, to their phone."""
     GW = _API()
@@ -1590,68 +1548,6 @@ def _plan(d: dict, rd: dict) -> Optional[str]:
     if not fu or "phone" not in (rd.get("rungs") or {}):
         return None
     return ESC.plan_line(f"If they haven't replied within {int(fu['after_hours'])} hours, I'll call them", None)
-
-
-async def _email(ctx, a: dict, rd: dict, res: dict, at: str, d: dict) -> dict:
-    """The request by email (a room for N nights; a date and a quote when there's no slot): read back; on the yes, sent."""
-    from booking_signer import guest_receipt as GR
-    GW = _API()
-    nights, open_slot = _nights(ctx, a), _open_slot(ctx, a)
-    venue = GW.plain_venue(rd["venue"])
-    mine = await GR.address_of(ctx.account)
-    plan = _plan(d, rd)
-    if open_slot or (res.get("when") or {}).get("mode") == "venue_proposes":   # Sasha 253 · G7 — the old flow's quote email
-        day = str(a.get("day") or "")[:10]
-        try:
-            day = date.fromisoformat(day).isoformat()
-        except ValueError:
-            day = ""
-        body = GW.quote_email(rd["read_id"], res["who"]["name"], mine, _what(a), day or None)
-        extra = {"open_slot": a.get("open_slot"), "say": GW.quote_sentence(venue, day or None)}
-    else:
-        body = {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": res["who"]["name"],
-                "email": mine or "", **({"nights": nights} if nights else {})}   # Sasha 253 · G8 — the room email (N nights)
-        extra = {"nights": nights, "say": GW.room_email_sentence(venue, res["how_many"]["count"], at[:10], nights)} if nights else {}
-    if plan:
-        body["plan_line"] = plan
-    status, j = await GW.api(ctx.account, "POST", "/api/booking/emails", body)
-    if status != 200:
-        raise _err("no_route", f"{venue} can't be asked from here right now — {GW.refusal_words(j, status)}")
-    return _hold(ctx, "email", j["email_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id"), **extra})
-
-
-async def _call(ctx, a: dict, rd: dict, res: dict, extra: Optional[dict] = None) -> dict:
-    """The call: what she'll say, read back; on the yes, placed (or scheduled when the rules said wait)."""
-    GW = _API()
-    fi = ((rd.get("rungs") or {}).get("phone") or {}).get("fact_index")
-    status, j = await GW.api(ctx.account, "POST", "/api/booking/calls",
-                             {"reservation": res, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
-    if status != 200:
-        raise _err("no_route", f"{GW.plain_venue(rd['venue'])} can't be called from here right now — {GW.refusal_words(j, status)}")
-    return _hold(ctx, "call", j["call_id"], j["read_back"], rd, res, extra={"trip_item_id": j.get("trip_item_id"), **(extra or {})})
-
-
-async def _call_and_email(ctx, a: dict, rd: dict, res: dict, at: str, d: dict) -> dict:
-    """R6 · soon, a hotel: the call AND the email at once — both prepared, ONE read-back (the two together), ONE yes."""
-    GW = _API()
-    fi = ((rd.get("rungs") or {}).get("phone") or {}).get("fact_index")
-    s1, cj = await GW.api(ctx.account, "POST", "/api/booking/calls",
-                          {"reservation": res, "read_id": rd["read_id"], **({"fact_index": fi} if fi is not None else {})})
-    if s1 != 200:
-        raise _err("no_route", f"{GW.plain_venue(rd['venue'])} can't be called from here right now — {GW.refusal_words(cj, s1)}")
-    from booking_signer import guest_receipt as GR
-    mine = await GR.address_of(ctx.account)
-    nights = _nights(ctx, a)
-    s2, ej = await GW.api(ctx.account, "POST", "/api/booking/emails", {
-        "read_id": rd["read_id"], "date": at[:10], "time": at[11:16], "party": res["how_many"]["count"], "name": res["who"]["name"],
-        "email": mine or "", **({"nights": nights} if nights else {})})
-    if s2 != 200:   # the email can't go: the call alone, said as a call
-        return _hold(ctx, "call", cj["call_id"], cj["read_back"], rd, res, extra={"trip_item_id": cj.get("trip_item_id")})
-    lines = list(cj["read_back"].get("lines") or []) + list(ej["read_back"].get("lines") or [])
-    both = {"lines": lines, "sha256": hashlib.sha256((cj["read_back"]["sha256"] + ej["read_back"]["sha256"]).encode()).hexdigest()}
-    return _hold(ctx, "call_email", cj["call_id"], both, rd, res,
-                 extra={"trip_item_id": cj.get("trip_item_id"), "call": {"id": cj["call_id"], "sha": cj["read_back"]["sha256"]},
-                        "email": {"id": ej["email_id"], "sha": ej["read_back"]["sha256"]}})
 
 
 def _draft(ctx, a: dict, rd: dict, res: dict, at: str, now, ch: str) -> dict:
@@ -1891,16 +1787,6 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         return await _agapi_send(ctx, held, how, venue, where)
     if rung == "agapi_call":   # Sasha 265 · item 4 — the call act, on their tap (the approval); dialled only from the act
         return await _agapi_call(ctx, held, how, venue, where)
-    if rung == "form":
-        status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/send", {"read_back_sha256": held["sha"], "approval": how}, timeout=120)
-        if status != 200:
-            raise _err("not_sent", GW.refusal_words(j, status))
-        result = (j.get("reading") or {}).get("result") if j.get("status") == "sent" else None
-        ref = j.get("booking_reference") if result == "confirmed" else None
-        return {"status": "confirmed" if result == "confirmed" else ("requested" if j.get("status") == "sent" else "not_sent"),
-                "venue": venue, "when": held["summary"], "itinerary": where, **({"reference": ref} if ref else {}),
-                "line": (f"✅ Booked: {venue}, {held['summary']}." + (f" Their reference: {ref}." if ref else "")) if result == "confirmed"
-                else held.get("rules_say") or __import__("app.agent.voice", fromlist=["x"]).SENT}   # Sasha 254 · the rules' words
     if rung == "draft":   # Sasha 212 · the drafted message goes to THEIR phone; they send it — never "booked"
         sent = False
         try:
@@ -1971,13 +1857,6 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                 **({"in_app": True} if VS.TAP.get() is not None else {}),
                 # Sasha 249 · her words for it are her voice's, never the engine's (which may name the booking platform)
                 "say": (V.done_form(getattr(ctx, "surface", "s2")) if filled else V.NOT_FILLED) + " Say exactly that — never that it's booked."}
-    if rung == "handover":
-        status, j = await GW.api(ctx.account, "POST", f"/api/booking/forms/{held['id']}/handover", {}, timeout=120)
-        if status != 200:
-            raise _err("not_opened", (j or {}).get("say") or GW.refusal_words(j, status))
-        sent = bool((j.get("phone") or {}).get("sent"))
-        return {"status": "tap_to_finish", "venue": venue, "when": held["summary"], "itinerary": where, "on_phone": sent,
-                **({} if sent else {"open": j.get("view_url")}), **({"view_url": j["view_url"]} if j.get("view_url") else {})}
     if rung == "page":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/links/{held['id']}/opened", {"read_back_sha256": held["sha"]})
         if status != 200:
@@ -2016,19 +1895,9 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                 "platform": held.get("platform"), **({} if sent else {"open": url}), **({"page_url": url} if url else {}),
                 # Sasha 236 · found live on /s2: "their page is on your phone" when it wasn't sent there
                 **({} if sent else {"say": "Their page is on this screen — Tap to finish opens it. Never say it's on their phone."})}
-    if rung == "email":
-        status, j = await GW.api(ctx.account, "POST", f"/api/booking/emails/{held['id']}/send", {"read_back_sha256": held["sha"], "approval": how}, timeout=60)
-        if status != 200 or j.get("status") != "sent":
-            raise _err("not_sent", (j or {}).get("say") or GW.refusal_words(j, status))
-        return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where,
-                "line": held.get("rules_say") or __import__("app.agent.voice", fromlist=["x"]).SENT}   # Sasha 254 · the rules' words
-    if rung == "call_email":   # Sasha 254 · R6 — the email AND the call, on the ONE yes
-        mail = held["email"]
-        s1, ej = await GW.api(ctx.account, "POST", f"/api/booking/emails/{mail['id']}/send", {"read_back_sha256": mail["sha"], "approval": how}, timeout=60)
-        out = await _place(ctx, {**held, "id": held["call"]["id"], "sha": held["call"]["sha"]}, how, venue, where)
-        return {**out, "email": "sent" if s1 == 200 and (ej or {}).get("status") == "sent" else
-                f"not sent — {(ej or {}).get('say') or GW.refusal_words(ej, s1)}"}
-    return await _place(ctx, held, how, venue, where)
+    # Sasha 319 · Sasha's own email / form / call to a venue are gone: AgAPI's acts are the one sender
+    return {"status": "not_sent", "venue": venue, "when": held.get("summary"), "booked": False, "line": TO_TYLER,
+            "how": "Say `line` word for word — nothing else."}
 
 
 def _platform_page(u) -> bool:
@@ -2263,26 +2132,6 @@ async def _tap_refused(ctx, held: dict, code: str, err: dict, venue: str) -> dic
             "say": V.tap_line(code) + (f" {status}" if status else "")}
 
 
-async def _place(ctx, held: dict, how: dict, venue: str, where) -> dict:
-    """The call, on their yes. Sasha 254 · R10 refused at the dial (3 a day for this person, the server's net, 30 minutes since the
-    last call to this venue, calls off) → booking_rules.stopped(): the person is told, in this turn and on get_status."""
-    from agapi import booking_decide as BD
-    GW = _API()
-    body = {"read_back_sha256": held["sha"], "approval": how, **({"scheduled_for": held["scheduled_for"]} if held.get("scheduled_for") else {})}
-    status, j = await GW.api(ctx.account, "POST", f"/api/booking/calls/{held['id']}/place", body, timeout=120)
-    if status in (403, 422, 429) and (j or {}).get("rule") in BD.CALL_STOPS:
-        d = await BD.tell_stopped(ctx.account, f"the call to {venue}", BD.CALL_STOPS[j["rule"]], push=False)
-        return {"status": "stopped", "venue": venue, "when": held["summary"], "booked": False, "say": BD.say(d), "takeover": d["takeover"]}
-    if status != 200:
-        raise _err("not_called", GW.refusal_words(j, status))
-    if j.get("status") in ("placed", "uncertain"):   # Sasha 253 · G2 — its result pushed to their WhatsApp when the call ends
-        await _push_later(ctx.account, call_id=held["id"], venue=venue, purpose="book", what=held.get("summary") or "")
-    return {"status": j.get("status"), "venue": venue, "when": held["summary"], "itinerary": where,
-            **({"line": held["rules_say"]} if held.get("rules_say") and j.get("status") in ("placed", "uncertain") else {}),
-            **({"say": j["say"]} if j.get("status") == "scheduled" and j.get("say") else {}),
-            **({"scheduled_for": str(j.get("scheduled_for") or "")[11:16]} if j.get("status") == "scheduled" else {})}
-
-
 async def _with_loyalty(ctx, held: dict) -> List[dict]:
     """Sasha 253 · G14 — the prepared page's fields for THEIR phone: a loyalty number's value opened once from the Keep (vault.use:
     bound to the read-back that named it, logged as a loyalty_number use). Anything refused: the number is left out, said so."""
@@ -2300,13 +2149,6 @@ async def _with_loyalty(ctx, held: dict) -> List[dict]:
         log.info("[venues] loyalty number not opened: %s", type(e).__name__)
     return [({**x, "value": number} if x is lf and number else
              {**x, "value": "(not added — it's in your Keep)"} if x is lf else x) for x in held["fields"]]
-
-
-async def _push_later(account: str, **kw) -> str:
-    """Sasha 253 · G2 — the result of a call / a written cancellation, pushed to the account's linked WhatsApp when it comes (the
-    old flow's own watchers, booking_signer.guest_whatsapp.watch_for_brain — the real module, whatever _API() stands for)."""
-    from booking_signer import guest_whatsapp as _GWM
-    return await _GWM.watch_for_brain(account, **kw)
 
 
 async def venue_bookings(account: str, include_cancelled: bool = False) -> List[dict]:
@@ -2349,9 +2191,9 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
 
 
 async def cancel_venue(ctx, a: dict) -> dict:
-    """Two steps, as booking: first the cancellation's read-back (its route: their cancel link, an email, a text or a call);
-    after the person's explicit yes in a LATER turn, sent. Cancelled only when the venue's words say so."""
-    from agapi.v0 import claim, stale, yes_to_cancel as explicit_yes   # Sasha 217 · "yes, cancel it" counts HERE only
+    """A booking AgAPI sent (an act): its cancellation through AgAPI (venue.cancel_booking — read back, or his one instruction).
+    A booking handed over is his, there. Sasha 319 · one on the old reservation route has no act: handed to Tyler, nothing sent."""
+    from agapi.v0 import stale, yes_to_cancel as explicit_yes   # Sasha 217 · "yes, cancel it" counts HERE only
     GW = _API()
     said = ((a.get("approval") or {}).get("said")) or ""
     held = _CANCEL.get(ctx.account)
@@ -2386,38 +2228,13 @@ async def cancel_venue(ctx, a: dict) -> dict:
                     f"{b.get('date')} {b.get('time') or ''} · act_id {b['act_id']}" for b in acts) + ") and call again with its act_id")
             return await _cancel_act(ctx, {**a, "act_id": pick["act_id"]}, held, said, explicit_yes)
         tid = hit[0]["trip_item_id"] if hit else None
-    if held and (not tid or tid == held["id"]) and held["at"] < ctx.started:
-        if not explicit_yes(said):
-            raise _err("no_explicit_yes", "cancelling needs their explicit yes — ask them")
-        await claim(ctx)
-        return await _cancel_reservation(ctx, held, said)
     if not tid:
         raise _err("booking_unknown", "which booking? get_status lists them")
-    status, j = await GW.api(ctx.account, "GET", f"/api/booking/reservations/{tid}/cancel")
-    if status != 200:
-        raise _err((j or {}).get("rule") or "booking_unknown", GW.refusal_words(j, status))
-    _CANCEL[ctx.account] = {"id": tid, "sha": j["read_back"]["sha256"], "at": datetime.now(timezone.utc), "venue": j.get("venue")}
-    if await one_instruction(ctx, GW.plain_venue(j.get("venue")) or "", "cancel", rows=await venue_bookings(ctx.account)):
-        # Sasha 317 · the same rule on this route: his "cancel my <venue> booking" naming exactly one IS the yes — sent once, now
-        if not await claim_words(ctx, f"cancel|{tid}"):
-            _CANCEL.pop(ctx.account, None)
-            return {"status": "already_sent", "venue": GW.plain_venue(j.get("venue")),
-                    "line": f"I've already asked {GW.plain_venue(j.get('venue'))} to cancel it.", "how": "Say `line` word for word — nothing else."}
-        return await _cancel_reservation(ctx, _CANCEL[ctx.account], str(getattr(ctx, "user_said", "") or said))
-    return {"status": "awaiting_yes", "venue": GW.plain_venue(j.get("venue")), "route": j.get("route"), "read_back": j["read_back"]["lines"]}
-
-
-async def _cancel_reservation(ctx, held: dict, said: str) -> dict:
-    """The cancellation of a reservation (the booking_signer route) — sent on his yes, or (Sasha 317) on his instruction that was it."""
-    GW = _API()
+    # Sasha 319 · a booking on the old reservation route has no AgAPI act, and AgAPI is the ONE sender to venues: nothing is sent from
+    # here (its link / email / text / call are gone) — Tyler takes it. Said by code.
     _CANCEL.pop(ctx.account, None)
-    status, j = await GW.api(ctx.account, "POST", f"/api/booking/reservations/{held['id']}/cancel",
-                             {"read_back_sha256": held["sha"], "approval": {"how": "voice", "said": said}}, timeout=120)
-    if status != 200:
-        raise _err("not_cancelled", GW.refusal_words(j, status))
-    if j.get("status") in ("requested", "not_confirmed"):   # Sasha 253 · G2 — "cancelled" pushed to WhatsApp on their words
-        await _push_later(ctx.account, trip_item_id=held["id"], venue=GW.plain_venue(held["venue"]))
-    return {"status": j.get("status"), "say": j.get("say"), "venue": held["venue"]}
+    venue = next((GW.plain_venue(b.get("venue")) for b in await venue_bookings(ctx.account) if b.get("trip_item_id") == tid), None) or "them"
+    return {"status": "to_tyler", "venue": venue, "sent": False, "line": TO_TYLER, "how": "Say `line` word for word — nothing else."}
 
 
 async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_yes) -> dict:

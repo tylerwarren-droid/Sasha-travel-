@@ -416,47 +416,6 @@ class LadderRoutes:
         r = self.c.post("/api/booking/venues/read", json={"name": "X", "city": "Madrid", "phone": "+15550100"})
         self.assertEqual(r.json()["rule"], "contact_from_request")
 
-    def test_the_call_dials_the_number_that_was_read_and_says_where_it_came_from(self):
-        v = self.read()
-        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING})
-        self.assertEqual(prep.status_code, 200, prep.text)
-        lines = prep.json()["read_back"]["lines"]
-        self.assertEqual(lines[0], "I'll phone La Contra, +34915001122 — the number on their website, lacontra.test.")
-        self.assertIn("Hola, soy Sasha, una concierge de inteligencia artificial de Kanoe Technologies SL", lines[1])
-        r = self.c.post(f"/api/booking/calls/{prep.json()['call_id']}/place",
-                        json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual(r.json()["status"], "placed", r.text)
-        bland = [b for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")]
-        self.assertEqual(bland[0]["phone_number"], "+34915001122")
-        self.assertEqual(bland[0]["language"], "es")
-        self.assertNotIn("from", bland[0])   # no Sasha number yet: Bland's own caller ID
-
-    def test_sashas_own_number_is_not_the_caller_id_until_bland_holds_it(self):
-        """S-70 · SASHA_PHONE_NUMBER receives (SMS, voicemail); only SASHA_CALLER_ID — set once the number is imported
-        into Bland — goes out as `from`. A number Bland does not hold would make every call fail."""
-        def first_bland_payload(env):
-            self.web.requests.clear()
-            self.now = self.now + timedelta(minutes=31)   # Sasha 254 · R10: 30 minutes between two calls to the same venue
-            with mock.patch.dict(os.environ, env):
-                v = self.read()
-                prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-                self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-            return [b for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")][0]
-        own_only = first_bland_payload({"SASHA_PHONE_NUMBER": "+44 7700 900123"})
-        self.assertNotIn("from", own_only)                                   # Bland's own caller ID
-        imported = first_bland_payload({"SASHA_PHONE_NUMBER": "+44 7700 900123", "SASHA_CALLER_ID": "+44 7700 900123"})
-        self.assertEqual(imported["from"], "+447700900123")
-        self.assertNotIn("7700900123", imported["task"])
-
-    def test_the_three_a_day_limit_holds_for_read_numbers(self):
-        v = self.read()
-        for i in range(4):
-            self.now = self.now + timedelta(minutes=31)   # Sasha 254 · past R10's 30 minutes: only the day's cap stands in the way
-            prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-            r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual((r.status_code, r.json()["rule"]), (429, "daily_call_limit"))
-        self.assertEqual(len([1 for m, u, b in self.web.requests if u.startswith("https://api.bland.ai")]), 3)
-
     # ── S-62 step 2 · each account sees only its own: A's ids answer B exactly as ids that do not exist ─────
 
     def as_guest(self):
@@ -470,63 +429,6 @@ class LadderRoutes:
         I.reset_cache()
         self.addCleanup(lambda: (setattr(I, "FETCH", saved), I.reset_cache()))
         return {"x-sasha-booking-key": "test-booking-key", "authorization": f"Bearer {token()}", "x-sasha-session": ""}
-
-    def test_s62_another_account_sees_none_of_it(self):
-        v = self.read()                                                                                     # A: the founder
-        call = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-        mail = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
-        lv = self.link_read() if hasattr(self, "link_read") else None
-        link = self.c.post("/api/booking/links", json={"read_id": lv["read_id"], **self.BOOKING}).json() if lv else None
-        b = self.as_guest()
-        # Sasha 120 · the guest's calls are switched on here, so what is tested is the OWNERSHIP refusal, not the calls switch
-        from booking_signer import limits as _LM
-        _on = mock.patch.object(_LM, "calls_on", lambda account: True)
-        _on.start()
-        self.addCleanup(_on.stop)
-        ghost = "00000000-0000-4000-8000-000000000000"
-        yes = {"read_back_sha256": "0" * 64, "approval": {"how": "button"}}
-
-        def same(method, path_for, body_for=lambda i: None):
-            """B on A's id answers exactly as B on an id that never existed — never 200, never "forbidden"."""
-            got = [self.c.request(method, path_for(i), json=body_for(i), headers=b) for i in (real, ghost)]
-            self.assertNotEqual(got[0].status_code, 200, path_for(real))
-            self.assertEqual((got[0].status_code, got[0].json()), (got[1].status_code, got[1].json()), path_for(real))
-            self.assertIn(got[0].status_code, (404, 422), path_for(real))
-
-        real = v["read_id"]
-        same("GET", lambda i: f"/api/booking/venues/read/{i}")
-        same("POST", lambda i: "/api/booking/calls", lambda i: {"read_id": i, **self.BOOKING})
-        same("POST", lambda i: "/api/booking/emails", lambda i: {"read_id": i, **self.BOOKING, "email": "b@example.test"})
-        same("POST", lambda i: "/api/booking/links", lambda i: {"read_id": i, **self.BOOKING})
-        real = call["call_id"]
-        same("GET", lambda i: f"/api/booking/calls/{i}")
-        same("POST", lambda i: f"/api/booking/calls/{i}/place", lambda i: {**yes, "read_back_sha256": call["read_back"]["sha256"]} if i == real else {**yes, "read_back_sha256": call["read_back"]["sha256"]})
-        same("POST", lambda i: "/api/booking/calls", lambda i: {"cancels_call_id": i})
-        real = mail["email_id"]
-        same("GET", lambda i: f"/api/booking/emails/{i}")
-        same("POST", lambda i: f"/api/booking/emails/{i}/send", lambda i: {**yes, "read_back_sha256": mail["read_back"]["sha256"]})
-        if link:
-            real = link["link_id"]
-            same("GET", lambda i: f"/api/booking/links/{i}")
-            same("POST", lambda i: f"/api/booking/links/{i}/opened", lambda i: {})
-            same("POST", lambda i: f"/api/booking/links/{i}/booked", lambda i: {"said": "booked"})
-        self.assertFalse([u for m, u, _ in self.web.requests if u.startswith("https://api.bland.ai")])     # nothing dialled for B
-        self.assertEqual(self.c.get(f"/api/booking/calls/{call['call_id']}").status_code, 200)              # A still sees it
-
-    def test_s62_a_per_account_daily_call_cap(self):
-        # Sasha 254 · the booking rules' 3 per PERSON a day (call_routes.account_cap = CALLS_PER_PERSON_PER_DAY, no env var), under a
-        # server net set wider here so the person's own cap is what refuses the 4th
-        from agapi import booking_decide as BD
-        from agapi.booking_rules import booking_rules as BR
-        v = self.read()
-        with mock.patch.object(BD, "SERVER_CALLS_PER_DAY", 10):
-            rs = []
-            for i in range(BR.CALLS_PER_PERSON_PER_DAY + 1):
-                self.now = self.now + timedelta(minutes=31)
-                prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-                rs.append(self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}))
-        self.assertEqual([r.json().get("status") for r in rs[:-1]], ["placed"] * BR.CALLS_PER_PERSON_PER_DAY)
-        self.assertEqual((rs[-1].status_code, rs[-1].json()["rule"]), (429, "account_daily_call_limit"))
 
     # ── S-54 · the refusal check: a venue that said stop is never contacted by Sasha again ──────────────────
 
@@ -551,17 +453,6 @@ class LadderRoutes:
         for r in (call, mail):
             self.assertEqual((r.status_code, r.json()["rule"]), (403, "venue_opted_out"), r.text)
             self.assertIn("you can still contact them yourself", r.json()["message"])
-        self.assertEqual(self.sent(), [])
-
-    def test_a_withdrawal_between_the_read_back_and_the_yes_stops_the_send(self):
-        v = self.read()
-        call = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-        mail = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
-        self.optin(self.venue_id(v), "withdrawn", channel="email_confirm", scope="reservas@lacontra.test")
-        yes = {"approval": {"how": "button"}}
-        r1 = self.c.post(f"/api/booking/calls/{call['call_id']}/place", json={"read_back_sha256": call["read_back"]["sha256"], **yes})
-        r2 = self.c.post(f"/api/booking/emails/{mail['email_id']}/send", json={"read_back_sha256": mail["read_back"]["sha256"], **yes})
-        self.assertEqual([r1.json()["rule"], r2.json()["rule"]], ["venue_opted_out", "venue_opted_out"])
         self.assertEqual(self.sent(), [])
 
     def test_opting_back_in_is_a_new_row_and_lifts_the_refusal(self):
@@ -604,44 +495,6 @@ class LadderRoutes:
         self.assertEqual(test_line.json()["rule"], "read_required")
         book = self.c.post("/api/booking/calls", json={"reservation": {**obj, "flow": "book"}, "read_id": v["read_id"]})
         self.assertEqual(book.json()["rule"], "when_invalid")
-
-    def test_the_email_rung_end_to_end(self):
-        v = self.read()
-        prep = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"})
-        self.assertEqual(prep.status_code, 200, prep.text)
-        p = prep.json()
-        self.assertIn("reservas@lacontra.test", p["read_back"]["lines"][0])   # the JSON-LD address, read first
-        bad = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})
-        self.assertEqual(bad.json()["rule"], "approval_void")
-        r = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual(r.json()["status"], "sent", r.text)
-        self.assertIn("accepted it", r.json()["say"])
-        again = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual(again.json()["rule"], "email_already_sent")
-        self.assertEqual(len([1 for m, u, b in self.web.requests if u == E.RESEND_SEND_URL]), 1)
-        self.assertEqual(self.trip_status_of_email(p["email_id"]), "attempting")
-
-        # the venue replies to act-{id}@in.kanoe.test
-        self.web.resend_received["rcv_1"] = {"text": "Sí, perfecto: mesa para 4 el jueves a las 20:00."}
-        body, h = signed({"type": "email.received", "data": {"email_id": "rcv_1", "from": "reservas@lacontra.test",
-                                                            "to": [f"act-{p['email_id']}@in.kanoe.test"], "subject": "Re: Solicitud"}})
-        self.assertEqual(self.c.post("/api/booking/email/inbound", content=body, headers=h).json(), {"ok": True, "matched": True})
-        self.c.post("/api/booking/email/inbound", content=body, headers=h)   # a redelivery is recognised
-        g = self.c.get(f"/api/booking/emails/{p['email_id']}").json()
-        self.assertEqual([x["text"] for x in g["replies"]], ["Sí, perfecto: mesa para 4 el jueves a las 20:00."])
-        self.assertEqual(g["say"], "They replied — here are their words.")
-        # Sasha 74/75 · an explicit yes restating the number, day and time confirms (before: a reply never moved the status)
-        self.assertEqual(self.trip_status_of_email(p["email_id"]), "confirmed")
-
-    def test_resend_refusing_is_not_sent_with_its_words(self):
-        self.web.resend_send = R(403, {"message": "The mail.kanoe.test domain is not verified"})
-        v = self.read()
-        p = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
-        r = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"], "approval": {"how": "button"}}).json()
-        self.assertEqual(r["status"], "not_sent")
-        self.assertIn("domain is not verified", r["say"])
-        self.assertEqual(self.c.get(f"/api/booking/emails/{p['email_id']}").json()["status"], "not_sent")
-        self.assertEqual(self.trip_status_of_email(p["email_id"]), "pending")
 
     def test_email_off_means_no_read_back(self):
         v = self.read()
@@ -786,13 +639,6 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         self.reply(p, "rcv_q", "Gracias, os confirmamos mañana.\n\nOn Tue, 29 Sep 2026 Sasha wrote:\n> Reply STOP to stop.")
         self.assertEqual(self.optins.rows, [])
 
-    def test_a_stop_sent_to_the_wrong_address_still_counts_from_a_venue_sasha_wrote_to(self):
-        v, p = self.sent_email()
-        r = self.reply(p, "rcv_x", "No nos escribáis más, gracias.", to="hello@in.kanoe.test")
-        # Sasha 74 · rule 1: mail to Sasha's own domain from the venue she last emailed lands on that email's reservation
-        self.assertEqual(r.json(), {"ok": True, "matched": True})
-        self.assertEqual(self.optins.rows[-1]["withdrawn_evidence"]["verbatim"], "No nos escribáis más, gracias.")
-
     def test_s64_a_massage_booked_from_the_object_is_cancelled_as_a_massage(self):
         v = self.read()
         obj = {"schema": "reservation/1", "flow": "book", "who": {"name": "Tyler Warren"},
@@ -808,68 +654,6 @@ class OnMemory(SlotLinkRoutes, LadderRoutes, unittest.TestCase):
         lines = c.json()["read_back"]["lines"]
         self.assertIn("Llamo para cancelar la reserva del jueves, un masaje relajante de 60 minutos", lines[1])
         self.assertTrue(lines[2].startswith("This cancels your 60-minute relaxing massage for 1 on 2026-10-08 at 10:00"))
-
-    def test_s66_closed_now_the_call_is_scheduled_for_opening_and_placed_then(self):
-        from datetime import datetime as _dt, timezone as _tz
-        from tests.test_hours import GOOGLE
-        v = self.read()
-        self.ladder.reads[v["read_id"]]["read"]["facts"].append(GOOGLE)      # their listing: Mon–Fri 10:00–20:00
-        self.now = _dt(2026, 10, 5, 7, 30, tzinfo=_tz.utc)                   # Monday 09:30 in Madrid: closed
-        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-        self.assertIn("If they're closed when you say yes, I'll call when they open — they open at 10:00 on 2026-10-05, "
-                      "so I'd call at 10:10. Your yes covers that call.", prep["read_back"]["lines"])
-        yes = {"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}
-        r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json=yes).json()
-        self.assertEqual(r["status"], "scheduled")
-        self.assertIn("is closed now by its listed hours — they open at 10:00 — so I'll call at 10:10", r["say"])
-        self.assertEqual(self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json=yes).json()["rule"], "call_already_placed")
-        self.assertEqual(self.c.get(f"/api/booking/calls/{prep['call_id']}").json()["status"], "scheduled")
-        bland = lambda: [u for m, u, b in self.web.requests if u.startswith("https://api.bland.ai") and m == "POST"]
-        self.assertEqual(bland(), [])                                         # nothing dialled while closed
-        self.now = _dt(2026, 10, 5, 8, 9, tzinfo=_tz.utc)                     # 10:09: not yet
-        self.c.portal.call(call_routes.sweep_once)
-        self.assertEqual(bland(), [])
-        self.now = _dt(2026, 10, 5, 8, 11, tzinfo=_tz.utc)                    # 10:11: placed, once
-        self.c.portal.call(call_routes.sweep_once)
-        self.c.portal.call(call_routes.sweep_once)
-        self.assertEqual(len(bland()), 1)
-        self.assertEqual(self.calls.calls[prep["call_id"]]["status"], "placed")
-
-    def test_sasha109_a_cancelling_call_to_a_closed_venue_waits_for_them_to_open(self):
-        """A closed venue's answering machine cancels nothing: the cancelling call is scheduled like a booking call."""
-        from datetime import datetime as _dt, timezone as _tz
-        from tests.test_hours import GOOGLE
-        v = self.read()
-        self.ladder.reads[v["read_id"]]["read"]["facts"].append(GOOGLE)      # Mon–Fri 10:00–20:00
-        self.now = _dt(2026, 10, 5, 12, 0, tzinfo=_tz.utc)                   # Monday 14:00 in Madrid: open
-        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-        self.calls.calls[prep["call_id"]].update(status="answered", outcome="yes", reading={"reference": None})
-        self.now = _dt(2026, 10, 5, 19, 0, tzinfo=_tz.utc)                   # 21:00: closed
-        c = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]}).json()
-        r = self.c.post(f"/api/booking/calls/{c['call_id']}/place",
-                        json={"read_back_sha256": c["read_back"]["sha256"], "approval": {"how": "whatsapp_button"}}).json()
-        self.assertEqual(r["status"], "scheduled", r)
-        self.assertEqual([u for m, u, b in self.web.requests if u.startswith("https://api.bland.ai") and m == "POST"], [])
-
-    def test_s66_a_reply_by_email_cancels_the_scheduled_call(self):
-        from datetime import datetime as _dt, timezone as _tz
-        from tests.test_hours import GOOGLE
-        v, p = self.sent_email()
-        self.ladder.reads[v["read_id"]]["read"]["facts"].append(GOOGLE)
-        self.now = _dt(2026, 10, 5, 7, 30, tzinfo=_tz.utc)
-        prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **self.BOOKING}).json()
-        self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.c.portal.call(self.calls.link_email, prep["call_id"], p["email_id"])
-        self.reply(p, "rcv_yes", "Sí, perfecto, les esperamos.")
-        c = self.calls.calls[prep["call_id"]]
-        self.assertEqual((c["status"], c["not_placed_why"][:40]), ("not_placed", "they replied by email before the call, s"))
-
-    def test_s66_a_yes_typed_in_the_chat_sends_the_email(self):
-        v = self.read()
-        p = self.c.post("/api/booking/emails", json={"read_id": v["read_id"], **self.BOOKING, "email": "anna@example.test"}).json()
-        r = self.c.post(f"/api/booking/emails/{p['email_id']}/send", json={"read_back_sha256": p["read_back"]["sha256"],
-                                                                            "approval": {"how": "chat", "said": "yes please"}})
-        self.assertEqual(r.json()["status"], "sent", r.text)
 
     def test_s66_the_draft_route_words_the_activity_for_the_venues_country(self):
         r = self.c.post("/api/booking/draft", json={"text": "massage place", "country": "ES"}).json()

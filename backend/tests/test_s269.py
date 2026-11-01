@@ -87,7 +87,7 @@ class NoSecondCopy(unittest.TestCase):
 
     def test_one_path_never_makes_sashas_own_call(self):
         src = pathlib.Path(VN.__file__).read_text()
-        block = src[src.index("    if one_path(ctx) and (key == \"ask_page_or_call\""):src.index("    if action == \"ask_one_question\":")]
+        block = src[src.index("    if key == \"ask_page_or_call\" or action in"):src.index("    if action == \"ask_one_question\":")]   # Sasha 319: every surface
         self.assertIn("_call_question", block)
         self.assertNotIn("await _call(", block)
 

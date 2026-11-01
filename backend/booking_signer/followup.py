@@ -270,74 +270,10 @@ def followup_id(call_id: str, kind: str) -> str:
     return str(uuid.uuid5(_NS, f"{call_id}:{kind}"))
 
 
-async def after_call(call: Mapping[str, Any], outcome: Optional[str], now: datetime) -> Optional[str]:
-    """Rules 2–3 · once a booking call's reading is recorded: the confirmation (yes) or the could-you-confirm (unclear)
-    email, as the guest's yes already covered. Returns what happened, in words (for the log and the tests)."""
-    from . import ladder_routes as LR
-    from .ladder import emails_ready
-    brief = call.get("brief") or {}
-    fu = brief.get("followup")
-    if brief.get("purpose") != "book" or outcome not in ("yes", "unclear") or not fu:
-        return None
-    kind = "confirm" if outcome == "yes" else "ask"
-    why = emails_ready()
-    if why:
-        log.error("[followup] call %s: the %s email was promised but %s — nothing sent", call.get("call_id"), kind, why)
-        return f"not sent: {why}"
-    o = fu.get("request")
-    if not isinstance(o, dict) or not o.get("what"):
-        log.error("[followup] call %s: no reservation object to restate — nothing sent", call.get("call_id"))
-        return "not sent: no reservation object"
-    email_id = followup_id(str(call["call_id"]), kind)
-    store = LR.LADDER_STORE
-    if await store.email_exists(email_id):
-        return "already sent"
-    email = compose(kind, brief.get("language") or "en", o, fu["to"], fu.get("bcc"), email_id, brief.get("own_reference"))
-    venue_key = str(brief.get("venue_key") or "")
-    row = {"email_id": email_id, "account_id": str(call["account_id"]), "read_id": venue_key[5:] if venue_key.startswith("read:") else None,
-           "email": email, "email_sha256": E.email_sha256(email), "read_back_lines": call["read_back_lines"],
-           "read_back_sha256": call["read_back_sha256"], "created_at": now}
-    if not row["read_id"]:
-        return "not sent: the call has no venue read"
-    try:
-        await store.put_followup_email(row, str(call["trip_item_id"]))
-    except Exception as e:   # a duplicate id means it already exists: never twice
-        log.warning("[followup] call %s: the %s email was not recorded (%s: %s)", call.get("call_id"), kind, type(e).__name__, e)
-        return "not recorded"
-    approval = {"how": "auto", "after_call": str(call["call_id"]), "kind": kind, "outcome": outcome,
-                "covered_by_read_back_sha256": call["read_back_sha256"], "at": now.isoformat()}
-    claimed = await store.claim_email(str(call["account_id"]), email_id, approval, now, now - LR.APPROVAL_WINDOW,
-                                      LR.email_cap(), LR.cap_window(now), LR.account_email_cap())
-    if claimed != "claimed":
-        log.error("[followup] call %s: the %s email was not sent (%s)", call.get("call_id"), kind, claimed)
-        return f"not sent: {claimed}"
-    sent = await E.send(LR.HTTP, email)
-    await store.mark_sent(email_id, sent, now)
-    return "sent" if sent.sent else f"not sent: {sent.why}"
-
-
 SMS_ASK = {"es": "Hola, soy Sasha (Kanoe Technologies SL). Les llamé por esta reserva y se cortó: {what}. ¿Nos la pueden "
                   "confirmar respondiendo a este SMS? Gracias.",
            "en": "Hello, this is Sasha (Kanoe Technologies SL). I called about this booking and we were cut off: {what}. Could "
                  "you confirm it by replying to this text? Thank you."}
-
-
-async def sms_ask(call: Mapping[str, Any]) -> str:
-    """Sasha 108 · an unclear booking with no email to ask: a text to the MOBILE the venue publishes, from Sasha's own
-    number (SASHA_SMS_TO_VENUES), whose reply lands on the booking (inbound_phone). Returns what happened, in words."""
-    from . import cancel_routes as CNR, guest_receipt as GR, ladder_routes as LR
-    brief = call.get("brief") or {}
-    o = (brief.get("followup") or {}).get("request") or call.get("request")
-    venue_key = str(brief.get("venue_key") or "")
-    if not isinstance(o, dict) or not venue_key.startswith("read:"):
-        return "sms not sent: no reservation or venue read to restate"
-    row = await LR.LADDER_STORE.get_read(str(call["account_id"]), venue_key[5:])
-    mob = CNR._mobile(((row or {}).get("read") or {}).get("facts") or [])
-    if not mob:
-        return "sms not sent: the venue publishes no mobile"
-    lang = (brief.get("language") or "en")[:2]
-    text = SMS_ASK.get(lang, SMS_ASK["en"]).format(what=restatement(brief.get("language") or "en", o))
-    return await GR.send_sms(mob, text, "SASHA_SMS_TO_VENUES")
 
 
 # ── rule 3 · the venue's reply, read with the field checks ───────────────────────────────────────────────────────────
@@ -431,4 +367,4 @@ async def on_reply(email_id: str, text: Optional[str], now: datetime) -> Optiona
     return r
 
 
-__all__ = ["own_email", "spoken", "venue_email", "with_own_contact", "after_call", "reply_reading", "on_reply", "followup_id", "compose", "restatement"]
+__all__ = ["own_email", "spoken", "venue_email", "with_own_contact", "reply_reading", "on_reply", "followup_id", "compose", "restatement"]

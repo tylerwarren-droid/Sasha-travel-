@@ -167,39 +167,8 @@ class G2ResultsPushed(TG.Base):
         VN._CANCEL.pop(ACCOUNT, None)
         super().tearDown()
 
-    def book_by_call(self):
-        held = {"id": "call-1", "sha": "a" * 64, "when": "2026-10-03T21:00", "summary": "Saturday 3 October at 21:00, 2 people"}
-        return run(VN._book_inner(API.Ctx(account=ACCOUNT, surface="s2"), held, {"how": "voice", "said": "yes"}, "Botavara", "call"))
-
-    def test_one_message_per_state_never_two(self):
-        out = self.book_by_call()
-        self.assertEqual(out["status"], "placed")
-        self.assertEqual([c.__name__ for c in self.coros], ["watch_call"])            # the old flow's own watcher, started
-        seq = iter([(200, {"status": "placed"}), (200, {"status": "placed"}),
-                    (200, {"status": "answered", "outcome": "yes", "say": "Booked: Botavara confirmed it.", "venue_words": "Sí, perfecto."})])
-
-        async def fake(account, method, path, body=None, timeout=90.0):
-            self.assertEqual(path, "/api/booking/calls/call-1")
-            return next(seq)
-        with mock.patch.object(GW, "WATCH_CALL", (0, 5)), mock.patch.object(GW, "api", fake):
-            run(self.coros.pop())
-        self.assertEqual(self.bodies()[:2], ["✅ Booked: Botavara, Saturday 3 October at 21:00, 2 people.", "Their words: “Sí, perfecto.”"])
-        self.assertEqual(len([b for b in self.bodies() if b.startswith("✅")]), 1)
-
-    def test_a_scheduled_call_is_pushed_from_where_it_is_recorded_not_watched(self):
-        GW.api.place = {"status": "scheduled", "scheduled_for": "2026-10-02T19:40:00"}
-        self.book_by_call()
-        self.assertEqual(self.coros, [])                                               # push_confirmation_result tells that one
-
-    def test_a_written_cancellation_is_pushed_on_their_words(self):
-        VN._CANCEL[ACCOUNT] = {"id": "t-1", "sha": "e" * 64, "at": datetime.now(timezone.utc) - timedelta(minutes=1), "venue": "Botavara Chamberí"}
-        r = run(VN.cancel_venue(API.Ctx(account=ACCOUNT, surface="s2"), {"approval": {"said": "yes, cancel it"}}))
-        self.assertEqual(r["status"], "requested")                                     # asked, never "cancelled" yet
-        self.assertEqual([c.__name__ for c in self.coros], ["watch_cancel"])
-        GW.api.reservations = [{**GW.api.reservations[0], "status": "cancelled", "venue_words": "Cancelada, gracias."}]
-        with mock.patch.object(GW, "WATCH_CANCEL", (0, 3)):
-            run(self.coros.pop())
-        self.assertEqual(self.bodies(), ["Botavara Chamberí has cancelled your booking.", "Their words: “Cancelada, gracias.”"])
+    # Sasha 319 · Sasha's own booking call and written cancellation are gone (AgAPI's acts are the one sender), and with them the pushes
+    # they started (venues._push_later); the watcher itself stays for the calls AgAPI's plan dials (products.health.agapi_call)
 
     def test_no_whatsapp_linked_nothing_is_watched(self):
         run(GW.STORE.unlink(ACCOUNT)) if hasattr(GW.STORE, "unlink") else GW.STORE.channels.clear()

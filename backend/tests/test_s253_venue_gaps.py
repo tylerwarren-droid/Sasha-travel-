@@ -177,24 +177,19 @@ class TheSchemaOnTheOnePath(unittest.TestCase):
 # ── G7 · a request with no slot ────────────────────────────────────────────────────────────────────────────────────────────
 
 class G7NoSlot(Base):
-    def test_custom_work_is_an_email_asking_for_a_date_and_a_quote_read_back_then_the_yes(self):
+    def test_custom_work_with_no_slot_is_tylers_never_sashas_own_email(self):
+        """Sasha 319 · a request with no slot was Sasha's own email asking for a date and a quote (G7). AgAPI is the one sender to venues
+        and books a day and a time, so it's handed to Tyler — nothing sent, never Sasha's email."""
         out = self.hold({"email": {"value": "ink@studio.es"}, "phone": {"fact_index": 0}}, venue="Tinta Studio",
                         what="a forearm tattoo, black and grey", open_slot="quote", day=LATER)
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "email"))
-        body = self.api.bodies("/api/booking/emails")[0]
-        self.assertEqual(body, GW.quote_email("r-1", "Alex Gate", "alex@example.test", "a forearm tattoo, black and grey", LATER))
-        self.assertNotIn("time", body)                                                           # no slot in it
-        self.assertEqual(out["say"], GW.quote_sentence("Tinta Studio", LATER))                    # the old flow's own sentence
-        self.assertIn("a date and a quote", out["what_happens"])
-        self.assertEqual(self.api.bodies("/api/booking/calls"), [])                               # the email, not a call
-        got = self.yes()
-        self.assertEqual(got["status"], "requested")                                             # never "booked"
-        self.assertEqual(self.api.bodies("/api/booking/emails/e-1/send")[0]["read_back_sha256"], "c" * 64)
+        self.assertEqual((out["status"], out["sent"]), ("to_tyler", False))
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
 
-    def test_a_one_word_want_asks_what_they_can_offer(self):
-        self.hold({"email": {}}, what="tattoo", open_slot="quote")
-        self.assertEqual(self.api.bodies("/api/booking/emails")[0]["quote"],
-                         {"what": "tattoo — please tell me what you can offer", "dates": ""})
+    def test_a_one_word_want_is_tylers_too(self):
+        out = self.hold({"email": {}}, what="tattoo", open_slot="quote")
+        self.assertEqual(out["status"], "to_tyler")
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])
 
     def test_whenever_they_have_space_by_phone_only_the_rules_wait(self):
         # Sasha 254 · the booking rules (R3): no form and no time (so not within 48 h) → no call now — a call closer to the day,
@@ -214,8 +209,9 @@ class G7NoSlot(Base):
                "alternative": {"kind": "email"}}
         with mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)):
             out = self.hold({"email": {}, "own_page": {"value": "https://casagate.es/reservas"}}, open_slot="whenever")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "email"))                 # no choose_route, no prefilled page
+        self.assertEqual(out["status"], "to_tyler")             # no choose_route, no prefilled page — and (319) never Sasha's own email
         self.assertEqual(self.api.bodies("/api/booking/links"), [])
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])
 
     def test_no_time_and_no_open_slot_says_how(self):
         with self.assertRaises(API.ToolError) as e:
@@ -223,12 +219,17 @@ class G7NoSlot(Base):
         self.assertEqual(e.exception.code, "when_invalid")
         self.assertIn("open_slot", e.exception.message)
 
-    def test_a_given_time_wins_over_open_slot(self):
-        out = self.hold({"email": {}}, open_slot="quote", day=LATER, time="11:00", route="email")
-        body = self.api.bodies("/api/booking/emails")[0]
-        self.assertEqual((body["date"], body["time"]), (LATER, "11:00"))
-        self.assertNotIn("quote", body)
-        self.assertEqual(out["route"], "email")
+    def test_a_given_time_wins_over_open_slot(self):   # Sasha 319 · the slot goes to AgAPI's booking record (the one sender)
+        from agapi import venue_submit as VS
+        seen = []
+
+        async def prepare(account, place, person, date, time_, party, **k):
+            seen.append((date, time_))
+            return {"ok": False, "error": {"code": "not_configured", "message": "no venues key"}}
+        with mock.patch.object(VS, "prepare", prepare):
+            self.hold({"email": {}}, open_slot="quote", day=LATER, time="11:00", route="email")
+        self.assertEqual(seen, [(LATER, "11:00")])
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])
 
 
 # ── G8 · a real request to a hotel, on the same ladder ─────────────────────────────────────────────────────────────────────
@@ -501,15 +502,12 @@ class OldS1Untouched(Base):
             self.hold({"email": {}}, open_slot="quote", day=LATER)
         self.assertEqual((e.exception.code, e.exception.message), ("when_invalid", "day is YYYY-MM-DD and time HH:MM"))
 
-    def test_nights_and_loyalty_are_not_added(self):
+    def test_nothing_of_sashas_own_reaches_the_venue(self):   # Sasha 319 · old S1 too: AgAPI's acts are the one sender
         LY.find_for.return_value = ITEM
         self.hold({"email": {}}, day=LATER, time="21:00", nights=2, route="email")
-        self.assertNotIn("nights", self.api.bodies("/api/booking/emails")[0])
-        self.assertEqual(len(self.api.bodies("/api/booking/draft")), 1)                     # a table, as before
         self.hold({"form": {}}, day=LATER, time="21:00", route="form")
-        self.assertNotIn("loyalty_item_id", self.api.bodies("/api/booking/forms")[0])
+        self.assertEqual((self.api.bodies("/api/booking/emails"), self.api.bodies("/api/booking/forms")), ([], []))
         LY.find_for.assert_not_awaited()
-
 
 if __name__ == "__main__":
     unittest.main()

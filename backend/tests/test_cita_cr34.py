@@ -133,27 +133,20 @@ class Routes(Base):
         self.assertFalse([c for c in GW.api.calls if c[2] == "/api/booking/calls"])
 
     def test_the_founder_call_reads_back_first_and_dials_only_on_the_yes(self):
-        from booking_signer import ladder_routes as LR
-        reads = []
-
-        class Store:
-            async def put_read(self, r):
-                reads.append(r)
-        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": TG.ACCOUNT}), mock.patch.object(LR, "LADDER_STORE", Store()):
+        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": TG.ACCOUNT}):
             self.to_centre()
             self.say("", payload="hx:ci:call")
             self.say("Tuesday 10:00")
-            (_, _, _, body), = [c for c in GW.api.calls if c[2] == "/api/booking/calls"]
-            self.assertEqual(body["reservation"]["what"]["activity_venue_lang"],
-                             "una cita para entregar la solicitud de la tarjeta sanitaria")
+            self.assertEqual(self.agapi.ops(), ["prepare", "read_back"])                # Sasha 319 · AgAPI's call act, read back
+            p = self.agapi.calls[0][1]
+            self.assertIn("una cita para entregar la solicitud de la tarjeta sanitaria", p["notes"])
+            self.assertEqual(p["call"], {"phone": "+34913690491", "source": "venue"})   # the finder's own cita line
             self.assertIn("I agree to nothing else", self.said())
-            self.assertFalse([c for c in GW.api.calls if c[2].endswith("/place")])
+            self.assertNotIn("/api/booking/calls", " ".join(c[2] for c in GW.api.calls))
             self.say("", payload=self.buttons()[0][1])
-            self.assertEqual(len([c for c in GW.api.calls if c[2].endswith("/place")]), 1)
+            self.assertEqual(self.agapi.ops(), ["prepare", "read_back", "submit", "dial"])
             self.assertIn("watch_call", self.spawned)
             self.assertEqual(self.pend()["step"], "ci_booked")
-            self.assertEqual(reads[0]["read"]["facts"][0]["value"], "+34913690491")       # the finder's own cita line
-            self.assertIn("SERMAS's own centre finder", reads[0]["read"]["facts"][0]["source_label"])
 
     def test_not_now_keeps_nothing(self):
         self.to_offer()

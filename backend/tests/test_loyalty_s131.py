@@ -58,24 +58,6 @@ class OnTheForm(FormRung):
         VK.reset()
         super().tearDown()
 
-    def test_named_before_the_yes_opened_at_the_send_once_logged_never_shown_back(self):
-        found = asyncio.run(LY.find_for(ACCOUNT, "Sasha Test Venue", "restaurant"))
-        self.assertEqual(found["id"], self.item)
-        v = self.read()
-        prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation(), "loyalty_item_id": self.item}).json()
-        text = "\n".join(prep["read_back"]["lines"])
-        self.assertIn("I'll use your saved Kanoe Test Club number from your vault.", text)
-        self.assertIn(f"· Comentarios: Kanoe Test Club: {LY.TOKEN}", text)
-        self.assertNotIn(NUMBER, text)
-        self.assertEqual(asyncio.run(VC.STORE.uses_of(ACCOUNT)), [])                     # nothing opened before the yes
-        sent = self.c.post(f"/api/booking/forms/{prep['form_id']}/send",
-                           json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}}).json()
-        self.assertEqual(sent["status"], "sent")
-        self.assertEqual(self.posts[0][1]["comentarios"], f"Kanoe Test Club: {NUMBER}")   # written in
-        self.assertNotIn(NUMBER, json.dumps(sent))                                       # never shown back
-        uses = asyncio.run(VC.STORE.uses_of(ACCOUNT))
-        self.assertEqual([(u["action_kind"], u["status"]) for u in uses], [("loyalty_number", "done")])
-
     def test_a_revoked_number_is_not_added(self):
         asyncio.run(VC.STORE.revoke(ACCOUNT, self.item, datetime.now(timezone.utc)))
         v = self.read()

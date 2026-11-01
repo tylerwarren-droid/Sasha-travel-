@@ -65,6 +65,9 @@ class MyPlans(unittest.TestCase):
 
 
 class RunningLate(unittest.TestCase):
+    """Sasha 319 · "I'm running late" for a booking on the old reservation route (no AgAPI act): AgAPI is the one sender to venues, so
+    nothing is read back or sent from here — Tyler takes it. (An AgAPI act's late: tests.test_s300 / test_s317.)"""
+
     def setUp(self):
         M._HELD.clear()
         self.calls = []
@@ -73,41 +76,20 @@ class RunningLate(unittest.TestCase):
 
         async def api(account, method, path, body=None, timeout=None):
             self.calls.append((method, path, body))
-            if method == "GET" and "/notice" in path:
-                return 200, {"route": "call", "read_back": {"lines": ["I'll call Casa Gate and say the Gate table for 2 at 21:00 will arrive about 21:20.",
-                                                                     "If nobody answers, I'll email them at r@casa.test instead.", "OK?"], "sha256": "n" * 64}}
-            if method == "POST" and path.endswith("/notice"):
-                return 200, {"status": "call_prepared", "call_id": "call-1", "call_read_back_sha256": "c" * 64}
-            if method == "POST" and path.endswith("/place"):
-                return 200, {"status": "placed"}
             return 404, {}
-        for p in (mock.patch.object(VN, "venue_bookings", mock.AsyncMock(return_value=VENUES)), mock.patch.object(GW, "api", api),
-                  mock.patch.object(API, "claim", mock.AsyncMock()), mock.patch.object(M, "_record", mock.AsyncMock())):
+        for p in (mock.patch.object(VN, "venue_bookings", mock.AsyncMock(return_value=VENUES)), mock.patch.object(GW, "api", api)):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_read_back_then_ok_next_turn_calls(self):
-        first = run(M.running_late(ctx(), {"minutes": 20, "approval": {"said": "I'm running 20 minutes late"}}))
-        self.assertEqual(first["status"], "awaiting_yes")
-        self.assertTrue(first["read_back"][0].startswith("I'll call Casa Gate and say the Gate table for 2 at 21:00 will arrive about 21:20"))
-        self.assertIn("arrive=21:20", self.calls[0][1])
+    def test_it_is_handed_to_tyler_and_nothing_is_sent(self):
+        from agapi import venues as VN
+        r = run(M.running_late(ctx(), {"minutes": 20, "approval": {"said": "I'm running 20 minutes late"}}))
+        self.assertEqual((r["status"], r["sent"], r["line"]), ("to_tyler", False, VN.TO_TYLER))
+        self.assertFalse([c for c in self.calls if "/notice" in c[1] or "/place" in c[1]])
         later = datetime.now(timezone.utc) + timedelta(seconds=5)
-        done = run(M.running_late(ctx(started=later), {"approval": {"said": "OK"}}))
-        self.assertEqual(done["status"], "calling")
-        self.assertEqual([c[1].rsplit("/", 1)[-1] for c in self.calls[1:]], ["notice", "place"])
-
-    def test_a_yes_in_the_same_turn_does_nothing(self):
-        run(M.running_late(ctx(), {"minutes": 20, "approval": {"said": "I'm late"}}))
-        same = run(M.running_late(ctx(started=datetime.now(timezone.utc) - timedelta(seconds=60)), {"minutes": 20, "approval": {"said": "yes"}}))
-        self.assertEqual(same["status"], "awaiting_yes")       # read back again — nothing sent
-        self.assertFalse(any(c[0] == "POST" for c in self.calls))
-
-    def test_a_question_is_not_a_yes(self):
-        run(M.running_late(ctx(), {"minutes": 20, "approval": {"said": "I'm late"}}))
-        later = datetime.now(timezone.utc) + timedelta(seconds=5)
-        r = run(M.running_late(ctx(started=later), {"minutes": 20, "approval": {"said": "Yes — what will you say to them?"}}))
-        self.assertEqual(r["status"], "awaiting_yes")
-        self.assertFalse(any(c[0] == "POST" for c in self.calls))
+        again = run(M.running_late(ctx(started=later), {"approval": {"said": "OK"}}))   # a yes after it: still nothing sent
+        self.assertEqual(again["status"], "to_tyler")
+        self.assertFalse([c for c in self.calls if c[0] == "POST"])
 
 
 class NoticeCall(unittest.TestCase):
@@ -124,25 +106,10 @@ class NoticeCall(unittest.TestCase):
         with self.assertRaises(C.CallRefused):
             C.build_notice_call(v, p, datetime.now(timezone.utc), "book", arrive=time(21, 25))
 
-    def test_nobody_answers_then_the_email_goes(self):
-        from booking_signer import venue_notice as VNT, emailing as E, live_events as LE
-        sent, pub = [], []
-
-        async def send(http, email):
-            sent.append(email)
-            return E.Sent(True, "em_1", 200, {}, None)
-        reading = mock.Mock(state="not_reached", outcome=None, why="nobody answered. Nothing was agreed.")
-        call = {"brief": {"purpose": "late", "venue_name": "Casa Gate", "fallback_email": {"to": "r@casa.test", "subject": "s", "text": "t"}}}
-        with mock.patch.object(E, "send", send), mock.patch.object(LE, "publish", lambda a, ev: pub.append(ev)):
-            run(VNT.after_call(ACCOUNT, call, reading))
-        self.assertEqual(sent[0]["to"], "r@casa.test")
-        self.assertIn("So I emailed them at r@casa.test instead.", pub[0]["say"])
-
-    def test_the_call_follow_up_routes_a_late_call(self):
-        from booking_signer import call_routes as CRT, venue_notice as VNT
-        with mock.patch.object(VNT, "after_call", mock.AsyncMock()) as ac:
-            run(CRT._follow_up({"account_id": ACCOUNT, "brief": {"purpose": "late"}}, mock.Mock(state="answered", outcome="yes")))
-        ac.assert_awaited_once()
+    def test_after_a_late_call_nothing_goes_to_the_venue(self):   # Sasha 319 · its "nobody answered → the email" follow-up is gone
+        from booking_signer import call_routes as CRT, emailing as E
+        with mock.patch.object(E, "send", mock.AsyncMock(side_effect=AssertionError("never an email to the venue"))):
+            run(CRT._follow_up({"account_id": ACCOUNT, "brief": {"purpose": "late"}}, mock.Mock(state="not_reached", outcome=None)))
 
 
 class TestVenue(unittest.TestCase):

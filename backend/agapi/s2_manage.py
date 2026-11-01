@@ -133,65 +133,21 @@ def _arrive(b: dict, a: dict) -> Optional[str]:
 
 async def _notice(ctx, a: dict, kind: str, tool: str) -> dict:
     from agapi import venues as VN
-    from agapi.v0 import claim
-    GW = VN._API()
     said = ((a.get("approval") or {}).get("said")) or ""
     held = _held(ctx, tool)
     if held and held.get("act_id") and said and _yes(said, ok=True):   # Sasha 300 · an AgAPI act: by ITS route, on this yes
         return await _act_notice_go(ctx, held, said, kind)
-    if held and said and _yes(said, ok=True):   # anything but their yes is a NEW read-back below (nothing is sent)
-        await claim(ctx)
-        return await _reservation_notice_go(ctx, held, said, kind)
     b = await _venue_target(ctx, a)
     from agapi import itinerary as IT
     if b["source"] == "handover":   # Sasha 300 · handed over (their page / his own WhatsApp): his, there, by that route — nothing sent
         return IT.page_answer(b, kind)
     if b["source"] == "act":   # Sasha 300 · AgAPI's act: the change goes by the route it went (venue.change_booking, CR 131 (c))
         return await _act_notice(ctx, a, b, kind, tool)
-    args = {"arrive": _arrive(b, a)} if kind == "late" else {k: v for k, v in (("time", a.get("new_time")), ("party", a.get("new_party"))) if v}
-    if kind == "late" and not args["arrive"]:
-        raise _err("arrive_missing", "how late? ask what time they'll get there (or how many minutes)")
-    q = "&".join(f"{k}={v}" for k, v in args.items() if v)
-    s, j = await GW.api(ctx.account, "GET", f"/api/booking/reservations/{b['trip_item_id']}/notice?kind={kind}&{q}")
-    if s != 200:
-        raise _err((j or {}).get("rule") or "booking_unknown", GW.refusal_words(j or {}, s))
-    lines = j["read_back"]["lines"]
-    if not j.get("route"):
-        return {"status": "not_possible", "venue": b["venue"], "say": " ".join(lines)}
-    _hold(ctx, tool, lines, tid=b["trip_item_id"], args={k: str(v) for k, v in args.items() if v}, notice_sha=j["read_back"]["sha256"],
-          venue=b["venue"])
-    if await VN.one_instruction(ctx, b["venue"], kind, rows=await VN.venue_bookings(ctx.account)):
-        # Sasha 317 · THE ONE RULE on this route too: his complete instruction naming exactly one booking IS the yes — sent once, now
-        if not await VN.claim_words(ctx, f"{kind}|{b['trip_item_id']}|{sorted(args.items())}"):
-            _HELD.pop(ctx.account, None)
-            return {"status": "already_sent", "venue": b["venue"], "say": f"I've already sent that to {b['venue']}."}
-        return await _reservation_notice_go(ctx, _HELD[ctx.account], str(getattr(ctx, "user_said", "") or ""), kind)
-    return {"status": "awaiting_yes", "venue": b["venue"], "route": j["route"], "read_back": lines,
-            "say": "Read this back in a sentence or two (its first line as it is) and ask: OK? Act only on their yes in their next turn."}
-
-
-async def _reservation_notice_go(ctx, held: dict, said: str, kind: str) -> dict:
-    """A change or "running late" for a reservation (the booking_signer route), sent — on his yes, or (Sasha 317) on his instruction."""
-    from agapi import venues as VN
-    GW = VN._API()
+    # Sasha 319 · a booking on the old reservation route has no AgAPI act, and AgAPI is the ONE sender to venues: its call / email /
+    # text notices are gone — Tyler takes it, nothing is sent. Said by code.
     _HELD.pop(ctx.account, None)
-    s, j = await GW.api(ctx.account, "POST", f"/api/booking/reservations/{held['tid']}/notice",
-                        {"kind": kind, **held["args"], "read_back_sha256": held["notice_sha"], "approval": {"how": "voice", "said": said}}, timeout=60)
-    if s != 200:
-        raise _err((j or {}).get("rule") or "not_sent", GW.refusal_words(j or {}, s))
-    what = "venue_late" if kind == "late" else "booking_change"
-    if j.get("status") == "call_prepared":
-        s2, j2 = await GW.api(ctx.account, "POST", f"/api/booking/calls/{j['call_id']}/place",
-                              {"read_back_sha256": j["call_read_back_sha256"], "approval": {"how": "voice", "said": said}}, timeout=60)
-        ok = s2 == 200 and (j2 or {}).get("status") in ("placed", "uncertain", "scheduled")
-        await _record(ctx.account, what, "requested" if ok else "failed", {"reference": j["call_id"], "said": said,
-                                                                           "read_back_sha256": "sha256:" + held["sha"]}, held["venue"])
-        return {"status": "calling" if ok else "not_placed", "venue": held["venue"],
-                "say": (f"Calling {held['venue']} now — I'll tell you here exactly what they say." if ok else
-                        f"I couldn't place the call: {(j2 or {}).get('why') or GW.refusal_words(j2 or {}, s2)}")}
-    await _record(ctx.account, what, "requested" if j.get("status") == "requested" else "failed",
-                  {"reference": j.get("email_id") or held["tid"], "said": said, "read_back_sha256": "sha256:" + held["sha"]}, held["venue"])
-    return {"status": j.get("status"), "venue": held["venue"], "say": j.get("say")}
+    return {"status": "to_tyler", "venue": b.get("venue") or "them", "sent": False, "line": VN.TO_TYLER,
+            "how": "Say `line` word for word — nothing else."}
 
 
 async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:

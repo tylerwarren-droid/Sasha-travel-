@@ -83,16 +83,28 @@ class OnePath(Base):
 
 
 class UnderAnotherName(Base):
+    """Sasha 319 · the name goes to AgAPI's booking record (venue.prepare_booking's person) — Sasha's own email is gone."""
+
+    def prepared_as(self, **kw):
+        from agapi import venue_submit as VS
+        seen = []
+
+        async def prepare(account, place, person, *a, **k):
+            seen.append(person)
+            return {"ok": False, "error": {"code": "not_configured", "message": "no venues key"}}
+        with mock.patch.object(VS, "prepare", prepare):
+            out = self.hold("s2", {"email": {"value": "madrid@hammamalandalus.com"}}, **kw)
+        return out, seen
+
     def test_the_name_goes_to_the_person(self):
-        out = self.hold("s2", {"email": {"value": "madrid@hammamalandalus.com"}}, under="Alex Gate")
-        self.assertEqual(out["status"], "awaiting_yes")
-        body = next(b for m, p, b in self.api.calls if p == "/api/booking/emails")
-        self.assertEqual(body["name"], "Alex Gate")
+        out, seen = self.prepared_as(under="Alex Gate")
+        self.assertEqual(seen[0]["name"], "Alex Gate")
+        self.assertEqual(out["status"], "to_tyler")                     # no venues key in this test: Tyler's, nothing sent
+        self.assertNotIn("/api/booking/emails", [c[1] for c in self.api.calls])
 
     def test_without_it_their_own_name(self):
-        self.hold("s2", {"email": {"value": "madrid@hammamalandalus.com"}})
-        body = next(b for m, p, b in self.api.calls if p == "/api/booking/emails")
-        self.assertEqual(body["name"], "Alex Gate")   # FakeApi's contact name — the account's own
+        out, seen = self.prepared_as()
+        self.assertEqual(seen[0]["name"], "Alex Gate")   # FakeApi's contact name — the account's own
 
     def test_the_field_is_on_s2_and_parity_only(self):
         tool = next(API.schema_for_model(t) for t in API.TOOLS if t["name"] == "hold_venue")

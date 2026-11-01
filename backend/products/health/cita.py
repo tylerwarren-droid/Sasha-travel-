@@ -500,11 +500,9 @@ async def _record(ctx: dict, on: date, at: str, said: str = "") -> None:
 
 
 async def call_prepare(ctx: dict, t: str) -> None:
-    """The founder's CR 34 route: the centre's own cita line, from the finder; the read-back first; one yes."""
+    """The founder's CR 34 route: the centre's own cita line, from the finder; AgAPI's call act's read-back first; one yes."""
     from booking_signer import guest_whatsapp as GW
-    from booking_signer import ladder_routes as LR
-    from .turn import MADRID, parse_when
-    import uuid
+    from .turn import parse_when
     pend, out, account = ctx["st"]["pending"], ctx["out"], ctx["account"]
     ci = pend.get("ci") or {}
     c = ci.get("centre") or {}
@@ -520,27 +518,18 @@ async def call_prepare(ctx: dict, t: str) -> None:
     if not who.get("name") or not who.get("mobile_e164"):
         out.text(GW.NO_CONTACT.format(web=GW.web_url()))
         return
-    rid = str(uuid.uuid4())
-    read = {"name": c["name"], "country": "ES", "listing": {"name": c["name"]},
-            "facts": [{"kind": "phone", "value": c["phone_e164"], "source_kind": "site",
-                       "source_label": f"SERMAS's own centre finder (“Teléfono cita previa”), read {c.get('read_at', READ_ON)}"}]}
-    await LR.LADDER_STORE.put_read({"read_id": rid, "account_id": account, "query": "CR 34 centro de salud", "venue_name": c["name"],
-                                    "country": "ES", "read": read, "created_at": datetime.now(MADRID)})
-    reservation = {"schema": "reservation/1", "flow": "book",
-                   "who": {"name": who["name"], "contact": {"mobile_e164": who["mobile_e164"]}},
-                   "what": {"category": "appointment", "activity": "a time to hand in a health-card application",
-                            "activity_venue_lang": "una cita para entregar la solicitud de la tarjeta sanitaria"},
-                   "where": {}, "when": {"mode": "at", "at": at.strftime("%Y-%m-%dT%H:%M")},
-                   "how_many": {"count": 1, "unit": "people"}}
-    status, j = await GW.api(account, "POST", "/api/booking/calls", {"reservation": reservation, "read_id": rid})
-    if status != 200:
-        out.text(f"Not prepared — {GW.refusal_words(j, status)}. Nothing was dialled.")
+    from . import agapi_call as AC   # Sasha 319 · AgAPI's call act — the one sender to venues
+    got = await AC.prepare(account, c["name"], c["phone_e164"], at, who,
+                           "a time to hand in a health-card application (una cita para entregar la solicitud de la tarjeta sanitaria)")
+    if not got["ok"]:
+        out.text(got["say"])
         return
-    lines, sha = j["read_back"]["lines"], j["read_back"]["sha256"]
+    held = got["held"]
+    lines, sha = held["lines"], held["sha"]
     out.text("Exactly what I'll say:\n" + "\n".join("• " + ln for ln in lines) +
              "\nI ask only for that time to hand in the form; I agree to nothing else, and I tell you their exact words.")
     out.ask(f"Call {c['name']} now?", [("Yes, call them", f"hxyes:{sha[:16]}"), ("No", f"hxno:{sha[:16]}")])
-    pend.update(step="ci_call_confirm", call_id=j["call_id"], sha=sha, asked_at=ctx["now"].isoformat(),
+    pend.update(step="ci_call_confirm", agapi=held, sha=sha, asked_at=ctx["now"].isoformat(),
                 summary=f"a time to hand in the health-card form, {at.strftime('%A %-d %B at %H:%M')}")
 
 
@@ -562,19 +551,14 @@ async def call_yes(ctx: dict, t: str, payload: str) -> None:
         pend["step"] = "ci_call_when"
         out.text("That yes came more than 15 minutes later — nothing was dialled. Which day and time?")
         return
-    how = {"how": "whatsapp_button" if payload else "whatsapp_text", "said": t or "Yes, call them"}
-    status, j = await GW.api(account, "POST", f"/api/booking/calls/{pend['call_id']}/place",
-                             {"read_back_sha256": sha, "approval": how}, timeout=120)
-    if status != 200:
-        out.text(f"Not called — {GW.refusal_words(j, status)}. Nothing was dialled.")
-        return
-    if j.get("status") == "placed":
-        out.text(f"📞 {j.get('say') or 'Calling ' + c.get('name', 'the centre') + ' now.'} I'll tell you their exact words. "
+    from . import agapi_call as AC   # Sasha 319 · the call AgAPI's act allows, dialled only from its plan
+    r = await AC.place(account, pend["agapi"], t or "Yes, call them", pend.get("summary", ""))
+    if r["status"] == "calling":
+        out.text(f"📞 {r['say'] or 'Calling ' + c.get('name', 'the centre') + '.'} I'll tell you their exact words. "
                  "When they've given you a time, tell me (e.g. \"booked Tuesday 10:00\") and it goes in your itinerary.")
-        GW._spawn(GW.watch_call(ctx["ch"], ctx["frm"], account, pend["call_id"], c.get("name", "the centre"), "book",
-                                pend.get("summary", "")))
-    elif j.get("status") == "scheduled":
-        out.text(f"They're closed now — I'll call at {j.get('scheduled_for')}, covered by your yes.")
+        if r.get("call_id") and r.get("dial") in ("placed", "uncertain"):
+            GW._spawn(GW.watch_call(ctx["ch"], ctx["frm"], account, r["call_id"], c.get("name", "the centre"), "book",
+                                    pend.get("summary", "")))
     else:
-        out.text(f"⚠ {j.get('say') or 'The call did not go through'} — nothing is booked.")
+        out.text(r["say"])
     pend["step"] = "ci_booked"

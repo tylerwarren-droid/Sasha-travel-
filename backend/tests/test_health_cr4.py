@@ -1,5 +1,5 @@
 """CR 4 · health on WhatsApp, inside S-77: consent first; the reason never asked; a private clinic booked through Sasha's
-call path (read-back, one yes, the call); SERMAS prepared for the person to press — values only from the vault (behind
+call path — Sasha 319: AgAPI's call act (read-back, one yes, the call AgAPI's plan allows); SERMAS prepared for the person to press — values only from the vault (behind
 the DPIA) or a FICTIONAL patient, dropped after 24 hours; new in Madrid as a sourced checklist with reminders; never a
 public health centre called. Offline; the model is never called.
 
@@ -28,34 +28,53 @@ from tests import test_guest_whatsapp_s75 as TG
 run = TG.run
 
 
-class Fake(TG.FakeApi):
-    """Sasha's routes at their in-process boundary: the contact, and the call's prepare and place."""
+class AgAPI:
+    """Sasha 319 · AgAPI's call act at its boundary (venue_submit + venue_calls): prepare, the call's read-back, the yes, the dial.
+    Sasha's own /api/booking/calls is gone — a test that sees it called fails."""
 
     def __init__(self):
-        super().__init__()
-        self.place = {"ok": True, "status": "placed", "say": "Calling Kanoe Test Clinic now."}
+        self.calls = []
+        self.submit_result = {"ok": True, "status": "calling", "act_id": "act_health_1", "say": "Calling Kanoe Test Clinic now.",
+                              "call_plan": {"call_id": "plan-1", "phone": "+34600000000"}}
 
-    async def __call__(self, account, method, path, body=None, timeout=90.0):
-        if path == "/api/booking/calls" and method == "POST" and body.get("reservation"):
-            self.calls.append((account, method, path, body))
-            r = body["reservation"]
-            lines = ["I'll phone Kanoe Test Clinic, +34 600 000 000.",
-                     f"I'll say: “Hola, soy Sasha … para reservar {r['what']['activity_venue_lang']} para Tyler Warren el "
-                     f"{r['when']['at']}. ¿Sería posible?”", "Shall I call them now?"]
-            return 200, {"call_id": "call-health-1", "read_back": {"lines": lines, "sha256": "d" * 64}, "purpose": "book"}
-        return await super().__call__(account, method, path, body, timeout)
+    async def prepare(self, account, place, person, date, time_, party, notes=None, call=None, link=None, stay=None):
+        self.calls.append(("prepare", {"place": place, "person": person, "date": date, "time": time_, "party": party, "notes": notes,
+                                       "call": call}))
+        return {"ok": True, "prepared_id": "vpr_health_1"}
+
+    async def read_back(self, account, prepared_id, route=None):
+        self.calls.append(("read_back", {"prepared_id": prepared_id, "route": route}))
+        p = self.calls[-2][1]
+        lines = [f"Call {p['place']['name']} for {p['notes']}, {p['date']} {p['time']}, 1 person.", "I'll call them now and let you know."]
+        return {"ok": True, "read_back_id": "rb_health_1", "sha256": "d" * 64, "lines": lines, "end_user": "eu_1"}
+
+    async def submit(self, account, held, said):
+        self.calls.append(("submit", {"held": held, "said": said}))
+        return dict(self.submit_result)
+
+    async def dial(self, account, result, held):
+        self.calls.append(("dial", {"act_id": result.get("act_id"), "held": held}))
+        return {"dialled": True, "status": "placed", "call_id": "call-health-1"}
+
+    def ops(self):
+        return [c[0] for c in self.calls]
 
 
 class Base(TG.Base):
     def setUp(self):
         super().setUp()
-        GW.api = Fake()
-        self.saved = (ST.STORE, HT._clinic_read, GW._spawn)
+        from agapi import venue_calls as VCL, venue_submit as VS
+        self.agapi = AgAPI()
+        for target, name in ((VS, "prepare"), (VS, "read_back"), (VS, "submit"), (VCL, "dial")):
+            pt = mock.patch.object(target, name, getattr(self.agapi, name))
+            pt.start()
+            self.addCleanup(pt.stop)
+        from booking_signer import guest_receipt as GRC
+        pt = mock.patch.object(GRC, "address_of", mock.AsyncMock(return_value=None))   # their email: not on this test's record
+        pt.start()
+        self.addCleanup(pt.stop)
+        self.saved = (ST.STORE, GW._spawn)
         ST.STORE = ST.MemoryCaseStore()
-
-        async def clinic(account):
-            return "read-clinic-1" if HT.test_clinic_number() else None
-        HT._clinic_read = clinic
         self.spawned = []
         GW._spawn = lambda coro: (self.spawned.append(coro.__name__), coro.close())
         self.env2 = mock.patch.dict(os.environ, {"SASHA_TEST_CALL_NUMBER": "+34600000000", "SASHA_VAULT_HEALTH_DPIA_REF": ""})
@@ -63,7 +82,7 @@ class Base(TG.Base):
         self.link()
 
     def tearDown(self):
-        ST.STORE, HT._clinic_read, GW._spawn = self.saved
+        ST.STORE, GW._spawn = self.saved
         self.env2.stop()
         super().tearDown()
 
@@ -100,19 +119,18 @@ class Private(Base):
     def test_read_back_then_one_yes_then_the_call(self):
         self.start("hx:priv")
         self.say("Tuesday 10:00")
-        (acct, method, path, body), = [c for c in GW.api.calls if c[2] == "/api/booking/calls"]
-        r = body["reservation"]
-        self.assertEqual((r["what"]["category"], r["what"]["activity_venue_lang"], r["how_many"]), ("appointment",
-                         "una cita con el médico general", {"count": 1, "unit": "people"}))
-        self.assertEqual(r["when"], {"mode": "at", "at": "2026-10-06T10:00"})       # Tuesday after Fri 2 Oct, Madrid time
-        self.assertNotIn("reason", json.dumps(r))
+        self.assertEqual(self.agapi.ops(), ["prepare", "read_back"])                    # Sasha 319 · AgAPI's call act, read back
+        p = self.agapi.calls[0][1]
+        self.assertEqual((p["place"]["name"], p["party"], p["call"]), (HT.TEST_CLINIC, 1, {"phone": "+34600000000", "source": "venue"}))
+        self.assertEqual((p["date"], p["time"]), ("2026-10-06", "10:00"))                # Tuesday after Fri 2 Oct, Madrid time
+        self.assertIn("una cita con el médico general", p["notes"])
+        self.assertEqual(self.agapi.calls[1][1]["route"], "call")
+        self.assertNotIn("reason", json.dumps(p))
         self.assertIn("Exactly what I'll say:", self.said())
-        self.assertIn("para reservar una cita con el médico general", self.said())
-        self.assertNotIn("/place", " ".join(c[2] for c in GW.api.calls))               # nothing dialled before the yes
+        self.assertNotIn("/api/booking/calls", " ".join(c[2] for c in GW.api.calls))     # never Sasha's own call
         self.say("", payload=self.buttons()[0][1])
-        place = [c for c in GW.api.calls if c[2].endswith("/place")]
-        self.assertEqual(place[0][3]["read_back_sha256"], "d" * 64)
-        self.assertEqual(place[0][3]["approval"]["how"], "whatsapp_button")
+        self.assertEqual(self.agapi.ops(), ["prepare", "read_back", "submit", "dial"])   # the yes → the act → its plan dialled
+        self.assertEqual(self.agapi.calls[2][1]["held"]["read_back_id"], "rb_health_1")
         self.assertIn("📞 Calling Kanoe Test Clinic now.", self.said())
         self.assertEqual(self.spawned, ["watch_call"])
 

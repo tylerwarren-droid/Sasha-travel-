@@ -370,47 +370,6 @@ class CallRoutes:
     def status(self, call_id):
         return self.c.get(f"/api/booking/calls/{call_id}").json()
 
-    def test_a_timeout_is_may_have_been_placed_and_blocks_a_retry_until_blands_log_answers(self):
-        self.bland.place_answer = ReadTimeout("timed out")
-        prep = self.prepare()
-        r = self.yes(prep).json()
-        self.assertEqual(r["status"], "uncertain")
-        self.assertIn("may have been placed", r["say"])
-        v = self.status(prep["call_id"])
-        self.assertEqual(v["status"], "placing")                      # ⛔ never not_placed on a timeout
-        self.assertIn("checking its own call log", v["say"])
-        # a second call to that number is refused while it is unresolved — nothing is dialled
-        self.bland.place_answer = None
-        again = self.prepare()
-        refused = self.yes(again)
-        self.assertEqual((refused.status_code, refused.json()["rule"]), (409, "previous_call_unresolved"))
-        self.assertEqual(len([1 for m, u, h, b in self.bland.requests if m == "POST"]), 1)
-        # Bland's log has it: the sweeper records it as placed, with Bland's id, then reads it like any call
-        self.bland.log = [{"call_id": "ae18c3c8-log", "to": "+351912000000", "created_at": (self.now + timedelta(seconds=29)).isoformat().replace("+00:00", "Z")}]
-        self.now = self.now + timedelta(minutes=2)
-        self.bland.details = done(status="completed", answered_by="voicemail")
-        self.c.portal.call(call_routes.sweep_once)
-        v = self.status(prep["call_id"])
-        self.assertEqual(v["status"], "not_reached", v)
-        self.assertEqual(self.bland_id(prep["call_id"]), "ae18c3c8-log")
-        self.assertEqual(self.yes(again).json()["rule"], "too_soon")   # Sasha 254 · R10: 30 minutes between calls to one venue
-        self.now = self.now + timedelta(minutes=31)
-        again = self.prepare()
-        self.assertEqual(self.yes(again).json()["status"], "placed")  # resolved, and the rules' 30 minutes passed: the retry may go
-
-    def test_nothing_in_blands_log_after_ten_minutes_is_not_placed_and_says_so(self):
-        self.bland.place_answer = ReadTimeout("timed out")
-        prep = self.prepare()
-        self.yes(prep)
-        self.now = self.now + timedelta(minutes=5)
-        self.c.portal.call(call_routes.sweep_once)
-        self.assertEqual(self.status(prep["call_id"])["status"], "placing")   # not yet: keep looking
-        self.now = self.now + timedelta(minutes=6)
-        self.c.portal.call(call_routes.sweep_once)
-        v = self.status(prep["call_id"])
-        self.assertEqual(v["status"], "not_placed")
-        self.assertIn("Bland's call log has no call", v["why"])
-
     def test_s64_the_prepare_writes_the_reservation_object_alongside_the_old_columns(self):
         from booking_signer import reservation as RS
         prep = self.prepare()
@@ -421,16 +380,6 @@ class CallRoutes:
         self.assertEqual(item_sha, RS.sha256(req))
         self.assertEqual(call_sha, item_sha)                     # the call carried out exactly this request
         self.assertEqual(self.trip_status(prep["call_id"]), "pending")   # the old columns, as before
-
-    def test_s64_a_waiting_list_is_recorded_as_waitlisted_and_never_confirmed(self):
-        prep = self.prepare()
-        self.assertEqual(self.yes(prep).json()["status"], "placed")
-        call_routes.READER = reader_says({"reading": "unclear", "quote": "", "raised": []})
-        self.bland.details = done(("user", "We're full on Thursday, but I can put you on the waiting list."))
-        v = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
-        self.assertEqual((v["status"], v["outcome"], v["offer"]["kind"]), ("answered", "unclear", "waitlisted"))
-        self.assertIn("waiting list — that is not a booking", v["say"])
-        self.assertEqual(self.trip_status(prep["call_id"]), "waitlisted")
 
     def test_s66_the_store_schedules_holds_and_releases_a_call(self):
         prep = self.prepare()
@@ -449,30 +398,6 @@ class CallRoutes:
         self.assertEqual(run_(self.store.start_scheduled(cid, 3, later - timedelta(days=1))), "claimed")
         self.assertFalse(run_(self.store.cancel_scheduled(cid, "too late")))                # already placing: not cancelled
 
-    def test_s66_a_yes_typed_in_the_chat_places_the_call_with_its_words(self):
-        prep = self.prepare()
-        bad = self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
-                          json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "chat", "said": "  "}})
-        self.assertEqual(bad.json()["rule"], "approval_void")                  # a typed yes needs its words
-        r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
-                        json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes, go ahead"}})
-        self.assertEqual(r.json()["status"], "placed", r.text)
-        wrong = self.prepare(party=3)                                             # a different read-back, so a different hash
-        self.assertEqual(self.c.post(f"/api/booking/calls/{wrong['call_id']}/place",
-                                     json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "chat", "said": "yes"}}).json()["rule"],
-                         "approval_void")                                        # bound to THAT card's read-back, never another's
-
-    def test_off_means_no_read_back_and_no_call(self):
-        with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": "0"}):
-            r = self.c.post("/api/booking/calls", json=JOHNSON)
-            self.assertEqual((r.status_code, r.json()["rule"]), (422, "calls_disabled"))
-        prep = self.prepare()
-        with mock.patch.dict(os.environ, {"SASHA_CALLS_ENABLED": ""}):
-            self.assertEqual(self.yes(prep).json()["rule"], "calls_disabled")
-        with mock.patch.dict(os.environ, {"BLAND_API_KEY": ""}):
-            self.assertEqual(self.yes(prep).json()["rule"], "calls_not_configured")
-        self.assertEqual(self.bland.requests, [])
-
     def test_only_a_listed_venue_and_never_a_number_from_the_request(self):
         r = self.c.post("/api/booking/calls", json={**JOHNSON, "venue": "any-restaurant"})
         self.assertEqual(r.json()["rule"], "venue_not_callable")
@@ -481,130 +406,9 @@ class CallRoutes:
 
     # Sasha 269 (CR 100, booking-rules/2.1) · MOVED: Sasha 108/109's automatic confirmation call and its retry (confirm_unclear,
     # retry_confirmation) are deleted — Sasha keeps no call decision of its own; a call is an act's (venue.call_again on the person's ask)
-    def test_sasha108_an_unclear_booking_gets_no_call_of_sashas_own(self):
-        prep = self.prepare()
-        self.assertEqual(self.yes(prep).json()["status"], "placed")
-        before = len(self.bland.requests)
-        self.assertFalse(hasattr(call_routes, "confirm_unclear") or hasattr(call_routes, "confirm_brief"))
-        self.now = self.now + timedelta(minutes=31)
-        self.assertEqual(self.c.portal.call(call_routes.place_due), 0)                          # nothing scheduled, nothing dialled
-        self.assertEqual(len(self.bland.requests), before)
-        self.assertIsNone(self.c.portal.call(self.store.confirming, prep["call_id"]))
-
     def test_sasha108_a_confirmation_nobody_answered_is_never_retried_by_sasha(self):
         self.assertFalse(hasattr(call_routes, "retry_confirmation"))
         self.assertNotIn("retry_confirmation(", pathlib.Path(call_routes.__file__).read_text().split("def money_or_time_asked")[1])
-
-    def test_sasha109_the_answered_call_stays_the_booking_after_an_unanswered_confirmation(self):
-        """Live: Yatri's confirmation calls (one voicemail, one stopped) made "cancel" pick a call never answered."""
-        from booking_signer.identity import founder_account
-        acct = str(founder_account())
-        prep = self.prepare()
-        self.yes(prep)
-        call = self.c.portal.call(self.store.get_call, acct, prep["call_id"])
-        self.c.portal.call(self.store.record_reading, prep["call_id"],
-                           C.CallReading(state="answered", outcome="unclear", venue_words="Sí, sí.", quote="Sí, sí.", why=""), {}, self.now)
-        rows = self.c.portal.call(self.store.receipt_rows, acct, str(call["trip_item_id"]))
-        self.assertEqual(str(rows["call"]["call_id"]), prep["call_id"])
-        r = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]})
-        self.assertEqual(r.status_code, 200, r.text)                                              # an unclear booking can be cancelled
-
-    def test_sasha109_a_cancelling_call_nobody_answered_is_not_retried_by_sasha(self):
-        """Live: Yatri's cancelling call (15:21) reached no one; an answering machine cancels nothing — and Sasha 269: nothing redials it."""
-        from booking_signer.identity import founder_account
-        acct = str(founder_account())
-        prep = self.prepare()
-        self.yes(prep)
-        self.c.portal.call(self.store.record_reading, prep["call_id"],
-                           C.CallReading(state="answered", outcome="unclear", venue_words="Sí, sí.", quote="Sí, sí.", why=""), {}, self.now)
-        self.now = self.now + timedelta(minutes=31)   # Sasha 254 · R10: 30 minutes between two calls to the same venue
-        cx = self.c.post("/api/booking/calls", json={"cancels_call_id": prep["call_id"]}).json()
-        self.c.post(f"/api/booking/calls/{cx['call_id']}/place", json={"read_back_sha256": cx["read_back"]["sha256"], "approval": {"how": "button"}})
-        tries = self.c.portal.call(self.store.confirmations, prep["call_id"], "cancels_call_id")
-        self.assertEqual(len(tries), 1)                                                          # the one cancelling call, never a retry
-        self.assertFalse(hasattr(call_routes, "retry_confirmation"))
-
-    def test_the_yes_must_be_for_this_read_back(self):
-        prep = self.prepare()
-        r = self.c.post(f"/api/booking/calls/{prep['call_id']}/place", json={"read_back_sha256": "0" * 64, "approval": {"how": "button"}})
-        self.assertEqual(r.json()["rule"], "approval_void")
-        self.assertEqual(self.bland.requests, [])
-
-    def test_a_yes_places_one_call_to_the_venues_number_and_never_a_second(self):
-        prep = self.prepare()
-        r = self.yes(prep)
-        self.assertEqual(r.json()["status"], "placed", r.text)
-        self.assertEqual(len(self.bland.requests), 1)
-        method, url, headers, body = self.bland.requests[0]
-        self.assertEqual((method, url, body["phone_number"]), ("POST", C.BLAND_CALLS_URL, "+351912000000"))
-        self.assertEqual(headers["authorization"], "test-key-not-real")
-        r2 = self.yes(prep)
-        self.assertEqual((r2.status_code, r2.json()["rule"]), (409, "call_already_placed"))
-        self.assertEqual(len(self.bland.requests), 1)
-
-    def test_bland_refusing_is_recorded_as_not_placed_never_as_a_call(self):
-        self.bland.place_answer = R(402, {"status": "error", "message": "Insufficient balance"})
-        prep = self.prepare()
-        r = self.yes(prep).json()
-        self.assertEqual((r["ok"], r["status"]), (False, "not_placed"))
-        self.assertIn("Insufficient balance", r["say"])
-        g = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
-        self.assertEqual(g["status"], "not_placed")
-        self.assertIn("Insufficient balance", g["why"])
-        self.assertEqual(self.trip_status(prep["call_id"]), "pending")
-
-    def test_a_read_back_older_than_15_minutes_cannot_be_approved(self):
-        prep = self.prepare()
-        self.now = MONDAY + timedelta(minutes=16)
-        self.assertEqual(self.yes(prep).json()["rule"], "read_back_expired")
-        self.assertEqual(self.bland.requests, [])
-
-    def test_the_daily_ceiling(self):   # Sasha 254 · the server's net is booking_decide.SERVER_CALLS_PER_DAY (no env var)
-        from agapi import booking_decide as BD
-        with mock.patch.object(BD, "SERVER_CALLS_PER_DAY", 1):
-            self.assertEqual(self.yes(self.prepare()).json()["status"], "placed")
-            self.now = self.now + timedelta(minutes=31)   # past R10's 30 minutes: only the ceiling stands in the way
-            r = self.yes(self.prepare())
-            self.assertEqual((r.status_code, r.json()["rule"]), (429, "daily_call_limit"))
-        self.assertEqual(len(self.bland.requests), 1)
-
-    def test_a_finished_call_is_read_once_and_the_reservation_follows_the_venues_words(self):
-        prep = self.prepare()
-        self.yes(prep)
-        g = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
-        self.assertEqual((g["status"], g.get("outcome")), ("placed", None))   # still on the phone
-        self.bland.details = booked(("user", "Yes, that's fine."))
-        g = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
-        self.assertEqual((g["status"], g["outcome"], g["quote"]), ("answered", "yes", "Yes, that's fine."))
-        self.assertEqual(g["read_by"], C.READ_BY)
-        self.assertIn('Their words: "Yes, that\'s fine."', g["say"])
-        self.assertEqual(self.trip_status(prep["call_id"]), "confirmed")
-        self.assertEqual([(a["method"], a["status"]) for a in self.attempts(prep["call_id"])], [("phone", "confirmed")])
-        self.c.get(f"/api/booking/calls/{prep['call_id']}")
-        self.assertEqual(self.reads, 1)
-        self.assertEqual(len(self.attempts(prep["call_id"])), 1)
-
-    def test_a_call_that_reached_nobody_leaves_the_reservation_pending(self):
-        prep = self.prepare()
-        self.yes(prep)
-        self.bland.details = done(answered_by="voicemail")
-        g = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
-        self.assertEqual((g["status"], g["outcome"]), ("not_reached", None))
-        self.assertEqual(self.trip_status(prep["call_id"]), "pending")
-        self.assertEqual(self.attempts(prep["call_id"]), [])
-
-    def test_unclear_carries_the_venues_words(self):
-        prep = self.prepare()
-        self.yes(prep)
-
-        async def reader(t):
-            return json.dumps({"reading": "unclear", "quote": "", "raised": []})
-        call_routes.READER = reader
-        self.bland.details = done(("user", "Call back tomorrow, the manager does the bookings."))
-        g = self.c.get(f"/api/booking/calls/{prep['call_id']}").json()
-        self.assertEqual(g["outcome"], "unclear")
-        self.assertEqual(g["venue_words"], "Call back tomorrow, the manager does the bookings.")
-        self.assertEqual(self.trip_status(prep["call_id"]), "unclear")
 
     def _confirmed_booking(self):
         prep = self.prepare()
@@ -612,30 +416,6 @@ class CallRoutes:
         self.bland.details = booked(("user", "Yes, that's fine."))
         self.c.get(f"/api/booking/calls/{prep['call_id']}")
         return prep
-
-    def test_a_cancellation_is_prepared_from_the_booking_and_cancels_that_reservation(self):
-        """S-47 · everything read from the booking call; a confirmed cancellation marks the SAME reservation cancelled."""
-        booking = self._confirmed_booking()
-        self.now = self.now + timedelta(minutes=31)   # Sasha 254 · R10: 30 minutes between two calls to the same venue
-        c = self.c.post("/api/booking/calls", json={"cancels_call_id": booking["call_id"]})
-        self.assertEqual(c.status_code, 200, c.text)
-        lines = c.json()["read_back"]["lines"]
-        self.assertIn("I'm calling to cancel the booking for Thursday under the name Johnson.", lines[1])
-        self.assertTrue(lines[2].startswith("This cancels your table for 4 on 2026-10-08 at 20:00, under Anna Johnson"))
-        self.assertEqual(c.json()["trip_item_id"], booking["trip_item_id"])
-        self.bland.details = {"completed": False, "queue_status": "started"}
-        r = self.c.post(f"/api/booking/calls/{c.json()['call_id']}/place",
-                        json={"read_back_sha256": c.json()["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual(r.json().get("status"), "placed", r.text)
-        sent = [b for m, u, h, b in self.bland.requests if m == "POST"][-1]
-        self.assertIn("CANCEL an existing table booking", sent["task"])
-        recap = sent["task"].split('say at once: "', 1)[1].split('"', 1)[0]           # Sasha 119 · the cancellation's own recap
-        self.assertTrue(recap.endswith("Is that confirmed?"), recap)
-        self.bland.details = done(("user", "Yes, that's fine."), ("assistant", recap), ("user", "Yes, confirmed."))
-        g = self.c.get(f"/api/booking/calls/{c.json()['call_id']}").json()
-        self.assertEqual(g["outcome"], "yes")
-        self.assertIn("confirmed the cancellation", g["say"])
-        self.assertEqual(self.trip_status(c.json()["call_id"]), "cancelled")
 
     def test_a_cancellation_takes_nothing_but_the_booking(self):
         booking = self._confirmed_booking()

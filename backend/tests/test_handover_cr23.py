@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tests.founder_fixture  # noqa: F401,E402  (Sasha 254 · the fixtures' founder / lists → person_access records)
 import asyncio
+import json
 import os
 import unittest
 import uuid
@@ -433,60 +434,12 @@ class Pressed(Base):
 
 
 class FromPreparedForm(Base):
-    """The real path: a form the rung prepared → claimed at hand-over → finished from their answer (trip item confirmed)."""
+    """Sasha 319 · the hand-over from a form Sasha's own rung prepared is retired (it filled the venue's form): nothing is opened or sent."""
 
-    async def asyncSetUp(self):
-        self.saved_store = FR.STORE
-        FR.STORE = FR.MemoryFormStore()
-        self.acct = str(uuid.uuid4())
-        rec = {"form_id": str(uuid.uuid4()), "account_id": self.acct, "read_id": None, "host": "sasha-travel-production.up.railway.app",
-               "page_url": TV + "plain", "action_url": TV + "plain", "fields": values(FR.TEST_FIELDS), "hidden_names": ["token"],
-               "read_back_lines": ["I'll send the booking form on Sasha Test Venue's own website (…)"], "read_back_sha256": "x",
-               "created_at": HO.NOW()}
-        await FR.STORE.put(rec, {})
-        self.fid = rec["form_id"]
-
-    async def asyncTearDown(self):
-        FR.STORE = self.saved_store
-
-    async def call(self):
-        req = mock.Mock()
-        req.json = mock.AsyncMock(return_value={"return_to": "https://project.kanoe.ai/chat"})
-        with mock.patch.object(HO, "account_for", return_value=self.acct), \
-             mock.patch.object(HO.V, "_allowed", mock.AsyncMock(side_effect=self.robots)), \
-             mock.patch("booking_signer.form_rung._request_of", mock.AsyncMock(return_value=REQ)), \
-             mock.patch.object(HO, "_receipt", mock.AsyncMock()):
-            return await HO.from_prepared_form(self.fid, req)
-
-    async def robots(self, http, url, resolve):
-        assert isinstance(url, str) and url.startswith("https://"), "robots check called as (http, url, resolve)"
-        return True
-
-    async def test_link_then_booked_in_the_form_store(self):
-        out = await self.call()
-        self.assertTrue(out["ok"])
-        self.assertEqual(out["taps_left"], 1)
-        self.assertIn("One tap left", out["say"])
-        self.assertEqual(FR.STORE.forms[self.fid]["status"], "sending")                  # claimed: no second send can race
-        rec = HO.HANDOVERS[out["handover_id"]]
-        _, on_press, _, on_nav = self.pages[0].watching
-        on_press("Reservar"), on_nav()
-        with mock.patch.object(HO, "_receipt", mock.AsyncMock()):
-            await asyncio.wait_for(rec["_watch"], 2)
-        f = FR.STORE.forms[self.fid]
-        self.assertEqual((f["status"], f["booking_reference"]), ("sent", "TV-ABC123-4F"))
-        self.assertEqual(FR.STORE.attempts[-1]["status"], "confirmed")
-
-    async def test_a_second_handover_is_refused(self):
-        await self.call()
-        out = await self.call()
-        self.assertEqual(out.status_code, 409)
-
-    async def test_a_refusal_marks_the_form_not_sent(self):
-        FakePage.stubborn = {"email"}
-        out = await self.call()
-        self.assertEqual(out.status_code, 422)
-        self.assertEqual(FR.STORE.forms[self.fid]["status"], "not_sent")
+    async def test_it_refuses_and_sends_nothing(self):
+        out = await HO.from_prepared_form(str(uuid.uuid4()), mock.Mock())
+        self.assertEqual(out.status_code, 410)
+        self.assertEqual(json.loads(out.body)["rule"], "venue_send_retired")
 
 
 class GuestPage(Base):

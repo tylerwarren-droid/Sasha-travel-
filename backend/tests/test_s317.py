@@ -146,28 +146,25 @@ class BEveryRouteOneRule(Base):
         submit.assert_not_called()
         self.assertEqual(out["status"], "awaiting_yes")
 
-    def test_the_reservation_route_takes_the_same_rule(self):
+    def test_the_reservation_route_sends_nothing_it_is_tylers(self):
+        """Sasha 319 · a booking on the old reservation route has no AgAPI act: never Sasha's own cancel — handed to Tyler, nothing sent."""
         calls = []
 
         async def api(account, method, path, body=None, timeout=90.0):
             calls.append((method, path))
-            if method == "GET" and path.endswith("/cancel"):
-                return 200, {"venue": "Taberna Las Sobrinas", "route": "email", "read_back": {"sha256": "a" * 64, "lines": ["Cancel: …"]}}
-            if method == "POST" and path.endswith("/cancel"):
-                return 200, {"status": "requested", "say": "I've asked them to cancel."}
             return 200, {}
         rows = [{"trip_item_id": "ti_1", "venue": "Taberna Las Sobrinas", "status": "requested"}]
         GW = VN._API()
         with mock.patch.object(GW, "api", api), mock.patch.object(VN, "venue_bookings", mock.AsyncMock(return_value=rows)), \
-                mock.patch.object(VN, "_push_later", mock.AsyncMock()), mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=[])):
+                mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=[])):
             out = run(VN.cancel_venue(ctx("Cancel my Las Sobrinas booking"), {"trip_item_id": "ti_1"}))
-        self.assertEqual(out["status"], "requested")
-        self.assertIn(("POST", "/api/booking/reservations/ti_1/cancel"), calls)
+        self.assertEqual((out["status"], out["sent"], out["line"]), ("to_tyler", False, VN.TO_TYLER))
+        self.assertFalse([c for c in calls if "/cancel" in c[1]])
 
     def test_one_rule_no_route_copy(self):
         src = inspect.getsource(VN) + inspect.getsource(M)
         self.assertNotIn("_cancel_named", src)                                                    # 314's per-cancel copy is gone
-        self.assertEqual(src.count("await one_instruction(") + src.count("await VN.one_instruction("), 4)   # act + reservation, cancel + notice
+        self.assertEqual(src.count("await one_instruction(") + src.count("await VN.one_instruction("), 2)   # the act's cancel + notice (319)
 
 
 class DAskedAgain(Base):

@@ -46,6 +46,23 @@ class VenueAPI:
     def acts(self):
         return [c for c in self.calls if c[0] != "GET"]
 
+    # Sasha 319 · AgAPI's acts are the one sender to venues: the send and the cancellation are venue_submit's (submit / cancel_submit)
+    refuse = False
+
+    async def submit(self, account, held, said):
+        if self.refuse:
+            return {"ok": False, "error": {"code": "not_sent", "message": "no"}}
+        self.calls.append(("POST", "venue.submit_booking", {"read_back_id": held.get("read_back_id"), "said": said}))
+        return {"ok": True, "status": "sent", "act_id": "act_215", "say": "Sent."}
+
+    async def cancel_submit(self, account, held, said):
+        self.calls.append(("POST", "venue.cancel_booking", {"act_id": held.get("act_id"), "said": said}))
+        return {"ok": True, "status": "sent", "cancel_act_id": "act_c215"}
+
+    async def cancel_read_back(self, account, act_id):
+        self.calls.append(("GET", "venue.cancel_booking", {"act_id": act_id}))
+        return {"ok": True, "end_user": "eu", "read_back_id": "rb_c215", "lines": ["Cancel: Casa Lucio · Fri 14 Nov 21:00 · 2"], "act_id": act_id}
+
 
 class FakeStore:
     """basket_events as Postgres holds it: unique on (source, event_id) — shared by every 'process' in a test."""
@@ -74,7 +91,11 @@ class Base(unittest.TestCase):
         self.venue = VenueAPI()
         GW = VN._API()
         from booking_signer import basket as BK
+        from agapi import venue_submit as VS
         self.patches = [mock.patch.object(GW, "api", self.venue.api), mock.patch.object(GW, "plain_venue", lambda v: v or ""),
+                        mock.patch.object(VS, "submit", self.venue.submit), mock.patch.object(VS, "cancel_submit", self.venue.cancel_submit),
+                        mock.patch.object(VS, "cancel_read_back", self.venue.cancel_read_back),
+                        mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=[])),
                         mock.patch.object(GW, "refusal_words", lambda j, s: "refused"),
                         mock.patch.object(BK, "_run", lambda: None)]   # no store: claims in-process (Durable gives one)
         for p in self.patches:
@@ -93,15 +114,17 @@ class Base(unittest.TestCase):
     def ctx(self, said):
         return API.Ctx(account=ACCOUNT, user_said=said)
 
-    def cancel_prepared(self, minutes_ago=2):
-        VN._CANCEL[ACCOUNT] = {"id": "item-1", "sha": "c" * 64, "venue": "Casa Lucio", "at": datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)}
+    def cancel_prepared(self, minutes_ago=2):   # an AgAPI act's cancellation, read back (Sasha 319: the one sender)
+        VN._CANCEL[ACCOUNT] = {"act_id": "act_1", "read_back_id": "rb_c215", "end_user": "eu", "lines": ["Cancel: Casa Lucio"], "sha": "c" * 64,
+                               "venue": "Casa Lucio", "at": datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)}
 
-    def booking_prepared(self, minutes_ago=2):
-        VN._HELD[ACCOUNT] = {"venue": "Casa Lucio", "rung": "email", "id": "em-1", "sha": "e" * 64, "place_id": None, "summary": "Fri 21:00",
-                             "when": "2026-11-14T21:00", "party": 2, "at": datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)}
+    def booking_prepared(self, minutes_ago=2):   # AgAPI's send, read back (Sasha 319: Sasha's own email rung is gone)
+        VN._HELD[ACCOUNT] = {"venue": "Casa Lucio", "rung": "agapi", "read_back_id": "rb_215", "prepared_id": "vpr_215", "sha": "e" * 64,
+                             "end_user": "eu", "place_id": None, "summary": "Fri 21:00", "when": "2026-11-14T21:00", "party": 2,
+                             "at": datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)}
 
     def cancel(self, said, key="k1"):
-        return run(API.call(self.ctx(said), "cancel_venue", {"trip_item_id": "item-1", "approval": {"said": said}, "idempotency_key": key}))
+        return run(API.call(self.ctx(said), "cancel_venue", {"act_id": "act_1", "approval": {"said": said}, "idempotency_key": key}))
 
     def book_venue(self, said, key="k1"):
         with mock.patch("booking_signer.wa_brain.trip_day_words", mock.AsyncMock(return_value="")):
@@ -389,10 +412,9 @@ class Durable(Base):
         for p in ps:
             p.start()
         try:
-            VN._API().api = None
             self.booking_prepared()
-            with mock.patch.object(VN._API(), "api", mock.AsyncMock(return_value=(422, {"message": "no"}))):
-                r = self.book_venue("yes", key="kr")
+            self.venue.refuse = True   # AgAPI refuses the send
+            r = self.book_venue("yes", key="kr")
             self.assertEqual(r["error"]["code"], "not_sent")
             self.assertEqual(st.rows, {})   # released: nothing was sent
         finally:

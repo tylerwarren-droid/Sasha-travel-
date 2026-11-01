@@ -110,16 +110,15 @@ class Tools(Base):
         self.prepared_cancel()
         r = run(API.call(self.ctx(CANCEL_TERMS), "cancel_venue", {"trip_item_id": "item-1", "approval": {"said": CANCEL_TERMS},
                                                                  "idempotency_key": "k-cancel-terms-1"}))
-        self.assertFalse(r["ok"])
-        self.assertEqual(r["error"]["code"], "no_explicit_yes")
+        self.assertEqual(r["result"]["status"], "to_tyler")                         # Sasha 319 · the old route: Tyler's — nothing sent
         self.assertEqual(self.venue.acts(), [])
 
     def test_a_first_cancel_call_only_reads_the_cancellation(self):
         r = run(API.call(self.ctx(CANCEL_TERMS), "cancel_venue", {"trip_item_id": "item-1", "approval": {"said": CANCEL_TERMS},
                                                                  "idempotency_key": "k-cancel-terms-2"}))
         self.assertTrue(r["ok"], r)
-        self.assertEqual(r["result"]["status"], "awaiting_yes")
-        self.assertEqual(self.venue.acts(), [])                                   # a GET of the read-back, nothing sent
+        self.assertEqual((r["result"]["status"], r["result"]["sent"]), ("to_tyler", False))   # Sasha 319 · handed to Tyler
+        self.assertEqual(self.venue.acts(), [])                                   # nothing sent
 
     def test_dinner_options_with_a_booking_prepared_never_books(self):
         self.prepared_booking()
@@ -182,9 +181,8 @@ class Turn(Base):
         forged = {"trip_item_id": "item-1", "approval": {"said": "yes, cancel it"}}            # the model can't supply the yes
         evs = self.turn(CANCEL_TERMS, [[Block(type="tool_use", id="t1", name="cancel_venue", input=forged)],
                                        [Block(type="text", text="You can cancel free until the day before.")]])
-        self.assertEqual(self.tools(evs), [("cancel_venue", False, "no_explicit_yes")])
-        self.assertEqual(self.venue.acts(), [])
-        self.assertIn(ACCOUNT, VN._CANCEL)                                          # still only prepared
+        self.assertEqual(self.tools(evs), [("cancel_venue", True, None)])            # Sasha 319 · the old route: "I'll hand this to Tyler"
+        self.assertEqual(self.venue.acts(), [])                                     # and nothing is ever cancelled from here
 
     def test_dinner_options_never_book_even_if_the_model_tries(self):
         self.prepared_booking()

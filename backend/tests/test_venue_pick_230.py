@@ -89,8 +89,9 @@ class APick(unittest.TestCase):
         self.assertNotIn("/api/booking/forms", [c[1] for c in self.api.calls])
 
     def test_on_s2_their_own_email_comes_before_a_platform(self):
+        self.agapi()   # Sasha 319 · the email request is AgAPI's send (Sasha's own email rung is gone)
         out = self.pick("s2", {"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
-        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "email", "request_email"))
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "request_email"))
 
     def test_old_s1_asks_the_same_rules(self):   # Sasha 254 · old S1 (parity off): the same decision (its schema unchanged)
         with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):

@@ -165,7 +165,6 @@ class Base(unittest.TestCase):
                   mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value="It's in your bookings")),
                   mock.patch.object(OC, "booked", mock.AsyncMock()), mock.patch("agapi.v0.claim", mock.AsyncMock()),
                   mock.patch.object(LY, "find_for", mock.AsyncMock(return_value=None)),
-                  mock.patch.object(VN, "_push_later", mock.AsyncMock(return_value="watching")),
                   mock.patch.object(CR, "CALL_STORE", self.calls_store)):
             p.start()
             self.addCleanup(p.stop)
@@ -216,8 +215,9 @@ class R1ChannelOrder(Base):
     def test_email_before_phone(self):
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]})
         self.expect(out, "request_email", "request_wait")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "email"))
+        self.assertEqual(out["status"], "to_tyler")   # Sasha 319 · the request is AgAPI's send; no venues key in this test → Tyler's
         self.assertNotIn("/api/booking/calls", self.api.paths())
+        self.assertNotIn("/api/booking/emails", self.api.paths())                # never Sasha's own email
 
     def test_phone_only_far_away_waits_to_call(self):
         # Sasha 269 · MOVED (CR 100): R3's call is the ACT's — its card (venue.submit_booking route "call"), never Sasha's own
@@ -341,7 +341,8 @@ class R6Hotel(Base):
 
     def test_a_restaurant_request_carries_no_call(self):
         self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=72)
-        self.assertNotIn("plan_line", self.api.bodies("/api/booking/emails")[0])
+        self.assertEqual(self.api.bodies("/api/booking/emails"), [])            # Sasha 319 · never Sasha's own email, so never its plan line
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
 
 
 class R5HotelNoReplySweep(unittest.TestCase):
@@ -489,8 +490,6 @@ class R8DepositAsked(unittest.TestCase):
                   mock.patch.object(GW, "venue_display", mock.AsyncMock(return_value="Casa Lucio")),
                   mock.patch.object(GW, "push_payment_question", mock.AsyncMock(side_effect=AssertionError("asked to pay"))),
                   mock.patch.object(CR.C, "place_call", mock.AsyncMock(side_effect=AssertionError("a confirmation call"))),   # Sasha 269 · moved
-                  mock.patch("booking_signer.followup.after_call", mock.AsyncMock(return_value=None)),
-                  mock.patch("booking_signer.followup.sms_ask", mock.AsyncMock(return_value="no")),
                   mock.patch("booking_signer.guest_receipt.send_after_call", mock.AsyncMock(return_value="sent"))):
             p.start()
             self.addCleanup(p.stop)

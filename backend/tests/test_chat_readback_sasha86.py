@@ -91,7 +91,7 @@ class TheReadBack(unittest.TestCase):
         self.assertNotIn(TABERNA, json.dumps(request, default=str))
         placed = self.c.post(f"/api/booking/calls/{prep.json()['call_id']}/place",
                              json={"read_back_sha256": prep.json()["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual(placed.json()["status"], "placed", placed.text)   # the yes to the shown words dials
+        self.assertEqual((placed.status_code, placed.json()["rule"]), (410, "venue_send_retired"))   # Sasha 319 · never Sasha's own call
 
 
 if __name__ == "__main__":

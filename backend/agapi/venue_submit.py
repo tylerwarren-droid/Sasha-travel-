@@ -463,7 +463,7 @@ async def bookings(account: str, read: bool = True) -> List[dict]:
         except Exception as e:
             log.warning("[venue_submit] acts not kept: %s", type(e).__name__)
     cancelled = {a.get("cancels") for a in acts if a.get("cancels") and STATE.get(str(a.get("state") or "")) == "confirmed"}
-    out = []
+    out, overdue = [], []
     for a in acts:
         if a.get("cancels") or a.get("changes"):
             continue   # the cancellation (Sasha 300: or the change) itself is said on the booking it's about
@@ -488,7 +488,43 @@ async def bookings(account: str, read: bool = True) -> List[dict]:
                     **({"wa": wa_line(a, state)} if a.get("channel") in MESSAGE_CHANNELS else {}),
                     **({"cancel": "asked — waiting for the venue"} if pend else {}),
                     **({"change": _change_of(acts, a["act_id"])} if _change_of(acts, a["act_id"]) else {})})
+        if state == "requested" and not pend and no_answer_yet(a):   # Sasha 324 · past its channel's wait: never a silent "requested"
+            out[-1].update(no_answer_yet=True, status_words="No answer yet")
+            if not a.get("no_answer_told"):
+                overdue.append(a)
+    if overdue:
+        await _told_no_answer(account, overdue)
     return out
+
+
+def no_answer_yet(a: dict, now: Optional[float] = None) -> bool:
+    """Sasha 324 · an act still waiting past its channel's expected wait (outcomes_week.WAIT_H, the one table): message acts by their
+    channel, a call by the phone's, anything else as a web form (its confirmation email). A page handed over is his: never."""
+    from agapi.outcomes_week import WAIT_H
+    ch = "phone" if a.get("route") == "call" else str(a.get("channel") or "web_form")
+    wait = WAIT_H.get(ch, 24)
+    sent = float(a.get("at") or 0)
+    return bool(wait is not None and sent and (now or time.time()) - sent > wait * 3600)
+
+
+async def _told_no_answer(account: str, acts: List[dict]) -> None:
+    """Said ONCE per booking (WhatsApp and /s2), and remembered on the act (no_answer_told) — never again on the next read."""
+    from booking_signer import live_events as LE
+    for a in acts:
+        line = f"No answer yet from {a.get('venue') or 'them'} — it isn't confirmed. I'll tell you the moment they reply."
+        try:
+            await LE._tell_whatsapp(account, line)
+            LE.publish(account, {"type": "proactive", "say": line})
+        except Exception as e:
+            log.warning("[venue_submit] the no-answer line wasn't said: %s", type(e).__name__)
+        a["no_answer_told"] = time.time()
+    keep = {a["act_id"]: a["no_answer_told"] for a in acts}
+    _ACTS[account] = [{**c, "no_answer_told": keep[c["act_id"]]} if c.get("act_id") in keep else c for c in (_ACTS.get(account) or [])]
+    try:
+        from agapi import s2_memory as M
+        await M.put_kind(account, "venue_acts", _ACTS[account])
+    except Exception as e:
+        log.warning("[venue_submit] the no-answer mark wasn't kept: %s", type(e).__name__)
 
 
 def _change_of(acts: List[dict], act_id: str) -> Optional[dict]:

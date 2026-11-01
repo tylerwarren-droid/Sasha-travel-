@@ -82,7 +82,11 @@ async def _send(op: str, body: dict, account: Optional[str] = None) -> Optional[
 
 
 async def booked(account: str, held: dict, venue: str, city: Optional[str], result: Optional[dict] = None, error: Optional[str] = None) -> None:
-    """book_venue acted: record the attempt and what happened at once. Never raises."""
+    """book_venue acted: record the attempt and what happened at once. Never raises.
+    Sasha 324 · NEVER an AgAPI act: AgAPI records its own act in this ledger (agapi:<act_id>, at venue.submit_booking) — recording it here
+    too counted every AgAPI booking twice since 319. Only an attempt AgAPI never saw is Sasha's to record."""
+    if held.get("rung") in ("agapi", "agapi_call"):
+        return
     rung, channel = RUNG.get(held.get("rung") or "", ("phone", "phone"))
     if held.get("rung") == "agapi":   # Sasha 254 · AgAPI's send: the rung the booking rules chose (agapi.venues.AGAPI_RUNG)
         from agapi.venues import AGAPI_RUNG
@@ -130,6 +134,45 @@ async def settle(timeout: float = 5.0) -> int:
     if pending:
         await asyncio.wait(pending, timeout=timeout)
     return len(pending)
+
+
+# ── Sasha 324 · an attempt that ENDED BEFORE any act (handed to Tyler, refused, not prepared): its outcome, on the one ledger ────────
+#: the tools that book, change or cancel — an outcome ends one of these
+ACTING = {"book_venue", "hold_venue", "cancel_venue", "change_booking", "cancel_booking", "running_late", "book"}
+#: a result that ends the attempt with nothing sent (its status → the reason said on the ledger)
+NO_ACT = {"to_tyler": "handed to Tyler", "not_sent": "handed to Tyler — not sent", "not_contacted": "not allowed to contact venues",
+          "not_called": "not called", "not_possible": "not possible from here", "not_cancelled": "not cancelled"}
+#: errors that END an attempt (a question back to the person — a missing detail, a yes still to come — does not)
+ENDS = {"not_prepared", "no_route", "not_bookable", "payments_unreachable", "airline_unreachable", "store_unreachable", "booking_unknown"}
+
+
+def ended_without_act(tool: str, ok: bool, out: Any, code: Optional[str]) -> Optional[str]:
+    """→ why, when this tool call ENDED a booking / change / cancel with no act of AgAPI's (its outcome is then Sasha's to record); else
+    None (an act exists — AgAPI records it — or the attempt goes on)."""
+    if tool not in ACTING:
+        return None
+    if not ok:
+        return f"failed: {code}" if code in ENDS else None
+    st = str((out or {}).get("status") or "") if isinstance(out, dict) else ""
+    if (out or {}).get("act_id") if isinstance(out, dict) else False:
+        return None
+    return NO_ACT.get(st)
+
+
+async def no_act(account: Optional[str], tool: str, why: str, out: Any = None, args: Optional[dict] = None) -> None:
+    """The outcome of an attempt that ended before any act — recorded ONCE on the ledger (failed + why), from the one choke point (v0.call).
+    Never the person's details: the venue's name, the kind, the channel. Never raises."""
+    if not account:
+        return
+    o = out if isinstance(out, dict) else {}
+    a = args or {}
+    venue = str(o.get("venue") or a.get("name") or a.get("venue") or "unknown")[:120]
+    kind = {"cancel_venue": "cancel", "cancel_booking": "cancel", "change_booking": "change", "running_late": "change"}.get(tool, "booking")
+    body = {"ref": f"sasha:noact:{secrets.token_hex(8)}", "venue": venue, "rung": "human_tap", "channel": "handover", "state": "failed",
+            "failure_reason": f"{why} ({kind})"[:300],
+            **({"sector": str(a.get("what") or a.get("category") or "")[:40]} if (a.get("what") or a.get("category")) else {}),
+            **({"city": str(a.get("city"))[:80]} if a.get("city") else {})}
+    await _send("outcomes.record", body, account)
 
 
 async def basket_booked(account: str, rows: list) -> int:

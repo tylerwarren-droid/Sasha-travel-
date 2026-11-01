@@ -216,7 +216,8 @@ async def agapi_rows(account: Optional[str]) -> List[dict]:
              "declined": ST.WORDS["declined"], "cancelled": "Cancelled"}
     return [{"id": a["act_id"], "venue": a.get("venue") or "", "date": a.get("date"), "time": a.get("time"), "status": a.get("status"),
              "party": a.get("party"), "type": "venue", "channel": "agapi", "booking_reference": a.get("reference"),
-             **({"status_words": words[a["status"]]} if a.get("status") in words else {})}
+             **({"status_words": words[a["status"]]} if a.get("status") in words else {}),
+             **({"status_words": "No answer yet", "no_answer_yet": True} if a.get("no_answer_yet") else {})}   # Sasha 324
             for a in acts if a.get("act_id")]
 
 

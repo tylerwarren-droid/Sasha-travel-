@@ -1516,6 +1516,18 @@ READ_BACK_HOW = ("This is the trip as it stands. When you read it back, end with
                  "stays are estimates. Never add up the items yourself. The dates are start and end, as on the trip.")
 
 
+async def booking_outcomes(ctx: Ctx, a: dict) -> dict:
+    """Sasha 324 · the week, read-only (agapi.outcomes_week): the founder's question "how is Sasha doing?" answered from the one ledger."""
+    from app.services.accounts import is_founder
+    from agapi import outcomes_week as OW
+    if not is_founder(ctx.account):
+        raise ToolError("founder_only", "this is the founder's view of every booking — not for this account")
+    w = await OW.week(int(a.get("days") or 7))
+    if not w.get("ok"):
+        raise ToolError("ledger_unreachable", w.get("say") or "the outcomes ledger didn't answer")
+    return {k: w[k] for k in ("count", "outcomes", "no_answer", "handed_to_tyler", "by_channel", "by_kind", "unhandled", "excluded_test", "say")}
+
+
 async def get_trip(ctx: Ctx, a: dict) -> dict:
     """The trip as it stands, from the ONE trip record (its dates) and the ONE total — Sasha 251 · the read-back carries
     basket.trip_figures()' total (found live 12 Oct: she read the items back and gave no total). Read only."""
@@ -1645,6 +1657,10 @@ TOOLS: List[dict] = [
        [], {"type": "object", "properties": {"status": {"type": "string"}}}, ["booking_unknown", "no_explicit_yes", "not_cancelled", "already_done", "store_unreachable"], austen=True),
     _t("get_status", "Pacioli", get_status, "What is booked, failed, cancelled or awaiting payment — the ONLY source for booked/paid/confirmed.",
        {}, [], {"type": "object", "properties": {"booked": {"type": "array"}, "anything_booked": {"type": "boolean"}}}, ["no_trip"]),
+    _t("booking_outcomes", "Pacioli", booking_outcomes, "FOUNDER ONLY, read-only: this week's REAL bookings and their outcomes — confirmed, "
+       "declined, failed (handed to Tyler), no answer yet — the rate per channel and per kind, and the couldn't-handle list with its counts. "
+       "Say its `say` as it is.", {"days": {"type": "integer", "minimum": 1, "maximum": 31}}, [],
+       {"type": "object", "properties": {"count": {"type": "integer"}, "say": {"type": "string"}}}, ["founder_only", "ledger_unreachable"]),
     _t("get_trip", "Pacioli", get_trip, "The trip as it stands: days and stays, the chosen flights, each item's state.", {}, [],
        {"type": "object"}, ["no_trip"]),
     _t("get_total", "Pacioli", get_total, "The whole trip's total from the basket (what booking would charge).", {}, [], TOTAL, ["no_trip"]),
@@ -1758,6 +1774,15 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
                       **({"code": res["error"]["code"]} if not res["ok"] else {})})
     from agapi import measure as MS   # Sasha 275 · S1 measure — observation only: how far a booking got, and why it stopped
     MS.tool(ctx, name, args, res, ctx.calls[-1]["ms"])
+    # Sasha 324 · THE ONE CHOKE POINT: a booking, change or cancel that ENDED with no act of AgAPI's (to Tyler, refused, not prepared) —
+    # its outcome on the one ledger, once, for every surface (an AgAPI act records its own)
+    from agapi import s2_outcomes as _OC
+    _why = _OC.ended_without_act(name, res["ok"], out, (res.get("error") or {}).get("code"))
+    if _why:
+        try:
+            await _OC.no_act(ctx.account, name, _why, out, args)
+        except Exception as e:   # a ledger that doesn't answer never stops her answer
+            log.warning("[v0] the outcome of %s wasn't recorded: %s", name, type(e).__name__)
     if key and res["ok"]:
         _IDEM[key] = res
         try:

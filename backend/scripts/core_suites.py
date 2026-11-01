@@ -101,13 +101,16 @@ async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
         h = (v or {}).get("messages") or h
         seen.append(_said(v))
         print(f"   · {said!r} → {_said(v)[:150]!r}", flush=True)
-    for _ in range(6):
+    for _ in range(8):
         made = [x for x in await VSB.acts_of(a) if float(x.get("at") or 0) >= before]
         if made:
             return made, seen
         s = _said(v)
-        said = (contact if re.search(r"(?i)whose name|what name|which name|your name|name and (?:a )?(?:phone|number)", s)
-                else "Handle it" if (BR.PHRASES["ask_book"] in s or re.search(r"(?i)prefilled|handle it", s)) else "yes")
+        # Sasha 323 · answered as a guest would, in THIS order: the rules' one question first ("…prefilled form… or shall I handle it?"
+        # — found on 972a6a6: "the booking will go under your name. I'll book it. Want a prefilled form…" was answered with the contact);
+        # a name only when she ASKS for one; else her read-back's yes
+        asks_name = re.search(r"(?i)(?:whose name|what name|which name|name and (?:a |your )?(?:phone|number|mobile))[^.?!]*\?", s)
+        said = ("Handle it" if (BR.PHRASES["ask_book"] in s or re.search(r"(?i)prefilled|handle it", s)) else contact if asks_name else "yes")
         AGS._MINUTE.pop(a, None)
         v = await VT.turn(a, said, h)
         h = (v or {}).get("messages") or h

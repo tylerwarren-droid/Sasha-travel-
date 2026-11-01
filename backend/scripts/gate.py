@@ -46,6 +46,8 @@ async def main() -> int:
     os.environ["SASHA_AGAPI_ROUTE"] = (os.getenv("SASHA_AGAPI_ROUTE", "") + ",outcomes=sandbox").lstrip(",")
     from agapi import venue_submit as _VSB
     real_call = _VSB.CALL   # Sasha 321 · AgAPI's real sender, for the voice proof after the verdict
+    from agapi import venue_truth as _VTR
+    real_engine = _VTR.CALL   # … and its real venue read
     from scripts import venue_engine_fake   # Sasha 248 · the venue engine's saved answers: no AgAPI read from a suite
     venue_engine_fake.install(submit=True)   # Sasha 254 · + the booking sender: nothing reaches AgAPI live
     # Sasha 254 item 5 · the access record: every gate guest is a scratch account with no person_access row, so it reads CLOSED
@@ -82,7 +84,7 @@ async def main() -> int:
     if not bad:   # Sasha 321 · after the verdict, never part of it: one voice-avatar booking at the test venue on the REAL sandbox
         from scripts import voice_proof
         try:
-            await voice_proof.run(real_call)
+            await voice_proof.run(real_call, real_engine)
         except Exception as e:
             print(f"voice proof: ⚠ {type(e).__name__}")
     return 1 if bad else 0

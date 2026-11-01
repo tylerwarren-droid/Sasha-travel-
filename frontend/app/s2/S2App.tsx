@@ -55,6 +55,7 @@ type Card =
   | { k: 'claim_status'; claim: Ev }
   | { k: 'handover'; url: string; external: boolean; label?: string; alts?: { label: string; link: string }[] }
   | { k: 'operators'; line: string; buttons: { label: string; url: string }[] }   // Sasha 320 · CR 150: the trip line + one button per page   // Sasha 236 · Tap to finish · 286: the floor's button + alternatives
+  | { k: 'reconnect'; label: string; url: string }   // Sasha 323 · a link that stopped working: one tap to fix it (/you)
   | { k: 'trip' }                                        // Sasha 236 · the trip changed: one tap to the Trip board · 283: it says what the trip is
   | { k: 'did_it'; key: string; venue: string; done?: boolean }   // Sasha 283 · item 4c · the way back: her ONE question, its two answers
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
@@ -486,6 +487,8 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
             style={{ padding: '10px 16px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>{untag(b.label)}</a>))}
       </div>
     </Box>)
+  if (c.k === 'reconnect') return (   /* Sasha 323 · the mailbox link died: told once, one tap to /you */
+    <a href={c.url} data-reconnect style={{ display: 'inline-block', marginTop: 6, padding: '10px 18px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>{c.label}</a>)
   if (c.k === 'trip') return <TripCard />
   if (c.k === 'did_it') return (   // Sasha 283 · item 4c · the tap IS his answer (on the hand-over's one record)
     <Box k="Your booking" h={untag(c.venue)}>
@@ -678,7 +681,8 @@ export default function S2App() {
         markNews(j.news.key)
         const nt = untag(String(j.news.text))
         newsRef.current = nt
-        setTimeout(() => setMsgs(ms => [...ms, { role: 'sasha', text: nt, cards: [] }]), 0)
+        const nc: Card[] = typeof j.news.url === 'string' && j.news.url.startsWith('/') ? [{ k: 'reconnect', label: 'Reconnect Gmail', url: j.news.url }] : []   // Sasha 323
+        setTimeout(() => setMsgs(ms => [...ms, { role: 'sasha', text: nt, cards: nc }]), 0)
       }
       const r = rule4(mid)
       const greet = r.greet && r.lead === 'hello'
@@ -732,6 +736,8 @@ export default function S2App() {
         const card: Card[] = ev.render?.kind === 'counter_card' && ev.render.card ? [{ k: 'counter_card', card: ev.render.card }]
           : ev.render?.kind === 'subscriptions' && Array.isArray(ev.render.items)   // Sasha 260 · their receipts, read after the turn: the same card
             ? [{ k: 'subscriptions', items: ev.render.items, total: ev.render.total, source: ev.render.source }]
+          : ev.render?.kind === 'reconnect' && ev.render.url   // Sasha 323 · the Gmail link stopped working: one tap to reconnect
+            ? [{ k: 'reconnect', label: String(ev.render.label || 'Reconnect'), url: String(ev.render.url) }]
           : ev.render?.kind === 'no_answer' && ev.render.act_id   // Sasha 269 · a call nobody picked up: AgAPI's question, as a card
             ? [{ k: 'no_answer', act_id: String(ev.render.act_id), ask: ev.render.ask || undefined, page: ev.render.page || undefined,
                  choices: Array.isArray(ev.render.choices) ? ev.render.choices : [] }] : []

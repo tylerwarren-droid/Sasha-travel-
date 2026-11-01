@@ -140,9 +140,15 @@ class TheTripTabReadsTheOneBookingRecord(unittest.TestCase):
                  "status": "confirmed", "type": "venue", "reference": "TV-CCFD94-87"},
                 {"trip_item_id": None, "act_id": "act_tc1", "venue": "Taverna Correo", "date": "2026-11-07", "time": "21:00", "party": 2,
                  "status": "requested", "type": "venue"}]
-        with mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=acts)), mock.patch.object(JN, "_run", lambda: None), \
-                mock.patch.object(JN, "_extra", mock.AsyncMock(return_value=({}, []))), mock.patch.object(JN, "product_rows", mock.AsyncMock(return_value=[])):
-            j = run(JN.journeys(ACCT, []))
+        # Sasha 323 · re-pointed: these are a TEST person's bookings at Kanoe's test venues (how a test person books) — shown to them;
+        # a person whose record is live never sees them (journeys.shown_to)
+        def tab(mode):
+            with mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=acts)), mock.patch.object(JN, "_run", lambda: None), \
+                    mock.patch.object(JN, "_extra", mock.AsyncMock(return_value=({}, []))), mock.patch.object(JN, "product_rows", mock.AsyncMock(return_value=[])), \
+                    mock.patch("agapi.test_venues.mode_of", mock.AsyncMock(return_value=mode)):
+                return run(JN.journeys(ACCT, []))
+        self.assertEqual((tab("live")["receipts"], tab("live")["everything"]), ([], []))
+        j = tab("test")
         self.assertEqual([r["id"] for r in j["receipts"]], ["act_tv1"])
         self.assertEqual(j["receipts"][0]["booking_reference"], "TV-CCFD94-87")
         self.assertIn("TEST", j["receipts"][0]["status_words"])                # a test venue's booking is never shown as a real one

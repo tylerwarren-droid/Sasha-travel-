@@ -220,6 +220,46 @@ async def agapi_rows(account: Optional[str]) -> List[dict]:
             for a in acts if a.get("act_id")]
 
 
+# ── Sasha 323 · MY BOOKINGS, DEMO-CLEAN — the ONE rule /you and S2's trip both read ───────────────────────────────────────────────
+#: a booking that is over, whatever its day: under "Show history"
+OVER = ("cancelled", "declined", "failed")
+
+
+def is_scratch(r: dict) -> bool:
+    """A booking a real person must never see: Kanoe's test venues (Sasha Test Venue, Taverna Correo / Sandbox, any "(TEST …)" or
+    "(sandbox)" stand-in), a TEST-/TV- reference, a row marked test."""
+    from agapi import test_venues as TV
+    from . import plan_store as PS
+    v = str(r.get("venue") or "")
+    return PS._is_test(r) or TV.names_test_venue(v) or "(sandbox" in v.lower() or "(test" in v.lower()
+
+
+async def shown_to(account: Optional[str], rows: List[dict]) -> List[dict]:
+    """A person whose access record is live never sees a test or scratch booking; a test person sees theirs (it is how they book)."""
+    if not account:
+        return rows
+    from agapi import test_venues as TV
+    try:
+        live = await TV.mode_of(account) == "live"
+    except Exception as e:   # unread → as a live person: never a test booking on a real screen
+        log.info("[journeys] the person's mode not read: %s", type(e).__name__)
+        live = True
+    return [r for r in rows if not is_scratch(r)] if live else rows
+
+
+def booking_view(rows: List[dict], today: Optional[str] = None) -> tuple:
+    """→ (upcoming, history). Upcoming: not over and today or later (or no day yet), soonest first. History: over (cancelled, declined,
+    failed) or past, newest first."""
+    from datetime import date as _d
+    today = today or _d.today().isoformat()
+    past = [r for r in rows if r.get("status") in OVER or (r.get("date") and str(r["date"]) < today)]
+    ids = {id(r) for r in past}
+    up = [r for r in rows if id(r) not in ids]
+    up.sort(key=lambda r: (str(r.get("date") or "9999-12-31"), str(r.get("time") or "")))
+    past.sort(key=lambda r: (str(r.get("date") or ""), str(r.get("time") or "")), reverse=True)
+    return up, past
+
+
 async def journeys(account: Optional[str], rows: List[dict]) -> dict:
     """The tabs, from the account's reservations (each carries its trip_id)."""
     run = _run()
@@ -232,6 +272,7 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
     cities, saved = await _extra(account) if account else ({}, [])
     from . import plan_store as PS
     rows = PS.truthful(list(rows) + await agapi_rows(account)) + saved   # Sasha 179 · TEST never "Confirmed"; Sasha 178 · parked, unbooked: in their tab AND in Requests
+    rows = await shown_to(account, rows)   # Sasha 323 · a real person never sees a test or scratch booking — every list below
     ids = {p["trip_id"] for p in plans}
     # Sasha 177 (3) · EVERY PRODUCT WRITES HERE: CampusMe visits, RelocateMe's deadlines and appointments, EspañaMe's follow-ups
     prod = await product_rows(account)
@@ -308,7 +349,8 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
             # Sasha 181 · real bookings, kept, and real PLATFORM bookings cancelled (a TEST one never: the reset cleared those)
             "receipts": [r for r in rows if r.get("status") in BOOKED or (r.get("status") == "cancelled" and not PS._is_test(r)
                                                                           and r.get("channel") == "link")],   # a platform's, cancelled
-            "everything": sorted(rows, key=lambda r: f"{r.get('date') or '9'}{r.get('time') or ''}")}
+            # Sasha 323 · My bookings: upcoming first; past and cancelled behind "Show history" (booking_view, the one rule)
+            "everything": booking_view(rows)[0], "history": booking_view(rows)[1]}
 
 
 def _upcoming(r: dict) -> bool:

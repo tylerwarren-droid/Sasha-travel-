@@ -480,13 +480,22 @@ async def sync(account: str) -> List[dict]:
     from . import guest_whatsapp as GW
     from .vault import crypto as VC
     link = await STORE.get_link(account)
-    if not link or link.get("needs_reconnect_at"):
+    if not link:
+        return []
+    if link.get("needs_reconnect_at"):   # Sasha 323 · dead: said once (a link that died before 323 is told on its first sync after)
+        if not link.get("told_reconnect_at"):
+            await link_dead(account, link, "already marked")
         return []
     try:
         token = await VC.use_connection(account, link["vault_item_id"], purpose="gmail_read")
     except VC.UseRefused as e:
-        if e.rule == "connection_invalid_grant":
-            await STORE.set_link(account, needs_reconnect_at=NOW())
+        if transient(e.rule):   # Google busy / unreachable: not a death — retried on the next sync
+            log.warning("[mailbox] the Gmail link's token refresh failed for now (%s) — retried next sync", e.rule)
+        else:
+            await link_dead(account, link, e.rule)
+        return []
+    except Exception as e:   # the network itself: not a death
+        log.warning("[mailbox] the Gmail link's token refresh failed for now (%s) — retried next sync", type(e).__name__)
         return []
     rows = await GW._upcoming(account, names=False) if GW.STORE else []   # Sasha 143 · domains only: no listing re-read
     domains = [r.get("venue_domain") for r in rows if r.get("venue_domain")]
@@ -537,6 +546,48 @@ async def sync(account: str) -> List[dict]:
     await STORE.set_link(account, last_sync_at=now)
     await _offer_on_whatsapp(account, [f for f in found if f["offered_action"]])
     return found
+
+
+# ── Sasha 323 · THE LINK NEVER DIES SILENTLY ────────────────────────────────────────────────────────────────────────
+# The one truth for "is the Gmail link alive" is the token refresh every sync starts with (the link's needs_reconnect_at). A refusal
+# Google means (anything but a 5xx / 429 / network failure — invalid_grant is the 7-day expiry of an app in "Testing") marks it dead
+# and Tyler is told ONCE, in that same sync, on WhatsApp and on /s2 (told_reconnect_at). Reconnecting clears both (put_link), so the
+# next death is told again. No timer, no reminder loop.
+RECONNECT_LINE = "Your Gmail link stopped working. Tap to reconnect"
+
+
+def reconnect_url() -> str:
+    return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/you#gmail"
+
+
+def transient(rule: str) -> bool:
+    """A refusal that is not the link dying: Google answering 5xx / 429 (connection_http_5xx, connection_http_429)."""
+    return bool(re.fullmatch(r"connection_http_(5\d\d|429)", rule or ""))
+
+
+async def link_dead(account: str, link: dict, rule: str) -> dict:
+    """Marked dead (if not yet) and told ONCE — WhatsApp (the line + its link) and /s2 (the line now on an open page, kept for its
+    next visit, with one button to /you). → {told: whatsapp result | None, s2: bool}."""
+    from . import live_events as LE
+    now = NOW()
+    if not link.get("needs_reconnect_at"):
+        await STORE.set_link(account, needs_reconnect_at=now)
+    log.warning("[mailbox] the Gmail link's token refresh was refused: %s — it needs a reconnect", rule)
+    if link.get("told_reconnect_at"):
+        return {"told": None, "s2": False}
+    url = reconnect_url()
+    wa = await LE._tell_whatsapp(account, f"{RECONNECT_LINE}: {url}")
+    s2 = False
+    try:
+        LE.publish(account, {"type": "proactive", "say": RECONNECT_LINE + ".",
+                             "render": {"kind": "reconnect", "label": "Reconnect Gmail", "url": "/you#gmail"}})
+        await LE.keep_news(account, f"mailbox-reconnect:{now.date().isoformat()}", RECONNECT_LINE + ".", url="/you#gmail")
+        s2 = True
+    except Exception as e:
+        log.warning("[mailbox] the reconnect line wasn't kept for /s2: %s", type(e).__name__)
+    await STORE.set_link(account, told_reconnect_at=now)   # once: both doors were tried in this same sync
+    log.info("[mailbox] the reconnect line: WhatsApp %s, /s2 %s", wa, s2)
+    return {"told": wa, "s2": s2}
 
 
 async def _told_auto(account: str, action: str, facts: dict, row: dict) -> None:

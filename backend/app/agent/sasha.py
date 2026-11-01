@@ -2124,7 +2124,8 @@ async def s2_memory(request: Request, session: str = ""):
     try:
         out = {"ok": True, **(await MEM.recall(account, session[:64] or None, surface="s2"))}
         news = await LE.take_news(account)   # Sasha 279 · B: a booking finished while they were away — her return leads with it, once
-        return {**out, **({"news": {"key": news.get("key"), "text": news["text"]}} if news else {})}
+        return {**out, **({"news": {"key": news.get("key"), "text": news["text"], **({"url": news["url"]} if news.get("url") else {})}}
+                           if news else {})}
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}

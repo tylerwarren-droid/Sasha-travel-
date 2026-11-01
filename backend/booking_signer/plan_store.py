@@ -473,6 +473,8 @@ def short_status(b: dict) -> str:
 async def view(account: Optional[str], p: dict, bookings: List[dict]) -> dict:
     """Sasha 198 R3 · THE VIEW every surface shows (web panel, WhatsApp, voice, ask-anything): merge(), and with the basket on
     (SASHA_BASKET=1) each day's stay and the trip's flights from the basket — the same on all three."""
+    from . import journeys as JN
+    bookings = await JN.shown_to(account, list(bookings or []))   # Sasha 323 · a real person's trip never shows a test or scratch booking
     m = merge(p, bookings)
     from . import basket as BK
     if account and p.get("trip_id") and BK.on():

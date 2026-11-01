@@ -160,10 +160,11 @@ async def _close(account: str, key: str) -> None:
         log.warning("[live_events] closed key not kept: %s", type(e).__name__)
 
 
-async def keep_news(account: str, key: str, text: str) -> None:
+async def keep_news(account: str, key: str, text: str, url: Optional[str] = None) -> None:
+    """url (Sasha 323): one button with it on /s2 (the reconnect line's /you)."""
     try:
         from agapi import s2_memory as M
-        await M.put_kind(account, "news", {"key": key, "text": text, "at": time.time()})
+        await M.put_kind(account, "news", {"key": key, "text": text, "at": time.time(), **({"url": url} if url else {})})
     except Exception as e:
         log.warning("[live_events] news not kept: %s", type(e).__name__)
 

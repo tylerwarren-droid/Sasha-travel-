@@ -74,7 +74,7 @@ type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting' 
 type JGetting = { title: string; text: string; say: string; entry_date?: string | null; to?: string }
 type Journeys = { journeys: { key: string; label: string; title: string; start?: string | null; end?: string | null; count: number
     virtual?: boolean; extras?: JRow[]; forms?: JForm[]; getting_there?: JGetting }[]
-  home: { label: string; items: JRow[] }; requests: JRow[]; receipts: JRow[]; everything: JRow[] }
+  home: { label: string; items: JRow[] }; requests: JRow[]; receipts: JRow[]; everything: JRow[]; history?: JRow[] }   // Sasha 323 · history: past + cancelled
 /** Sasha 177 · the account's journeys and lists, polled like the plan (a booking made on WhatsApp shows within seconds) */
 function useJourneys(): Journeys | null {
   const [j, setJ] = useState<Journeys | null>(null)
@@ -116,6 +116,16 @@ function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
         ))}
       </div></div>
     </>
+  )
+}
+/** Sasha 323 · past and cancelled bookings — kept, folded behind one tap */
+function PastList({ rows }: { rows: JRow[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button className="lw-chip" data-show-history onClick={() => setOpen(o => !o)}>{open ? 'Hide history' : `Show history · ${rows.length}`}</button>
+      {open ? <JourneyList title="History" rows={rows} /> : null}
+    </div>
   )
 }
 const FORM_MARK: Record<JForm['state'], string> = { filled: '✓ Prepared — sign it', signed: '✓ Signed', missing: '☐ Still yours to do', waiting: '⏳ Waiting',
@@ -220,7 +230,7 @@ export default function TripPanel({
       {(jn?.home.items.length ?? 0) > 0 && <button className="lw-chip" style={chip(view === 'home')} onClick={() => setView('home')}>{jn?.home.label ?? 'Home'} · {jn!.home.items.length}</button>}{/* Sasha 181 · no empty home tab */}
       <button className="lw-chip" style={chip(view === 'requests')} onClick={() => setView('requests')}>Requests{jn?.requests.length ? ` · ${jn.requests.length}` : ''}</button>
       <button className="lw-chip" style={chip(view === 'receipts')} onClick={() => setView('receipts')}>Receipts</button>
-      <button className="lw-chip" style={chip(view === 'everything')} onClick={() => setView('everything')}>Everything</button>
+      <button className="lw-chip" style={chip(view === 'everything')} onClick={() => setView('everything')}>My bookings</button>
     </div>
   )
   const curJ = (jn?.journeys ?? []).find((t) => t.key === activeTrip)
@@ -244,8 +254,10 @@ export default function TripPanel({
   if (view !== 'trip') {
     const rows = !jn ? null : view === 'home' ? jn.home.items : view === 'requests' ? jn.requests : view === 'receipts' ? jn.receipts : jn.everything
     const title = view === 'home' ? `${jn?.home.label ?? 'Home'} — outside any trip` : view === 'requests' ? 'Waiting on a reply'
-      : view === 'receipts' ? 'Booked' : 'Everything, by date'
-    return <div className="lw-trip">{tabs}<JourneyList title={title} rows={rows} /></div>
+      : view === 'receipts' ? 'Booked' : 'Coming up'
+    // Sasha 323 · My bookings, demo-clean: upcoming first (the server's booking_view); past and cancelled behind "Show history"
+    const past = view === 'everything' ? (jn?.history ?? []) : []
+    return <div className="lw-trip">{tabs}<JourneyList title={title} rows={rows} />{past.length ? <PastList rows={past} /> : null}</div>
   }
   const serverDay = (n: number): ServerDay | undefined => (server?.days ?? []).find((x) => x.day === n)
   // Sasha 249 · ONE STATUS (EU 245 §1.12): the banner said "✓ Paid … · not booked yet" from a client bookingRef prop. It now says

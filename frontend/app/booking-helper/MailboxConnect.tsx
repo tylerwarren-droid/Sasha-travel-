@@ -108,7 +108,7 @@ export function MailboxConnect() {
       )}
       {view && view.configured && view.invited !== false && !view.connected && gmailOffer({ email, connected: view.connected, expired: view.expired, opened }) === 'full' && (
         <div className="space-y-2">
-          {view.expired && <p><strong>Expired, reconnect.</strong> In Google&rsquo;s testing mode a connection lasts 7 days.</p>}
+          {view.expired && <p><strong>Your Gmail link stopped working.</strong> Google stopped accepting it — reconnect once and Sasha sees your booking emails again.</p>}
           <label className="flex items-start gap-2"><input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} /><span>{view.consent.text}</span></label>
           <GatedButton label={view.expired ? 'Reconnect Gmail' : 'Connect Gmail (read-only)'} onClick={() => { connect() }}
             needs={[!ticked && 'the box above ticked', busy && 'the last step to finish']} />

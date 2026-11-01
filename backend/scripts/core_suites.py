@@ -76,12 +76,27 @@ TO_TYLER_WORDS = "hand this to Tyler"
 async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +34 600 000 000") -> tuple:
     """Sasha 321 · a venue booking on the voice avatar / REST chat, answered as a guest would until AgAPI has an act (or 6 more turns):
     → (the acts AgAPI made in it, every line she said). The one brain decides how many questions; the gate checks the act."""
-    from agapi import venue_submit as VSB, venues as VNS
+    from agapi import person_access as PA, venue_submit as VSB, venues as VNS
+    from app.agent import sasha as AGS
     VNS._SENT.pop(a, None)   # each booking here is its own (AgAPI's path answers a repeated yes "already sent")
     VNS._HELD.pop(a, None)
+    # as venue_suite: this scratch guest's own record (person_access test hook — never a real grant), mode "test" so every AgAPI call
+    # goes to the sandbox (the gate's stand-in, or the real sandbox in voice_proof); without it the guest reads CLOSED (no venue sends)
+    PA.install({a: {**PA.FOUNDER_PERSON, "mode": "test"}})
+    from booking_signer import guest_whatsapp as GWS
+    await GWS.STORE.put_state(VT.voice_key(a), {"history": [], "pending": None, "last_inbound_at": None})   # each booking its own talk
     before = len(await VSB.acts_of(a))
+    try:
+        return await _voice_turns(a, turns, VT, BR, contact, before, AGS)
+    finally:
+        PA.uninstall(a)
+
+
+async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
+    from agapi import venue_submit as VSB
     h, seen, v = [], [], None
     for said in turns:
+        AGS._MINUTE.pop(a, None)   # a guest replayed at machine speed is not "going faster than I can keep up" (TURNS_PER_MIN)
         v = await VT.turn(a, said, h)
         h = (v or {}).get("messages") or h
         seen.append(_said(v))
@@ -93,6 +108,7 @@ async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +34 
         s = _said(v)
         said = (contact if re.search(r"(?i)whose name|what name|which name|your name|name and (?:a )?(?:phone|number)", s)
                 else "Handle it" if (BR.PHRASES["ask_book"] in s or re.search(r"(?i)prefilled|handle it", s)) else "yes")
+        AGS._MINUTE.pop(a, None)
         v = await VT.turn(a, said, h)
         h = (v or {}).get("messages") or h
         seen.append(_said(v))

@@ -1,0 +1,148 @@
+{
+ "venue_id": "ven_b6d45986d08251c75b627a86",
+ "site": "sasha-travel-production.up.railway.app",
+ "url": "https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain",
+ "read_at": "2026-11-01T13:09:49Z",
+ "robots": "robots.txt: none (HTTP 404) \u2014 reading allowed",
+ "facts": {
+  "name": {
+   "value": null,
+   "listed_as": "Sasha Test Venue",
+   "source": "the page's own heading \u2014 read without the AI reader",
+   "fallback": true
+  },
+  "type": null,
+  "city": null,
+  "hours": null,
+  "price_range": null
+ },
+ "read_rules": "reader/11 \u00b7 CR 121b",
+ "kind": null,
+ "withheld": [],
+ "photos": [],
+ "booking": {
+  "rung": 2,
+  "rung_label": "web form",
+  "channel": "their own booking form",
+  "evidence": "fields: D\u00eda, Hora, Personas, Nombre, Email, Tel\u00e9fono, Comentarios, website_url",
+  "evidence_on": "https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain",
+  "how": "form",
+  "partner": null,
+  "also": [],
+  "say": "DIVE fills their booking form, as a guest would."
+ },
+ "confirm": {
+  "type": "request_reply",
+  "basis": "their own booking form: a request \u2014 they confirm after it is sent"
+ },
+ "form": {
+  "page": "https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain",
+  "host": "sasha-travel-production.up.railway.app",
+  "action": "https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain",
+  "method": "POST",
+  "title": "Sasha Test Venue \u2014 reservas",
+  "captcha": false,
+  "required": [
+   "fecha",
+   "hora",
+   "personas",
+   "nombre",
+   "email",
+   "telefono"
+  ],
+  "formats": {
+   "date": "YYYY-MM-DD",
+   "time": "HH:MM",
+   "party": "a number"
+  },
+  "fields": [
+   {
+    "name": "fecha",
+    "label": "D\u00eda",
+    "type": "date",
+    "required": true,
+    "role": "date"
+   },
+   {
+    "name": "hora",
+    "label": "Hora",
+    "type": "time",
+    "required": true,
+    "role": "time"
+   },
+   {
+    "name": "personas",
+    "label": "Personas",
+    "type": "number",
+    "required": true,
+    "role": "party",
+    "min": "1",
+    "max": "20"
+   },
+   {
+    "name": "nombre",
+    "label": "Nombre",
+    "type": "text",
+    "required": true,
+    "role": "name"
+   },
+   {
+    "name": "email",
+    "label": "Email",
+    "type": "email",
+    "required": true,
+    "role": "email"
+   },
+   {
+    "name": "telefono",
+    "label": "Tel\u00e9fono",
+    "type": "tel",
+    "required": true,
+    "role": "phone"
+   },
+   {
+    "name": "comentarios",
+    "label": "Comentarios",
+    "type": "textarea",
+    "required": false,
+    "role": "notes"
+   },
+   {
+    "name": "website_url",
+    "label": "website_url",
+    "type": "text",
+    "required": false
+   }
+  ],
+  "submit": "Reservar",
+  "source": "site"
+ },
+ "channels": [
+  {
+   "kind": "own_form",
+   "source": "site",
+   "url": "https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain",
+   "host": "sasha-travel-production.up.railway.app",
+   "owner": "kanoe"
+  }
+ ],
+ "cached": false,
+ "age_days": 0,
+ "identity": {
+  "name": "Sasha Test Venue",
+  "source": "the place card"
+ },
+ "decision": {
+  "route": "send_form",
+  "channel": "their own booking form",
+  "how_far": "zero_touch",
+  "say_text": "I can fill in Sasha Test Venue's own booking form and send it for you \u2014 just say yes.",
+  "button": {
+   "label": "Send my request",
+   "link": "https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain",
+   "sends": true
+  },
+  "version": "handoff/2.3 \u00b7 2026-10-25"
+ },
+ "fixture": "Sasha 321 \u00b7 AgAPI sandbox venue.profile of Kanoe's own test venue form, read 1 Nov 2026 (the one path's channel + decision)"
+}

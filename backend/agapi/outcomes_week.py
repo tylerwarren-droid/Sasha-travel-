@@ -66,7 +66,9 @@ CALL = _live   # tests replace it
 async def week(days: int = 7, now: Optional[datetime] = None) -> Dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     since = (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rep = await CALL("outcomes.report", {"from": since, "by": ["channel", "sector"]})
+    # AgAPI's report groups by its own fields only (rung · sector · city — "by":["channel"] was refused at /by/0, 3c3a70e's log): per
+    # channel = per rung (AgAPI's channel family: request_reply · phone · zero_touch · human_tap · api), per kind = per sector
+    rep = await CALL("outcomes.report", {"from": since, "by": ["rung", "sector"]})
     if not rep.get("ok"):
         return {"ok": False, "why": (rep.get("error") or {}).get("message") or "the outcomes ledger didn't answer",
                 "say": "I couldn't read this week's bookings — " + ((rep.get("error") or {}).get("message") or "the ledger didn't answer") + "."}
@@ -94,7 +96,7 @@ async def week(days: int = 7, now: Optional[datetime] = None) -> Dict[str, Any]:
     o = r.get("overall") or {}
     out = {"ok": True, "handed_to_tyler_unrecorded": handed, "window": {"from": since, "days": days}, "count": int(o.get("attempts") or 0), "overall": o,
            "outcomes": outcomes, "no_answer": outcomes.get("no_answer", 0), "handed_to_tyler": outcomes.get("handed_to_tyler", 0),
-           "by_channel": r.get("by_channel") or [], "by_kind": r.get("by_sector") or [], "excluded_test": r.get("excluded_test", 0),
+           "by_channel": r.get("by_rung") or [], "by_kind": r.get("by_sector") or [], "excluded_test": r.get("excluded_test", 0),
            "unhandled": {"count": unhandled.get("count", sum(by_kind.values())), "by_kind": by_kind,
                          "items": [{k: it.get(k) for k in ("kind_guess", "request", "why", "at") if it.get(k) is not None} for it in items[:20]]}}
     out["say"] = line(out)
@@ -106,7 +108,7 @@ def line(w: Dict[str, Any]) -> str:
         return w.get("say") or "This week's bookings couldn't be read."
     o = w.get("overall") or {}
     rate = f"{round(o['success_rate'] * 100)}% of those decided confirmed" if o.get("success_rate") is not None else "none decided yet"
-    ch = "; ".join(f"{c.get('channel')}: {c.get('confirmed', 0)}/{c.get('attempts', 0)}" for c in (w.get("by_channel") or [])[:6])
+    ch = "; ".join(f"{c.get('rung')}: {c.get('confirmed', 0)}/{c.get('attempts', 0)}" for c in (w.get("by_channel") or [])[:6])
     return (f"{w['count']} real booking(s) in the last {w['window']['days']} days — {o.get('confirmed', 0)} confirmed, {o.get('declined', 0)} declined, "
             f"{o.get('failed', 0)} failed, {w.get('no_answer', 0)} no answer yet, "
             f"{o.get('open', 0)} still open; {rate}." + (f" By channel (confirmed/asked): {ch}." if ch else "")

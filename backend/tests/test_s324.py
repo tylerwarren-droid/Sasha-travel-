@@ -84,9 +84,10 @@ class TheWeek(unittest.TestCase):
 
         async def call(op, body):
             calls.append(op)
-            if op == "outcomes.report":
+            if op == "outcomes.report":   # AgAPI's schema: by ⊂ {rung, sector, city} — anything else is refused
+                assert set(body["by"]) <= {"rung", "sector", "city"}, body["by"]
                 return {"ok": True, "result": {"overall": {"attempts": 7, "confirmed": 1, "declined": 1, "failed": 1, "open": 4, "success_rate": 0.333},
-                                               "by_channel": [{"channel": "email", "attempts": 4, "confirmed": 1}], "by_sector": [{"sector": "restaurant", "attempts": 7}],
+                                               "by_rung": [{"rung": "request_reply", "attempts": 4, "confirmed": 1}], "by_sector": [{"sector": "restaurant", "attempts": 7}],
                                                "excluded_test": 1}}
             if op == "outcomes.list":
                 return {"ok": True, "result": {"outcomes": self.ROWS}}
@@ -97,6 +98,7 @@ class TheWeek(unittest.TestCase):
         with mock.patch.object(OW, "CALL", call), mock.patch("agapi.measure.read_rows", mock.AsyncMock(return_value=rows)):
             w = asyncio.run(OW.week(7, now=NOW))
         self.assertEqual(calls, ["outcomes.report", "outcomes.list", "venue.unhandled"])     # read-only: nothing written
+        self.assertIn("request_reply: 1/4", w["say"])
         self.assertEqual((w["count"], w["no_answer"], w["handed_to_tyler"], w["unhandled"]["count"]), (7, 2, 1, 2))
         self.assertEqual(w["unhandled"]["by_kind"], {"bus": 1, "unknown": 1})
         self.assertIn("7 real booking(s)", w["say"])

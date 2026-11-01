@@ -109,7 +109,8 @@ async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
         # Sasha 323 · answered as a guest would, in THIS order: the rules' one question first ("…prefilled form… or shall I handle it?"
         # — found on 972a6a6: "the booking will go under your name. I'll book it. Want a prefilled form…" was answered with the contact);
         # a name only when she ASKS for one; else her read-back's yes
-        asks_name = re.search(r"(?i)(?:whose name|what name|which name|name and (?:a |your )?(?:phone|number|mobile))[^.?!]*\?", s)
+        # Sasha 324 · asked as a question OR as a request ("I need a name and a mobile number…", 27037aa's gate) — never "under your name"
+        asks_name = re.search(r"(?i)\b(?:need|give me|send me|tell me|what|which|whose)\b[^.?!]{0,40}\bname\b|\bname and (?:a |your )?(?:phone|number|mobile)", s)
         said = ("Handle it" if (BR.PHRASES["ask_book"] in s or re.search(r"(?i)prefilled|handle it", s)) else contact if asks_name else "yes")
         AGS._MINUTE.pop(a, None)
         v = await VT.turn(a, said, h)

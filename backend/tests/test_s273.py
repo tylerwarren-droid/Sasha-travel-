@@ -281,7 +281,8 @@ class FrontHeld(unittest.TestCase):
         self.assertIn('.s2-mic[data-live="1"] button{box-shadow:0 0 0 3px #34d399}', app)
         self.assertIn("const r = rule4()", app)
         vb = _front(self, "app/components/VoiceButton.tsx")
-        self.assertIn("if (!strictRef.current || !hearingRef.current) return", vb)   # strict is /s2's alone: /next unchanged
+        # Sasha 322 · re-pointed: "not hearing" is the ONE state machine's on every page (Tyler: the mic's truth everywhere) — never a flag
+        self.assertIn("micLog('not_hearing', { why })\n    recomputeRef.current()", vb)
 
     def test_in_the_gate(self):
         suite = (BACKEND / "scripts" / "one_truth_suite.py").read_text(encoding="utf-8")

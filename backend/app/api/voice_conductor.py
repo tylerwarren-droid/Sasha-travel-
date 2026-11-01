@@ -39,7 +39,7 @@ async def _deepgram_project() -> str:
 # Sasha 266 · row 943 (a) · THE MIC REPORTS ITSELF: a page's mic state changes (lib/mic-state.report) — so a phone whose mic never hears
 # names why (the permission state, the error's name, the audio's state, the socket, the first frame). Allow-listed fields only: no audio,
 # no words, never a transcript; capped per hour. Read in Railway's log as "[mic] …".
-MIC_FIELDS = ("ev", "page", "ua", "t", "name", "message", "state", "status", "why", "perm", "after", "ms", "by", "frames")
+MIC_FIELDS = ("ev", "page", "ua", "t", "name", "message", "state", "status", "why", "perm", "after", "ms", "by", "frames", "code")   # Sasha 322 · + close code
 MIC_CAP_PER_HOUR = 3000
 _MIC_SEEN: list = []
 

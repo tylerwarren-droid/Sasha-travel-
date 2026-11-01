@@ -35,21 +35,25 @@ def _tsx(case, rel):
 class OnOnlyWhenItHears(unittest.TestCase):
     def test_gate_the_on_look_and_the_live_signal_come_only_from_frames(self):
         src = _tsx(self, "app/components/VoiceButton.tsx")
-        opened = src[src.index("ws.onopen = async () => {"):src.index("keepAliveIntervalRef.current = setInterval")]
-        self.assertNotIn("onConnectedChangeRef.current?.(true)", opened)                 # an open socket is not "on"
+        # Sasha 322 · re-pointed, same guarantee: "on" comes ONLY from the one state machine (lib/mic-machine.mjs), read from the pipeline
+        # — a live unmuted track delivering frames NOW to an open socket — never from an open socket alone
+        opened = src[src.index("ws.onopen = () => {"):src.index("keepAliveIntervalRef.current = setInterval")]
+        self.assertNotIn("onConnectedChangeRef.current?.(", opened)                     # an open socket is not "on"
         self.assertIn("if (!deafRef.current) reportMicError(null)", opened)              # nor does it clear "can't hear you"
-        frame = src[src.index("node.port.onmessage = (e) => {"):src.index("if (deafRef.current) {")]
-        self.assertIn("tr.readyState === 'live' && !tr.muted", frame)
-        self.assertIn("onConnectedChangeRef.current?.(true)", frame)                    # ON = a live track's first frame
-        self.assertEqual(src.count("onConnectedChangeRef.current?.(true)"), 1)
-        self.assertIn(": hearing     ? 'bg-red-500 animate-pulse'", src)
-        self.assertIn("hearing ? (isSpeaking ? 'Speaking'", src)
-        self.assertNotIn("isConnected ? (isSpeaking ? 'Speaking'", src)
+        machine = _tsx(self, "lib/mic-machine.mjs")
+        self.assertIn("p.track === 'live' && !p.trackMuted && p.audio === 'running' && p.socket === 'open'", machine)
+        self.assertIn("(p.now - p.lastFrameAt) <= LIVE_FRAME_MS", machine)                # ON = frames arriving now
+        self.assertEqual(src.count("onConnectedChangeRef.current?.("), 1)                 # ONE place says on/off: the machine
+        self.assertIn("onConnectedChangeRef.current?.(live)", src[src.index("const recompute = useCallback"):])
+        self.assertNotIn("bg-red-500 animate-pulse", src)
+        self.assertIn("MIC_WORDS[state]", src)
 
     def test_gate_a_blocked_site_is_said_with_its_steps_before_any_key(self):
         src = _tsx(self, "app/components/VoiceButton.tsx")
         body = src[src.index("const connect = useCallback(async () => {"):]
-        self.assertLess(body.index("await micPermission()"), body.index("getDeepgramKey()"))   # no key minted for a blocked site
+        fresh = body[body.index("const ctx = new AudioContext()"):]
+        self.assertLess(fresh.index("await micPermission()"), fresh.index("prefetchKey()"))   # no key minted for a blocked site
+        self.assertIn("if (perm !== 'denied') void prefetchKey()", src)                        # Sasha 322 · nor before the tap
         self.assertIn("if (perm === 'denied') {", body)
         self.assertIn("reportMicError(BLOCKED)", body)
         app = _tsx(self, "app/s2/S2App.tsx")

@@ -77,6 +77,10 @@ _ACCOUNT_LIMITED = ("/api/agent/",)
 # Warm-up is a cheap 1-token ping the frontend fires before the user authenticates anything;
 # it must not require the secret (but it IS still rate-limited).
 _AUTH_EXEMPT = {"/api/agents/warmup"}
+# Sasha 322 · the mic's own state beacons (POST /api/voice/mic-event: ~8 per connect, no audio, no words, allow-listed fields) cost
+# nothing and carry their own cap (voice_conductor.MIC_CAP_PER_HOUR). Counted in the per-IP bucket they spent the 30/min a phone's
+# Deepgram key mint shares, so a few reconnects could 429 the key ("Voice service unavailable"). They never take a token.
+_SELF_CAPPED = {"/api/voice/mic-event"}
 
 
 class _Bucket:
@@ -143,7 +147,7 @@ async def _note_daily_request() -> None:
 class RateLimitAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
-        if not path.startswith(_PROTECTED_PREFIXES) or request.method == "OPTIONS":
+        if not path.startswith(_PROTECTED_PREFIXES) or request.method == "OPTIONS" or path in _SELF_CAPPED:
             return await call_next(request)
         if path.startswith(_ACCOUNT_LIMITED):
             if request.method == "POST" and GLOBAL_RATE_LIMIT_RPM > 0:

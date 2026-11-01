@@ -25,6 +25,7 @@
 //   her face     always drawn while signed in (presence never 'none'): full size or the corner — paused, listening, thinking, speaking.
 // Measured before (390×844 and desktop): back after 30 s or a lock — only the 40 px circle and the mic's small word; on desktop the one
 // tap there turned a live mic OFF. Her face sent to the corner: at once and silent (≤0.5 s); her requests: the full camera line every time.
+import { MIC_WORDS } from './mic-machine.mjs'   // Sasha 322 · the mic's words, one place
 import { STARTERS } from './capabilities.generated.mjs'
 import { voiceOf } from './presence-rule.mjs'
 import { buttonLabel } from './sleep-rule.mjs'
@@ -89,13 +90,23 @@ export const ON_TAP = ['unlock', 'mic', 'hello']
 export const LISTENING = 'Listening'
 export const THINKING = 'Thinking'
 export const SPEAKING = 'Speaking'
-/** THE ONE CUE (the mic's state and its word): speaking over thinking over listening — each its own look; paused, resting and a
- *  refused mic as presence-rule / mic-state say. From the real state only: her audio playing, a turn in flight, the mic hearing.
- *  @param {{ asleep?: boolean, dormant?: boolean, micLive?: boolean, speaking?: boolean, thinking?: boolean, micNote?: string | null }} s
- *  @returns {{ state: 'paused' | 'speaking' | 'thinking' | 'listening' | 'refused' | 'tap', words: string }} */
+/** THE ONE CUE (the mic's state and its word). Sasha 322 · given `mic` — the ONE state machine's state, read from the audio pipeline
+ *  (lib/mic-machine.mjs, VoiceButton onState) — the cue IS that state: Listening only while audio reaches her (it outranks her voice:
+ *  a barge-in is heard), then speaking, thinking, "Getting ready…", and off ("Tap to talk"; refused when the browser said no).
+ *  Without `mic` (older callers): speaking over thinking over listening, from the real state only.
+ *  @param {{ asleep?: boolean, dormant?: boolean, micLive?: boolean, speaking?: boolean, thinking?: boolean, micNote?: string | null,
+ *            mic?: 'off' | 'connecting' | 'listening' | 'thinking' | 'speaking' }} s
+ *  @returns {{ state: 'paused' | 'speaking' | 'thinking' | 'listening' | 'connecting' | 'refused' | 'tap', words: string }} */
 export function cueOf(s) {
   const vo = voiceOf(s)
   if (s.asleep) return { state: 'paused', words: vo.words }
+  if (s.mic && !s.dormant) {
+    if (s.mic === 'listening') return { state: 'listening', words: MIC_WORDS.listening }
+    if (s.mic === 'speaking' || s.speaking) return { state: 'speaking', words: MIC_WORDS.speaking }
+    if (s.mic === 'thinking' || s.thinking) return { state: 'thinking', words: MIC_WORDS.thinking }
+    if (s.mic === 'connecting') return { state: 'connecting', words: MIC_WORDS.connecting }
+    return { state: s.micNote ? 'refused' : 'tap', words: MIC_WORDS.off }
+  }
   if (s.speaking) return { state: 'speaking', words: SPEAKING }
   if (s.thinking) return { state: 'thinking', words: THINKING }
   if (vo.live) return { state: 'listening', words: LISTENING }

@@ -4,8 +4,8 @@
  * transcript it submits lands in window.__mic (and on screen), every state change in window.__micLog. A headless harness
  * plays 50 recorded sentences into it; on an iPhone, tap Start and read the sentences aloud — the page scores itself.
  */
-import { useState } from 'react'
-import VoiceButton from '@/app/components/VoiceButton'
+import { useRef, useState } from 'react'
+import VoiceButton, { type VoiceCtl } from '@/app/components/VoiceButton'
 
 const SENTENCES = [
   'A week in Portugal for two in November', 'Find me a seafood restaurant in Madrid tonight', 'What is the weather like in Lisbon',
@@ -32,6 +32,12 @@ const heardIn = (s: string, heard: string[]) => heard.some(h => {
 export default function MicTest() {
   const [on, setOn] = useState(false)
   const [heard, setHeard] = useState<string[]>([])
+  const ctl = useRef<VoiceCtl | null>(null)
+  // Sasha 322 · her two phases, switchable here so every mic state can be seen (and screenshotted) without a conversation: speaking
+  // closes the gate as /s2's speaker does; thinking mutes it as a turn in flight does
+  const [speaking, setSpeaking] = useState(false)
+  const [thinking, setThinking] = useState(false)
+  const gate = useRef<((v: boolean) => void) | null>(null)   // Sasha 322 · the mic is on the page from load (as on /s2); Start is his tap on it
   const onTranscript = (t: string) => {
     const w = window as unknown as { __mic?: { t: number; text: string }[] }
     ;(w.__mic ??= []).push({ t: Math.round(performance.now()), text: t })
@@ -42,8 +48,13 @@ export default function MicTest() {
     <main style={{ padding: 16, fontFamily: 'system-ui', maxWidth: 640, margin: '0 auto' }}>
       <h1 style={{ fontSize: 20 }}>Mic test</h1>
       <p>Tap Start, allow the mic, then read each sentence with a short pause between them. Score: <b id="mt-score">{score}</b>/50 · heard {heard.length}</p>
-      {!on ? <button id="mt-start" onClick={() => setOn(true)} style={{ fontSize: 18, padding: '12px 24px' }}>Start</button>
-        : <VoiceButton onTranscript={onTranscript} autoStart readyToListen />}
+      {!on ? <button id="mt-start" onClick={() => { setOn(true); ctl.current?.tap() }} style={{ fontSize: 18, padding: '12px 24px' }}>Start</button> : null}
+      <VoiceButton onTranscript={onTranscript} readyToListen strict ctlRef={ctl} speaking={speaking} thinking={thinking} muted={thinking}
+        onSetGate={g => { gate.current = g; g(false) }} />
+      <p style={{ display: 'flex', gap: 8 }}>
+        <button id="mt-speaking" onClick={() => { const v = !speaking; setSpeaking(v); gate.current?.(v) }}>{speaking ? 'Sasha stops speaking' : 'Sasha speaks'}</button>
+        <button id="mt-thinking" onClick={() => setThinking(t => !t)}>{thinking ? 'Sasha stops thinking' : 'Sasha thinks'}</button>
+      </p>
       <ol style={{ lineHeight: 1.6 }}>{SENTENCES.map(s => <li key={s} data-s={s} style={{ color: heardIn(s, heard) ? '#0a0' : undefined }}>{s}</li>)}</ol>
       <h2 style={{ fontSize: 16 }}>Heard</h2>
       <ol id="mt-heard">{heard.map((h, i) => <li key={i}>{h}</li>)}</ol>

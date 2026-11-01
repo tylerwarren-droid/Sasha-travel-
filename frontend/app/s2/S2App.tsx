@@ -10,7 +10,7 @@
  * Nothing shown here carries a "test" or "stand-in" label (lib/no-test-label.mjs) — what's underneath is unchanged.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import VoiceButton, { type VoiceCtl } from '@/app/components/VoiceButton'
+import VoiceButton, { type VoiceCtl, type MicState } from '@/app/components/VoiceButton'
 import { reappear, voiceOf, wordOf } from '@/lib/presence-rule.mjs'
 import { midFlow } from '@/lib/greeting-rule.mjs'   // Sasha 274 · mid-booking, from the screen   // Sasha 273 · rule 4 and the mic's truth: the ONE presence rule
 import { AccountControl, SIGN_IN_CARRY } from '@/app/components/SignedInLine'   // Sasha 257 · who is signed in, quietly in the header
@@ -613,6 +613,7 @@ export default function S2App() {
   const asleepRef = useRef(false)
   // Sasha 273 · items 3 + 4: the mic's REAL state (VoiceButton strict: hearing now), its two moves, the last activity, rule 4's answer
   const [micLive, setMicLive] = useState(false)
+  const [micState, setMicState] = useState<MicState>('off')   // Sasha 322 · the ONE state machine (VoiceButton onState): label, cue and her face
   const voiceCtl = useRef<VoiceCtl | null>(null)
   const lastAt = useRef<number | null>(null)
   const touch = useCallback(() => { const t = Date.now(); lastAt.current = t; try { localStorage.setItem(LAST_KEY, String(t)) } catch { /* private mode */ } }, [])
@@ -1152,10 +1153,10 @@ export default function S2App() {
           <footer style={{ flex: 'none', padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* Sasha 273 · item 3: the voice label is the MIC's real state (lib/presence-rule.mjs voiceOf, from VoiceButton's strict `hearing`),
                 on the mic itself — "Voice on" and its green ring only while it hears; otherwise "Tap to talk" (the tap starts or resumes it) */}
-            {(() => { const vo = voiceOf({ asleep, dormant, micLive }); const cue = cueOf({ asleep, dormant, micLive, speaking, thinking: busy || working, micNote }); return (
+            {(() => { const vo = voiceOf({ asleep, dormant, micLive }); const cue = cueOf({ asleep, dormant, micLive, speaking, thinking: busy || working, micNote, mic: micState }); return (
             <div className="s2-mic" data-live={vo.live ? '1' : '0'} data-cue={!vo.live && !asleep && !!micNote ? '1' : '0'} data-cue-state={cue.state} onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={t => { voiceNext.current = voiceCtl.current?.speechEndAt() ?? Date.now(); void send(t) }} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
-                strict ctlRef={voiceCtl} onConnectedChange={setMicLive} />}{/* Sasha 273 · item 3: "on" only while it hears */}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
+                strict ctlRef={voiceCtl} onConnectedChange={setMicLive} speaking={speaking} thinking={busy || working} onState={setMicState} />}{/* Sasha 273 · item 3: "on" only while it hears */}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
               <span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-live="polite"
                 style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{cue.words}</span>{/* Sasha 295 · ONE cue: listening · thinking · speaking */}
             </div>) })()}
@@ -1176,6 +1177,7 @@ export default function S2App() {
             /* Sasha 295 · THE ONE CUE (lib/opening-rule.mjs cueOf), each its own look: speaking — a solid gold ring · thinking — a slow
                soft pulse · listening — the green ring above */
             + `.s2-mic[data-cue-state="speaking"] button{box-shadow:0 0 0 4px #e8b931}`
+            + `.s2-mic[data-cue-state="connecting"] [data-voice-state]{color:#e8b931}`   /* Sasha 322 · Getting ready… (the spinner is on the mic) */
             + `.s2-mic[data-cue-state="thinking"] button{animation:s2think 1.8s ease-in-out infinite}`
             + `@keyframes s2think{0%,100%{box-shadow:0 0 0 2px rgba(255,255,255,.25)}50%{box-shadow:0 0 0 7px rgba(255,255,255,.08)}}`
             + `@media (prefers-reduced-motion: reduce){.s2-mic[data-cue-state="thinking"] button{animation:none;box-shadow:0 0 0 3px rgba(255,255,255,.4)}}`}</style>

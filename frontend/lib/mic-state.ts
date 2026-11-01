@@ -45,7 +45,7 @@ export function stepsFor(ua: string = typeof navigator !== 'undefined' ? navigat
 
 const REPORT_MAX = 40
 let reported = 0
-const KEEP = ['name', 'message', 'state', 'status', 'why', 'perm', 'after', 'ms', 'by', 'frames']
+const KEEP = ['name', 'message', 'state', 'status', 'why', 'perm', 'after', 'ms', 'by', 'frames', 'code']   // Sasha 322 · + a socket's close code
 
 export function report(ev: string, data: Record<string, unknown> = {}): void {
   if (typeof window === 'undefined' || reported >= REPORT_MAX) return

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { preconnect } from 'react-dom'   // Sasha 322 · DNS + TLS to the speech service warmed before the tap
 import { Mic, MicOff, Loader2 } from 'lucide-react'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { watchdogAction } from '@/lib/voice-watchdog.mjs'
@@ -45,12 +46,16 @@ interface VoiceButtonProps {
   // without a tap) and tap (inside a tap: start or resume, never stop).
   strict?: boolean
   ctlRef?: { current: VoiceCtl | null }
+  // Sasha 322 · her phase, for the ONE state machine (lib/mic-machine.mjs): she is speaking (the mic paused) / a turn is in flight
+  speaking?: boolean
+  thinking?: boolean
+  /** Sasha 322 · the mic's state as the machine reads it from the pipeline: off · connecting · listening · thinking · speaking */
+  onState?: (state: MicState) => void
 }
 
 /** Sasha 273 · what /s2 may ask of its mic: on return, resume what was live; on a tap, listen (start or resume — never stop). */
 export type VoiceCtl = { resume: () => void; tap: () => void; granted: () => boolean; speechEndAt: () => number | null }
-/** Sasha 273 · strict: no frame for this long and the mic is not hearing (the screen stops saying "Voice on"). */
-const LIVE_FRAME_MS = 1500
+export type MicState = 'off' | 'connecting' | 'listening' | 'thinking' | 'speaking'
 
 // What the page needs to render its own mic picker: the choosable devices, what's selected
 // now, and the switcher (which tears down and reopens the pipeline on the new device).
@@ -72,6 +77,7 @@ import { micLog } from '@/lib/mic-log'   // Sasha 213 · the mic's state machine
 import { BLOCKED, micPermission } from '@/lib/mic-state'   // Sasha 266 · "on" only when it hears; blocked said, with its steps
 import { holdPlayAndRecord, audioSessionType } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session
 import { makeDownsampler, sendRate } from '@/lib/downsample.mjs'   // Sasha 215 (d) · the mic at 16 kHz
+import { micState as readMic, MIC_WORDS, REPLY_MS } from '@/lib/mic-machine.mjs'   // Sasha 322 · the ONE state machine, read from the pipeline
 
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
 
@@ -87,6 +93,21 @@ async function getDeepgramKey(): Promise<string> {
   } catch { /* unreachable: status 0 */ }
   return keyOrFail(status, key, PUBLIC_DEEPGRAM_KEY).key
 }
+
+// Sasha 322 · THE KEY IS MINTED BEFORE THE TAP (Tyler's iPhone, 1 Nov: 0.73–1.09 s of every start was this mint, and the socket waited
+// for it). One key per page, kept KEY_REUSE_MS (it lives DEEPGRAM_KEY_TTL, an hour, on the server) and reused by every socket — a tap and
+// every reconnect find it ready. Asks for nothing (no mic, no permission prompt); never minted for a site the browser blocks.
+const KEY_REUSE_MS = 10 * 60 * 1000
+let KEY: { key: string; at: number } | null = null
+let KEY_INFLIGHT: Promise<string> | null = null
+function prefetchKey(): Promise<string> {
+  if (KEY && Date.now() - KEY.at < KEY_REUSE_MS) return Promise.resolve(KEY.key)
+  if (KEY_INFLIGHT) return KEY_INFLIGHT
+  KEY_INFLIGHT = getDeepgramKey().then(k => { if (k) KEY = { key: k, at: Date.now() }; return k }).finally(() => { KEY_INFLIGHT = null })
+  return KEY_INFLIGHT
+}
+function dropKey() { KEY = null }
+const BUFFER_MS = 5000   // Sasha 322 · words said while it gets ready: kept (up to this much) and sent first when the socket opens
 
 // Barge-in tuning. The mic is fully muted while the avatar speaks — that is what
 // stops the avatar hearing itself. A user may still interrupt, but ONLY with a
@@ -224,7 +245,7 @@ const AUDIO_MODE = 'I can’t hear you — your phone kept this page’s sound p
 const PREROLL_MS = 600        // Sasha 265 · item 1: kept while she speaks, sent only if the person talks over her (barge-in)
 const RESUME_WAIT_MS = 1000   // Sasha 265 · item 1: how long the audio may take to start before the socket opens anyway (and the screen says tap)
 
-export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake, strict = false, ctlRef }: VoiceButtonProps) {
+export default function VoiceButton({ onTranscript, quiet = false, muted = false, disabled, autoStart = false, readyToListen = false, onSpeakingChange, onInterrupt, onSetGate, avatarSpeechGetter, language = 'en', onConnectedChange, onMicError, onMicDevices, asleep = false, onWake, strict = false, ctlRef, speaking, thinking, onState }: VoiceButtonProps) {
   const strictRef = useRef(strict)   // Sasha 273 · /s2: "on" only while frames arrive
   useEffect(() => { strictRef.current = strict }, [strict])
   const wasLiveRef = useRef(false)   // Sasha 273 · it was live when the page went to the background: resume it on return
@@ -240,6 +261,32 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     return () => { if (st) st.onchange = null }
   }, [strict])   // Sasha 273 · "Tap to talk" on a connected mic that isn't hearing: resume it
   const droppedMutedRef = useRef(false)   // Sasha 213 · log the muted spell once, not per frame
+  // Sasha 322 · THE ONE STATE MACHINE's inputs that aren't the pipeline's own objects, and its output
+  const wantedRef = useRef(false)                       // a connect was asked for (a tap, autoStart) and not stopped
+  const permStateRef = useRef<string | null>(null)      // the browser's permission answer, as last read
+  const speakingRef = useRef(false)                     // her voice is playing (the mic paused)
+  const thinkingRef = useRef(false)                     // a turn is in flight (the mic paused)
+  const [state, setState] = useState<MicState>('off')
+  const stateRef = useRef<MicState>('off')
+  const onStateRef = useRef(onState)
+  useEffect(() => { onStateRef.current = onState }, [onState])
+  const recomputeRef = useRef<() => void>(() => {})
+  const connectRef = useRef<() => void>(() => {})
+  const flushRef = useRef<(() => void) | null>(null)   // sends what was buffered while the socket opened
+  const levelRef = useRef<HTMLSpanElement | null>(null) // the live input-level bar (written from the frames, never re-rendered)
+  const tapAtRef = useRef(0)                            // his tap: tap → Listening is measured from here
+  const replyAtRef = useRef(0)                          // the speech service's last answer (any message) — it answers what it hears
+  const sendFromRef = useRef(0)                         // when audio started (again) to leave for it — its answer is due from here
+  const lastSentRef = useRef(0)
+  useEffect(() => { speakingRef.current = !!speaking; recomputeRef.current() }, [speaking])
+  useEffect(() => { thinkingRef.current = !!thinking; recomputeRef.current() }, [thinking])
+  useEffect(() => {   // Sasha 322 · the key minted before any tap — never for a site the browser blocks (Sasha 266)
+    let live = true
+    try { preconnect('https://api.deepgram.com') } catch { /* a hint only */ }
+    void fetch('/pcm-capture.js', { cache: 'force-cache' }).catch(() => {})   // the worklet's file in cache before the tap
+    micPermission().then(perm => { if (!live) return; permStateRef.current = perm; if (perm !== 'denied') void prefetchKey() })
+    return () => { live = false }
+  }, [])
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)   // the socket is open — NOT "on" (Sasha 266: that is `hearing`)
   // Sasha 266 · row 943 (a): the mic is "on" ONLY when it hears — a live, unmuted audio track delivering frames. The button's "on"
@@ -268,6 +315,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   // Sasha 264 · item 7 (Tyler's phone, /s2, 14 Oct): closed at the start ONLY when someone owns the gate (onSetGate: the call, /s2's
   // speaker) and will open it when she stops — /s2 had no owner, so an auto-started mic dropped every frame while it showed connected
   const micGatedRef = useRef(!!onSetGate)
+  const gateOwnedRef = useRef(!!onSetGate)   // Sasha 322 · someone closes the gate while she talks (the call, /s2's speaker)
   const gateOpenedAtRef = useRef(0)  // when the mic last opened — bounds the echo window
   // Sasha 192 · THE WATCHDOG: listening never dies silently (live 7 Oct: 3 minutes deaf after Sasha's question)
   const heardAtRef = useRef(0)        // when speech started with no transcript yet
@@ -289,7 +337,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   useEffect(() => { readyToListenRef.current = readyToListen }, [readyToListen])
   // Mirrored for the audio worklet's long-lived onmessage closure — see note above.
   const mutedRef = useRef(muted)
-  useEffect(() => { mutedRef.current = muted }, [muted])
+  useEffect(() => { mutedRef.current = muted; recomputeRef.current() }, [muted])
   // Refs so the long-lived Deepgram/worklet closures (created once in connect()) always
   // call the LATEST props. Without this, ws.onmessage captures the first onTranscript →
   // first sendMessage → a stale `messages` snapshot, so every voice turn sends the same
@@ -351,70 +399,425 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       } else {
         loudFramesRef.current = 0  // avatar just started — reset barge-in counter
       }
+      recomputeRef.current()
     })
     console.log('[GATE] registered, present:', !!onSetGate)
   }, [])
 
+  // Sasha 322 · THE ONE STATE MACHINE: a snapshot of the pipeline itself (permission, track, audio, socket, frames) and her phase → the
+  // state drawn (lib/mic-machine.mjs). Recomputed on every pipeline event and on a 250 ms tick (a frame's age); never set on a timer.
+  const snapshot = () => {
+    const tr = streamRef.current?.getAudioTracks()[0]
+    const ws = wsRef.current
+    return {
+      wanted: wantedRef.current, connecting: connectingRef.current, perm: permStateRef.current,
+      track: tr ? tr.readyState : null, trackMuted: !!tr?.muted, audio: audioCtxRef.current?.state ?? null,
+      socket: ws ? (ws.readyState === WebSocket.OPEN ? 'open' : ws.readyState === WebSocket.CONNECTING ? 'connecting' : 'closed') : null,
+      lastFrameAt: lastFrameRef.current, now: Date.now(), gated: micGatedRef.current, muted: mutedRef.current, asleep: asleepRef.current,
+      // her voice: the page says so (speaking), or the gate its owner closes while she talks is shut (a gated mic is her speaking)
+      speaking: speakingRef.current || (gateOwnedRef.current && micGatedRef.current), thinking: thinkingRef.current, deaf: deafRef.current,
+      lastReplyAt: ws && ws.readyState === WebSocket.OPEN && sendFromRef.current ? Math.max(replyAtRef.current, sendFromRef.current) : null,
+      backlog: ws && ws.readyState === WebSocket.OPEN ? ws.bufferedAmount : 0,
+    }
+  }
+  const recompute = useCallback(() => {
+    const st = readMic(snapshot()) as MicState
+    if (st === stateRef.current) return
+    const from = stateRef.current
+    stateRef.current = st; setState(st); onStateRef.current?.(st)
+    const live = st === 'listening'
+    if (live !== hearingRef.current) { hearingRef.current = live; setHearing(live); onConnectedChangeRef.current?.(live) }   // Sasha 266: "on" = hearing
+    if (live) { connectingRef.current = false; setIsConnecting(false) }   // the connect is done when audio reaches her
+    micLog('state', { state: st, why: from, ...(tapAtRef.current ? { ms: Date.now() - tapAtRef.current } : {}) })
+    if (live && tapAtRef.current) { micLog('listening', { ms: Date.now() - tapAtRef.current }); tapAtRef.current = 0 }   // tap → Listening, reported
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reads refs only
+  }, [])
+  useEffect(() => { recomputeRef.current = recompute })
+
+  // the audio pipeline (stream, audio, worklet) — torn down only on a stop, a dead track or a new device; never for a dropped socket
+  const teardownAudio = () => {
+    try { workletNodeRef.current?.disconnect() } catch {}
+    workletNodeRef.current = null; flushRef.current = null
+    try { audioCtxRef.current?.close() } catch {}
+    audioCtxRef.current = null
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+  }
+  const pipelineLive = () => {
+    const tr = streamRef.current?.getAudioTracks()[0]
+    return !!(tr && tr.readyState === 'live' && audioCtxRef.current && audioCtxRef.current.state !== 'closed' && workletNodeRef.current)
+  }
+
   const stopAll = useCallback(() => {
     manualStopRef.current = true   // intentional stop — suppress auto-reconnect
+    wantedRef.current = false
     clearTimeout(dgReconnectTimerRef.current)
     clearTimeout(connectTimeoutRef.current)
     clearInterval(keepAliveIntervalRef.current)
-    workletNodeRef.current?.disconnect()
-    workletNodeRef.current = null
-    audioCtxRef.current?.close()
-    audioCtxRef.current = null
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+    teardownAudio()
     setIsConnected(false)
-    hearingRef.current = false; setHearing(false)
-    onConnectedChangeRef.current?.(false)
     setIsSpeaking(false)
     setIsConnecting(false)
     connectedRef.current = false
+    connectingRef.current = false
     transcriptRef.current = ''
+    recompute()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Sasha 273 · strict (/s2): the mic stops being "on" the moment it stops hearing — the track muted or ended, the audio suspended, or
-  // no frame for LIVE_FRAME_MS — and is "on" again only when frames arrive again (the frame handler, below).
+  // Sasha 273 · strict (/s2): the mic stops being "on" the moment it stops hearing — Sasha 322: the machine reads it (track, audio, frames)
   const notHearing = useCallback((why: string) => {
-    if (!strictRef.current || !hearingRef.current) return
-    hearingRef.current = false; setHearing(false); onConnectedChangeRef.current?.(false)
     micLog('not_hearing', { why })
+    recomputeRef.current()
   }, [])
+
+  // Sasha 322 · the frame handler, ONCE per pipeline: a frame goes to the socket when it is open — and while it is still opening, it is
+  // KEPT (up to BUFFER_MS) and sent first on open, so words said during "Getting ready…" reach her (micLog 'flushed' {ms}).
+  const wirePipeline = (ctx: AudioContext, stream: MediaStream) => {
+    const source = ctx.createMediaStreamSource(stream)
+    const node = new AudioWorkletNode(ctx, 'pcm-capture')
+    const downsample = makeDownsampler(ctx.sampleRate)
+    workletNodeRef.current = node
+    const rate = sendRate(ctx.sampleRate)
+    const pending: ArrayBuffer[] = []
+    let pendingSamples = 0
+    const pendingMax = Math.round(rate * BUFFER_MS / 1000)
+    const toPcm = (float32: Float32Array): ArrayBuffer | null => {
+      // Convert float32 to int16 PCM before sending — Sasha 215 (d): at 16 kHz (a third of the upload at 48 kHz)
+      const pcm = downsample(float32)
+      if (!pcm.length) return null
+      const int16 = new Int16Array(pcm.length)
+      for (let i = 0; i < pcm.length; i++) {
+        const v = Math.max(-1, Math.min(1, pcm[i]))
+        int16[i] = v < 0 ? v * 0x8000 : v * 0x7fff
+      }
+      return int16.buffer
+    }
+    const send = (float32: Float32Array) => {
+      const buf = toPcm(float32)
+      if (!buf) return
+      const ws = wsRef.current
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const t = Date.now()
+        if (t - lastSentRef.current > 500) sendFromRef.current = t   // sending (re)starts: the service's answer is due from now
+        lastSentRef.current = t
+        ws.send(buf); return
+      }
+      if (!wantedRef.current) return
+      pending.push(buf); pendingSamples += buf.byteLength / 2
+      while (pending.length > 1 && pendingSamples > pendingMax) pendingSamples -= pending.shift()!.byteLength / 2
+    }
+    flushRef.current = () => {
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== WebSocket.OPEN || !pending.length) return
+      const ms = Math.round(pendingSamples / rate * 1000)
+      for (const b of pending.splice(0)) ws.send(b)
+      pendingSamples = 0
+      micLog('flushed', { ms })   // Sasha 322 · item 3: what he said while it got ready, used
+    }
+    // Sasha 265 · item 1 (the browser proof: "Book a table for two tonight" came back "A table for two tonight"): talking over
+    // her, the frames that tripped barge-in were dropped with the rest — the first word lost every time. The last PREROLL_MS
+    // while closed are kept and sent on a barge-in ONLY (never when she simply stops: that audio is her own voice).
+    const preroll: Float32Array[] = []
+    let prerollLen = 0
+    const prerollMax = Math.round(ctx.sampleRate * PREROLL_MS / 1000)
+    let level = 0, drawn = false
+    node.port.onmessage = (e) => {
+      const float32 = e.data as Float32Array
+      lastFrameRef.current = Date.now()   // Sasha 264 · item 7: the mic is delivering
+      const rms = Math.sqrt(float32.reduce((sum, x) => sum + x * x, 0) / float32.length)
+      level = Math.max(rms, level * 0.85)   // Sasha 322 · the live input level: moves with his voice, drawn once a frame at most
+      if (!drawn) { drawn = true; requestAnimationFrame(() => { drawn = false; const el = levelRef.current; if (el) el.style.transform = `scaleX(${Math.min(1, level * 8).toFixed(3)})` }) }
+      if (stateRef.current !== 'listening') recomputeRef.current()   // Sasha 322 · frames (again): the machine says if audio reaches her
+      if (deafRef.current) { deafRef.current = false; reportMicError(null); micLog('hearing', { after: 'deaf' }) }
+      // HARD mute (itinerary build / any in-flight turn): drop every frame at the source,
+      // before Deepgram and before barge-in. `muted` is documented as a hard mute, but the
+      // frame loop only honoured the speak-gate — so a build whose classify was slow/failed
+      // left the mic genuinely streaming under a "Not listening" label. Enforce it here so
+      // the mic is truly deaf whenever muted, independent of the speak-gate's timing.
+      if (mutedRef.current) { preroll.length = 0; prerollLen = 0; if (!droppedMutedRef.current) { droppedMutedRef.current = true; micLog('dropping', { why: 'muted while a turn runs' }) } return }
+      if (droppedMutedRef.current) { droppedMutedRef.current = false; micLog('listening', { after: 'muted' }) }
+      if (micGatedRef.current) {
+        preroll.push(float32); prerollLen += float32.length
+        while (prerollLen - preroll[0].length >= prerollMax) prerollLen -= preroll.shift()!.length
+        // Gate ON = avatar is speaking. DROP every frame so the avatar's audio
+        // bleeding into the mic is never streamed to Deepgram. This is the core
+        // echo fix — Deepgram simply never hears the avatar.
+        // A deliberate mute is not interruptible — barge-in only exists to cut off the
+        // avatar mid-sentence, and during a build she isn't speaking.
+        if (BARGE_IN_ENABLED && !mutedRef.current) {
+          if (rms > BARGE_IN_RMS) {
+            loudFramesRef.current += 1
+            if (loudFramesRef.current >= BARGE_IN_FRAMES) {
+              loudFramesRef.current = 0
+              console.log('[BARGE-IN]', rms.toFixed(3), '> thr', BARGE_IN_RMS, '— interrupting avatar')
+              micLog('barge_in', { rms: Number(rms.toFixed(3)) })
+              onInterruptRef.current?.()
+              micGatedRef.current = false  // open mic; gate setter fires async
+              micLog('preroll', { ms: Math.round(prerollLen / ctx.sampleRate * 1000) })
+              for (const f of preroll.splice(0)) send(f)   // Sasha 265 · item 1: the words that interrupted her, from their start
+              prerollLen = 0
+              recomputeRef.current()
+            }
+          } else {
+            loudFramesRef.current = 0  // must be SUSTAINED — reset on any quiet frame
+          }
+        }
+        return  // gated: never send avatar bleed to Deepgram
+      }
+      loudFramesRef.current = 0
+      if (preroll.length) { preroll.length = 0; prerollLen = 0 }   // opened by her stopping: what was kept is her voice — dropped
+      send(float32)
+    }
+    source.connect(node)
+    // Keep the audio graph alive WITHOUT monitoring the mic to the speakers.
+    // Routing the worklet straight to ctx.destination plays the user's mic out
+    // loud, which adds a feedback path and muddies echo cancellation. Sink through
+    // a zero-gain node instead.
+    const sink = ctx.createGain()
+    sink.gain.value = 0
+    node.connect(sink)
+    sink.connect(ctx.destination)
+  }
+
+  // Sasha 322 · THE SOCKET ALONE — opened at the tap beside the mic (never after it), and the only thing a reconnect rebuilds: the stream,
+  // the running audio and the worklet stay, so a dropped socket never needs a new tap on a phone (1 Nov: every reconnect came back
+  // "deaf, audio suspended until a tap") and the state is Connecting the moment it drops — never a stale Listening.
+  const openSocket = (dgKey: string) => {
+    const ctx = audioCtxRef.current
+    if (!ctx || !dgKey || manualStopRef.current) return
+    const cur = wsRef.current
+    if (cur && (cur.readyState === WebSocket.OPEN || cur.readyState === WebSocket.CONNECTING)) return
+    const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
+    const ws = new WebSocket(
+      `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${sendRate(ctx.sampleRate)}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true${KEYTERMS}`,
+      ['token', dgKey]
+    )
+    wsRef.current = ws
+    sendFromRef.current = 0; replyAtRef.current = 0
+    recomputeRef.current()
+
+    // Watchdog: if the socket doesn't open within 8s, close it so onclose can retry —
+    // otherwise a rejected connection leaves the mic stuck on the "connecting" spinner.
+    clearTimeout(connectTimeoutRef.current)
+    connectTimeoutRef.current = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.warn('[DG] connect watchdog — socket never opened, closing to retry')
+        try { ws.close() } catch {}
+      }
+    }, 8000)
+
+    // Dedup state for BUG 4 — scoped to this connection's lifetime
+    let lastFinal = ''
+    let lastFinalAt = 0
+    // Turn-hold: Deepgram's endpointing (300ms) fires speech_final on any natural
+    // mid-sentence pause, and firing immediately made Sasha answer half a sentence
+    // ("I want to go to…" → she replies before "…Hanoi with my wife" arrives). Instead
+    // of firing on speech_final, HOLD briefly; if the guest resumes (SpeechStarted or a
+    // fresh interim), cancel the hold and keep accumulating — the fragments merge into
+    // one turn. A transcript that already ends in terminal punctuation is very likely a
+    // finished sentence, so it gets a short hold; a trailing/unpunctuated one waits longer.
+    let pendingFire: any = null
+
+    ws.onopen = () => {
+      // Guard against StrictMode race: cleanup may have nulled wsRef while WS was connecting
+      if (wsRef.current !== ws) {
+        console.log('[DG] onopen: WS superseded by cleanup, discarding')
+        ws.close()
+        return
+      }
+      console.log('[DG] connected')
+      micLog('socket_open', { ms: Date.now() - connectT0.current })
+      clearTimeout(connectTimeoutRef.current)
+      setIsConnected(true)   // Sasha 266: open — "on" only once it hears (the machine, from the frames)
+      connectedRef.current = true; lastAliveRef.current = Date.now()   // Sasha 192
+      hadConnectedRef.current = true    // Sasha 197
+      dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
+      if (!deafRef.current) reportMicError(null)   // Sasha 215 · open again: the error goes — Sasha 266: never "can't hear you" while still deaf
+
+      // KeepAlive runs for the lifetime of the session — not gated, always on
+      keepAliveIntervalRef.current = setInterval(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'KeepAlive' }))
+        }
+      }, 8000)
+      flushRef.current?.()   // Sasha 322 · what he said while it got ready, sent first
+      recomputeRef.current()
+    }
+
+    ws.onmessage = (event) => {
+      replyAtRef.current = Date.now()   // Sasha 322 · the service answered: audio is reaching it
+      if (micGatedRef.current) return
+      try {
+        const data = JSON.parse(event.data)
+        if (data.type === 'SpeechStarted') {
+          micLog('speech_start')
+          if (!heardAtRef.current) heardAtRef.current = Date.now()   // Sasha 192 · the watchdog's clock
+          clearTimeout(pendingFire)   // guest resumed — this turn isn't over
+          setIsSpeaking(true)
+          onSpeakingChangeRef.current?.(true)
+        }
+
+        const isEcho = (text: string): boolean => {
+          // Only acoustic bleed (which arrives right after the avatar goes quiet) is
+          // echo. After the window, identical words are the user genuinely answering.
+          if (Date.now() - gateOpenedAtRef.current > ECHO_WINDOW_MS) return false
+          const tWords = normalizeText(text)
+          if (tWords.length < ECHO_MIN_WORDS) return false  // never drop short genuine replies
+          const bWords = new Set(normalizeText(avatarSpeechGetterRef.current?.() ?? ''))
+          if (tWords.length > 0 && bWords.size > 0) {
+            const overlap = tWords.filter(w => bWords.has(w)).length / tWords.length
+            if (overlap >= 0.6) {
+              console.log('[ECHO] discarded (within echo window):', text)
+              micLog('dropped', { why: 'echo of her own words', text })
+              return true
+            }
+          }
+          return false
+        }
+
+        const fireTranscript = (final: string) => {
+          setIsSpeaking(false)
+          onSpeakingChangeRef.current?.(false)
+          if (final === lastFinal && Date.now() - lastFinalAt < 5000) { micLog('dropped', { why: 'repeat within 5 s', text: final }); return }
+          lastFinal = final
+          lastFinalAt = Date.now()
+          if (isEcho(final)) return
+          heardAtRef.current = 0; lastAliveRef.current = Date.now(); setNotCaught(false)   // Sasha 192 · heard: the watchdog rests
+          micLog('submitted', { text: final })
+          if (!firstHeardRef.current) { firstHeardRef.current = true; micLog('first_transcript', { ms: Date.now() - connectT0.current }) }   // Sasha 267 · reported (no words)
+          onTranscriptRef.current?.(final)
+        }
+
+        const scheduleFire = () => {
+          clearTimeout(pendingFire)
+          // Hold graded by how finished the utterance is: question/directive/short
+          // answer → fast; declarative narration → breathing room; fragment → longest.
+          const hold = holdFor(transcriptRef.current)
+          pendingFire = setTimeout(() => {
+            if (transcriptRef.current.length >= 3) {
+              const final = transcriptRef.current
+              transcriptRef.current = ''
+              fireTranscript(final)
+            }
+          }, hold)
+        }
+
+        if (data.type === 'Results') {
+          const fragment = data.channel?.alternatives?.[0]?.transcript || ''
+          if (fragment) micLog(data.is_final ? 'final' : 'partial', { text: fragment, speech_final: !!data.speech_final })
+          // Sasha 214 · words are arriving, so Deepgram is alive: the watchdog's "speech with no transcript" clock rests.
+          // It ran from the first SpeechStarted until a SUBMIT, so a guest who kept talking through the declarative hold
+          // (two statements 2.5 s apart) tripped the 8 s restart on a healthy socket and lost the held words (B3 harness).
+          if (fragment) heardAtRef.current = 0
+          if (data.is_final === true) {
+            // Accumulate is_final fragments; the hold below decides when the turn is over.
+            if (fragment) {
+              transcriptRef.current = transcriptRef.current
+                ? `${transcriptRef.current} ${fragment}`
+                : fragment
+            }
+            if (data.speech_final === true && transcriptRef.current.length >= 3) {
+              speechEndRef.current = Date.now()   // Sasha 275
+              scheduleFire()
+            }
+          } else if (fragment) {
+            // A non-empty interim means the guest is mid-word again — not done.
+            clearTimeout(pendingFire)
+          }
+        }
+        // UtteranceEnd fallback — fires if speech_final never came
+        if (data.type === 'UtteranceEnd') micLog('utterance_end', { pending: transcriptRef.current.length })
+        if (data.type === 'UtteranceEnd' && transcriptRef.current.length >= 3) {
+          speechEndRef.current = speechEndRef.current && Date.now() - speechEndRef.current < 3000 ? speechEndRef.current : Date.now()   // Sasha 275
+          scheduleFire()
+        }
+      } catch(e) {}
+    }
+
+    ws.onerror = () => {
+      // A WebSocket error Event carries NO detail — it always serialises to {}. The real
+      // diagnostic is the close code, logged in onclose (which also handles reconnect).
+      console.warn('[DG] socket error (readyState', ws.readyState, ') — reconnect handled on close')
+    }
+    ws.onclose = (e) => {
+      clearTimeout(pendingFire)
+      console.log('[DG] closed:', e.code, e.reason)
+      micLog('socket_close', { code: e.code, reason: e.reason })
+      if (wsRef.current !== ws) return  // superseded socket — ignore
+      wsRef.current = null
+      clearTimeout(connectTimeoutRef.current)
+      clearInterval(keepAliveIntervalRef.current)
+      connectedRef.current = false
+      setIsConnected(false)
+      setIsSpeaking(false)
+      if (e.code === 1008 || e.code === 4001 || e.code === 4003) dropKey()   // a refused key: the next socket gets a fresh one
+      // Auto-reconnect on an UNEXPECTED drop (network blip, server reap) — but not
+      // after a user/unmount stop, and only while we still want to be listening.
+      if (manualStopRef.current || !readyToListenRef.current) { connectingRef.current = false; setIsConnecting(false); recomputeRef.current(); return }
+      connectingRef.current = true; setIsConnecting(true)
+      recomputeRef.current()   // Sasha 322 · item 4: Connecting at once — never a stale Listening
+      const attempt = (dgReconnectAttemptsRef.current = Math.min(dgReconnectAttemptsRef.current + 1, 6))
+      // Sasha 215 · reconnecting again and again without ever opening is a dead mic: shown and said, not retried in silence
+      if (attempt >= RECONNECTS_BEFORE_SAYING) reportMicError('Voice service unavailable')
+      const backoff = Math.min(250 * 2 ** (attempt - 1), 8000)  // 0.25s → 8s cap
+      console.log(`[DG] unexpected close — reconnecting in ${backoff}ms (attempt ${attempt})`)
+      clearTimeout(dgReconnectTimerRef.current)
+      dgReconnectTimerRef.current = setTimeout(() => {
+        if (manualStopRef.current || !readyToListenRef.current) return
+        if (pipelineLive()) {   // Sasha 322 · the socket alone: the audio is still running (no new tap needed)
+          void prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; reportMicError('Voice service unavailable'); recomputeRef.current() } })
+        } else { connectingRef.current = false; connectRef.current() }   // the pipeline died too (a dead track): rebuilt whole
+      }, backoff)
+    }
+  }
 
   const connect = useCallback(async () => {
     if (asleepRef.current) { resumeRef.current = true; micLog('asleep', { connect: 'deferred until she wakes' }); return }   // Sasha 246 · asleep: never listening
     if (connectedRef.current || connectingRef.current) return
     connectingRef.current = true
+    wantedRef.current = true
     manualStopRef.current = false  // a fresh connect attempt re-enables reconnect
     console.log('[DG] connecting...')
     micLog('connect')
     if (!dgReconnectAttemptsRef.current) reportMicError(null)   // Sasha 215 · a reconnect keeps the error on screen until it opens
     setIsConnecting(true)
+    connectT0.current = Date.now()
     // Sasha 265 · item 1 (Tyler's iPhone 14:21Z, his Mac Chrome 14:46Z: a key minted, NO socket ever reached Deepgram): the audio was
     // made AFTER the mic permission and the key, and its resume() was waited on for good — a phone (or Chrome with no tap yet)
     // never resumes audio outside a tap, so the socket was never opened and 264's "can't hear you" line, after that await, never ran.
     // Made and resumed HERE, before the first await — inside the tap when a tap started it — and never waited on (RESUME_WAIT_MS).
     holdPlayAndRecord('the mic')   // Sasha 267 · before any mic request: "playback" makes iOS refuse capture (InvalidStateError)
+    if (pipelineLive()) {   // Sasha 322 · the pipeline is up (a socket dropped): the socket alone
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'running') audioCtxRef.current.resume().catch(() => {})
+      recompute()
+      void prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); recompute() } })
+      return
+    }
+    teardownAudio()   // the pieces of a pipeline that died
     const ctx = new AudioContext()
     audioCtxRef.current = ctx
     const resumed = ctx.resume().catch(() => {})
+    const workletReady = ctx.audioWorklet.addModule('/pcm-capture.js')   // Sasha 322 · loaded beside the mic, not after the socket
+    workletReady.catch(() => {})
     const dropCtx = () => { if (audioCtxRef.current === ctx) audioCtxRef.current = null; ctx.close().catch(() => {}) }
-    connectT0.current = Date.now()
+    recompute()
     try {
       // Sasha 266 · row 943 (a): his iPhone minted 16 keys and never asked for the mic. The browser's own answer first — a site the
       // browser blocks is said at once, with the steps to allow it (never a key, never a silent retry, never "on")
       const perm = await micPermission()
+      permStateRef.current = perm
       micLog('permission_state', { perm, state: audioSessionType() || 'none (not iOS Safari)' })
       if (perm === 'denied') {
         connectingRef.current = false; setIsConnecting(false); dropCtx()
         micLog('blocked', { perm, why: 'the browser blocks the microphone for this site' })
         reportMicError(BLOCKED)
+        recompute()
         return
       }
-      // Mint the ephemeral STT key in parallel with mic acquisition — no added latency.
-      const keyPromise = getDeepgramKey()
+      // Sasha 322 · the key was minted on mount (prefetchKey): ready now — and the socket opens BESIDE the mic, not after it
+      const keyPromise = prefetchKey()
+      void keyPromise.then(k => { if (k && audioCtxRef.current === ctx && !manualStopRef.current) openSocket(k) })
       const baseAudio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       // Resolve the device BEFORE opening anything. Once mic permission was granted in a
       // prior session, enumerateDevices() exposes labels without an active stream — so we
@@ -462,14 +865,14 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         }
       } catch { /* enumerate/re-acquire is best-effort */ }
       streamRef.current = stream
+      permStateRef.current = 'granted'
       micLog('permission', { granted: true, device: stream.getAudioTracks()[0]?.label || '' })
       // Mid-session mic death (the "froze at minute N" failure): a Continuity iPhone that
       // sleeps, locks, or walks out of range kills its audio track SILENTLY — no WS close,
-      // no error, the guest just stops being heard and the demo looks frozen. Route track
-      // death into the existing Deepgram onclose teardown + auto-reconnect: the reconnect
-      // re-runs device selection and lands on a healthy local mic. Our own teardown calls
-      // track.stop(), which does NOT fire onended, so this cannot loop. A mute must be
-      // SUSTAINED to count — brief mutes happen on audio-route changes and self-recover.
+      // no error, the guest just stops being heard and the demo looks frozen. A dead track ends the PIPELINE (Sasha 322: the
+      // socket alone can't fix it): torn down, and the socket's close rebuilds it whole on a healthy local mic. Our own teardown calls
+      // track.stop(), which does NOT fire onended, so this cannot loop. A mute must be SUSTAINED to count — brief mutes happen on
+      // audio-route changes and self-recover.
       {
         const track = stream.getAudioTracks()[0]
         if (track) {
@@ -478,308 +881,44 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
             if (streamRef.current !== stream || manualStopRef.current) return
             console.warn(`[MIC] input track ${why} (${track.label || 'unknown device'}) — recycling connection`)
             reportMicError('Microphone disconnected — reconnecting')
-            try { wsRef.current?.close() } catch {}
+            teardownAudio()
+            if (wsRef.current) { try { wsRef.current.close() } catch {} } else { connectingRef.current = false; connectRef.current() }
+            recompute()
           }
           track.onended = () => { notHearing('the track ended'); dead('ended') }
           track.onmute = () => { notHearing('the track was muted'); clearTimeout(muteTimer); muteTimer = setTimeout(() => dead('stayed muted'), 4000) }
-          track.onunmute = () => clearTimeout(muteTimer)
+          track.onunmute = () => { clearTimeout(muteTimer); recompute() }
         }
       }
       const dgKey = await keyPromise
       if (asleepRef.current) {   // Sasha 246 · fell asleep while the mic was opening: close it, listen again only when she wakes
-        if (streamRef.current === stream) streamRef.current = null
-        stream.getTracks().forEach(t => t.stop())
-        connectingRef.current = false; setIsConnecting(false); resumeRef.current = true; dropCtx()
+        connectingRef.current = false; setIsConnecting(false); resumeRef.current = true
+        if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
+        teardownAudio(); recompute()
         return
       }
-      if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); dropCtx(); return }
+      if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); teardownAudio(); recompute(); return }
 
       await Promise.race([resumed, new Promise(r => setTimeout(r, RESUME_WAIT_MS))])   // Sasha 265 · item 1: looked at, never waited for
       micLog('audiocontext', { state: ctx.state, sampleRate: ctx.sampleRate })
       // Sasha 264 · item 7: a phone only lets the mic's audio run from a tap — started without one (autoStart), it stays suspended and
       // no frame ever comes. Never "Listening" then: the screen says to tap, and the tap (toggleListening) turns it on.
       if (ctx.state !== 'running') { deafRef.current = true; reportMicError(DEAF_TAP); micLog('deaf', { why: 'audio suspended until a tap' }) }
-      ctx.onstatechange = () => { micLog('audiocontext', { state: ctx.state }); if (ctx.state !== 'running') notHearing('audio ' + ctx.state) }   // iOS suspends it when the page loses audio focus · 273: then never "on"
+      ctx.onstatechange = () => { micLog('audiocontext', { state: ctx.state }); if (ctx.state !== 'running') notHearing('audio ' + ctx.state); else recompute() }   // iOS suspends it when the page loses audio focus · 273: then never "on"
       console.log('[DG] AudioContext sampleRate:', ctx.sampleRate)
-
-      const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
-      const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${sendRate(ctx.sampleRate)}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true${KEYTERMS}`,
-        ['token', dgKey]
-      )
-      wsRef.current = ws
-
-      // Watchdog: if the socket doesn't open within 8s, close it so onclose can retry —
-      // otherwise a rejected connection leaves the mic stuck on the "connecting" spinner.
-      clearTimeout(connectTimeoutRef.current)
-      connectTimeoutRef.current = setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          console.warn('[DG] connect watchdog — socket never opened, closing to retry')
-          try { ws.close() } catch {}
-        }
-      }, 8000)
-
-      // Dedup state for BUG 4 — scoped to this connection's lifetime
-      let lastFinal = ''
-      let lastFinalAt = 0
-      // Turn-hold: Deepgram's endpointing (300ms) fires speech_final on any natural
-      // mid-sentence pause, and firing immediately made Sasha answer half a sentence
-      // ("I want to go to…" → she replies before "…Hanoi with my wife" arrives). Instead
-      // of firing on speech_final, HOLD briefly; if the guest resumes (SpeechStarted or a
-      // fresh interim), cancel the hold and keep accumulating — the fragments merge into
-      // one turn. A transcript that already ends in terminal punctuation is very likely a
-      // finished sentence, so it gets a short hold; a trailing/unpunctuated one waits longer.
-      let pendingFire: any = null
-
-      ws.onopen = async () => {
-        // Guard against StrictMode race: cleanup may have nulled wsRef while WS was connecting
-        if (wsRef.current !== ws) {
-          console.log('[DG] onopen: WS superseded by cleanup, discarding')
-          ws.close()
-          return
-        }
-        console.log('[DG] connected')
-        micLog('socket_open')
-        clearTimeout(connectTimeoutRef.current)
-        setIsConnecting(false)
-        setIsConnected(true)   // Sasha 266: open — "on" only once it hears (the first frame, below)
-        connectedRef.current = true; lastAliveRef.current = Date.now()   // Sasha 192
-        connectingRef.current = false; hadConnectedRef.current = true    // Sasha 197
-        dgReconnectAttemptsRef.current = 0   // healthy connection — reset backoff
-        if (!deafRef.current) reportMicError(null)   // Sasha 215 · open again: the error goes — Sasha 266: never "can't hear you" while still deaf
-
-        // KeepAlive runs for the lifetime of the session — not gated, always on
-        keepAliveIntervalRef.current = setInterval(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'KeepAlive' }))
-          }
-        }, 8000)
-
-        // Load worklet and wire up the audio pipeline
-        await ctx.audioWorklet.addModule('/pcm-capture.js')
-        const source = ctx.createMediaStreamSource(stream)
-        const node = new AudioWorkletNode(ctx, 'pcm-capture')
-        const downsample = makeDownsampler(ctx.sampleRate)   // per connection: its carry never crosses sockets
-        workletNodeRef.current = node
-
-        const send = (float32: Float32Array) => {
-          if (ws.readyState !== WebSocket.OPEN) return
-          // Convert float32 to int16 PCM before sending — Sasha 215 (d): at 16 kHz (a third of the upload at 48 kHz)
-          const pcm = downsample(float32)
-          if (!pcm.length) return
-          const int16 = new Int16Array(pcm.length)
-          for (let i = 0; i < pcm.length; i++) {
-            const s = Math.max(-1, Math.min(1, pcm[i]))
-            int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-          }
-          ws.send(int16.buffer)
-        }
-        // Sasha 265 · item 1 (the browser proof: "Book a table for two tonight" came back "A table for two tonight"): talking over
-        // her, the frames that tripped barge-in were dropped with the rest — the first word lost every time. The last PREROLL_MS
-        // while closed are kept and sent on a barge-in ONLY (never when she simply stops: that audio is her own voice).
-        const preroll: Float32Array[] = []
-        let prerollLen = 0
-        const prerollMax = Math.round(ctx.sampleRate * PREROLL_MS / 1000)
-        node.port.onmessage = (e) => {
-          const float32 = e.data as Float32Array
-          lastFrameRef.current = Date.now()   // Sasha 264 · item 7: the mic is delivering
-          if (!hearingRef.current) {   // Sasha 266 · row 943 (a): ON = a live, unmuted track delivering frames — from here, only
-            const tr = stream.getAudioTracks()[0]
-            if (tr && tr.readyState === 'live' && !tr.muted) {
-              hearingRef.current = true; setHearing(true); onConnectedChangeRef.current?.(true)
-              micLog('hearing', { ms: Date.now() - connectT0.current })
-            }
-          }
-          if (deafRef.current) { deafRef.current = false; reportMicError(null); micLog('hearing', { after: 'deaf' }) }
-          // HARD mute (itinerary build / any in-flight turn): drop every frame at the source,
-          // before Deepgram and before barge-in. `muted` is documented as a hard mute, but the
-          // frame loop only honoured the speak-gate — so a build whose classify was slow/failed
-          // left the mic genuinely streaming under a "Not listening" label. Enforce it here so
-          // the mic is truly deaf whenever muted, independent of the speak-gate's timing.
-          if (mutedRef.current) { preroll.length = 0; prerollLen = 0; if (!droppedMutedRef.current) { droppedMutedRef.current = true; micLog('dropping', { why: 'muted while a turn runs' }) } return }
-          if (droppedMutedRef.current) { droppedMutedRef.current = false; micLog('listening', { after: 'muted' }) }
-          if (micGatedRef.current) {
-            preroll.push(float32); prerollLen += float32.length
-            while (prerollLen - preroll[0].length >= prerollMax) prerollLen -= preroll.shift()!.length
-            // Gate ON = avatar is speaking. DROP every frame so the avatar's audio
-            // bleeding into the mic is never streamed to Deepgram. This is the core
-            // echo fix — Deepgram simply never hears the avatar.
-            // A deliberate mute is not interruptible — barge-in only exists to cut off the
-            // avatar mid-sentence, and during a build she isn't speaking.
-            if (BARGE_IN_ENABLED && !mutedRef.current) {
-              const rms = Math.sqrt(float32.reduce((s, x) => s + x * x, 0) / float32.length)
-              if (rms > BARGE_IN_RMS) {
-                loudFramesRef.current += 1
-                if (loudFramesRef.current >= BARGE_IN_FRAMES) {
-                  loudFramesRef.current = 0
-                  console.log('[BARGE-IN]', rms.toFixed(3), '> thr', BARGE_IN_RMS, '— interrupting avatar')
-                  micLog('barge_in', { rms: Number(rms.toFixed(3)) })
-                  onInterruptRef.current?.()
-                  micGatedRef.current = false  // open mic; gate setter fires async
-                  micLog('preroll', { ms: Math.round(prerollLen / ctx.sampleRate * 1000) })
-                  for (const f of preroll.splice(0)) send(f)   // Sasha 265 · item 1: the words that interrupted her, from their start
-                  prerollLen = 0
-                }
-              } else {
-                loudFramesRef.current = 0  // must be SUSTAINED — reset on any quiet frame
-              }
-            }
-            return  // gated: never send avatar bleed to Deepgram
-          }
-          loudFramesRef.current = 0
-          if (preroll.length) { preroll.length = 0; prerollLen = 0 }   // opened by her stopping: what was kept is her voice — dropped
-          send(float32)
-        }
-
-        source.connect(node)
-        // Keep the audio graph alive WITHOUT monitoring the mic to the speakers.
-        // Routing the worklet straight to ctx.destination plays the user's mic out
-        // loud, which adds a feedback path and muddies echo cancellation. Sink through
-        // a zero-gain node instead.
-        const sink = ctx.createGain()
-        sink.gain.value = 0
-        node.connect(sink)
-        sink.connect(ctx.destination)
-      }
-
-      ws.onmessage = (event) => {
-        if (micGatedRef.current) return
-        try {
-          const data = JSON.parse(event.data)
-          if (data.type === 'SpeechStarted') {
-            micLog('speech_start')
-            if (!heardAtRef.current) heardAtRef.current = Date.now()   // Sasha 192 · the watchdog's clock
-            clearTimeout(pendingFire)   // guest resumed — this turn isn't over
-            setIsSpeaking(true)
-            onSpeakingChangeRef.current?.(true)
-          }
-
-          const isEcho = (text: string): boolean => {
-            // Only acoustic bleed (which arrives right after the avatar goes quiet) is
-            // echo. After the window, identical words are the user genuinely answering.
-            if (Date.now() - gateOpenedAtRef.current > ECHO_WINDOW_MS) return false
-            const tWords = normalizeText(text)
-            if (tWords.length < ECHO_MIN_WORDS) return false  // never drop short genuine replies
-            const bWords = new Set(normalizeText(avatarSpeechGetterRef.current?.() ?? ''))
-            if (tWords.length > 0 && bWords.size > 0) {
-              const overlap = tWords.filter(w => bWords.has(w)).length / tWords.length
-              if (overlap >= 0.6) {
-                console.log('[ECHO] discarded (within echo window):', text)
-                micLog('dropped', { why: 'echo of her own words', text })
-                return true
-              }
-            }
-            return false
-          }
-
-          const fireTranscript = (final: string) => {
-            setIsSpeaking(false)
-            onSpeakingChangeRef.current?.(false)
-            if (final === lastFinal && Date.now() - lastFinalAt < 5000) { micLog('dropped', { why: 'repeat within 5 s', text: final }); return }
-            lastFinal = final
-            lastFinalAt = Date.now()
-            if (isEcho(final)) return
-            heardAtRef.current = 0; lastAliveRef.current = Date.now(); setNotCaught(false)   // Sasha 192 · heard: the watchdog rests
-            micLog('submitted', { text: final })
-            if (!firstHeardRef.current) { firstHeardRef.current = true; micLog('first_transcript', { ms: Date.now() - connectT0.current }) }   // Sasha 267 · reported (no words)
-            onTranscriptRef.current?.(final)
-          }
-
-          const scheduleFire = () => {
-            clearTimeout(pendingFire)
-            // Hold graded by how finished the utterance is: question/directive/short
-            // answer → fast; declarative narration → breathing room; fragment → longest.
-            const hold = holdFor(transcriptRef.current)
-            pendingFire = setTimeout(() => {
-              if (transcriptRef.current.length >= 3) {
-                const final = transcriptRef.current
-                transcriptRef.current = ''
-                fireTranscript(final)
-              }
-            }, hold)
-          }
-
-          if (data.type === 'Results') {
-            const fragment = data.channel?.alternatives?.[0]?.transcript || ''
-            if (fragment) micLog(data.is_final ? 'final' : 'partial', { text: fragment, speech_final: !!data.speech_final })
-            // Sasha 214 · words are arriving, so Deepgram is alive: the watchdog's "speech with no transcript" clock rests.
-            // It ran from the first SpeechStarted until a SUBMIT, so a guest who kept talking through the declarative hold
-            // (two statements 2.5 s apart) tripped the 8 s restart on a healthy socket and lost the held words (B3 harness).
-            if (fragment) heardAtRef.current = 0
-            if (data.is_final === true) {
-              // Accumulate is_final fragments; the hold below decides when the turn is over.
-              if (fragment) {
-                transcriptRef.current = transcriptRef.current
-                  ? `${transcriptRef.current} ${fragment}`
-                  : fragment
-              }
-              if (data.speech_final === true && transcriptRef.current.length >= 3) {
-                speechEndRef.current = Date.now()   // Sasha 275
-                scheduleFire()
-              }
-            } else if (fragment) {
-              // A non-empty interim means the guest is mid-word again — not done.
-              clearTimeout(pendingFire)
-            }
-          }
-          // UtteranceEnd fallback — fires if speech_final never came
-          if (data.type === 'UtteranceEnd') micLog('utterance_end', { pending: transcriptRef.current.length })
-          if (data.type === 'UtteranceEnd' && transcriptRef.current.length >= 3) {
-            speechEndRef.current = speechEndRef.current && Date.now() - speechEndRef.current < 3000 ? speechEndRef.current : Date.now()   // Sasha 275
-            scheduleFire()
-          }
-        } catch(e) {}
-      }
-
-      ws.onerror = () => {
-        // A WebSocket error Event carries NO detail — it always serialises to {}. The real
-        // diagnostic is the close code, logged in onclose (which also handles reconnect). Keep
-        // this a warn, not console.error: a transient, already-recovered socket blip must not
-        // trip the Next.js dev error overlay in the middle of a live session.
-        console.warn('[DG] socket error (readyState', ws.readyState, ') — reconnect handled on close')
-      }
-      ws.onclose = (e) => {
-        clearTimeout(pendingFire)
-        console.log('[DG] closed:', e.code, e.reason)
-        micLog('socket_close', { code: e.code, reason: e.reason })
-        const wasActiveSocket = wsRef.current === ws
-        if (!wasActiveSocket) return  // superseded socket — ignore
-        wsRef.current = null
-        connectingRef.current = false
-        clearTimeout(connectTimeoutRef.current)
-        setIsConnecting(false)  // never leave the mic stuck on the connecting spinner
-
-        // Tear down this connection's audio graph so a reconnect rebuilds cleanly.
-        clearInterval(keepAliveIntervalRef.current)
-        try { workletNodeRef.current?.disconnect() } catch {}
-        workletNodeRef.current = null
-        try { audioCtxRef.current?.close() } catch {}
-        audioCtxRef.current = null
-        if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
-        connectedRef.current = false
-        setIsConnected(false)
-        hearingRef.current = false; setHearing(false)   // Sasha 266
-        onConnectedChangeRef.current?.(false)
-        setIsSpeaking(false)
-
-        // Auto-reconnect on an UNEXPECTED drop (network blip, server reap) — but not
-        // after a user/unmount stop, and only while we still want to be listening.
-        if (manualStopRef.current || !readyToListenRef.current) return
-        const attempt = (dgReconnectAttemptsRef.current = Math.min(dgReconnectAttemptsRef.current + 1, 6))
-        // Sasha 215 · reconnecting again and again without ever opening is a dead mic: shown and said, not retried in silence
-        if (attempt >= RECONNECTS_BEFORE_SAYING) reportMicError('Voice service unavailable')
-        const backoff = Math.min(500 * 2 ** (attempt - 1), 8000)  // 0.5s → 8s cap
-        console.log(`[DG] unexpected close — reconnecting in ${backoff}ms (attempt ${attempt})`)
-        clearTimeout(dgReconnectTimerRef.current)
-        dgReconnectTimerRef.current = setTimeout(() => {
-          if (!manualStopRef.current && readyToListenRef.current) connect()
-        }, backoff)
-      }
+      await workletReady
+      wirePipeline(ctx, stream)
+      micLog('worklet', { ms: Date.now() - connectT0.current })
+      openSocket(dgKey)   // opened already beside the mic (this is a no-op then)
+      flushRef.current?.()
+      recompute()
 
     } catch (err: any) {
       connectingRef.current = false
       setIsConnecting(false)
-      dropCtx()
+      teardownAudio()
+      if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
+      recompute()
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
       micLog('error', { name: err?.name, message: String(err?.message || '').slice(0, 120) })
@@ -790,7 +929,9 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       else if (err.name === 'OverconstrainedError') reportMicError('Selected mic is unavailable')
       else reportMicError(err.message || 'Could not access microphone')
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])  // stable — all dynamic props are read via refs above
+  useEffect(() => { connectRef.current = connect })
 
   // Sasha 246 item 2 · fall asleep: everything stops (the stream's tracks, the socket, the reconnect timers; stopAll marks it a
   // manual stop, so neither the watchdog nor onclose reconnects). Wake: the mic comes back only if it was on or wanted.
@@ -810,7 +951,15 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   useEffect(() => {
     const t = setInterval(() => {
       const now = Date.now()
-      if (hearingRef.current && now - lastFrameRef.current > LIVE_FRAME_MS) notHearing('no frames')   // Sasha 273 · strict only (notHearing)
+      recomputeRef.current()   // Sasha 322 · a frame's age is a pipeline fact: the machine re-reads it
+      // Sasha 322 · item 4: a socket the browser still calls open that takes audio and answers nothing for 2× REPLY_MS is dead — closed, so
+      // onclose brings it back (the screen already left Listening at REPLY_MS: the machine reads the same fact)
+      const ws0 = wsRef.current
+      if (ws0 && ws0.readyState === WebSocket.OPEN && sendFromRef.current && now - lastSentRef.current < 1000 &&
+          now - Math.max(replyAtRef.current, sendFromRef.current) > 2 * REPLY_MS) {
+        micLog('socket_silent', { ms: now - Math.max(replyAtRef.current, sendFromRef.current) })
+        sendFromRef.current = 0; try { ws0.close() } catch { /* onclose reconnects */ }
+      }
       // a gate closed from the start (before her greeting) gets a clock too, so rule 1 covers the first turn
       if (micGatedRef.current && !gatedSinceRef.current && connectedRef.current) gatedSinceRef.current = now
       // Sasha 197 · the decision is lib/voice-watchdog.mjs (held by scripts/check-voice-watchdog.mjs at build).
@@ -819,8 +968,8 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       // Sasha 264 · item 7: connected, open and not paused, yet no frame from the mic for DEAF_AFTER_MS → it isn't reaching her: said
       if (connectedRef.current && !mutedRef.current && !asleepRef.current && !deafRef.current && streamRef.current &&
           now - Math.max(lastFrameRef.current, lastAliveRef.current) > DEAF_AFTER_MS) {
-        deafRef.current = true; reportMicError(DEAF_TAP); micLog('deaf', { why: 'no audio from the mic', ms: now - lastFrameRef.current })
-        if (hearingRef.current) { hearingRef.current = false; setHearing(false); onConnectedChangeRef.current?.(false) }   // Sasha 266
+        deafRef.current = true; connectingRef.current = false; setIsConnecting(false); reportMicError(DEAF_TAP); micLog('deaf', { why: 'no audio from the mic', ms: now - lastFrameRef.current })
+        recomputeRef.current()   // Sasha 266 / 322 · no audio reaching her: never "Listening"
       }
       const act = watchdogAction({
         now, manualStop: manualStopRef.current, ready: readyToListenRef.current, muted: mutedRef.current,
@@ -841,20 +990,21 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         lastAliveRef.current = now
         connect()
       }
-    }, 2000)
+    }, 250)   // Sasha 322 · the machine re-reads a frame's age 4× a second (the watchdog's own clocks are its own)
     return () => clearInterval(t)
   }, [connect, notHearing])
 
   const toggleListening = () => {
     tappedRef.current = true   // Sasha 320 · from now on the browser's answer is his to hear
+    if (!connectedRef.current && !tapAtRef.current) { tapAtRef.current = Date.now(); micLog('tap') }   // Sasha 322 · tap → Listening, measured (once)
     if (asleepRef.current) {   // Sasha 246 · pressing the mic wakes her — and she listens
       asleepRef.current = false; resumeRef.current = false
       onWakeRef.current?.()
     }
     if (connectedRef.current && deafRef.current) {   // Sasha 264 · item 7: the tap a phone needs — the same mic turned on, not off
       audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(() => {})
-      micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); lastFrameRef.current = Date.now()
-      deafRef.current = false; reportMicError(null)
+      micGatedRef.current = false; gateOpenedAtRef.current = Date.now()
+      deafRef.current = false; reportMicError(null); recomputeRef.current()
       return
     }
     if (connectedRef.current && strictRef.current && !hearingRef.current) { listenRef.current?.(); return }   // Sasha 273 · "Tap to talk": resume, never off
@@ -881,12 +1031,14 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     if (!connectedRef.current && !connectingRef.current) connect()
   }
   const listenNow = () => {
+    if (stateRef.current !== 'listening') { tapAtRef.current = Date.now(); micLog('tap') }   // Sasha 322 · tap / New chat → Listening, measured
     if (asleepRef.current || !connectedRef.current) { toggleListening(); return }   // asleep: wakes her and listens · off: starts it
     const tr = streamRef.current?.getAudioTracks()[0]
     if (!tr || tr.readyState === 'ended') { stopAll(); manualStopRef.current = false; micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); connect(); return }
     audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(() => {})   // inside the tap
-    micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); lastFrameRef.current = Date.now()
+    micGatedRef.current = false; gateOpenedAtRef.current = Date.now()
     if (deafRef.current) { deafRef.current = false; reportMicError(null) }
+    recomputeRef.current()
   }
   useEffect(() => {
     if (!ctlRef) return
@@ -960,47 +1112,36 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showMicPicker, selectedMicId, switchMic, audioDevices])
 
-  const stateWords = micError || (asleep ? 'Asleep — not listening' : muted ? 'Mic paused while Sasha answers' : notCaught ? 'I didn’t catch that — say it again'
-    : hearing ? (isSpeaking ? 'Speaking' : micGatedRef.current ? 'Sasha is speaking' : 'Listening') : isConnected || isConnecting ? 'Starting the microphone…' : 'Talk to Sasha')   // Sasha 266: "on" only when it hears
+  // Sasha 322 · what the mic SAYS and SHOWS is the machine's state (lib/mic-machine.mjs), on every page: off · connecting · listening ·
+  // thinking · speaking — an error the browser gave after his tap first (Sasha 320), asleep, then the state's own words
+  const stateWords = micError || (asleep ? 'Asleep — not listening' : notCaught ? 'I didn’t catch that — say it again' : MIC_WORDS[state])
+  const look = asleep ? 'bg-white/10 opacity-60'
+    : state === 'listening' ? `bg-emerald-600${isSpeaking ? ' scale-110' : ''}`
+    : state === 'connecting' ? 'bg-yellow-500'
+    : state === 'speaking' ? 'bg-amber-500/80'
+    : state === 'thinking' ? 'bg-white/10 opacity-70'
+    : 'bg-indigo-600 hover:bg-indigo-700'
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex flex-col items-center gap-1" data-mic-state={state}>
       <button
         onClick={toggleListening}
-        disabled={disabled || isConnecting}
-        aria-label={stateWords} title={stateWords}
-        className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-          // Muted outranks everything. `isSpeaking` can be a stale true from the moment before
-          // the mute landed, and a pulsing green mic on a closed mic is the exact thing that
-          // made the UI look like it was still listening.
-          asleep        ? 'bg-white/10 opacity-60'
-          : muted       ? 'bg-white/10 opacity-60'
-          : isSpeaking  ? 'bg-green-500 animate-pulse scale-110'
-          : hearing && strict ? 'bg-emerald-600'   /* Sasha 274 · item 3: live — the same green as its ring and "Voice on" */
-          : hearing     ? 'bg-red-500 animate-pulse'
-          : isConnected && !strict ? 'bg-yellow-500'
-          : isConnecting ? 'bg-yellow-500'
-          : 'bg-indigo-600 hover:bg-indigo-700'
-        } disabled:opacity-40`}
+        disabled={disabled}
+        aria-label={stateWords} title={stateWords} data-mic-state={state}
+        className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${look} disabled:opacity-40`}
       >
         {asleep ? <MicOff className="w-4 h-4 text-white/50" />
-          : muted ? <MicOff className="w-4 h-4 text-white/50" />
-          : isConnecting ? <Loader2 className="w-4 h-4 text-white animate-spin" />
-          : hearing && strict ? <Mic className="w-4 h-4 text-white" />   /* Sasha 274 · item 3: live = the mic, never crossed out beside "Voice on" */
-          : hearing ? <MicOff className="w-4 h-4 text-white" />
-          : isConnected && !strict ? <Loader2 className="w-4 h-4 text-white animate-spin" />   /* 274: strict — connected, not hearing = "Tap to talk" */
+          : state === 'connecting' ? <Loader2 className="w-4 h-4 text-white animate-spin" />
+          : state === 'thinking' || state === 'speaking' ? <MicOff className="w-4 h-4 text-white/70" />   /* the mic paused while she answers */
           : <Mic className="w-4 h-4 text-white" />}
       </button>
-      {!quiet && micError && <p className="text-xs text-red-400 text-center max-w-[200px]">{micError}</p>}
-      {!quiet && asleep && <p className="text-xs text-white/50 text-center">Asleep — not listening</p>}
-      {/* Sasha 257 · Tyler (row 860): the red "Not…" was this — the mic resting while she answers, said as an error. Said plainly now */}
-      {!quiet && !asleep && muted && <p className="text-xs text-white/50 text-center">Mic paused while Sasha answers</p>}
-      {!quiet && !asleep && notCaught && <p className="text-xs text-amber-300 text-center">I didn&rsquo;t catch that — say it again</p>}
-      {!quiet && !asleep && !muted && hearing && !isSpeaking && !notCaught && <p className="text-xs text-white/60 text-center">{micGatedRef.current ? 'Sasha is speaking…' : 'Listening…'}</p>}
-      {!quiet && !asleep && !muted && isSpeaking && <p className="text-xs text-green-400 text-center">Speaking...</p>}
+      {/* Sasha 322 · the live input level: moves with his voice — drawn only while Listening (audio reaching her) */}
+      <span aria-hidden="true" data-mic-meter style={{ display: 'block', width: 36, height: 3, borderRadius: 2, overflow: 'hidden', background: 'rgba(52,211,153,.25)', visibility: state === 'listening' ? 'visible' : 'hidden' }}>
+        <span ref={levelRef} style={{ display: 'block', height: '100%', background: '#34d399', transformOrigin: 'left center', transform: 'scaleX(0)', transition: 'transform 60ms linear' }} />
+      </span>
+      {!quiet && <p className={`text-xs text-center max-w-[200px] ${micError ? 'text-red-400' : state === 'listening' ? 'text-emerald-400' : 'text-white/60'}`}>{stateWords}</p>}
       {/* The mic picker is deliberately NOT rendered here. It is published upward via
           onMicDevices and drawn by the page as a pill beside the camera toggle, where the rest
-          of the call controls live. A local fallback used to exist for standalone use; it only
-          ever caused confusion by reappearing under the composer, so it is gone. */}
+          of the call controls live. */}
     </div>
   )
 }

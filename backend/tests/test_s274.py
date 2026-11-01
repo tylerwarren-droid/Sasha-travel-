@@ -59,9 +59,10 @@ class Cards(unittest.TestCase):
 class MicAgrees(unittest.TestCase):
     def test_icon_from_hearing(self):
         vb = _front(self, "app/components/VoiceButton.tsx")
-        self.assertIn(": hearing && strict ? <Mic className=\"w-4 h-4 text-white\" />", vb)
-        self.assertIn(": hearing && strict ? 'bg-emerald-600'", vb)
-        self.assertIn(": isConnected && !strict ? <Loader2", vb)
+        # Sasha 322 · re-pointed: the icon and the green come from the ONE state machine (Listening = audio reaching her), everywhere
+        self.assertIn(": state === 'listening' ? `bg-emerald-600", vb)
+        self.assertIn(": state === 'connecting' ? <Loader2", vb)
+        self.assertIn(": <Mic className=\"w-4 h-4 text-white\" />}", vb)
 
     def test_tap_starts_listening(self):
         app = _front(self, "app/s2/S2App.tsx")

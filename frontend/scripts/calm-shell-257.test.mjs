@@ -35,7 +35,9 @@ test('a calm screen: identity quietly in the header (whoami), no floating pill o
 
 test('the mic says plainly what it is: paused while she answers (not a red "Not…"); a blocked mic says what to do', () => {
   assert.doesNotMatch(mic, />Not listening</)
-  assert.match(mic, /Mic paused while Sasha answers/)
+  // Sasha 322 · paused while she answers is the ONE machine's state (lib/mic-machine.mjs): Thinking / Speaking, the mic crossed out
+  assert.match(mic, /MIC_WORDS\[state\]/)
+  assert.match(mic, /state === 'thinking' \|\| state === 'speaking' \? <MicOff/)
   // Sasha 266 · row 943 (a): a blocked mic says what to do — the plain line (lib/mic-state BLOCKED) and the steps for that browser
   assert.match(mic, /reportMicError\(BLOCKED\)/)
   // Sasha 320 · ONE short line, only after his tap: never on load, never the long steps under it
@@ -66,7 +68,7 @@ test('Sasha 259 · a calm phone screen: her face is a real still (268: half-body
   assert.match(app, /<SleepButton asleep=\{asleep\} onToggle=\{\(\) => sleepEvent\('tap_pause'\)\} size=\{36\} style=\{\{ flexShrink: 0, padding: '0 10px' \}\} \/>/)   // Sasha 273 · moved: never squeezed at 390 px
   assert.doesNotMatch(app, /position: 'fixed', zIndex: 46, left: 16/)                   // the moon no longer floats over "Voice off"
   assert.match(app, /<VoiceButton quiet /)
-  assert.match(mic, /\{!quiet && !asleep && muted && <p/)
+  assert.match(mic, /\{!quiet && <p className/)   // Sasha 322 · one line, the machine's (quiet on /s2: none under the mic)
 })
 
 test('Sasha 259 · the overlap rule: any two boxes that cross fail; touching does not', async () => {

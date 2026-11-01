@@ -171,7 +171,8 @@ async def voice_conductor(
         result = None
         if signed_in(account):   # Sasha 169 (6) · a booking on the voice page: the cards, picked by voice, read back, one yes
             from booking_signer import voice_turn as _vt
-            result = await _vt.turn(account, transcript, history)
+            from agapi import venue_submit as _VS   # Sasha 321 · a venue booking: the one brain, his yes = AgAPI's in_app_tap
+            result = await _vt.turn(account, transcript, history, tap=_VS.session_of(request))
         if result is None:
             result = await conduct(transcript, history, user_id=account, signed_in=signed_in(account))
         response_text = result["response"]

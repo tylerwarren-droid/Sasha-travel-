@@ -138,7 +138,16 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
         if bk:                     # "Back to RelocateMe": its own word resumes it
             from products.whatsapp import START_WORD
             message, payload = START_WORD.get(bk[1], bk[1]), None
-        result = await conduct(
+        result = None
+        if signed_in(account) and not body.media and not payload:
+            # Sasha 321 · a venue booking typed in the chat books as the voice avatar's does: the one brain → AgAPI's send, his yes =
+            # AgAPI's in_app_tap from this request's own session (never the retired senders behind the chat's booking card)
+            from booking_signer import voice_turn as _vt
+            from agapi import venue_submit as _VS
+            _r = await _vt.turn(account, message, body.conversation_history, tap=_VS.session_of(request), venues_only=True)
+            if _r is not None:
+                result = {"tools_used": [], **_r}
+        result = result or await conduct(
             user_message=message,
             conversation_history=body.conversation_history,
             client_config=client_config,

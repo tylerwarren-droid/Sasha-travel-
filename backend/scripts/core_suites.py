@@ -70,6 +70,36 @@ async def itinerary(a: str, conduct) -> None:
                                                                           (v3.get("itinerary") or {}).get("days") or [] if isinstance(d.get("hotel"), dict)), _said(v3)[:110])
 
 
+TO_TYLER_WORDS = "hand this to Tyler"
+
+
+async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +34 600 000 000") -> tuple:
+    """Sasha 321 · a venue booking on the voice avatar / REST chat, answered as a guest would until AgAPI has an act (or 6 more turns):
+    → (the acts AgAPI made in it, every line she said). The one brain decides how many questions; the gate checks the act."""
+    from agapi import venue_submit as VSB, venues as VNS
+    VNS._SENT.pop(a, None)   # each booking here is its own (AgAPI's path answers a repeated yes "already sent")
+    VNS._HELD.pop(a, None)
+    before = len(await VSB.acts_of(a))
+    h, seen, v = [], [], None
+    for said in turns:
+        v = await VT.turn(a, said, h)
+        h = (v or {}).get("messages") or h
+        seen.append(_said(v))
+        print(f"   · {said!r} → {_said(v)[:150]!r}", flush=True)
+    for _ in range(6):
+        made = (await VSB.acts_of(a))[before:]
+        if made:
+            return made, seen
+        s = _said(v)
+        said = (contact if re.search(r"(?i)whose name|what name|which name|your name|name and (?:a )?(?:phone|number)", s)
+                else "Handle it" if (BR.PHRASES["ask_book"] in s or re.search(r"(?i)prefilled|handle it", s)) else "yes")
+        v = await VT.turn(a, said, h)
+        h = (v or {}).get("messages") or h
+        seen.append(_said(v))
+        print(f"   · {said!r} → {_said(v)[:150]!r}", flush=True)
+    return (await VSB.acts_of(a))[before:], seen
+
+
 async def restaurant(a: str) -> None:
     # Sasha 254 · the routing rules are the vendored BOOKING RULES (agapi/booking_rules), asked through the one adapter — the old
     # decide.decide / decide.ladder (and their words) are retired
@@ -103,25 +133,15 @@ async def restaurant(a: str) -> None:
     real = GW.rehearsal
     GW.rehearsal = lambda acct: True   # this process only: the guest's cards end with OUR test venue (contacts no one)
     try:
-        h, seen = [], []
-        for said in ("dinner for 2 in Chamberí, Madrid on Saturday at 9pm", "Sasha Test Venue", "Suite Guest +34 600 000 000", "Handle it", "yes"):
-            v = await VT.turn(a, said, h)
-            h = (v or {}).get("messages") or h
-            if said in ("Handle it", "yes"):
-                seen.append(_said(v))
-            if said.startswith("Suite Guest"):   # Sasha 254 · the booking rules' ONE question (R2), word for word
-                ok("REST typed: the rules' one question — “I'll book it. Want a prefilled form you just confirm, or shall I handle it…?”",
-                   BR.PHRASES["ask_book"] in _said(v), _said(v)[:120])
-        # Sasha 254 · "Handle it" on a venue with its own form is the rules' fill_form_zero_touch: the choice is the yes (Sasha 195)
-        # Sasha 319 · the old flow's own form send is gone (AgAPI is the one sender; REST can't take a yes AgAPI accepts): Tyler's
-        ok("REST typed → the test venue is handed to Tyler — never Sasha's own form send", any("hand this to Tyler" in x for x in seen)
-           and not any(re.search(r"✅|[Bb]ooked", x) for x in seen), " | ".join(seen)[:160])
-        h = []
-        for said in ("Uh, a table for two in Chamberí, Madrid, Saturday at nine at night, please.", "the third one", "yes"):
-            v = await VT.turn(a, said, h)
-            print(f"   REST voice · {said!r} → {_said(v)[:140]!r}", flush=True)
-            h = (v or {}).get("messages") or h
-        ok("REST voice phrasing → handed to Tyler, nothing sent (319)", re.search(r"✅|[Bb]ooked", _said(v)) is None, _said(v)[:120])
+        # Sasha 321 · option (c), Tyler's go: the voice avatar / REST chat books through the one brain → AgAPI's send — an AgAPI act
+        # for our test venue, never "I'll hand this to Tyler", never Sasha's own form / email / call
+        made, seen = await _book_by_voice(a, ("dinner for 2 in Chamberí, Madrid on Saturday at 9pm", "Sasha Test Venue"), VT, BR)
+        ok("REST typed → the test venue booked through AgAPI: an act, never handed to Tyler (321)",
+           bool(made) and all(str(m.get("act_id") or "").startswith("act_") for m in made) and not any(TO_TYLER_WORDS in x for x in seen),
+           f"acts {[m.get('act_id') for m in made]} · " + " | ".join(seen)[-160:])
+        made, seen = await _book_by_voice(a, ("Uh, a table for two at the Sasha Test Venue in Madrid, Saturday at nine at night, please.",), VT, BR)
+        ok("REST voice phrasing → the test venue booked through AgAPI: an act, never handed to Tyler (321)",
+           bool(made) and not any(TO_TYLER_WORDS in x for x in seen), f"acts {[m.get('act_id') for m in made]} · " + " | ".join(seen)[-160:])
     finally:
         GW.rehearsal = real
 
@@ -222,26 +242,14 @@ async def guided(a: str, conduct) -> None:
     real = GW.rehearsal
     GW.rehearsal = lambda acct: True
     try:
-        vh = []
-        v = await VT.turn(a, "dinner for 2 in Hanoi on the 13th at 8pm", vh)
-        vh = (v or {}).get("messages") or vh
-        v = await VT.turn(a, "Sasha Test Venue", vh)
-        for _ in range(3):   # the contact if it's asked, then the ladder's question — answered as a guest would
-            vh = (v or {}).get("messages") or vh
-            if "Whose name" in _said(v):
-                v = await VT.turn(a, "Suite Guest +34 600 000 000", vh)
-            elif BR.PHRASES["ask_book"] in _said(v):   # Sasha 254 · the rules' ONE question (R2), not the retired ladder's words
-                ok("GUIDED 7: the rules' one question on the trip's day — “I'll book it. Want a prefilled form…?”", True, _said(v)[:120])
-                v = await VT.turn(a, "Handle it", vh)
-                break
+        made7, seen7 = await _book_by_voice(a, ("dinner for 2 in Hanoi on the 13th at 8pm", "Sasha Test Venue"), VT, BR)
     finally:
         GW.rehearsal = real
     from booking_signer import journeys as JN
     await JN.file(a)   # as every itinerary view does before showing it
     rows = await IQ._rows(a)
-    din = next((x for x in rows if "Sasha Test Venue" in str(x.get("venue")) and x.get("date") == "2026-11-13"), None)
-    ok("GUIDED 7: the ladder's restaurant is never sent by Sasha's own form (319) — nothing added on the 13th", din is None,
-       str({k: (din or {}).get(k) for k in ("date", "status")}))
+    ok("GUIDED 7: the trip's restaurant is booked through AgAPI — an act, never handed to Tyler, never Sasha's own form (321)",
+       bool(made7) and not any(TO_TYLER_WORDS in x for x in seen7), f"acts {[m.get('act_id') for m in made7]} · " + " | ".join(seen7)[-140:])
     r = await say("no")
     ok("GUIDED 8: “Any changes?”", _said(r) == CD.S199_CHANGES, _said(r)[:90])
     r = await say("change the hotel in Hoi An to something on the beach")

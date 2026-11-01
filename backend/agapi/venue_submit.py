@@ -38,6 +38,18 @@ TAP: _cv.ContextVar = _cv.ContextVar("sasha_in_app_session", default=None)
 #: message only; None everywhere else. Their reply to a read-back on WhatsApp is then approvals.in_app_tap, session kind "whatsapp".
 WA: _cv.ContextVar = _cv.ContextVar("sasha_whatsapp_tap", default=None)
 TAP_REFUSALS = ("approval_void", "approval_expired", "approval_untrusted_origin", "approval_consumed")
+
+
+def session_of(request) -> Optional[dict]:
+    """Sasha 258 / 321 · THE ONE PLACE a request's in-app session for approvals.in_app_tap is read — /s2, /next, the voice avatar and
+    the REST chat alike: the person's own Supabase token as the request carries it (chat_account verified it), or the founder's proxy
+    session. Held for that turn only: never stored or logged."""
+    bearer = request.headers.get("authorization", "").partition(" ")[2].strip()
+    if request.headers.get("x-sasha-session", "").strip().lower() == "founder" and not bearer:
+        return {"kind": "founder"}
+    return {"kind": "supabase", "token": bearer} if bearer else None
+
+
 TIMEOUT_S = 75.0
 _USERS: Dict[str, str] = {}             # target|account → AgAPI end_user
 _ACTS: Dict[str, List[dict]] = {}       # account → [{act_id, venue, date, time, party, state, say, at}]

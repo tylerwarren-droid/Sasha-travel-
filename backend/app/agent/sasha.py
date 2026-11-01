@@ -1918,9 +1918,8 @@ async def agent_turn(request: Request):
     guest_token = request.headers.get("authorization", "").partition(" ")[2].strip() if surface == "s2" else None   # CR 71 · /s2 only
     # Sasha 258 · THE IN-APP YES (CR 97): this person's own live session, for approvals.in_app_tap — their Supabase token as the proxy
     # sent it (the backend verified it in chat_account), or the founder's proxy session. Held for this turn only: never stored or logged
-    _bearer = request.headers.get("authorization", "").partition(" ")[2].strip()
-    tap_session = ({"kind": "founder"} if request.headers.get("x-sasha-session", "").strip().lower() == "founder" and not _bearer
-                   else {"kind": "supabase", "token": _bearer} if _bearer else None)
+    from agapi import venue_submit as _VS
+    tap_session = _VS.session_of(request)   # Sasha 321 · one reader, shared with the voice avatar and the REST chat
     over = await over_budget(account)
     lap("budget")
     session_id = str(body.get("session_id") or "")[:64] or None

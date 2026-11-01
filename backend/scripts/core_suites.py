@@ -85,7 +85,7 @@ async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +34 
     PA.install({a: {**PA.FOUNDER_PERSON, "mode": "test"}})
     from booking_signer import guest_whatsapp as GWS
     await GWS.STORE.put_state(VT.voice_key(a), {"history": [], "pending": None, "last_inbound_at": None})   # each booking its own talk
-    before = len(await VSB.acts_of(a))
+    before = time.time()   # an act made in THIS booking (the stand-in reuses one act id: the remembered act is re-stamped)
     try:
         return await _voice_turns(a, turns, VT, BR, contact, before, AGS)
     finally:
@@ -102,7 +102,7 @@ async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
         seen.append(_said(v))
         print(f"   · {said!r} → {_said(v)[:150]!r}", flush=True)
     for _ in range(6):
-        made = (await VSB.acts_of(a))[before:]
+        made = [x for x in await VSB.acts_of(a) if float(x.get("at") or 0) >= before]
         if made:
             return made, seen
         s = _said(v)
@@ -113,7 +113,7 @@ async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
         h = (v or {}).get("messages") or h
         seen.append(_said(v))
         print(f"   · {said!r} → {_said(v)[:150]!r}", flush=True)
-    return (await VSB.acts_of(a))[before:], seen
+    return [x for x in await VSB.acts_of(a) if float(x.get("at") or 0) >= before], seen
 
 
 async def restaurant(a: str) -> None:

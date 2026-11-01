@@ -132,5 +132,91 @@ class MyBookingsDemoClean(unittest.TestCase):
         self.assertIn("if (c.k === 'reconnect') return (", s2)
 
 
+RENFE = {"from": "Renfe <venta@renfe.com>", "subject": "Confirmación de compra - Localizador X7K2PQ", "date": "Sun, 01 Nov 2026 09:12:00 +0100",
+         "text": "Localizador: X7K2PQ\nTrayecto: Madrid-Puerta de Atocha → Barcelona-Sants\nFecha: 13 de noviembre de 2026\nSalida: 08:00\n"
+                 "Tarifa: Básico\nViajeros: 1\nImporte total: 45,60 €"}   # SYNTHETIC (AgAPI's rail_fixtures shape) — never anyone's mail
+TRIP = {"operator": "Renfe", "origin": "Madrid-Puerta de Atocha", "destination": "Barcelona-Sants", "date": "2026-11-13", "departs": "08:00",
+        "reference": "X7K2PQ", "fare": "Básico", "passengers": 1, "price_eur": 45.6}
+OPTIONS = {"act_id": "act_r1", "kind": "train", "operator": "Renfe", "fare": "Básico", "known": True,
+           "where": {"page": "https://www.renfe.com/es/es/gestiona-tu-billete/tus-reservas/consulta-tus-viajes", "reference": "X7K2PQ", "filled": "never"},
+           "options": [{"action": "change", "allowed": True, "say": "Change: €10 + the price difference, until 24 hours before departure."},
+                       {"action": "cancel", "allowed": False, "say": "This fare can't be cancelled (only within 2 hours of buying)."}]}
+
+
+class CR152Wired(unittest.TestCase):
+    """AgAPI's two ops, answered as v1.52.0 answers them: the ticket lands on his trip, and "cancel my Barcelona train" is its fare + one tap."""
+    def calls(self):
+        seen = []
+
+        async def call(account, op, body, approval=None):
+            seen.append((op, body))
+            if op == "venue.confirmation":
+                return {"ok": True, "result": {"matched": True, "act_id": "act_r1", "kind": "train", "state": "confirmed", "trip": TRIP,
+                                               "say_text": "Got it: your Renfe train Madrid-Puerta de Atocha → Barcelona-Sants, Fri 13 Nov 08:00 — ref X7K2PQ, fare Básico."}}
+            if op == "venue.manage_options":
+                return {"ok": True, "result": OPTIONS}
+            return {"ok": False, "error": {"code": "invalid_input", "message": "x"}}
+        return seen, call
+
+    def test_a_renfe_ticket_lands_on_the_trip_and_is_said_once(self):
+        from agapi import self_booked as SB, venue_submit as VS
+        seen, call = self.calls()
+        kept = {}
+        with mock.patch.object(VS, "_call", call), mock.patch.object(VS, "end_user", mock.AsyncMock(return_value="eu_1")), \
+                mock.patch.object(VS, "_remember", mock.AsyncMock(side_effect=lambda a, act: kept.update(act))):
+            got = asyncio.run(SB.from_mail(ACCT, RENFE))
+        self.assertEqual((got["matched"], got["act_id"]), (True, "act_r1"))
+        self.assertEqual(seen[0][0], "venue.confirmation")
+        self.assertNotIn("act_id", seen[0][1])                                            # no act_id: AgAPI's reader opens the record
+        self.assertEqual((kept["venue"], kept["when"], kept["reference"]), ("Renfe · Madrid-Puerta de Atocha → Barcelona-Sants", "2026-11-13T08:00", "X7K2PQ"))
+
+    def test_not_a_known_sellers_email_keeps_nothing(self):
+        from agapi import self_booked as SB, venue_submit as VS
+        async def call(*a, **k):
+            return {"ok": False, "error": {"code": "invalid_input", "message": "not a known seller"}}
+        with mock.patch.object(VS, "_call", call), mock.patch.object(VS, "end_user", mock.AsyncMock(return_value="eu_1")):
+            self.assertIsNone(asyncio.run(SB.from_mail(ACCT, {"from": "x@example.com", "subject": "hi", "text": "hello"})))
+
+    def test_cancel_and_change_answer_from_the_fare_with_the_operators_page_nothing_sent(self):
+        from agapi import self_booked as SB
+        c = SB.answer(OPTIONS, "cancel")
+        self.assertEqual((c["status"], c["sent"], c["button"]["link"]), ("their_page", False, OPTIONS["where"]["page"]))
+        self.assertTrue(c["say"].startswith("This fare can't be cancelled"))
+        self.assertIn("X7K2PQ", c["say"])
+        self.assertTrue(SB.answer(OPTIONS, "change")["say"].startswith("Change: €10"))
+
+    def test_the_hooks(self):
+        v = (ROOT / "backend/agapi/venues.py").read_text()
+        self.assertIn("m = await SB.manage(ctx.account, a[\"act_id\"])", v)
+        self.assertLess(v.index("m = await SB.manage(ctx.account, a[\"act_id\"])"), v.index("r = await VS.cancel_submit(ctx.account, held, said)"))
+        self.assertIn("m = await SB.manage(ctx.account, b[\"act_id\"])", (ROOT / "backend/agapi/s2_manage.py").read_text())
+        mb = (ROOT / "backend/booking_signer/mailbox.py").read_text()
+        self.assertIn("got = await SB.from_mail(account,", mb)
+        self.assertNotIn("renfe", mb.lower())                                             # no seller list in Sasha: AgAPI's table decides
+
+
+class OneReadBackOneYes(unittest.TestCase):
+    """VOICE LOOP 5's root (the gate's probe, 1 Nov 14:28 UTC, run 2/6): "Book it." → hold_booking!no_trip, propose_trip,
+    hold_booking!travellers_missing → she said "…the whole thing comes to about €2,771." (no ask) → "Yes." → travellers asked AFTER it →
+    the read-back needed a second yes. PRODUCT: the turn now ends asking for the travellers, by code."""
+    def test_the_failing_turn_asks_for_the_travellers(self):
+        from app.agent import sasha as AG
+        from booking_signer import passengers as PX
+        calls = [{"tool": "hold_booking", "code": "no_trip"}, {"tool": "propose_trip"}, {"tool": "hold_booking", "code": "travellers_missing"}]
+        self.assertEqual(AG.travellers_ask(calls, "I've put a trip together for you. The whole thing comes to about €2,771."), PX.ASK)
+
+    def test_never_twice_and_never_after_a_hold_that_worked(self):
+        from app.agent import sasha as AG
+        self.assertIsNone(AG.travellers_ask([{"tool": "hold_booking", "code": "travellers_missing"}],
+                                            "For the airline, I need each traveller's title, full name and date of birth."))
+        self.assertIsNone(AG.travellers_ask([{"tool": "hold_booking", "code": "travellers_missing"}, {"tool": "save_travellers"},
+                                             {"tool": "hold_booking"}], "Shall I go ahead and book it?"))
+
+    def test_the_gate_holds_it(self):
+        vl = (ROOT / "backend/scripts/voice_loop_suite.py").read_text()
+        self.assertIn("the travellers were asked after his yes", vl)
+        self.assertIn('fail.append(f"payment links on the phone: {len(links)} (want exactly one)', vl)   # still exactly one link
+
+
 if __name__ == "__main__":
     unittest.main()

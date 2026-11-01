@@ -105,6 +105,21 @@ def _money(s: str) -> float:
 _CONDITIONAL = re.compile(r"(?i)\b(?:once|when|after|as soon as|until|the moment)\b[^.!?]*\b(?:pa(?:y|id)|tap|go(?:ne)? through)|\bnot (?:yet )?(?:booked|paid|confirmed)|\bnothing'?s? (?:is )?(?:booked|paid|confirmed)")
 
 
+_ASKS_TRAVELLERS = re.compile(r"(?i)full names?|dates? of birth|birthdays?|\btitles?\b|passport names?")
+
+
+def travellers_ask(calls: list, text: str) -> Optional[str]:
+    """Sasha 323 · ONE READ-BACK, ONE YES (VOICE LOOP 5, 1 Nov: "Book it." → hold_booking said travellers_missing, she said the total
+    instead of asking, his "Yes." answered nothing, the travellers were asked AFTER it and the read-back needed a second yes). A turn whose
+    LAST hold_booking came back travellers_missing ends asking for the travellers — passengers.ASK, word for word — unless she already
+    asked. → the line to add, or None."""
+    from booking_signer import passengers as PX
+    holds = [c for c in calls or [] if c.get("tool") == "hold_booking"]
+    if holds and holds[-1].get("code") == "travellers_missing" and not _ASKS_TRAVELLERS.search(text or ""):
+        return PX.ASK
+    return None
+
+
 def _claims(text: str) -> bool:
     """A booked/paid/confirmed claim — not a sentence saying it WILL be, once they pay (Sasha 210), nor saying it isn't yet."""
     return any(_CLAIM.search(x) and not _CONDITIONAL.search(x) for x in re.split(r"(?<=[.!?])\s+", text or ""))
@@ -1161,6 +1176,13 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         guard_log.append(f"the one total said: {tline}")
         yield {"type": "text", "delta": " " + tline}
         yield {"type": "say", "text": SP.speakable(tline)}
+    ask = travellers_ask(ctx.calls, text)
+    if ask:   # Sasha 323 · the travellers before the read-back, in THIS turn — so his one yes answers the one read-back
+        text = f"{text} {ask}".strip()
+        said.append(ask)
+        guard_log.append("the travellers asked by code: hold_booking said travellers_missing")
+        yield {"type": "text", "delta": " " + ask}
+        yield {"type": "say", "text": SP.speakable(ask)}
     if len(text) > TRIM_CHARS:   # Sasha 205 · the safety trim: a very long reply ends at a sentence
         cut = text[:TRIM_CHARS]
         text = cut[: max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! ")) + 1] or cut

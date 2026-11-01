@@ -160,6 +160,9 @@ def judge(name: str, turns: list, ends_paid: bool) -> dict:
     if ends_paid and len(links) != 1:
         fail.append(f"payment links on the phone: {len(links)} (want exactly one) — her last words: "
                     + " | ".join(f"{t['user']!r} → {str(t.get('text') or '')[:110]!r}" for t in turns[-2:]))   # Sasha 322 · a flake says why
+    late = [i for i, t in enumerate(turns) if yes_at is not None and i >= yes_at and _ASKS_TRAVELLERS.search(t.get("text") or "")]
+    if late:   # Sasha 323 · ONE YES: the travellers are asked BEFORE the read-back his yes answers — never after it (a second yes)
+        fail.append(f"the travellers were asked after his yes (turn {late[0] + 1}): {str(turns[late[0]].get('text') or '')[:120]}")
     if links and (yes_at is None or links[0][0] < yes_at):
         fail.append("a payment link reached the phone before their yes")
     for t in turns:

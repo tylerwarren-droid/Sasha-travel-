@@ -2244,6 +2244,14 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
     own page, said kindly."""
     from agapi.v0 import claim
     from agapi import venue_submit as VS
+    if not (held and held.get("act_id")) and a.get("act_id"):
+        # Sasha 323 · CR 152 · a booking he made himself (a train): AgAPI's fare answers what can be cancelled, and he does it on the
+        # operator's own page (one button) — nothing is sent. A booking AgAPI sent itself has no such page: its own cancel act, below.
+        from agapi import self_booked as SB
+        m = await SB.manage(ctx.account, a["act_id"])
+        if m:
+            _CANCEL.pop(ctx.account, None)
+            return SB.answer(m, "cancel")
     if held and held.get("act_id") and (not a.get("act_id") or a["act_id"] == held["act_id"]) and held["at"] < ctx.started:
         if not explicit_yes(said):
             raise _err("no_explicit_yes", "cancelling needs their explicit yes — ask them")

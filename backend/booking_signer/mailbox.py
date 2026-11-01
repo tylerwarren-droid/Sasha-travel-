@@ -46,6 +46,7 @@ PLATFORM_NAMES = {"thefork": "TheFork", "eltenedor": "ElTenedor", "opentable": "
                   "zenchef": "Zenchef", "resy": "Resy", "sevenrooms": "SevenRooms", "quandoo": "Quandoo", "fresha": "Fresha",
                   "booking.com": "Booking.com", "restaurantes.com": "Restaurantes.com", "booksy": "Booksy"}   # Sasha 175 · Booksy
 KEYWORDS = ("reserva", "booking", "reservation", "confirmación", "confirmation", "cancelación", "cancellation", "factura", "cita",
+            "confirmado", "localizador", "billete",   # Sasha 323 · CR 152 · a train ticket he bought himself (AgAPI decides whose)
             "appointment",
             "invoice", "receipt", "recibo")
 
@@ -516,6 +517,22 @@ async def sync(account: str) -> List[dict]:
         body = _body_text(payload)
         kind, facts, parsed_by = read(_header(payload, "Subject"), _header(payload, "From"), body, now)
         row, basis = match(facts, rows)
+        if not row:   # Sasha 323 · CR 152 · a booking he made himself (a train): AgAPI's ONE reader decides whose it is and opens the record
+            from agapi import self_booked as SB
+            got = await SB.from_mail(account, {"from": _header(payload, "From"), "subject": _header(payload, "Subject"),
+                                               "date": _header(payload, "Date"), "text": body})
+            if got and got.get("matched"):
+                t = got.get("trip") or {}
+                find0 = {"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": m["id"], "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+                         "kind": got.get("kind") or "train", "facts": {k: t.get(k) for k in ("operator", "origin", "destination", "date", "departs",
+                                                                                             "reference", "fare", "passengers")},
+                         "parsed_by": "agapi", "trip_item_id": got["act_id"], "match_basis": "self_booked", "offered_action": None,
+                         "offered_sentence": None, "offer_sha256": None, "action_status": "done"}
+                await STORE.put_find(find0)
+                found.append(find0)
+                if not got.get("already"):
+                    await _told_train(account, got)
+                continue
         if kind == "other" and row and MODEL_READER and os.getenv("SASHA_MAILBOX_MODEL", "") == "1":
             kind, facts, parsed_by = await MODEL_READER(body, row), facts, "model"   # M-3 · matched and unread by rules only
         off = offer(kind, facts, row, now)
@@ -588,6 +605,18 @@ async def link_dead(account: str, link: dict, rule: str) -> dict:
     await STORE.set_link(account, told_reconnect_at=now)   # once: both doors were tried in this same sync
     log.info("[mailbox] the reconnect line: WhatsApp %s, /s2 %s", wa, s2)
     return {"told": wa, "s2": s2}
+
+
+async def _told_train(account: str, got: dict) -> None:
+    """Sasha 323 · CR 152 · a ticket he bought himself is on his trip now: AgAPI's own line, once — WhatsApp and /s2."""
+    from . import live_events as LE
+    line = got.get("say") or f"Got it: your {got.get('label') or 'train'} is on your trip."
+    try:
+        await LE._tell_whatsapp(account, line)
+        LE.publish(account, {"type": "proactive", "say": line})
+        await LE.keep_news(account, f"train:{got['act_id']}", line)
+    except Exception as e:
+        log.warning("[mailbox] the train line wasn't said: %s", type(e).__name__)
 
 
 async def _told_auto(account: str, action: str, facts: dict, row: dict) -> None:

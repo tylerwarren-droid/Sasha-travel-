@@ -52,6 +52,9 @@ class Sandbox:
         if op == "sandbox.simulate_approval":
             return ({"ok": True, "result": {"approval_id": "apv_1"}} if "yes" in body["said"].lower()
                     else {"ok": False, "error": {"code": "no_explicit_yes"}})
+        if op == "venue.manage_options":   # Sasha 323 · CR 152 · asked first; an act AgAPI sent itself has no fare page (v1.52.0's answer)
+            return {"ok": True, "result": {"act_id": body.get("act_id"), "kind": "venue", "known": False, "options": [],
+                                           "say_text": "I don't have this booking's fare rules — its change and cancel go by the booking's own route."}}
         raise AssertionError(op)
 
 

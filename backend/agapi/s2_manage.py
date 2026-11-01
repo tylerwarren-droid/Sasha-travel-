@@ -155,6 +155,11 @@ async def _act_notice(ctx, a: dict, b: dict, kind: str, tool: str) -> dict:
     act's an email, a WhatsApp act's a WhatsApp, a call act's a call). Not offered by AgAPI yet → said plainly; nothing is sent."""
     from agapi import venue_submit as VS
     from app.agent import voice as V
+    if kind == "change" and b.get("act_id"):   # Sasha 323 · CR 152 · a self-booked train: its fare + the operator's page, nothing sent
+        from agapi import self_booked as SB
+        m = await SB.manage(ctx.account, b["act_id"])
+        if m:
+            return SB.answer(m, "change")
     if kind == "late":
         arrive = _arrive(b, a)
         if not arrive:

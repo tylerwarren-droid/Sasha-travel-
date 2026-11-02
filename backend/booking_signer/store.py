@@ -172,7 +172,7 @@ class MemoryStore:
                         "booking_reference": item["booking_reference"], "venue_words": att.get("venue_words"),
                         "observed_by": att.get("observed_by"), "request": item.get("request"), "type": item.get("type") or "restaurant",
                         "location_name": item.get("location_name"), "location_address": item.get("location_address"),
-                        "duration_minutes": item.get("duration_minutes"),
+                        "duration_minutes": item.get("duration_minutes"), "escalation_notes": item.get("escalation_notes"),
                         "task_digest": self.tasks.get(intent["intent_id"], {}).get("task_digest")})
         return sorted(out, key=lambda r: (r["local_date"], r["local_time"]))
 
@@ -442,6 +442,7 @@ class PostgresStore:
             "c.own_reference, "   # Sasha 88 · her K-XXXX (written channels only since Sasha 131)
             "e.sent_at as requested_at, "   # Sasha 131 · when Sasha's email went: the reply clock
             "t.type, t.location_name, t.location_address, t.duration_minutes, "   # Sasha 132 · flights and the itinerary questions
+            "t.escalation_notes, "   # Sasha 327 · a train item's act link (agapi_act:<act_id>), never shown as text
             "t.request "   # S-64 step 14 · the activity, its length and its unit, for the screen
             "from trip_items t join trips p on p.id = t.trip_id "
             "left join lateral (select * from booking_intents y where y.trip_item_id = t.id order by y.created_at desc limit 1) i on true "

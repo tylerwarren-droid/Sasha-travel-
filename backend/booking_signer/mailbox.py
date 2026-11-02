@@ -522,11 +522,13 @@ async def sync(account: str) -> List[dict]:
             got = await SB.from_mail(account, {"from": _header(payload, "From"), "subject": _header(payload, "Subject"),
                                                "date": _header(payload, "Date"), "text": body})
             if got and got.get("matched"):
-                t = got.get("trip") or {}
+                # Sasha 327 · a train is a TRAIN on the ONE trip record (trains.keep: one item per act, linked to it); the find keeps
+                # AgAPI's answer (every field but the card) and the act — trip_item_id is the trip item's, never the act's id
+                from . import trains as TR
+                tid = await TR.keep(account, got)
                 find0 = {"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": m["id"], "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
-                         "kind": got.get("kind") or "train", "facts": {k: t.get(k) for k in ("operator", "origin", "destination", "date", "departs",
-                                                                                             "reference", "fare", "passengers")},
-                         "parsed_by": "agapi", "trip_item_id": got["act_id"], "match_basis": "self_booked", "offered_action": None,
+                         "kind": got.get("kind") or "train", "facts": TR.find_facts(got),
+                         "parsed_by": "agapi", "trip_item_id": tid, "match_basis": "self_booked", "offered_action": None,
                          "offered_sentence": None, "offer_sha256": None, "action_status": "done"}
                 await STORE.put_find(find0)
                 found.append(find0)
@@ -560,6 +562,11 @@ async def sync(account: str) -> List[dict]:
     for f in await STORE.list_finds(account):          # an "add" not answered before its day: withdrawn, kept as history
         if f["action_status"] == "offered" and f.get("offered_action") == "add" and not upcoming((f.get("facts") or {}).get("at"), now):
             await STORE.set_find(f["id"], action_status="none")
+    try:   # Sasha 327 · an 'other' item that is AgAPI's train → 'train'; a ticket not yet on the trip (046 not in then) → written now
+        from . import trains as TR
+        await TR.reread(account)
+    except Exception as e:
+        log.warning("[mailbox] the train re-read failed: %s", type(e).__name__)
     await STORE.set_link(account, last_sync_at=now)
     await _offer_on_whatsapp(account, [f for f in found if f["offered_action"]])
     return found

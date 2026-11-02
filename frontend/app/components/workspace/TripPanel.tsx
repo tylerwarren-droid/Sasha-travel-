@@ -7,6 +7,7 @@ import TripMap from '../TripMap'
 import { bookingReq } from '@/lib/booking-client'
 import type { RichItinerary } from '../ItineraryDays'
 import { termHead, type Term } from '../cards/S2Cards'   // Sasha 301 · the fine print: one way to say a term
+import TrainLine, { type Train } from './TrainLine'   // Sasha 327 · trains are trains
 // Sasha 301 · a day's booking line says the cancellation deadline the venue stated (their sentence is on its card) — nothing if none
 const cancelBy = (ts?: Term[]) => { const t = (ts || []).find((x) => x.kinds.includes('cancellation') && x.by_words); return t ? ` · cancel by ${t.by_words}` : '' }
 
@@ -67,7 +68,7 @@ type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; st
   to_pay_eur?: number; estimate_lines?: { what: string; eur: number | null }[]; lines?: { kind: string; state: string; what: string; day?: string | null }[] }
 const eur = (n: number) => `€${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string
-  route_words?: string; venue_words?: string | null; terms?: Term[] }   // Sasha 300 · the way it was made; the venue's own words (data) · 301: their terms
+  route_words?: string; venue_words?: string | null; terms?: Term[]; type?: string; train?: Train }   // Sasha 327 · a train: every field   // Sasha 300 · the way it was made; the venue's own words (data) · 301: their terms
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
 type JForm = { name: string; state: 'filled' | 'signed' | 'missing' | 'waiting' | 'done' | 'doing' | 'expired' | 'info'; note: string; pdf: string | null; next: string | null }
 /** CR 50 · the Move tab's "Getting there": Sasha books the flights and first nights from here, onto this trip */
@@ -104,7 +105,9 @@ function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
         {[...byDay].map(([d, rs]) => (
           <div key={d} style={{ marginBottom: 10 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>{d ? dayHead(d) : 'No day set yet'}</div>
-            {rs.map((r) => (
+            {rs.map((r) => r.type === 'train' && r.train ? (
+              <div key={r.id} style={{ marginBottom: 6 }}><TrainLine t={r.train} status={r.status_words ?? r.status} /></div>
+            ) : (
               <div key={r.id} style={{ marginBottom: 6 }}>
                 <div>{r.time ? `${r.time} · ` : ''}{r.venue.replace(/ \(TEST stand-in\)$/, '')}</div>
                 <div className="lw-note-s">{r.status_words ?? r.status}{r.route_words ? ` · ${r.route_words}` : ''}{r.booking_reference ? ` · ref ${r.booking_reference}` : ''}</div>

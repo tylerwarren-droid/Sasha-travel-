@@ -204,12 +204,16 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
     records = await VN.venue_bookings(account, include_cancelled=True)
     out: List[dict] = []
     today = date.today().isoformat()
+    # Sasha 327 · a train item IS its ticket: its AgAPI act's own row is not listed again (one booking, one row)
+    trains = {str(b["agapi_act"]) for b in records if b.get("type") == "train" and b.get("agapi_act")}
     for g in on_agapi.values():   # CR 132 · AgAPI's record is the truth for every booking on it (the hand-overs too); from today on
+        if g["act_id"] in trains:
+            continue
         if (str(g.get("at") or "")[:10] or today) >= today:
             out.append(_from_record(g, acts.get(g["act_id"])))
     for b in records:
-        if b.get("act_id") and b["act_id"] in on_agapi:
-            continue   # on AgAPI's record: its row is above
+        if b.get("act_id") and (b["act_id"] in on_agapi or b["act_id"] in trains):
+            continue   # on AgAPI's record: its row is above (327: or it is a train item's act — that item is its row)
         if b.get("act_id"):
             a = acts.get(b["act_id"]) or {}
             route = act_route({**a, **b})
@@ -221,7 +225,8 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
             route = _LADDER_ROUTE.get(str(b.get("channel") or "form"), "form")
             status = _LADDER.get(str(b.get("status") or ""), "asked")
             row = {"id": b["trip_item_id"], "source": "ladder", "trip_item_id": b["trip_item_id"], "route": route, "status": status,
-                   **({"trip_id": b["trip_id"]} if b.get("trip_id") else {}), **({"address": b["address"]} if b.get("address") else {})}
+                   **({"trip_id": b["trip_id"]} if b.get("trip_id") else {}), **({"address": b["address"]} if b.get("address") else {}),
+                   **{k: b[k] for k in ("location", "duration_minutes", "agapi_act") if b.get(k)}}   # Sasha 327 · a train's leg and its act
         kind = "hotel" if row.pop("stay", None) else b.get("type")
         if row["source"] == "act" and status not in ANSWERED:   # Sasha 302 · found live: "They said: Emailed … — sandbox: captured" was AgAPI's
             b = {k: v for k, v in b.items() if k != "venue_said"}  # note on a sent request, not the venue's words (CR 132's venue.bookings rule)
@@ -265,7 +270,9 @@ async def of(account: str) -> List[dict]:
                     "status_words": v["status_words"], "route": v["route"], "route_words": v["route_words"], "manage": v["manage"],
                     "party": v.get("party"), "id": v["id"], "source": "venue",
                     **{k: v[k] for k in ("reference", "venue_said", "map_url", "address", "platform", "url", "cancel", "change", "terms",
-                                         "change_answer", "country") if v.get(k)},
+                                         "change_answer", "country", "agapi_act") if v.get(k)},
+                    **({"minutes": v["duration_minutes"]} if v.get("duration_minutes") else {}),   # 327 · a train's length (the calendar reads it)
+                    **({"where": v["location"]} if v.get("location") else {}),   # Sasha 327 · a train's "Origin → Destination"
                     **({k: v["stay"][k] for k in ("check_in", "check_out", "nights") if v["stay"].get(k) is not None}   # Sasha 306 · AgAPI's
                        if isinstance(v.get("stay"), dict) else {}),
                     **({"trip_id": trip["trip_id"], "trip": trip.get("title")} if trip else {})})
@@ -308,6 +315,8 @@ async def of(account: str) -> List[dict]:
     for r in await RM.rentals(account):
         out.append({"kind": "car", "title": f"{r['rental_company']} car rental", "when": r["pickup_date"] + (f"T{r['pickup_time']}" if r.get("pickup_time") else ""),
                     "where": r.get("place") or r.get("country") or "", "status": "noted (booked elsewhere)", "id": r["id"], "source": "rental"})
+    from booking_signer import trains as TR   # Sasha 327 · a train: every field, read now (AgAPI's act and its reader's answer)
+    await TR.view(account, out)
     wallet = await _wallet(account)   # Sasha 301 · his loyalty numbers and card perks that apply to each booking (masked)
     if wallet:
         from agapi import booking_terms as BT
@@ -366,6 +375,8 @@ async def _wallet(account: str) -> List[dict]:
 
 def _venue_kind(t: Optional[str]) -> str:
     t = (t or "").lower()
+    if t == "train":   # Sasha 327 · trains are trains
+        return "train"
     if t in ("hotel", "stay"):   # Sasha 302 · a hotel stay booked as an act (CR 102)
         return "hotel"
     return "spa" if re.search(r"spa|massage|beauty|salon|nail|hair|wellness", t) else "dinner"

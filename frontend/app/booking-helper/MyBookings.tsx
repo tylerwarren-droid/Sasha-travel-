@@ -6,13 +6,15 @@
  *  so a booking made through AgAPI is here too (the old /reservations list had only Sasha's own). */
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
+import TrainLine, { type Train } from '../components/workspace/TrainLine'   // Sasha 327 · trains are trains
 
 type R = { id: string; venue: string; date: string | null; time: string | null; party?: number | null; status: string; status_words?: string
-  booking_reference?: string | null }
+  booking_reference?: string | null; type?: string; train?: Train }
 
 const day = (d: string | null) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : 'no day set')
 
 function Row({ x }: { x: R }) {
+  if (x.type === 'train' && x.train) return <li><TrainLine t={x.train} status={x.status_words ?? x.status} /></li>
   return (
     <li>
       <strong>{x.venue}</strong> — {day(x.date)}{x.time ? ` at ${x.time}` : ''}{x.party ? `, ${x.party} ${x.party === 1 ? 'person' : 'people'}` : ''}

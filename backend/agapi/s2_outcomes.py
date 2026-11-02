@@ -222,6 +222,8 @@ async def sync(account: str, reservations: list) -> int:
             st = "failed"
         if not tid or not st:
             continue
+        if tid not in was:   # Sasha 325 · only an attempt still OPEN (the durable open set) is updated — a settled one never again: after
+            continue         # every restart this re-sent every decided reservation (~45 outcomes.update in 10 s on 2 Nov, all 404)
         ref = f"sasha:{tid}"
         if (ref, st) in _DONE:
             continue

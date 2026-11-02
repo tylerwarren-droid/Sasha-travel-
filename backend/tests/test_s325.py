@@ -303,3 +303,19 @@ class TheHealthEmailSaysWhichItWas(unittest.TestCase):
         m = self.mail("budget_exhausted")
         self.assertIn("monthly budget is spent (402)", m["text"].splitlines()[0])
         self.assertNotIn("429", m["text"] + m["subject"])
+
+
+class SettledOutcomesAreNeverReSent(unittest.TestCase):
+    def test_only_an_open_attempt_is_updated(self):
+        from agapi import s2_outcomes as OC
+        sent = []
+
+        async def send(op, body, account=None):
+            sent.append(body["ref"])
+            return True
+        rows = [{"id": f"t{i}", "status": "confirmed"} for i in range(45)]   # 2 Nov after the deploy: 45 decided, long settled
+        with mock.patch.object(OC, "_send", send), mock.patch.dict(OC._OPEN, {"acct-o": {"t7"}}, clear=True), \
+                mock.patch.object(OC, "_DONE", set()), mock.patch.object(OC, "_keep_open", mock.AsyncMock()):
+            asyncio.run(OC.sync("acct-o", rows))
+            asyncio.run(OC.sync("acct-o", rows))
+        self.assertEqual(sent, ["sasha:t7"])   # the one still open, once

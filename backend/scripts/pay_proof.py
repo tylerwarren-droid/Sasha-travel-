@@ -53,8 +53,10 @@ async def run() -> bool:
         await TD.expire(pi["id"])
 
         await TD.remove_saved("proof")
-        await TD.HTTP("POST", "/payment_methods/pm_card_chargeDeclined/attach", {"customer": cid})
-        card = await TD.saved_card("proof")
+        await TD.HTTP("POST", "/payment_methods/pm_card_chargeCustomerFail/attach", {"customer": cid})
+        card = await TD.saved_card("proof")   # Stripe's card that attaches but fails when charged (4000 0000 0000 0341)
+        if not card:
+            raise RuntimeError("the decline test card wasn't saved at Stripe")
         pi = await TD.intent_saved(card, "9.00", "EUR", "pay proof — declined", "proof327d")
         r = await TD.confirm_saved(pi["id"])
         ok &= _p(bool(r.get("declined")), "declined: said plainly (the page is offered)", r.get("why"))

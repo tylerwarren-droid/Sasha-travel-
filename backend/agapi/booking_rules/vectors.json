@@ -1,5 +1,5 @@
 {
- "version": "booking-rules/2.4 · 2026-10-27",
+ "version": "booking-rules/2.5 · 2026-11-02",
  "vectors": [
   {
    "rule": "R1",
@@ -2778,6 +2778,386 @@
    "expect": {
     "action": "hand_over_platform_link",
     "!action": "fill_form_zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person, CoverManager (policy permits the beta) → filled and submitted after the yes",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "fill_platform_form",
+    "rung": "zero_touch",
+    "say": "platform_book"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · the same venue, a person outside the beta → hand over, never submitted",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "off"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_platform_form"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person, no platform_submit on the record → hand over (fails closed)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": null
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person, a platform the policy keeps closed (beta_submit false: TheFork) → hand over",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://widget.thefork.com/x",
+       "host": "widget.thefork.com",
+       "beta_submit": false
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person, a challenge on the page → hand over, never past it",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true,
+       "captcha": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person, a card or deposit step → hand over",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true,
+       "card": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person, sign-in required → hand over",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true,
+       "needs_sign_in": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person whose real-venue sends are off → hand over (a real reservation is a real send)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "off",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_platform_form"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person in test mode, a real venue → hand over (the sandbox never books a real venue)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "test",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "hand_over_platform_link",
+    "!action": "fill_platform_form"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.5 · a beta person in test mode, Kanoe's own test venue (the stand-in) → filled and submitted",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": true,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/module_restaurant/x/spanish",
+       "host": "www.covermanager.com",
+       "beta_submit": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-02T10:00:00Z",
+     "booking_at": "2026-11-05T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "test",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "prepared_link": null
+    }
+   },
+   "expect": {
+    "action": "fill_platform_form",
+    "rung": "zero_touch",
+    "say": "platform_book"
    }
   }
  ]

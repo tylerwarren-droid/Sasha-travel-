@@ -7,6 +7,9 @@ Tyler's answers (12 Oct; mailbox rows 791, 798):
   · calls: at most 3 per PERSON per day (the server cap stays as a net) and at least 30 minutes between two calls to the SAME venue
   · deposits are REFUSED, never asked about · "the person can always take it over" is on EVERY answer · nothing is cancelled silently
   · never book on a platform — Booksy, Fresha, Treatwell, CoverManager and Zenchef included
+    (booking-rules/2.5, CR 160 · Tyler 2 Nov 17:21: EXCEPT for a person in the platform beta — person_access platform_submit = beta — on a
+    platform the channel policy permits for the beta (CoverManager, DISH), with no challenge, sign-in or card step: filled and submitted
+    after the ONE yes)
 
 ctx (all optional except venue and when):
   venue:  {type: restaurant|spa|hotel|activity|service|other, test: bool,
@@ -44,7 +47,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-VERSION = "booking-rules/2.4 · 2026-10-27"
+VERSION = "booking-rules/2.5 · 2026-11-02"
 
 # ── the constants, as data (never env vars) ──────────────────────────────────────────────────────────────────────────────
 URGENT_HOURS = 48                           # R3/R4 · more than this → request and wait; within it → call or their own page
@@ -76,6 +79,7 @@ PHRASES = {
     "calling": "I'll call them now and tell you what they say.",
     "call_and_email": "It's soon, so I'll call them and email them too, and tell you what they say.",
     "platform": "They book on {platform}: their page is ready for you — you press Book there. I never book on a platform for you.",
+    "platform_book": "They book on {platform} — I'll fill in their booking and press Book for you.",
     "prepared_link": "Here's their booking page, filled in for you — you confirm it there.",
     "prepared_link_captcha": "Here's their booking page, filled in for you — you confirm it there (it asks you to prove you're human, which only you can do).",
     "wait_to_call": "Their only way to book is by phone, and it's still a while away — I'll call them closer to the day.",
@@ -112,7 +116,7 @@ CALL_RULES = ("Say you are an AI from Kanoe Technologies at the start; if asked,
 CALL_PAYLOAD = {"voicemail": {"action": "hangup"}, "record": False, "max_minutes": MAX_CALL_MINUTES}                    # R9
 _MONEY_OR_TIME = ("deposit", "depósito", "fianza", "señal", "prepay", "pago por adelantado", "card", "tarjeta", "fee", "cargo", "suplemento",
                   "another time", "different time", "otra hora", "a las", "only at", "solo a las", "would", "could you do")
-_RUNG = {"fill_form_zero_touch": "zero_touch", "prepared_link": "human_tap", "ask_one_question": "human_tap", "ask_call": "phone", "hand_over_platform_link": "human_tap",
+_RUNG = {"fill_platform_form": "zero_touch", "fill_form_zero_touch": "zero_touch", "prepared_link": "human_tap", "ask_one_question": "human_tap", "ask_call": "phone", "hand_over_platform_link": "human_tap",
          "request_whatsapp": "request_reply", "request_email": "request_reply", "wait": "request_reply", "call": "phone", "call_and_email": "phone",
          "refuse": None}
 
@@ -308,6 +312,14 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
         p = c.get("kind") == "platform" and ((named and platform_words(c, named)) or c.get("host") or "a booking platform") or \
             (c.get("kind") in ("form", "own_engine", "widget") and named and platform_words(c, named))
         own_first = any(x.get("kind") in ("form", "whatsapp", "email") and not platform_of(x) for x in chans)
+        if p and not own_first and access.get("platform_submit") == "beta" and c.get("beta_submit") is True and \
+                not (c.get("captcha") or c.get("needs_sign_in") or c.get("card")) and \
+                (venue.get("test") or (access.get("mode") == "live" and access.get("real_venue_sends") == "on")):
+            # booking-rules/2.5 (CR 160 · Tyler, 2 Nov 17:21) · a person in the platform beta (person_access platform_submit = beta) on a
+            # platform the channel policy permits for the beta (the caller reads it: beta_submit): Kanoe fills AND submits, after the
+            # ONE yes. A challenge, a sign-in or a card/deposit step → the hand-over below, filled. Everyone else: R14 as it was.
+            return _decision("fill_platform_form", "platform_book", c, link or (c.get("value") if str(c.get("value") or "").startswith("http") else c.get("url")),
+                             fmt={"platform": p})
         if p and not own_first:   # R1 · their own form / WhatsApp / email come first; a platform is never submitted to
             return _decision("hand_over_platform_link", "platform", c, link or (c.get("value") if str(c.get("value") or "").startswith("http") else c.get("url")),
                              fmt={"platform": p},

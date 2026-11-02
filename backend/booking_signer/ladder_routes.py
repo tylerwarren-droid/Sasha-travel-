@@ -568,6 +568,8 @@ async def journeys_view(request: Request):
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     from agapi import itinerary as IT   # Sasha 300 · THE ONE ITINERARY: every route's booking, in its trip
     rows = IT.with_terms((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account)   # Sasha 301
+    from . import trains as TR   # Sasha 327 · a train row: every field (AgAPI's act, read now) and its "Manage your ticket" page
+    rows = await TR.view(account, rows)
     return await JN.journeys(account, rows)
 
 

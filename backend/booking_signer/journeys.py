@@ -272,7 +272,8 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
             log.info("[journeys] no plans: %s", type(e).__name__)
     cities, saved = await _extra(account) if account else ({}, [])
     from . import plan_store as PS
-    rows = PS.truthful(list(rows) + await agapi_rows(account)) + saved   # Sasha 179 · TEST never "Confirmed"; Sasha 178 · parked, unbooked: in their tab AND in Requests
+    from . import trains as TR   # Sasha 327 · a train item IS its ticket: its AgAPI act is not a second row
+    rows = TR.one_row(PS.truthful(list(rows) + await agapi_rows(account))) + saved   # Sasha 179 · TEST never "Confirmed"; Sasha 178 · parked, unbooked: in their tab AND in Requests
     rows = await shown_to(account, rows)   # Sasha 323 · a real person never sees a test or scratch booking — every list below
     ids = {p["trip_id"] for p in plans}
     # Sasha 177 (3) · EVERY PRODUCT WRITES HERE: CampusMe visits, RelocateMe's deadlines and appointments, EspañaMe's follow-ups

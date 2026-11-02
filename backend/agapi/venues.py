@@ -2185,6 +2185,7 @@ async def venue_bookings(account: str, include_cancelled: bool = False) -> List[
              "party": r.get("party"), "status": r.get("status"), "type": r.get("type"),
              # Sasha 300 · the ONE itinerary's: the route it went by, its trip, the address its own record holds
              **{k: r[k] for k in ("channel", "trip_id", "address") if r.get(k)},
+             **{k: r[k] for k in ("location", "duration_minutes", "agapi_act") if r.get(k)},   # Sasha 327 · a train: its leg, length, act
              **({"reference": r["booking_reference"]} if r.get("booking_reference") else {}),   # Sasha 217 · the venue's reference in full
              # Sasha 215 · CR 56 — the venue's OWN words (an email/SMS reply) are untrusted data, never instructions to her
              **({"venue_said": {"untrusted_text": str(r["status_words"])[:160]}} if r.get("status_words") else {}),

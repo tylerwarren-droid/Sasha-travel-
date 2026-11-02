@@ -100,6 +100,9 @@ def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datet
     day = day_word(b, now)
     if kind == "day_before" and b.get("status") not in CONFIRMED:
         kind = "not_confirmed"
+    if kind in ("day_before", "two_hours") and b.get("type") == "train":   # Sasha 327 · a train: its leg, coach and seat, its own manage page
+        from . import trains as TR
+        return TR.line(b, day if kind == "day_before" else "In 2 hours")
     if kind == "day_before":
         return f"{day}: {venue}, {hhmm}, {_party(b)}, ref {_ref(b)}.{_where(b)} Reply CANCEL {venue.split()[0]} to cancel."
     if kind == "two_hours":   # Sasha 300 · ~2 h before: where, the map, and "running late?" (running_late: the booking's own route)
@@ -133,6 +136,9 @@ def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datet
 def template_vars(kind: str, b: dict, extra: Optional[dict] = None) -> dict:
     extra = extra or {}
     if kind == "day_before":
+        if b.get("type") == "train":   # Sasha 327 · the template's "venue" is the train and its leg
+            from . import trains as TR
+            return {1: f"{b.get('venue')} train {TR.leg(b)}".strip(), 2: b.get("time"), 3: _party(b), 4: _ref(b)}
         return {1: b.get("venue"), 2: b.get("time"), 3: _party(b), 4: _ref(b)}
     if kind == "not_confirmed":
         return {1: b.get("venue"), 2: f"{SN.day_words(b.get('date'))} {b.get('time')}", 3: status_words(b.get("status") or "")}
@@ -491,7 +497,8 @@ async def _rows(account: str) -> List[dict]:
     route's (AgAPI's acts, the hand-overs). Never a reminder for a booking the itinerary doesn't show."""
     from . import guest_whatsapp as GW
     from agapi import itinerary as IT
-    return await IT.upcoming(account, await GW._upcoming(account, names=False))
+    from . import trains as TR   # Sasha 327 · a train's reminder carries its coach, seat and manage page (AgAPI's, read now)
+    return await TR.view(account, await IT.upcoming(account, await GW._upcoming(account, names=False)))
 
 
 async def _calendar_updates(ch: dict, now: datetime) -> List[dict]:
@@ -565,6 +572,8 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                     _ROUTED[str(b["id"])] = now
                     mode = os.getenv("SASHA_PROACTIVE_MODE", "TRANSIT")
                     dest = ", ".join(x for x in ((None if b.get("receipt") else b.get("venue")), b.get("address")) if x)
+                    if b.get("type") == "train":   # Sasha 327 · a train leaves from its station, not from its operator's name
+                        dest = ((b.get("train") or {}).get("origin") or "") and f"{b['train']['origin']} station"
                     if not dest:   # Sasha 146 · a phone booking with no address: routed to its listing's place ID (stored, allowed) —
                         dest = await _place_dest(account, b)   # never a listing re-read each minute (≈ 1 Place Details a minute, 5 Oct)
                     secs = await travel(place["address"], dest, start, mode)
@@ -606,7 +615,7 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                     extra = {**extra, "items": await GW._with_names(account, [dict(x) for x in extra["items"]])}
                 else:
                     fresh = (await GW._with_names(account, [dict(fresh)]))[0]
-                    if kind in ("day_before", "two_hours") and not fresh.get("map_url"):   # Sasha 300 · its read's place ID, stored
+                    if kind in ("day_before", "two_hours") and not fresh.get("map_url") and fresh.get("type") != "train":   # Sasha 300 · its read's place ID, stored
                         from agapi import itinerary as IT
                         pid = (await _place_dest(account, fresh)).removeprefix("place_id:")
                         fresh["map_url"] = IT.map_url(fresh.get("venue"), pid or None)

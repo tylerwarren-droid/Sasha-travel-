@@ -99,6 +99,8 @@ calendar_sync.STORE = calendar_sync.PostgresCalendarStore(STORE)   # S-79 · Goo
 invitations.STORE = invitations.PostgresInviteStore(STORE)   # S-80 · invitations (sql/023)
 payments_t0.STORE = payments_t0.PostgresPaymentStore(STORE)   # S-81 · tier 0 (sql/024)
 mailbox.STORE = mailbox.PostgresMailboxStore(STORE)   # S-82 · Gmail read-only (sql/025)
+from . import trains as _trains  # noqa: E402
+_trains.STORE = _trains.PostgresTrainStore(STORE)   # Sasha 327 · a train on the trip (sql/046)
 
 
 def _now() -> datetime:
@@ -549,6 +551,8 @@ async def reservations(request: Request):
         # Sasha 132 · a flight is not a table: what kind of booking, where, and how long (the itinerary and its questions)
         "type": r.get("type") or "restaurant", "location": r.get("location_name"), "address": r.get("location_address"),
         "duration_minutes": r.get("duration_minutes"),
+        # Sasha 327 · a train item's link to its AgAPI booking record (the act): the trip view reads every field from it
+        **({"agapi_act": _trains.act_of(r.get("escalation_notes"))} if _trains.act_of(r.get("escalation_notes")) else {}),
     } for r in rows]}
 
 

@@ -200,21 +200,61 @@ def handed_over_later(account: str, prepared_id: Optional[str], how: str, link: 
     t.add_done_callback(_LATER_HANDED.discard)
 
 
-async def agapi_bookings(account: str) -> Optional[List[dict]]:
-    """CR 132 (b) · venue.bookings — every booking on AgAPI's record for this person (cancelled ones too), or None when AgAPI doesn't
-    answer it (an AgAPI without the op: the itinerary reads what it read before)."""
+#: Sasha 325 · ONE READ OF AGAPI'S RECORD PER REFRESH (2 Nov 14:52–14:54 UTC: ~280 calls in two minutes, all 429 — each 6-s refresh
+#: of the trip asked venue.booking_status once PER open act, and reached this reader 3–5 times). venue.bookings gives every act with its
+#: state in ONE call; every reader in a window (Journeys, Plan, get_status, trip_status, the itinerary, the sweep) shares that one
+#: answer, and concurrent readers share the one call in flight. PATCH (said honestly, docs/sasha/S-325-voice-and-reads.md): the window
+#: IS a ≤ RECORD_S cache of AgAPI's answer — nothing tells Sasha an act changed (the root is AgAPI pushing it: proposed CR). Sasha's
+#: own write (a booking, a cancel, a change remembered) drops it, so what she just did is never read stale.
+RECORD_S = 10.0
+NO_OP = "no_op"   # an AgAPI without venue.bookings (before CR 132): the acts are read one by one, as before
+_RECORD: Dict[str, tuple] = {}          # account → (read at, [bookings] | NO_OP | None not read, the transport it was read through)
+_RECORD_FLIGHT: Dict[str, Any] = {}     # account → the read in flight
+
+
+async def _read_record(account: str) -> Any:
     uid = await end_user(account)
-    if not uid:
-        return None
+    if not uid:   # no AgAPI person here (not configured): there's no record to read — the acts one by one, as before
+        return NO_OP
     try:
         r = await _call(account, "venue.bookings", {"end_user": uid, "include_cancelled": True})
-    except Exception as e:   # never the itinerary's failure: it reads what it read before
+    except Exception as e:   # never the reader's failure: the acts as last known
         log.info("[venue_submit] venue.bookings not read: %s", type(e).__name__)
-        return None
+        return NO_OP
     if not r.get("ok"):
-        log.info("[venue_submit] venue.bookings not read: %s", (r.get("error") or {}).get("code"))
-        return None
+        code = (r.get("error") or {}).get("code")
+        log.info("[venue_submit] venue.bookings not read: %s", code)
+        return NO_OP if code in ("unknown_operation", "not_configured") else None   # a 429 / timeout: as last known — NEVER a fan-out
     return list((r.get("result") or {}).get("bookings") or [])
+
+
+async def record(account: str) -> Any:
+    """AgAPI's record for this person — [bookings] (venue.bookings), NO_OP, or None (not read now) — read at most once per RECORD_S,
+    one call in flight per account."""
+    hit = _RECORD.get(account)
+    if hit and time.time() - hit[0] < RECORD_S and hit[2] is CALL:   # a read through another transport (a test's AgAPI) isn't this one
+        return hit[1]
+    fl = _RECORD_FLIGHT.get(account)
+    if fl is None or fl.done() or fl.get_loop() is not asyncio.get_running_loop():
+        fl = asyncio.ensure_future(_read_record(account))
+        _RECORD_FLIGHT[account] = fl
+    got = await asyncio.shield(fl)
+    if _RECORD_FLIGHT.get(account) is fl:
+        _RECORD_FLIGHT.pop(account, None)
+        _RECORD[account] = (time.time(), got, CALL)
+    return got
+
+
+def record_changed(account: str) -> None:
+    """Sasha's own write (an act remembered): the next read is AgAPI's, now."""
+    _RECORD.pop(account, None)
+
+
+async def agapi_bookings(account: str) -> Optional[List[dict]]:
+    """CR 132 (b) · venue.bookings — every booking on AgAPI's record for this person (cancelled ones too), or None when AgAPI doesn't
+    answer it. Sasha 325: the ONE shared read (record)."""
+    got = await record(account)
+    return got if isinstance(got, list) else None
 
 
 def _err(r: dict) -> dict:
@@ -372,6 +412,7 @@ async def status(account: str, act_id: str) -> Optional[dict]:
 async def _remember(account: str, act: dict) -> None:
     acts = [a for a in await acts_of(account) if a.get("act_id") != act["act_id"]] + [{**act, "at": time.time()}]
     _ACTS[account] = acts[-ACTS_KEEP:]
+    record_changed(account)   # Sasha 325 · what she just did is read from AgAPI next, never the window's answer
     try:
         from agapi import s2_memory as M
         await M.put_kind(account, "venue_acts", _ACTS[account])
@@ -403,7 +444,7 @@ FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", 
 #: no-answer is NOT final (the person may still say "try once more", or fill in their form) — venue.booking_status is read again
 #: the venue.booking_status fields get_status shows as they are (Sasha 269 · CR 100 §C: never re-derived here)
 STATUS_KEYS = ("state", "words", "say_now", "answered", "next_call", "next_step", "ask", "choices", "calls",
-               "booking", "follow_up")   # Sasha 271 · CR 102: the act's own booking (a stay) and the call the rules attach (R5/R6)
+               "booking", "follow_up", "rec")   # Sasha 325 · rec: the act's entry on AgAPI's record when last read   # Sasha 271 · CR 102: the act's own booking (a stay) and the call the rules attach (R5/R6)
 
 
 def unkept(step: dict) -> dict:
@@ -424,6 +465,18 @@ def _words(st: Optional[dict]) -> Optional[str]:
     return str(t)[:240] if t else None
 
 
+def rec_sig(a: dict, on: Dict[str, dict]) -> Optional[str]:
+    """Sasha 325 · an act's entry on AgAPI's record, as one comparable string: its state, the venue's latest words, its open change.
+    A cancel or change act (not on the record itself) is seen through the booking it is about. Not on the record at all → None."""
+    g = on.get(a.get("act_id")) or on.get(a.get("cancels") or a.get("changes") or "")
+    if not g:
+        return None
+    w = g.get("venue_words") or {}
+    ch = g.get("change") or {}
+    return "|".join(str(x) for x in (g.get("state"), (w.get("at") or w.get("untrusted_text") or "") if isinstance(w, dict) else w,
+                                     ch.get("state") if isinstance(ch, dict) else ch, len(g.get("answers") or [])))
+
+
 async def bookings(account: str, read: bool = True) -> List[dict]:
     """The person's AgAPI venue acts as get_status rows (venue_bookings' shape): each one's state from venue.booking_status now (the
     venue's reply, their words as untrusted data), else as it was when sent. Sasha 256 · a cancellation sent through
@@ -432,12 +485,34 @@ async def bookings(account: str, read: bool = True) -> List[dict]:
     venue_bookings' answer when AgAPI is slow, so a booking is never "unknown" because its status took long to read."""
     acts = await acts_of(account)
     changed = False
-    need = [a for a in acts if read and not (str(a.get("state") or "") in FINAL and a.get("words") is not None or a.get("answered"))]
+    settled = lambda a: str(a.get("state") or "") in FINAL and a.get("words") is not None or a.get("answered")   # noqa: E731
+    rec = await record(account) if read else None
+    sigs: Dict[str, Any] = {}
+    if rec == NO_OP:   # an AgAPI without venue.bookings: each open act, as before
+        need = [a for a in acts if read and not settled(a)]
+    else:   # Sasha 325 · ONE call gave every act; venue.booking_status only for an act whose entry CHANGED — once per change, never per refresh
+        on = {g.get("act_id"): g for g in rec or [] if g.get("act_id")}
+        need = []
+        for a in acts if isinstance(rec, list) else []:
+            sig = rec_sig(a, on)
+            if sig is None or sig == a.get("rec"):
+                continue
+            sigs[a["act_id"]] = sig
+            g = on.get(a["act_id"])
+            if a.get("rec") is None and g is not None and str(g.get("state")) == str(a.get("state")) and \
+                    bool(g.get("venue_words")) <= bool(a.get("words") or settled(a)):
+                a["rec"] = sig   # first sight, and the record agrees with what she already has: nothing to read
+                changed = True
+                continue
+            need.append(a)
     got = await asyncio.gather(*(status(account, a["act_id"]) for a in need), return_exceptions=True)
     for a, st in zip(need, got):
         if isinstance(st, BaseException):   # this one stays as it was; the others are read
             log.info("[venue_submit] %s status not read: %s", a["act_id"], type(st).__name__)
             continue
+        if a["act_id"] in sigs:   # read: this entry is seen (a failed read is read again at the next change of window)
+            a["rec"] = sigs[a["act_id"]]
+            changed = True
         if st is None:
             if str(a.get("state") or "") in FINAL:
                 a["answered"] = True   # confirmed on their own form: nothing more to ask

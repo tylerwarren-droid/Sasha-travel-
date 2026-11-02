@@ -21,6 +21,7 @@
  * same panel — and his tap hears her pick up where they were; every move into the corner is settle(): the camera words once a session,
  * then a pause, "Still here.", a pause.
  */
+import { apiUrl, apiHeaders } from '@/lib/api'   // Sasha 325 · her face's audio from the one speech engine
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { openingEnds, OPENING } from '@/lib/greeting-rule.mjs'
 import { presence, ring, HOLD_MS, inView, WORK_PULSE_CSS, WORK_PULSE_S, speakVia, withCamera } from '@/lib/presence-rule.mjs'
@@ -54,7 +55,9 @@ const metBefore = (): boolean => { try { return localStorage.getItem('s2_met') =
 const pcmEarly = new Map<string, Promise<string | null>>()
 const prefetchPcm = (text: string) => { if (text && !pcmEarly.has(text)) pcmEarly.set(text, pcm(text)) }
 async function pcm(text: string): Promise<string | null> {
-  const r = await fetch('/api/s2-voice/pcm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) }).catch(() => null)
+  // Sasha 325 · ONE speech engine: the backend's (voice_conductor.text_to_speech, format pcm) — every line through spoken.speakable, so no
+  // display mark ("·", "*", a bullet, a link) ever reaches her lips. The Next route /api/s2-voice/pcm (its own partial strip) is gone.
+  const r = await fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text, format: 'pcm' }) }).catch(() => null)
   const j = r && r.ok ? await r.json().catch(() => null) : null
   return j?.audio || null
 }

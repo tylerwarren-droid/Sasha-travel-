@@ -59,7 +59,7 @@ class FakeAgapi:
         if op == "venue.booking_status":
             return {"ok": True, "result": {"act_id": body["act_id"], "state": self.state, "venue": "Casa Gate",
                                            "venue_words": {"text": "Confirmado, os esperamos."}, "say": "x"}}
-        return {"ok": False, "error": {"code": "unknown_op", "message": op}}
+        return {"ok": False, "error": {"code": "unknown_operation", "message": op}}   # AgAPI's own code (agapi_service/app.py)
 
     def ops(self):
         return [c[0] for c in self.calls]

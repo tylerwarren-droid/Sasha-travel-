@@ -4,9 +4,10 @@ the ONE reader; every founder / calls / mailbox / demo / real-venue / mode decis
 booking_decide.access_of, agapi_route.person_mode, guest_accounts, s2_tools, outlook).
 
   get(account)      async: users.register (external_ref "sasha:<account>", the end user cached) → access.get → the record,
-                    cached per account for TTL_S (≤ 60 s). ANY failure (no key, unreachable, an error, a malformed answer) →
-                    CLOSED, not cached (retried after FAILED_TTL_S, 10 s).
-  cached(account)   sync: the record last read (≤ 60 s old), else CLOSED — for the sync checks (is_founder, calls_on, …).
+                    read ONCE PER SESSION (Sasha 325, Tyler: "access.get read once per session, not per call" — TTL_S, 15 min),
+                    one read in flight per account (concurrent requests share it). ANY failure (no key, unreachable, an error, a
+                    malformed answer) → CLOSED, not cached (retried after FAILED_TTL_S, 30 s: AgAPI's own Retry-After).
+  cached(account)   sync: the record last read (this session), else CLOSED — for the sync checks (is_founder, calls_on, …).
   warm(account)     async get that never raises — called wherever an account is resolved (chat_account, the WhatsApp turn,
                     the inner booking app, voice_turn, sasha.turn, the proactive sweep), so the sync checks read a fresh record.
   install({account: record}) / uninstall / records(...)   THE TEST HOOK: records put in place with no network and no expiry
@@ -26,8 +27,8 @@ from typing import Any, Awaitable, Callable, Dict, Iterator, Optional, Tuple
 
 log = logging.getLogger("agapi.person_access")
 
-TTL_S = 60.0
-FAILED_TTL_S = 10.0   # a failed read is closed and retried after this (not cached long: a down AgAPI never adds its timeout to every turn)
+TTL_S = 900.0   # Sasha 325 · once per session (was 60 s: with every request and every failed read, 11 access.get a minute in the 2 Nov flood)
+FAILED_TTL_S = 30.0   # a failed read is closed and retried after this — AgAPI's Retry-After on a 429 (a down AgAPI never adds its timeout to every turn)
 TIMEOUT_S = 5.0
 CLOSED: Dict[str, Any] = {"mode": "test", "calls": "off", "real_venue_sends": "off", "mailboxes": [], "demo": None,
                           "founder": False, "real_money": "off", "email": None, "source": "closed"}
@@ -35,6 +36,7 @@ CLOSED: Dict[str, Any] = {"mode": "test", "calls": "off", "real_venue_sends": "o
 _CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}   # account → (record, read at)
 _USERS: Dict[str, str] = {}                            # account → agapi-live end user
 _FAILED: Dict[str, float] = {}                         # account → when its last read failed
+_FLIGHT: Dict[str, Any] = {}                           # account → the access.get in flight (Sasha 325)
 _INSTALLED: Dict[str, Dict[str, Any]] = {}             # the test hook: account → record (no network, no expiry)
 #: the test hook's fallback (tests/founder_fixture): account → record or None. Never set by the serving process.
 RESOLVER: Optional[Callable[[str], Optional[dict]]] = None
@@ -113,7 +115,7 @@ async def _end_user(k: str) -> Optional[str]:
 
 
 async def get(account: Optional[str]) -> Dict[str, Any]:
-    """The person's record (≤ 60 s old); CLOSED on any failure (not cached)."""
+    """The person's record (read once per session — TTL_S); CLOSED on any failure (not cached)."""
     k = _key(account)
     if not k:
         return closed()
@@ -125,6 +127,19 @@ async def get(account: Optional[str]) -> Dict[str, Any]:
         return dict(hit[0])
     if time.time() - _FAILED.get(k, -1e18) < FAILED_TTL_S:
         return closed()
+    import asyncio   # Sasha 325 · one read in flight per account: every request arriving meanwhile shares it
+    fl = _FLIGHT.get(k)
+    if fl is None or fl.done() or fl.get_loop() is not asyncio.get_running_loop():
+        fl = asyncio.ensure_future(_read(k))
+        _FLIGHT[k] = fl
+    try:
+        return dict(await asyncio.shield(fl))
+    finally:
+        if _FLIGHT.get(k) is fl and fl.done():
+            _FLIGHT.pop(k, None)
+
+
+async def _read(k: str) -> Dict[str, Any]:
     try:
         uid = await _end_user(k)
         if not uid:
@@ -146,7 +161,7 @@ async def get(account: Optional[str]) -> Dict[str, Any]:
 
 
 def cached(account: Optional[str]) -> Dict[str, Any]:
-    """SYNC: the record last read for this account (≤ 60 s), else CLOSED."""
+    """SYNC: the record last read for this account (this session — TTL_S), else CLOSED."""
     k = _key(account)
     if not k:
         return closed()
@@ -186,6 +201,7 @@ def clear() -> None:
     _CACHE.clear()
     _USERS.clear()
     _FAILED.clear()
+    _FLIGHT.clear()
     _INSTALLED.clear()
 
 

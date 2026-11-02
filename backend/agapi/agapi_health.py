@@ -26,6 +26,17 @@ ALERT_EVERY_S = 3600
 _LAST: dict = {}
 SEND = None   # tests replace it: (msg) → {"sent": bool, "why": str}
 _SEEN: contextvars.ContextVar = contextvars.ContextVar("agapi_outages", default=None)
+#: Sasha 325 · the email says WHICH outage it was (Tyler, 2 Nov: "budget is spent or rate-limited (402/429)" told him neither)
+OUTAGE_WORDS = {"rate_limited": "AgAPI's per-minute rate limit (429) — too many calls in one minute; the key's budget is fine and it clears by itself within a minute",
+                "budget_exhausted": "the key's monthly budget is spent (402)",
+                LIMIT: "the key's budget is spent (402) or its per-minute rate limit was hit (429)",
+                SLOW: "it didn't answer in time / was unreachable"}
+SUBJECT = {"rate_limited": "too many calls a minute (429)", "budget_exhausted": "the key's budget is spent (402)",
+           LIMIT: "the key's budget or rate limit", SLOW: "it isn't answering"}
+FIX = {"rate_limited": "To fix: nothing to raise — find what is calling AgAPI so often (its op is above); the limit clears within a minute.",
+       "budget_exhausted": "To fix: raise the key's budget (AgAPI's signed admin action).",
+       LIMIT: "To fix: raise the key's budget (AgAPI's signed admin action), or find what is calling AgAPI so often.",
+       SLOW: "To fix: check the AgAPI service on Railway."}
 
 
 def kind_of(env: dict) -> Optional[str]:
@@ -52,7 +63,7 @@ def key_print(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:12] if key else "unset"
 
 
-async def note(kind: str, op: str, url: str, key: str) -> dict:
+async def note(kind: str, op: str, url: str, key: str, code: Optional[str] = None) -> dict:
     """An outage met: on the tool call in progress, and the founder told — at most once an hour (per process). Awaited."""
     seen = _SEEN.get()
     if seen is not None:
@@ -64,18 +75,18 @@ async def note(kind: str, op: str, url: str, key: str) -> dict:
     from app.services import model_health as MH
     to = await MH._founder_address()
     where = f"{op} on {url.split('//')[-1].split('/')[0]}"
-    what = "its key's budget is spent or rate-limited (402/429)" if kind == LIMIT else "it didn't answer in time / was unreachable"
+    what = OUTAGE_WORDS.get(code or "", OUTAGE_WORDS[kind])   # Sasha 325 · which it was, in one sentence (never "402/429")
     if not to:
         log.error("[agapi_health] AGAPI OUTAGE (%s: %s) — no founder address to tell", where, kind)
         return {"sent": False, "why": "no founder address"}
     at = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")
     msg = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": to,
-           "subject": "Sasha can't reach AgAPI — " + ("the key's budget is spent" if kind == LIMIT else "it isn't answering"),
+           "subject": "Sasha can't reach AgAPI — " + SUBJECT.get(code or "", SUBJECT[kind]),
            "text": "\n".join([
                f"At {at} one of Sasha's AgAPI calls failed: {what}.",
                f"Where it was seen: {where}. Key fingerprint (sha256): {key_print(key)} — the key itself is never sent.",
                "", "People are being told plainly that it can't be done right now; nothing is sent or booked on their behalf.",
-               "", "To fix: raise the key's budget (AgAPI's signed admin action), or check the AgAPI service on Railway.",
+               "", FIX.get(code or "", FIX[kind]),
                "You'll hear at most once an hour.", "", "— Sasha's health check"])}
     try:
         if SEND is not None:

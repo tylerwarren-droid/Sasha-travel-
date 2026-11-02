@@ -159,8 +159,9 @@ class ClosedOnFailure(Base):
 
 
 class TheCache(Base):
-    def test_cached_at_most_60_seconds(self):
-        self.assertLessEqual(PA.TTL_S, 60)
+    def test_read_once_per_session(self):
+        # Sasha 325 · Tyler (2 Nov flood, 11 access.get a minute): "access.get read once per session, not per call" — was ≤ 60 s
+        self.assertEqual(PA.TTL_S, 900)
         t = [1000.0]
         with mock.patch.object(PA.time, "time", lambda: t[0]):
             run(PA.get(JON))

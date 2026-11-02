@@ -1,7 +1,7 @@
 """Sasha 281 · T61 — HER LIPS MOVE ON EVERY LINE SHE SAYS WITH HER FACE ON SCREEN (Tyler's real use, 21 Oct 17:58: on his return she
 said she was turning off her camera and the avatar's mouth didn't move). Offline: source and words only (no avatar, no browser).
 
-THE ONE PLACE a line reaches her lips: frontend/app/s2/S2Hello.tsx startFace() → Face.say → /api/s2-voice/pcm → repeatAudio. The
+THE ONE PLACE a line reaches her lips: frontend/app/s2/S2Hello.tsx startFace() → Face.say → /api/voice/tts (format pcm: voice_conductor.text_to_speech, Sasha 325) → repeatAudio. The
 lines that went around it (all fixed by one rule, S2Hello speak(), not by the camera line): the return's voice-alone line under a face
 that came LATE (phase faceLate: her live face full size, muted, lips still — Tyler's case); the voice-alone arrival drawn over her big
 still; bye and every reply after a tap's face was let go (120 s, or a dropped session) with her still left full size; page lines during

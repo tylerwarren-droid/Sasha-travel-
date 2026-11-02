@@ -102,27 +102,20 @@ async def deepgram_ephemeral_key():
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"deepgram key error: {e}")
 
-async def text_to_speech(text: str) -> bytes:
-    """Convert text to speech using Deepgram TTS."""
-    # Strip markdown for voice
-    clean = text.replace("**", "").replace("*", "").replace("#", "").replace("→", "to").replace("—", "-")
-    # Keep it concise for voice
-    if len(clean) > 500:
-        clean = clean[:500] + "..."
-
-    headers = {
-        "Authorization": f"Token {DEEPGRAM_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "text": clean
-    }
-    params = {
-        "model": "aura-asteria-en",
-        "encoding": "mp3"
-    }
+async def text_to_speech(text: str, fmt: str = "mp3") -> bytes:
+    """Sasha 325 · THE ONE PLACE SASHA MAKES AUDIO — her voice (mp3) and her face's lip-sync (raw 24 kHz 16-bit PCM, the LiveAvatar LITE
+    session's input): every line passes spoken.speakable first (no display mark is ever spoken — "star 1 person" was the trip line's "·"),
+    then Deepgram aura-asteria-en. There is no other speech engine (the Next route /api/s2-voice/pcm, with its own partial strip, is gone)."""
+    from app.agent import spoken as SP
+    clean = SP.speakable(text)
+    if len(clean) > 600:   # concise for voice
+        clean = clean[:600].rsplit(" ", 1)[0] + "…"
+    if not clean:
+        return b""
+    headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "application/json"}
+    params = {"model": "aura-asteria-en", **({"encoding": "linear16", "sample_rate": "24000", "container": "none"} if fmt == "pcm" else {"encoding": "mp3"})}
     from booking_signer.http_pool import request   # Sasha 150 · pooled, kept alive (no new TLS handshake per reply)
-    response = await request("POST", DEEPGRAM_TTS_URL, timeout=15.0, json=payload, headers=headers, params=params)
+    response = await request("POST", DEEPGRAM_TTS_URL, timeout=15.0, json={"text": clean}, headers=headers, params=params)
     if response.status_code == 200:
         return response.content
     return b""
@@ -204,11 +197,16 @@ async def voice_conductor(
 
 @router.post("/voice/tts")
 async def tts_only(request: dict):
-    """Text to speech only — for when you have text and just need audio."""
+    """Text to speech only — her voice (mp3), or with format "pcm" her face's lip-sync audio as base64 (Sasha 325: one engine for both)."""
     text = request.get("text", "")
     if not text:
         raise HTTPException(status_code=400, detail="No text provided")
-    
+    if request.get("format") == "pcm":
+        import base64
+        pcm = await text_to_speech(text, "pcm")
+        if not pcm:
+            raise HTTPException(status_code=502, detail="TTS failed")
+        return {"ok": True, "audio": base64.b64encode(pcm).decode()}
     audio_data = await text_to_speech(text)
     if not audio_data:
         raise HTTPException(status_code=500, detail="TTS failed")

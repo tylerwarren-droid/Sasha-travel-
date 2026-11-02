@@ -54,8 +54,9 @@ class TheOneTransportNamesAnOutage(unittest.TestCase):
     def post(self, answer):
         noted = []
 
-        async def note(kind, op, url, key):
+        async def note(kind, op, url, key, code=None):
             noted.append(kind)
+        AR._WAIT.clear()   # Sasha 325 · each case its own AgAPI: no Retry-After held from the case before
         with mock.patch.object(httpx, "AsyncClient", client(answer)), mock.patch.object(AH, "note", note):
             env = run(AR.post("https://agapi.test", "k", "venue.prepare_booking", {}, {}, 5.0))
         return env, noted

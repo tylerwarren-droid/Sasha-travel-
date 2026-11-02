@@ -257,6 +257,14 @@ def failed_why(env: dict) -> str:
     return (" · " + ", ".join(parts)) if parts else ""
 
 
+_WAIT: Dict[str, float] = {}   # Sasha 325 · AgAPI url|key fingerprint → until when AgAPI asked it to wait (its 429's Retry-After)
+
+
+def _hold_key(url: str, key: str) -> str:
+    import hashlib
+    return url + "|" + hashlib.sha256((key or "").encode()).hexdigest()[:12]
+
+
 async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str], timeout: float) -> Dict:
     """Sasha 261 · THE ONE TRANSPORT every family's client sends through: AgAPI's envelope, or the transport's own (timeout /
     unreachable). An AgAPI outage (402/429, a timeout, unreachable) is noted once here — on the tool call in progress, and the
@@ -268,6 +276,11 @@ async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str],
     t0, status, version = time.perf_counter(), None, None
     if _LANE.get():   # Sasha 287 · a test run's lane, said on every call
         headers = {**headers, "AgAPI-Lane": _LANE.get()}
+    held = _WAIT.get(_hold_key(url, key), 0) - time.time()
+    if held > 0:   # Sasha 325 · AgAPI said "slow down" (429, Retry-After): nothing is sent to that key until it has passed — AgAPI's own
+        # client contract ("wait retry_after_s, then retry"), never a limit of Sasha's. A refused call counts toward AgAPI's minute too:
+        # asking again at once is what kept the 2 Nov flood going.
+        return {"ok": False, "error": {"code": "rate_limited", "message": "AgAPI asked Sasha to wait; not sent", "details": {"retry_after_s": int(held) + 1, "held": True}}}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as c:
             r = await c.post(f"{url}/v1/{op}", headers=headers, content=json.dumps(body))
@@ -281,6 +294,12 @@ async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str],
             env = r.json()
         except Exception:   # not AgAPI's envelope (a proxy's error page): AgAPI didn't answer
             env = {"ok": False, "error": {"code": "unreachable", "message": f"HTTP {r.status_code}"}}
+        if status == 429:   # Sasha 325 · hold that key for AgAPI's Retry-After (30 s when it gives none)
+            try:
+                wait = float((getattr(r, "headers", None) or {}).get("retry-after") or 30)
+            except (TypeError, ValueError):
+                wait = 30.0
+            _WAIT[_hold_key(url, key)] = time.time() + min(max(wait, 1.0), 120.0)
     except httpx.TimeoutException as e:
         env = {"ok": False, "error": {"code": "timeout", "message": type(e).__name__}}
     except Exception as e:
@@ -290,7 +309,7 @@ async def post(url: str, key: str, op: str, body: dict, headers: Dict[str, str],
                     failed_why(env))
     kind = AH.kind_of(env)
     if kind:
-        await AH.note(kind, op, url, key)
+        await AH.note(kind, op, url, key, code=(env.get("error") or {}).get("code"))
     from agapi import measure as MS   # Sasha 275 · S1 measure — observation only (an act's events, as Sasha received them)
     MS.agapi_op(op, body, env, int((time.perf_counter() - t0) * 1000), url, version)
     return env

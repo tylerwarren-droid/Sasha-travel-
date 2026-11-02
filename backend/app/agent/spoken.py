@@ -70,8 +70,41 @@ def _say_money(num: str, cur: str, before: str) -> str:
     return f"{about}{words(n)} {word}" if n != 1 else f"{about}one {word.rstrip('s')}"
 
 
-def speakable(text: str) -> str:
+# Sasha 325 · THE DISPLAY MARKS NEVER REACH HER VOICE (Tyler's train test, 2 Nov: "star 1 person", "star 15:30 in the afternoon" — the
+# trip line's "·" separators, read aloud by the speech engine). Every mark a screen uses to lay text out goes before a word is spoken: the
+# words are kept, the marks dropped (a separator becomes a pause). speakable() runs it first; every audio Sasha makes passes speakable()
+# (voice_conductor.text_to_speech — her voice AND her face's lip-sync audio, one engine).
+_MARKS = (
+    (r"!?\[([^\]]+)\]\([^)]*\)", r"\1"),                      # [label](url) / ![alt](img) → its words
+    (r"<(?:https?://)[^>]+>|https?://\S+|www\.\S+", ""),       # a link is never read out
+    (r"`+", ""),                                                # code ticks
+    (r"(?m)^[ \t]*(?:[-*+•·▪◦‣–]|\d{1,2}[.)])[ \t]+", ""),        # bullets and list numbers at a line's start
+    (r"(?m)^[ \t]*#{1,6}[ \t]*", ""),                          # headings
+    (r"\*{1,3}|~~", ""),                                         # emphasis
+    (r"_+", " "),                                               # _emphasis_ and a_name_with_underscores → its words
+    (r"#", ""),
+    (r"[ \t]*(?:[·•▪◦‣|])[ \t]*", ", "),                         # inline separators → a pause
+    (r"[ \t]*[→⟶➝]+[ \t]*", " to "),
+    (r"[ \t]*[—–][ \t]*", ", "),
+    (r"[✅❌⚠✓✗☐🔊🔇📱📍🗺✈️🏨]\ufe0f?", ""),                        # status icons: their words are beside them
+    (r"(?:,\s*){2,}", ", "),
+    (r"^\s*,\s*|\s*,\s*$", ""),
+    (r"\s*,\s*([.!?])", r"\1"),
+)
+#: what may never be spoken (a test holds it on every line she can say)
+NEVER_SPOKEN = re.compile(r"[*_#`·•▪◦‣|→⟶➝]|\]\(|https?://")
+
+
+def marks(text: str) -> str:
+    """Display text → the words only: every layout mark dropped (a separator a pause), the words untouched."""
     t = text or ""
+    for rx, rep in _MARKS:
+        t = re.sub(rx, rep, t)
+    return re.sub(r"[ \t]{2,}", " ", t).strip()
+
+
+def speakable(text: str) -> str:
+    t = marks(text or "")
     # money: €4,213.47 · £ 4,200 · EUR 120 · 2,770.81 euros
     t = re.sub(r"(?P<cur>[€£$]|\b(?:EUR|GBP|USD)\s)\s?(?P<num>\d[\d,]*(?:\.\d+)?)(?:\s?euros?\b)?",
                lambda m: _say_money(m.group("num"), m.group("cur"), m.string[max(0, m.start() - 12):m.start()]), t)
@@ -112,4 +145,4 @@ def speakable(text: str) -> str:
     return re.sub(r"\s{2,}", " ", t).strip()
 
 
-__all__ = ["speakable", "words", "ordinal", "money", "clock"]
+__all__ = ["speakable", "marks", "NEVER_SPOKEN", "words", "ordinal", "money", "clock"]

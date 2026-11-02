@@ -7,7 +7,9 @@ import asyncio
 router = APIRouter()
 
 async def stream_text(text: str):
-    words = text.split(' ')
+    # Sasha 325 · HeyGen's avatar speaks what this returns: the same one cleaning as every other line she says (no display mark spoken)
+    from app.agent import spoken as SP
+    words = (SP.speakable(text) or text).split(' ')
     for i, word in enumerate(words):
         chunk = {
             "id": "chatcmpl-sasha",

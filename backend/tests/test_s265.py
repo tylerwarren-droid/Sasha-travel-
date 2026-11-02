@@ -129,8 +129,9 @@ class NewChatClearsTheConversationOnly(unittest.TestCase):
 # Sasha 269 · moved to booking-rules/2.1 (CR 100, mailbox row 965) — was row 934's booking-rules/2
 # CR 129 · moved to booking-rules/2.4 (AgAPI v1.40.0): R14 reads every field a channel carries (a platform's widget on their own page is never
 # "I'll book it"); 2.2 / 2.3 come with it (check_in_at, watch, search: added functions — no decision changed)
-ROW_965 = {"booking_rules.py": "655ea2d16119c84a89c5262c075a72da002a2ff4052014e21076567431966218",
-           "vectors.json": "ea27ce1ed5bc6f20f0f8cf66d02fa1e1ae5a38d739cb9847e7d40d724415fada",
+# CR 160 · booking-rules/2.5 (Tyler's go, 2 Nov; merged with Sasha 327): byte-identical to AgAPI's agapi_service/booking_rules
+ROW_965 = {"booking_rules.py": "48cc2715dccd98fe3abcbe969fd7370af9fac61e82451d29be9c9af538c6af3a",
+           "vectors.json": "f37f4fdf6b3cd822f5f2d94701111e656fbb287d1559f87655471b2bf427ecab",
            "test_booking_rules.py": "bd602e8e3ac974b0b957e89a3223978395c2b38c95252924b003c7c5abe5de1b"}
 PAGE_AND_PHONE = {"form": {}, "phone": {"fact_index": 0, "value": "+34910000000"}}
 

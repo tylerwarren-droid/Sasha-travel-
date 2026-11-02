@@ -77,7 +77,8 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
             "file_confirmation", "time_between", "add_to_trip", "save_for_later",
             "call_again",   # Sasha 269 · "try once more" after a no-answer: the booking's own act (venue.call_again)
             "booking_fine_print", "keep_note",
-            "booking_outcomes", "start_count")   # Sasha 324 · the founder's count: read-only, and its start   # Sasha 301 · the fine print on each booking; his cards and loyalty numbers, told
+            "booking_outcomes", "start_count",
+            "remove_saved_card")   # Sasha 327 · "remove my saved card"   # Sasha 324 · the founder's count: read-only, and its start   # Sasha 301 · the fine print on each booking; his cards and loyalty numbers, told
 
 
 # Sasha 241 · S1 PARITY: /next keeps its own "Who she is" and gains S2's capability lines — taken from S2_WHO itself, so the two

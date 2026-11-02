@@ -624,3 +624,13 @@ async def _start_retention() -> None:
     _gw206.check_single_worker()   # Sasha 206 (EU 186 R3) · the in-process per-number lock needs one worker
     from scripts import live_suite as _ls
     _ls.start()   # Sasha 198 · the live Duffel suite every 6 h, in its own process: alerts, never blocks a deploy
+    import asyncio as _aio327, os as _os327
+
+    async def _pay_domains() -> None:   # Sasha 327 · Apple Pay / Google Pay / Link on Kanoe's own pages: the domains, with Stripe (TEST)
+        try:
+            from . import test_deposit as _td
+            log.warning("[pay] payment method domains: %s", await _td.register_domains())
+        except Exception as e:
+            log.warning("[pay] payment method domains not registered: %s", type(e).__name__)
+    if _os327.getenv("SASHA_PAY_DOMAINS", "on") != "off":   # idempotent: a domain already there is only read
+        _aio327.ensure_future(_pay_domains())

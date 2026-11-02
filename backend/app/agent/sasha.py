@@ -185,7 +185,7 @@ def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optiona
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venues",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
-          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
+          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})
@@ -242,6 +242,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
             return {"type": "render", "kind": "pay_here", **{k: v for k, v in res["checkout"].items() if v}, "total_eur": res.get("total_eur")}
         if res.get("status") == "already_paid":
             return {"type": "render", "kind": "pay_here", "already_paid": True, "session_id": res.get("session_id")}
+        if res.get("status") == "confirm_with_bank" and res.get("payment_url"):   # Sasha 327 · his bank's ONE confirm, on the channel he asked on
+            return {"type": "render", "kind": "pay", "url": res["payment_url"], "label": "Confirm with your bank"}
         return {"type": "render", "kind": "pay", "url": res["checkout_url"]} if res.get("checkout_url") else None
     # Sasha 250 · the prefilled form now comes from hold_venue too (249: the form IS the go-ahead, no second yes) — found live: she
     # said "Done — it's on your screen" and the card was never drawn, because only book_venue's result rendered it

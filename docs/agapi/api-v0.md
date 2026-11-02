@@ -28,7 +28,7 @@ One contract for every client.
 | **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
 | **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email`, `send_whatsapp` |
-| **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
+| **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `remove_saved_card`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
 
 ## Magellan
 
@@ -1338,6 +1338,39 @@ FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookin
  "properties": {
   "from": {
    "type": "string"
+  },
+  "say": {
+   "type": "string"
+  }
+ }
+}
+```
+
+### `remove_saved_card`
+
+Remove the card Stripe saved for them ("remove my saved card", "forget my card"). Their next booking shows the payment page again. Say its `say` as it is.
+
+**Errors:** `payments_unreachable`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {},
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "removed": {
+   "type": "integer"
   },
   "say": {
    "type": "string"

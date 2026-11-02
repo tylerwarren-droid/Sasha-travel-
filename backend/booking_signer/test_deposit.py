@@ -87,7 +87,7 @@ async def paid_since(link_id: str, since: float) -> Optional[dict]:
 
 
 async def checkout(amount: str, currency: str, label: str, ref: str, embedded: bool = False, where: str = "phone",
-                   name: Optional[str] = None) -> Dict[str, str]:
+                   name: Optional[str] = None, account: Optional[str] = None) -> Dict[str, str]:
     """Sasha 132 · one touch for ANY test amount (a flight's fare): a Stripe TEST Checkout session. {id, url} or {why}."""
     if not key():
         return {"why": "no Stripe TEST key is set (STRIPE_TEST_SECRET_KEY, sk_test_…) — the founder sets it on Railway"}
@@ -105,8 +105,9 @@ async def checkout(amount: str, currency: str, label: str, ref: str, embedded: b
     shape = ({"ui_mode": "embedded_page", "redirect_on_completion": "never"} if embedded else
              {"success_url": f"{back}/done?s={{CHECKOUT_SESSION_ID}}" + ("&w=here" if where == "here" else ""),
               "cancel_url": f"{back}/back?s={{CHECKOUT_SESSION_ID}}"})
+    save = await _save_fields(account)   # Sasha 327 · his Stripe customer; "save this card for next time" (default ON in beta)
     s, j = await HTTP("POST", "/checkout/sessions", {
-        "mode": "payment", **shape, "metadata[sasha_where]": where,
+        "mode": "payment", **shape, **save, "metadata[sasha_where]": where,
         "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
         "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": (name or f"TEST payment — {label}")[:250],   # Sasha 222 · the pay card: its own name (Stripe's TEST MODE badge stays)
         "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100]})
@@ -119,9 +120,12 @@ async def checkout(amount: str, currency: str, label: str, ref: str, embedded: b
 
 
 async def session_state(session_id: str) -> Optional[dict]:
-    """Sasha 220 · a checkout as Stripe holds it now: open / complete / expired, paid or not, and how it's paid (embedded's secret)."""
+    """Sasha 220 · a checkout as Stripe holds it now: open / complete / expired, paid or not, and how it's paid (embedded's secret).
+    Sasha 327 · a saved-card payment (pi_…): the same shape, where "saved"."""
     if not key():
         return None
+    if session_id.startswith("pi_"):
+        return await _intent_state(session_id)
     s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
     if s != 200 or cs.get("livemode"):
         return None
@@ -135,13 +139,17 @@ async def expire(session_id: str) -> bool:
     """Sasha 215 · a checkout that must never be paid (its booking record wasn't written): expired at Stripe, so the page refuses."""
     if not key():
         return False
-    s, j = await HTTP("POST", f"/checkout/sessions/{session_id}/expire", {})
+    s, j = await (HTTP("POST", f"/payment_intents/{session_id}/cancel", {}) if session_id.startswith("pi_") else
+                  HTTP("POST", f"/checkout/sessions/{session_id}/expire", {}))   # Sasha 327 · a saved-card payment: cancelled
     if s != 200:
         log.error("[test_deposit] session %s not expired: HTTP %s", session_id[:16], s)
     return s == 200
 
 
 async def session_paid(session_id: str) -> Optional[dict]:
+    if session_id.startswith("pi_"):   # Sasha 327 · a saved-card payment: Stripe's PaymentIntent, succeeded
+        st = await _intent_state(session_id)
+        return {"amount": st["amount"], "currency": st["currency"], "payment": session_id, "created": st["created"]} if st and st["paid"] else None
     s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
     if s != 200 or cs.get("livemode") or cs.get("status") != "complete" or cs.get("payment_status") != "paid":
         return None
@@ -149,11 +157,165 @@ async def session_paid(session_id: str) -> Optional[dict]:
             "created": cs.get("created") or 0}
 
 
+# ── Sasha 327 · PAY IN ONE TAP: his Stripe customer and the card Stripe saved for him ────────────────────────────────────────
+# Sasha never sees, logs or stores a card number: Stripe holds it (the customer + its saved payment method). Sasha keeps only the
+# customer's id (a pointer, s2_memory "stripe_customer") and says a card as its brand and last four digits, as Stripe gives them.
+SAVE_WORDS = "Your card is saved securely with Stripe for your next booking. Say \"remove my saved card\" any time to delete it."
+CUSTOMER_KIND = "stripe_customer"
+
+
+def save_default() -> bool:
+    """Default ON while Sasha is in beta (every person; Stripe TEST). SASHA_SAVE_CARD=off turns it off; live stays OFF regardless."""
+    return os.getenv("SASHA_SAVE_CARD", "on").strip().lower() != "off"
+
+
+async def customer_of(account: Optional[str], create: bool = True) -> Optional[str]:
+    if not account or not key():
+        return None
+    from agapi import s2_memory as M
+    try:
+        cus = await M.kind(account, CUSTOMER_KIND)
+    except Exception as e:
+        log.warning("[test_deposit] customer not read: %s", type(e).__name__)
+        cus = None
+    if isinstance(cus, str) and cus.startswith("cus_"):
+        return cus
+    if not create:
+        return None
+    s, c = await HTTP("POST", "/customers", {"metadata[sasha_account]": account, "description": "Sasha guest (TEST)"})
+    if s != 200 or c.get("livemode"):
+        log.warning("[test_deposit] customer not made: HTTP %s", s)
+        return None
+    await M.put_kind(account, CUSTOMER_KIND, c["id"])
+    return c["id"]
+
+
+async def _save_fields(account: Optional[str]) -> Dict[str, Any]:
+    cus = await customer_of(account) if account else None
+    if not cus:
+        return {}
+    out: Dict[str, Any] = {"customer": cus, "saved_payment_method_options[payment_method_remove]": "enabled"}   # removable on the page
+    if save_default():   # saved for next time, said where he pays
+        out.update({"payment_intent_data[setup_future_usage]": "off_session", "custom_text[submit][message]": SAVE_WORDS})
+    else:
+        out["saved_payment_method_options[payment_method_save]"] = "enabled"   # Stripe's own checkbox
+    return out
+
+
+async def saved_card(account: Optional[str]) -> Optional[Dict[str, str]]:
+    """The card Stripe saved for him → {id, brand, last4, words}, or None. Never the number."""
+    cus = await customer_of(account, create=False)
+    if not cus:
+        return None
+    s, j = await HTTP("GET", f"/customers/{cus}/payment_methods", {"limit": 1})
+    if s != 200:
+        return None
+    pm = next(iter(j.get("data") or []), None)
+    if not pm:
+        return None
+    c = pm.get("card") or {}
+    wallet = ((c.get("wallet") or {}).get("type") or "").replace("_", " ").title()
+    brand = str(c.get("brand") or pm.get("type") or "card").title()
+    return {"id": pm["id"], "customer": cus, "brand": brand, "last4": str(c.get("last4") or ""),
+            "words": f"your saved {brand}" + (f" ({wallet})" if wallet else "") + (f" ending {c['last4']}" if c.get("last4") else "")}
+
+
+async def remove_saved(account: Optional[str]) -> int:
+    """Detach every payment method Stripe saved for him → how many were removed."""
+    cus = await customer_of(account, create=False)
+    if not cus:
+        return 0
+    s, j = await HTTP("GET", f"/customers/{cus}/payment_methods", {"limit": 20})
+    n = 0
+    for pm in (j.get("data") or []) if s == 200 else []:
+        s2, _ = await HTTP("POST", f"/payment_methods/{pm['id']}/detach", {})
+        n += s2 == 200
+    return n
+
+
+async def intent_saved(card: Dict[str, str], amount: str, currency: str, label: str, ref: str) -> Dict[str, Any]:
+    """A PaymentIntent for the saved card, NOT yet confirmed (its id is recorded before any money moves). {id} or {why}."""
+    try:
+        cents = int(round(float(amount) * 100))
+    except ValueError:
+        return {"why": f"not an amount: {amount!r}"}
+    s, pi = await HTTP("POST", "/payment_intents", {"amount": cents, "currency": currency.lower(), "customer": card["customer"],
+                                                   "payment_method": card["id"], "description": f"TEST payment — {label}"[:250],
+                                                   "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100],
+                                                   "metadata[sasha_where]": "saved"})
+    if s != 200:
+        return {"why": f"Stripe refused the payment: {pi.get('error', {}).get('message', s)}"}
+    if pi.get("livemode"):
+        return {"why": "Stripe answered in LIVE mode — refused"}
+    return {"id": pi["id"]}
+
+
+async def confirm_saved(pi_id: str) -> Dict[str, Any]:
+    """Charge it, off-session. → {paid} · {confirm_url} (his bank asks him to confirm: SCA / 3-D Secure) · {declined, why}."""
+    s, pi = await HTTP("POST", f"/payment_intents/{pi_id}/confirm", {"off_session": "true"})
+    if s == 200 and pi.get("status") == "succeeded":
+        return {"paid": True}
+    err = (pi.get("error") or {}) if s != 200 else {}
+    if err.get("code") == "authentication_required" or pi.get("status") == "requires_action":
+        from .form_rung import public_base   # on-session now: Stripe's own page for his bank, then back to ours
+        s2, pi2 = await HTTP("POST", f"/payment_intents/{pi_id}/confirm", {"payment_method": (err.get("payment_method") or {}).get("id") or pi.get("payment_method") or "",
+                                                                        "return_url": f"{public_base()}/api/booking/test-pay/done?s={pi_id}",
+                                                                        "use_stripe_sdk": "false"})
+        url = ((pi2.get("next_action") or {}).get("redirect_to_url") or {}).get("url") if s2 == 200 else None
+        if url:
+            return {"confirm_url": url}
+        if s2 == 200 and pi2.get("status") == "succeeded":
+            return {"paid": True}
+    return {"declined": True, "why": err.get("message") or f"the bank didn't accept the saved card ({pi.get('status') or s})"}
+
+
+async def _intent_state(pi_id: str) -> Optional[dict]:
+    s, pi = await HTTP("GET", f"/payment_intents/{pi_id}", {})
+    if s != 200 or pi.get("livemode"):
+        return None
+    st = pi.get("status")
+    url = ((pi.get("next_action") or {}).get("redirect_to_url") or {}).get("url")
+    return {"status": "complete" if st == "succeeded" else "expired" if st == "canceled" else "open", "paid": st == "succeeded", "url": url,
+            "client_secret": None, "embedded": False, "where": "saved", "amount": (pi.get("amount") or 0) / 100,
+            "currency": (pi.get("currency") or "eur").upper(), "created": pi.get("created") or 0}
+
+
+async def legacy_session(stripe_sdk, **kw):
+    """Sasha 327 · the legacy S1 itinerary checkout (app/api/payments.py, its own key mode SASHA_LEGACY_STRIPE_MODE — TEST in the beta):
+    created HERE, so every place money is taken is this one module (its shape and keys unchanged)."""
+    import asyncio as _aio
+    return await _aio.to_thread(stripe_sdk.checkout.Session.create, **kw)
+
+
+# ── Sasha 327 · Apple Pay on Kanoe's own pages (Embedded Checkout): the payment method domains, registered with Stripe ─────
+PAY_DOMAINS = ("project.kanoe.ai", "demo.kanoe.ai", "investor.kanoe.ai")
+
+
+async def register_domains() -> Dict[str, str]:
+    """Idempotent: each of Kanoe's pay domains as a Stripe payment method domain (Apple Pay needs it for an embedded page; Google Pay and
+    Link read the same list). TEST key only. → {domain: state}."""
+    if not key():
+        return {"why": "no Stripe TEST key"}
+    s, j = await HTTP("GET", "/payment_method_domains", {"limit": 50})
+    have = {d.get("domain_name"): d for d in (j.get("data") or [])} if s == 200 else {}
+    out = {}
+    for dom in PAY_DOMAINS:
+        d = have.get(dom)
+        if not d:
+            s2, d = await HTTP("POST", "/payment_method_domains", {"domain_name": dom, "enabled": "true"})
+            if s2 != 200:
+                out[dom] = f"refused: {(d.get('error') or {}).get('message', s2)}"
+                continue
+        out[dom] = "apple_pay " + str(((d.get("apple_pay") or {}).get("status")) or "?") + " · google_pay " + \
+            str(((d.get("google_pay") or {}).get("status")) or "?") + " · link " + str(((d.get("link") or {}).get("status")) or "?")
+    return out
+
+
 # ── Sasha 136 · the public page Stripe returns to — no sign-in, nothing personal: the payment's state and the booking's ──
 
 public = APIRouter(prefix="/test-pay", tags=["test-pay"])
 OUTCOMES: Dict[str, dict] = {}   # Stripe session → what Sasha did with it (this server's memory; the watchers write it)
-_SID = re.compile(r"cs_test_[A-Za-z0-9]{10,200}")
+_SID = re.compile(r"(?:cs_test_|pi_)[A-Za-z0-9]{10,200}")   # Sasha 327 · + a saved card's payment, back from his bank
 
 
 def note(session_id: str, ok: bool, line: str) -> None:
@@ -240,4 +402,5 @@ async def status(request: Request):
     return {"ok": True, "paid": got, "say": (f"Paid (TEST): €{got['amount']:.2f} — Stripe test payment {got['payment']}" if got else "not paid yet")}
 
 
-__all__ = ["ops", "link", "paid_since", "message", "key", "LABEL", "checkout", "session_paid"]
+__all__ = ["ops", "link", "paid_since", "message", "key", "LABEL", "checkout", "session_paid", "saved_card", "remove_saved",
+           "intent_saved", "confirm_saved", "customer_of", "register_domains", "SAVE_WORDS"]

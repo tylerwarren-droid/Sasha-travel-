@@ -1446,6 +1446,9 @@ async def book(ctx: Ctx, a: dict) -> dict:
         raise ToolError("read_back_stale", "that read-back is over 15 minutes old — call hold_booking again and read it back before booking")
     sha = held["sha"]   # pay() still refuses if anything changed since
     where = chose or _PAY_CHOICE.get(key)
+    from booking_signer import test_deposit as _TD
+    if not chose and not await BB.in_progress(ctx.account) and await _TD.saved_card(ctx.account):
+        where = "saved"   # Sasha 327 · PAY IN ONE TAP: his saved card — this yes pays it, no page, no "here or phone?"
     if where is None:
         if linked:   # asked ONCE; their answer (next turn) pays — the yes is already given
             _PAY_ASKED[ctx.account] = {"sha": sha, "at": datetime.now(timezone.utc), "said": said}
@@ -1456,6 +1459,10 @@ async def book(ctx: Ctx, a: dict) -> dict:
     _PAY_CHOICE[key] = where
     await claim(ctx)   # Sasha 215 · durable: this payment is sent once, across restarts and workers
     got = await BB.pay(ctx.account, sha, where)
+    if where == "saved" and (got.get("declined") or got.get("no_saved_card")):   # Sasha 327 · failed: said plainly, the Pay-now page offered
+        why = got.get("why") or "the saved card wasn't there"
+        where = "here" if not linked or ctx.via != "wa" else "phone"
+        got = {**await BB.pay(ctx.account, sha, where), "saved_failed": why}
     from agapi.keep_gate import keep_on
     if got.get("session_id") and "why" not in got and keep_on(ctx.account, ctx.surface):   # Sasha 224 · CR 63 — this yes, this payment
         try:
@@ -1465,9 +1472,28 @@ async def book(ctx: Ctx, a: dict) -> dict:
     return await _paid_out(ctx, got, where)
 
 
+async def remove_saved_card(ctx: Ctx, a: dict) -> dict:
+    """Sasha 327 · "remove my saved card": every card Stripe saved for him, detached (Stripe holds it; Sasha never had the number)."""
+    from booking_signer import test_deposit as TD
+    try:
+        n = await TD.remove_saved(ctx.account)
+    except Exception as e:
+        raise ToolError("payments_unreachable", f"Stripe didn't answer ({type(e).__name__}) — nothing was removed; try me again in a minute")
+    return {"removed": n, "say": "Done — your saved card is removed. Next time you book, you'll pay on the payment page." if n else
+            "There's no saved card to remove — you pay on the payment page each time."}
+
+
 async def _paid_out(ctx: Ctx, got: dict, where: str) -> dict:
     if got.get("unrecorded"):   # Sasha 215 · CR 56 #2 — no record, no link: said as it is
         raise ToolError("payments_unreachable", got["why"])
+    if got.get("where") == "saved" and got.get("paid"):   # Sasha 327 · one tap: charged, Pacioli books it
+        return {"status": "paid_saved_card", "payment": "saved_card", "session_id": got["session_id"], "total_eur": got["eur"], "booked": False,
+                "say": f"Paid with {got['card']} — €{got['eur']:.2f}. It's booking now; I'll tell you the moment it's confirmed. "
+                       "Say exactly that — it isn't booked until get_status says so."}
+    if got.get("where") == "saved" and got.get("confirm_url"):   # his bank asks him to confirm (SCA / 3-D Secure): ONE link
+        return {"status": "confirm_with_bank", "payment": "confirm_with_bank", "session_id": got["session_id"], "total_eur": got["eur"],
+                "booked": False, "payment_url": got["confirm_url"], "button": {"label": "Confirm with your bank", "link": got["confirm_url"]},
+                "say": "Your bank wants you to confirm this payment — one tap: Confirm with your bank. I'll carry on as soon as it's done."}
     if got.get("already_paid"):   # Sasha 220 · one payment per basket: never charged twice
         return {"status": "already_paid", "booked": False, "session_id": got.get("session_id"),
                 "say": "It's already paid — nothing more to pay. It's booked once Stripe's confirmation is recorded (get_status says)."}
@@ -1476,10 +1502,13 @@ async def _paid_out(ctx: Ctx, got: dict, where: str) -> dict:
     if where == "here":
         return {"status": "awaiting_payment", "payment": "here", "session_id": got["session_id"], "total_eur": got["eur"], "booked": False,
                 "checkout": {k: got.get(k) for k in ("client_secret", "url", "session_id")},   # for the page; never shown to the model
-                "say": "The card is on their screen: they pay there (Apple Pay / Google Pay where their device has them)."}
+                "say": (f"Their saved card didn't go through ({got['saved_failed']}), so nothing was charged — " if got.get("saved_failed") else "")
+                       + "The card is on their screen: they pay there (Apple Pay / Google Pay where their device has them)."}
     sent = str(got.get("phone") or "").startswith("sent")
     return {"status": "awaiting_payment", "payment": "sent_to_phone" if sent else "link", **({} if sent else {"payment_url": got["url"]}),
-            "session_id": got["session_id"], "total_eur": got["eur"], "booked": False}
+            "session_id": got["session_id"], "total_eur": got["eur"], "booked": False,
+            **({"say": f"Your saved card didn't go through ({got['saved_failed']}), so nothing was charged — the payment page is "
+                       "here instead."} if got.get("saved_failed") else {})}
 
 
 # ── Pacioli ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1682,6 +1711,9 @@ TOOLS: List[dict] = [
     _t("start_count", "Pacioli", start_count, "FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookings before it "
        "aren't counted and aren't changed. Only when the founder says to start it.", {"from": {"type": "string"}}, [],
        {"type": "object", "properties": {"from": {"type": "string"}, "say": {"type": "string"}}}, ["founder_only", "invalid_input"]),
+    _t("remove_saved_card", "Pacioli", remove_saved_card, "Remove the card Stripe saved for them (\"remove my saved card\", \"forget my card\"). "
+       "Their next booking shows the payment page again. Say its `say` as it is.", {}, [],
+       {"type": "object", "properties": {"removed": {"type": "integer"}, "say": {"type": "string"}}}, ["payments_unreachable"]),
     _t("get_trip", "Pacioli", get_trip, "The trip as it stands: days and stays, the chosen flights, each item's state.", {}, [],
        {"type": "object"}, ["no_trip"]),
     _t("get_total", "Pacioli", get_total, "The whole trip's total from the basket (what booking would charge).", {}, [], TOTAL, ["no_trip"]),

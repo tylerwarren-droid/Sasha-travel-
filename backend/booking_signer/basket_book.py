@@ -372,6 +372,8 @@ async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Di
     settled = await PWT.settle(sid)
     if (st and st["paid"]) or (settled and settled.get("status") in ("booked", "booking", "failed")):
         return {"already_paid": True, "session_id": sid, "eur": (st or {}).get("amount")}
+    if st and st["status"] == "open" and st.get("where") == "saved" and st.get("url"):   # Sasha 327 · his bank's confirm, again
+        return {"where": "saved", "session_id": sid, "confirm_url": st["url"], "eur": st["amount"], "resumed": True}
     if st and st["status"] == "open" and st.get("where") == where:
         if where == "here":
             return {"where": "here", "session_id": sid, "client_secret": st.get("client_secret"), "url": st.get("url"), "eur": st["amount"],
@@ -422,9 +424,12 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     # Sasha 220 · "here" is the embedded card once the page has Stripe's publishable key (SASHA_PAY_EMBEDDED=1, set with it);
     # until then Stripe's own page, opened on the SAME device — never a dead end
     import os as _os
+    if where == "saved":   # Sasha 327 · PAY IN ONE TAP: his saved card, charged on this yes — no page
+        return await _pay_saved(account, cur, t, sha, what)
     got = await TD.checkout(f"{t['amount']:.2f}", "EUR", f"TEST — {cur['title'] or 'your trip'}: {what}", sha[:16],
                             embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where,
-                            name=f"{cur['title'] or 'Your trip'}: {what}" if where == "here" else None)   # Sasha 222 · the pay card's line
+                            name=f"{cur['title'] or 'Your trip'}: {what}" if where == "here" else None,   # Sasha 222 · the pay card's line
+                            account=account)   # Sasha 327 · his Stripe customer: the card saved for next time
     if "why" in got:
         return {"why": got["why"]}
     await BK.hold(account, cur["trip_id"], got["id"])
@@ -448,6 +453,38 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
         return {"where": "here", "session_id": got["id"], "client_secret": got.get("client_secret"), "url": got.get("url"), "eur": t["amount"]}
     phone = await GW.tap_to_pay(account, f"€{t['amount']:.2f}", f"{cur['title'] or 'your trip'} — {what} (TEST)", got["url"])
     return {"url": got["url"], "session_id": got["id"], "phone": phone, "eur": t["amount"], "where": "phone"}
+
+
+async def _pay_saved(account: str, cur: Dict[str, Any], t: Dict[str, Any], sha: str, what: str) -> Dict[str, Any]:
+    """Sasha 327 · the saved card: a PaymentIntent made (not charged), the items held with it and the restart-safe record written FIRST
+    (paid-never-booked stays impossible), THEN charged off-session. Paid → Pacioli books it (paid_watch.settle, the same one entry as a
+    page's payment). His bank asks to confirm → ONE "Confirm with your bank" link. Declined → nothing held, said; the page offered."""
+    from . import test_deposit as TD, paid_watch as PWT
+    card = await TD.saved_card(account)
+    if not card:
+        return {"no_saved_card": True}
+    got = await TD.intent_saved(card, f"{t['amount']:.2f}", "EUR", f"{cur['title'] or 'your trip'}: {what}", sha[:16])
+    if "why" in got:
+        return {"why": got["why"]}
+    await BK.hold(account, cur["trip_id"], got["id"])
+    rec = await PWT.remember(account, "trip", got["id"], {"basket": cur["trip_id"], "sha256": sha}, f"{cur['title'] or 'Your trip'} — {what}",
+                             None, "Europe/Madrid")
+    if not rec:
+        await TD.expire(got["id"])
+        await BK.release(account, cur["trip_id"], got["id"])
+        return {"why": "I couldn't save the payment record, so I haven't charged your card — nothing was charged. Try me again in a minute.",
+                "unrecorded": True}
+    res = await TD.confirm_saved(got["id"])
+    base = {"where": "saved", "session_id": got["id"], "eur": t["amount"], "card": card["words"]}
+    if res.get("paid"):
+        import asyncio as _aio
+        _aio.ensure_future(PWT.settle(got["id"]))   # booked now, said on his one channel (live_events → channel.tell)
+        return {**base, "paid": True}
+    if res.get("confirm_url"):
+        return {**base, "confirm_url": res["confirm_url"]}
+    await TD.expire(got["id"])
+    await BK.release(account, cur["trip_id"], got["id"])
+    return {**base, "declined": True, "why": res.get("why") or "the bank declined it"}
 
 
 async def charge_of(account: str, cur: Dict[str, Any]) -> Dict[str, Any]:
@@ -480,7 +517,8 @@ async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]
     import os as _os
     got = await TD.checkout(f"{amount:.2f}", "EUR", f"TEST — {title or 'your trip'}: {what}", sha[:16],
                             embedded=(where == "here" and _os.getenv("SASHA_PAY_EMBEDDED", "") == "1"), where=where,
-                            name=f"{title or 'Your trip'}: {what}" if where == "here" else None)   # Sasha 222 · the pay card's line
+                            name=f"{title or 'Your trip'}: {what}" if where == "here" else None,   # Sasha 222 · the pay card's line
+                            account=account)   # Sasha 327
     if "why" in got:
         return {"why": got["why"]}
     await BK.hold_ids(account, mv["trip_id"], [r["id"] for r in rows], got["id"])

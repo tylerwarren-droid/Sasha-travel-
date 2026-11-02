@@ -275,8 +275,9 @@ async def create_checkout(body: CheckoutRequest, request: Request):
         raise HTTPException(status_code=400, detail="amount must be greater than zero")
 
     try:
-        session = await asyncio.to_thread(
-            stripe.checkout.Session.create,
+        from booking_signer import test_deposit as _TD   # Sasha 327 · THE ONE PLACE money is taken: this legacy page's session too
+        session = await _TD.legacy_session(
+            stripe,
             mode="payment",
             line_items=line_items,
             # Stripe fills in the real session id. The return leg presents it and we ask
@@ -426,5 +427,14 @@ async def stripe_webhook(request: Request):
             await PWT.settle(obj.get("id") or "")
         except Exception as e:
             print(f"[payments] basket settle after the webhook failed: {type(e).__name__}: {e}")
+
+    if event["type"] == "payment_intent.succeeded":   # Sasha 327 · a saved card charged in one step (or after his bank's confirm)
+        obj = event["data"]["object"]
+        if (obj.get("metadata") or {}).get("sasha_where") == "saved":
+            try:
+                from booking_signer import paid_watch as PWT
+                await PWT.settle(obj.get("id") or "")   # once: a repeated webhook books nothing twice
+            except Exception as e:
+                print(f"[payments] saved-card settle after the webhook failed: {type(e).__name__}: {e}")
 
     return {"received": True}

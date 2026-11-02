@@ -115,8 +115,10 @@ class Base(unittest.TestCase):
         from tests.test_s254_one_decider import engine_from
         return await engine_from(getattr(self, "_rungs", {}))(card, budget_s, listing)
 
+    via = "wa"   # Sasha 326 · these hold what reaches his phone: a work-in-progress step reaches it only when asked on WhatsApp
+
     def ctx(self, said="", surface=None, later=False):
-        c = API.Ctx(account=ACCT, mode="test", user_said=said, session=self.session, surface=surface or self.surface)
+        c = API.Ctx(account=ACCT, mode="test", user_said=said, session=self.session, surface=surface or self.surface, via=self.via)
         if later:
             c.started = VN._HELD[ACCT]["at"] + timedelta(minutes=1)
         return c

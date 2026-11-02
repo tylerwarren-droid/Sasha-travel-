@@ -1787,10 +1787,11 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         return await _agapi_send(ctx, held, how, venue, where)
     if rung == "agapi_call":   # Sasha 265 · item 4 — the call act, on their tap (the approval); dialled only from the act
         return await _agapi_call(ctx, held, how, venue, where)
+    from booking_signer import channel as CH   # Sasha 326 · a work-in-progress step goes to WhatsApp ONLY when the request came from there
     if rung == "draft":   # Sasha 212 · the drafted message goes to THEIR phone; they send it — never "booked"
         sent = False
         try:
-            ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
+            ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE and CH.wip_on_phone(ctx) else None
             if ch:
                 # Sasha 249 · her voice never names the channel: the link opens the right one
                 out = await GW._tell(ch, f"✍️ For {venue} — send them this{': ' + held['link'] if held.get('link') else ''}\n\n{held['message']}")
@@ -1820,7 +1821,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             text = f"{text}\n\n{_V.way_back(WA.s2_link())}"
         sent = False
         try:
-            ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
+            ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE and CH.wip_on_phone(ctx) else None
             if ch:
                 o = await GW._tell(ch, text)
                 sent = "sent" in o and "not" not in o
@@ -1869,7 +1870,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             from app.agent import voice as _V
             from booking_signer import wa_agent as WA
             text = f"{text}\n\n{_V.way_back(WA.s2_link())}"
-        out = await GW.tap_platform(ctx.account, text, url, held["id"], venue, held["when"])
+        out = await GW.tap_platform(ctx.account, text, url, held["id"], venue, held["when"]) if CH.wip_on_phone(ctx) else \
+            "not sent: asked on S2 — the page is S2's card"   # Sasha 326
         if one_path(ctx):   # Sasha 283 · item 4c: on the one row the way back reads, with its link's own record
             await note_prepared(ctx.account, venue, held["when"], held["party"], url, link_id=held["id"], route="platform",
                                 platform=held.get("platform"), place_id=held.get("place_id"))
@@ -1891,7 +1893,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
                 GW._spawn(MB.watch_after_link(ctx.account, held["id"]))
             says = V.platform_line(venue, int(held["party"]), held["summary"], bool(held.get("slot_filled")), gmail)
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
-                **({"in_app": True, "phone_line": V.phone_line(sent, out), "page_says": says} if in_app else {}),
+                **({"in_app": True, "phone_line": V.phone_line(sent, out) if CH.wip_on_phone(ctx) else "", "page_says": says} if in_app else {}),   # 326: on S2, no phone words
                 "platform": held.get("platform"), **({} if sent else {"open": url}), **({"page_url": url} if url else {}),
                 # Sasha 236 · found live on /s2: "their page is on your phone" when it wasn't sent there
                 **({} if sent else {"say": "Their page is on this screen — Tap to finish opens it. Never say it's on their phone."})}
@@ -1925,9 +1927,10 @@ async def _platform_handover(ctx, held: dict, prep: dict, venue: str, where) -> 
     details = [by.get("Name"), by.get("Email"), by.get("Mobile")] + \
         [f"{x['label']}: {x['value']}" for x in fields if x["label"] not in ("Day", "Time", "People", "Name", "Email", "Mobile") and x.get("value")]
     text = V.handover_message(venue, platform, held["when"], int(held["party"]), ho.get("carried") or [], details, link)
+    from booking_signer import channel as CH   # Sasha 326 · the hand-over goes to WhatsApp ONLY when it was asked there
     sent, ch = False, None
     try:
-        ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE else None
+        ch = await GW.STORE.channel_of_account(ctx.account) if GW.STORE and CH.wip_on_phone(ctx) else None
         if ch:
             o = await GW._tell(ch, text)
             sent = "sent" in o and "not" not in o

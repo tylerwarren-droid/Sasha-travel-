@@ -612,9 +612,8 @@ async def _told_train(account: str, got: dict) -> None:
     from . import live_events as LE
     line = got.get("say") or f"Got it: your {got.get('label') or 'train'} is on your trip."
     try:
-        await LE._tell_whatsapp(account, line)
-        LE.publish(account, {"type": "proactive", "say": line})
-        await LE.keep_news(account, f"train:{got['act_id']}", line)
+        from . import channel as CH   # Sasha 326 · one channel, never both
+        await CH.tell(account, line, news_key=f"train:{got['act_id']}")
     except Exception as e:
         log.warning("[mailbox] the train line wasn't said: %s", type(e).__name__)
 
@@ -622,12 +621,7 @@ async def _told_train(account: str, got: dict) -> None:
 async def _told_auto(account: str, action: str, facts: dict, row: dict) -> None:
     """One line on WhatsApp for an automatic update from a platform's email."""
     from . import guest_whatsapp as GW, sentences as SN
-    if GW.STORE is None:
-        return
-    ch = await GW.STORE.channel_of_account(account)
-    if not ch:
-        return
-    at = facts.get("at") or ""
+    at = facts.get("at") or ""   # Sasha 326 · no WhatsApp needed: channel.tell says it on S2 then
     when = f"{SN.day_words(at[:10])} at {at[11:16]}" if "T" in at else (row.get("date") or "")
     venue = facts.get("venue") or row.get("venue") or "the venue"
     via = facts.get("via") or "the platform"
@@ -641,7 +635,8 @@ async def _told_auto(account: str, action: str, facts: dict, row: dict) -> None:
         if done.get("said") or done.get("already"):
             return
     try:
-        await GW._tell(ch, text)
+        from . import channel as CH   # Sasha 326 · a cancellation from the platform's email: one channel
+        await CH.tell(account, text)
     except Exception as e:
         log.warning("[mailbox] the automatic update wasn't told: %s", type(e).__name__)
 

@@ -173,7 +173,7 @@ class Base(unittest.TestCase):
         self.addCleanup(VN._HELD.pop, ACCT, None)
 
     def ctx(self, said="", later=False):
-        c = API.Ctx(account=ACCT, mode="test", user_said=said, session="s254d", surface=self.surface)
+        c = API.Ctx(account=ACCT, mode="test", user_said=said, session="s254d", surface=self.surface, via=getattr(self, "via", "wa"))   # 326: the phone only when asked there
         if later:
             c.started = VN._HELD[ACCT]["at"] + timedelta(minutes=1)
         return c

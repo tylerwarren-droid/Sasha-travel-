@@ -3667,16 +3667,14 @@ async def _told_handover_booked(pub: dict) -> None:
     account = pub.get("account_id")
     if not account or pub.get("state") != "booked":
         return
-    ch = await STORE.channel_of_account(account)
-    if not ch:
-        return
-    from . import itinerary_q as IQ, wa_brain as WB
+    from . import itinerary_q as IQ, wa_brain as WB   # Sasha 326 · no WhatsApp needed: channel.tell says it where they are
     venue = plain_venue(pub.get("venue"))
     rows = [r for r in await IQ._rows(account) if plain_venue(r.get("venue")) == venue]
     day = (rows[-1].get("date") if rows else "") or ""
     where = await WB.trip_day_words(account, day, venue)
     ref = f", ref {pub['reference']}" if pub.get("reference") else ""
-    await _tell(ch, f"✅ Booked: {venue}{ref}.\n{where} — receipt sent to your email.")
+    from . import channel as CH   # Sasha 326 · one channel: S2 when they're on it now, else here
+    await CH.tell(account, f"✅ Booked: {venue}{ref}.\n{where} — receipt sent to your email.")
 
 
 try:

@@ -224,15 +224,13 @@ def card_of(act_id: str, res: dict) -> Optional[Dict[str, Any]]:
 async def tell(account: str, text: str, card: Optional[dict] = None, wa_text: Optional[str] = None) -> str:
     """Her words for the act's answer: on their open page (/s2, /next — the live channel, with its card) and on their WhatsApp when it's
     linked (no card there: wa_text says the question in words)."""
-    from booking_signer import live_events as LE
-    LE.publish(account, {"type": "proactive", "say": text, **({"render": card} if card else {})})
+    from booking_signer import channel as CH   # Sasha 326 · ONE channel: S2 (with its card) when they're on it now, else WhatsApp (in words)
     try:
-        from booking_signer import guest_whatsapp as GW
-        ch = await GW.STORE.channel_of_account(account) if GW.STORE is not None else None
-        return (await GW._tell(ch, wa_text or text)) if ch else "page only (no WhatsApp linked)"
+        r = await CH.tell(account, text, event={"render": card} if card else None, wa_text=wa_text)
+        return r.get("wa") or "page only" if r["to"] == "wa" else "page only"
     except Exception as e:
-        log.warning("[venue_calls] not told on WhatsApp: %s", type(e).__name__)
-        return f"page only ({type(e).__name__})"
+        log.warning("[venue_calls] not told: %s", type(e).__name__)
+        return f"not told ({type(e).__name__})"
 
 
 async def after_call(call: dict, reading) -> Dict[str, Any]:

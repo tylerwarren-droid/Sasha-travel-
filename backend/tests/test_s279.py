@@ -127,11 +127,17 @@ class A_TheRing(unittest.TestCase):
 class _World:
     """completed()'s edges, captured: the email's send result, WhatsApp, the page's events, the kept news."""
 
-    def __init__(self, sent=True, to="scratch@example.com"):
+    def __init__(self, sent=True, to="scratch@example.com", page=False):
         self.mails, self.wa, self.news = [], [], []
-        self.sent, self.to = sent, to
+        self.sent, self.to, self.page = sent, to, page   # Sasha 326 · page: his S2 open now (its one channel) — else his WhatsApp
 
     def __enter__(self):
+        from booking_signer import channel as CH
+        CH._LAST.pop(ACCT, None)
+        self.q = None
+        if self.page:   # an open page as live_events holds it (a queue it puts each event in)
+            self.q = type("Q", (), {"put_nowait": lambda _s, e: None})()
+            LE._SUBS.setdefault(ACCT, []).append(self.q)
         LE._CLOSED.clear()   # once per booking is per process too: an earlier test's same booking (test_s263's play) is not this one
         LE._RECENT.pop(ACCT, None)
 
@@ -163,6 +169,8 @@ class _World:
         return out
 
     def __exit__(self, *a):
+        if self.q is not None:
+            LE.unsubscribe(ACCT, self.q)
         for x in self.p:
             x.stop()
 
@@ -172,26 +180,30 @@ TRIP = {"status": "booked", "say": "✅ Booked — everything's in your itinerar
 
 
 class B_PaymentSaidFirst(unittest.TestCase):
-    def test_gate_paid_she_says_so_first_on_both_doors(self):
-        """THE GATE (21 Oct 10:47:57 UTC: settled, his page heard `booked` — written, never spoken; WhatsApp had its own words)."""
-        with _World() as w:
-            run(LE.on_settled(ACCT, TRIP, "Kenya, 9 days", key="cs_test_279"))
-            ev = w.events()
+    def test_gate_paid_she_says_so_first_on_one_door(self):
+        """THE GATE (21 Oct 10:47:57 UTC: settled, his page heard `booked` — written, never spoken; WhatsApp had its own words).
+        Sasha 326 · ONE channel: his S2 open now → the page only; S2 closed → his WhatsApp only."""
         line = f"{V.paid_line('Kenya, 9 days')} {V.CLOSING}"
         self.assertEqual(line, "Your payment for Kenya, 9 days went through — you're booked. You'll find your itinerary here, and I've "
                                "sent it to your email. If you want to change anything, I'm here 24 hours a day, 7 days a week.")
+        with _World(page=True) as w:
+            run(LE.on_settled(ACCT, TRIP, "Kenya, 9 days", key="cs_test_279"))
+            ev = w.events()
         self.assertEqual([(e["type"], e["text"], e["key"]) for e in ev], [("booked", line, "pay:cs_test_279")])
+        self.assertEqual((w.wa, w.news, len(w.mails)), ([], [], 1))     # never WhatsApp too
+        with _World() as w:
+            run(LE.on_settled(ACCT, TRIP, "Kenya, 9 days", key="cs_test_279b"))
+            ev = w.events()
+        self.assertEqual(ev, [])
         self.assertEqual(len(w.wa), 1)
         self.assertTrue(w.wa[0].startswith(line))                    # the same words on WhatsApp (+ the itinerary link)
-        self.assertEqual(w.news, [("pay:cs_test_279", line)])      # kept for a return later than the replay
-        self.assertEqual(len(w.mails), 1)
 
     def test_said_once_however_many_see_the_payment(self):
-        with _World() as w:
+        with _World(page=True) as w:
             run(LE.on_settled(ACCT, TRIP, "Kenya", key="cs_test_once"))
             again = run(LE.on_settled(ACCT, TRIP, "Kenya", key="cs_test_once"))
             self.assertEqual(len(w.events()), 1)
-            self.assertEqual((len(w.wa), len(w.mails)), (1, 1))
+            self.assertEqual((len(w.wa), len(w.mails)), (0, 1))
         self.assertTrue(again.get("already"))
 
     def test_a_flight_is_named(self):
@@ -199,14 +211,14 @@ class B_PaymentSaidFirst(unittest.TestCase):
         self.assertEqual(LE.item_of({}, None), "your trip")
 
     def test_partly_booked_is_never_youre_booked(self):
-        with _World() as w:
+        with _World(page=True) as w:
             run(LE.on_settled(ACCT, {**TRIP, "failed": ["Hotel B — refused"]}, "Kenya", key="cs_test_part"))
             text = w.events()[0]["text"]
         self.assertNotIn("you're booked", text)
         self.assertIn("not everything", text)
 
     def test_failed_is_said_as_before_with_no_closing(self):
-        with _World() as w:
+        with _World(page=True) as w:
             run(LE.on_settled(ACCT, {"status": "failed", "failed": ["the airline refused"]}, "Kenya", key="cs_test_fail"))
             ev = w.events()
         self.assertEqual(ev[0]["type"], "booking_failed")
@@ -214,7 +226,7 @@ class B_PaymentSaidFirst(unittest.TestCase):
 
     def test_the_settle_hands_both_doors_to_completed(self):
         src = inspect.getsource(PW.settle)
-        self.assertIn('if r.get("status") != "booked":', src)          # its own WhatsApp line only when NOT booked
+        self.assertIn('wa_text=wa', src)          # Sasha 326 · its WhatsApp words go to the ONE send (on_settled → channel.tell), never apart
         self.assertIn("key=sid", src)
 
     def test_the_return_takes_the_kept_news_once(self):

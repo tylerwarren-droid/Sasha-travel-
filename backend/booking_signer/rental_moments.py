@@ -169,10 +169,14 @@ async def tick(now: datetime) -> List[dict]:
             if not m.get("speak"):
                 outcome = f"silent: {m.get('why_silent') or 'AgAPI said not to'}"
             else:
-                wa = await _whatsapp(acct, m.get("line") or "")
-                LE.publish(acct, {"type": "proactive", "kind": "pickup_tomorrow", "say": m.get("line"),
-                                  **({"render": {"kind": "counter_card", "card": (m.get("card") or {}).get("card") or m.get("card")}} if m.get("card") else {})})
-                outcome = f"said: whatsapp {wa}; /s2 if open"
+                from . import channel as CH   # Sasha 326 · one channel: S2 (with its card) when they're on it now, else WhatsApp
+                if await CH.outcome_channel(acct) == CH.WA:
+                    wa = await _whatsapp(acct, m.get("line") or "")
+                    outcome = f"said: whatsapp {wa}"
+                else:
+                    LE.publish(acct, {"type": "proactive", "kind": "pickup_tomorrow", "say": m.get("line"),
+                                      **({"render": {"kind": "counter_card", "card": (m.get("card") or {}).get("card") or m.get("card")}} if m.get("card") else {})})
+                    outcome = "said: /s2"
             await _outcome(r, outcome)
             done.append({"kind": "pickup_tomorrow", "rental": r["id"], "outcome": outcome})
     return done

@@ -228,12 +228,13 @@ async def completed(account: str, key: str, *, item: Optional[str] = None, paid:
     out: Dict[str, Any] = {"text": text, "emailed": emailed, "email": mailed, "said": True}
     if push:
         st = await status_now(account)
-        out["event"] = publish(account, {"type": "booked", "text": text, "say": text, "spoken": text.replace(" — ", ", "), "key": key,
-                                         "card": {"kind": "itinerary_link", "url": itinerary_url(), "title": title or "Your itinerary"},
-                                         "emailed": emailed, **({"status": st} if st else {})})
-        await keep_news(account, key, text)
-        out["whatsapp"] = await _tell_whatsapp(account, "\n".join([text] + [x for x in (wa_extra or []) if x] + [itinerary_url()]))
-        log.info("[live_events] completed %s: emailed %s, WhatsApp %s", key[-12:], emailed, out["whatsapp"])
+        from . import channel as CH   # Sasha 326 · ONE channel: S2 when they're on it now, else their WhatsApp — never both
+        told = await CH.tell(account, text, event={"type": "booked", "text": text, "spoken": text.replace(" — ", ", "), "key": key,
+                                                   "card": {"kind": "itinerary_link", "url": itinerary_url(), "title": title or "Your itinerary"},
+                                                   "emailed": emailed, **({"status": st} if st else {})},
+                             wa_text="\n".join([text] + [x for x in (wa_extra or []) if x] + [itinerary_url()]), news_key=key)
+        out["event"], out["whatsapp"], out["to"] = told.get("event"), told.get("wa") or "not this channel", told["to"]
+        log.info("[live_events] completed %s: emailed %s, told on %s", key[-12:], emailed, told["to"])
     return out
 
 
@@ -248,7 +249,7 @@ def item_of(r: dict, title: Optional[str]) -> str:
 
 
 async def on_settled(account: str, r: dict, title: Optional[str] = None, key: Optional[str] = None,
-                     wa_extra: Optional[List[str]] = None) -> dict:
+                     wa_extra: Optional[List[str]] = None, wa_text: Optional[str] = None) -> dict:
     """Called once per payment, after Pacioli recorded it. Booked → completed() (the email, her words — Sasha 279 · B: "Your payment
     for <item> went through — you're booked." then the closing line — and both doors). Failed or partly booked → said as before."""
     status = (r or {}).get("status")
@@ -276,10 +277,12 @@ async def on_settled(account: str, r: dict, title: Optional[str] = None, key: Op
             email = None
     w = words_for(r, email)
     st = await status_now(account)
-    ev = publish(account, {"type": "booked" if status == "booked" else "booking_failed", **w,
-                           "card": {"kind": "itinerary_link", "url": itinerary_url(), "title": title or "Your trip"},
-                           "emailed": bool(email), **({"status": st} if st else {})})
-    return {"event": ev, "email": mailed}
+    from . import channel as CH   # Sasha 326 · one channel (a payment that didn't book: its line, where they are)
+    told = await CH.tell(account, w.get("say") or w.get("text") or "", wa_text=wa_text,
+                         event={"type": "booked" if status == "booked" else "booking_failed", **w,
+                                "card": {"kind": "itinerary_link", "url": itinerary_url(), "title": title or "Your trip"},
+                                "emailed": bool(email), **({"status": st} if st else {})})
+    return {"event": told.get("event"), "email": mailed, "to": told["to"]}
 
 
 __all__ = ["subscribe", "unsubscribe", "recent", "publish", "on_settled", "words_for", "compose_email", "itinerary_url", "completed",

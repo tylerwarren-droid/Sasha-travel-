@@ -445,6 +445,15 @@ async def _send(ch: dict, kind: str, b: Optional[dict], text, variables: Optiona
         return "already sent"
     if callable(text):
         text, variables = await text()
+    from . import channel as CH   # Sasha 326 · a reminder is an outcome: S2 when they're on it now — never S2 AND WhatsApp
+    if await CH.outcome_channel(ch["account_id"]) == CH.S2 and CH.s2_open(ch["account_id"]):
+        from . import live_events as LE
+        LE.publish(ch["account_id"], {"type": "proactive", "kind": kind, "say": text})
+        try:
+            await STORE.finish(sid, "s2", "sent")
+        except Exception as e:   # the ledger's channel check predates S2 (SQL FOR CHAT, 326): said, the row stays claimed (never twice)
+            log.warning("[proactive] %s said on S2; the ledger couldn't record channel s2: %s", kind, type(e).__name__)
+        return "sent"
     st = await GW.STORE.get_state(ch["wa_id_sha256"])
     last = st.get("last_inbound_at")
     frm = sorted(GW.guest_numbers())[0] if GW.guest_numbers() else None
@@ -497,6 +506,9 @@ async def _calendar_updates(ch: dict, now: datetime) -> List[dict]:
         if not frm or not last or now - last > GW.SESSION_WINDOW or ch.get("opted_out_at"):
             return out
         from agapi import s2_tools as S2T
+        from . import channel as CH   # Sasha 326 · one channel
+        if await CH.outcome_channel(ch["account_id"]) == CH.S2 and CH.s2_open(ch["account_id"]):
+            return out   # they're on S2 now: My plans shows the change; the next sweep sends it if they leave
         for u in await S2T.calendar_updates_due(ch["account_id"]):
             got = await GW.deliver(ch, frm, GW.Out().text(f"{u.get('venue') or 'Your booking'}: {u['line']}\n{u['url']}"), last)
             out.append({"kind": "calendar_update", "booking": u.get("uid"), "outcome": ", ".join(str(x) for x in got)[:120]})

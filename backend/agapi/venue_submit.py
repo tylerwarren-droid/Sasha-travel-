@@ -588,8 +588,8 @@ async def _told_no_answer(account: str, acts: List[dict]) -> None:
     for a in acts:
         line = f"No answer yet from {a.get('venue') or 'them'} — it isn't confirmed. I'll tell you the moment they reply."
         try:
-            await LE._tell_whatsapp(account, line)
-            LE.publish(account, {"type": "proactive", "say": line})
+            from booking_signer import channel as CH   # Sasha 326 · one channel, never both
+            await CH.tell(account, line)
         except Exception as e:
             log.warning("[venue_submit] the no-answer line wasn't said: %s", type(e).__name__)
         a["no_answer_told"] = time.time()

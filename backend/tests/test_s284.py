@@ -74,8 +74,8 @@ CANT = re.compile(r"\b(can'?t|cannot|can not|unable|not able)\b", re.I)
 
 
 class Ctx:
-    def __init__(self, surface="s2", said=""):
-        self.account, self.surface, self.user_said = ACCT, surface, said
+    def __init__(self, surface="s2", said="", via="page"):
+        self.account, self.surface, self.user_said, self.via = ACCT, surface, said, via   # via "wa": asked on WhatsApp (Sasha 326)
         self.started = datetime.now(timezone.utc)
 
 
@@ -196,7 +196,7 @@ class TheHoldFollows(unittest.TestCase):
 
     def _follow(self, name, at="2099-11-01T18:00", refused=False, a=None):
         self.dec = dec_of(name)
-        return run(VN.follow(Ctx(), a or {"name": "Opulence Thai Spa"}, self.RD, self.RES, at, datetime.now(timezone.utc),
+        return run(VN.follow(Ctx(via="wa"), a or {"name": "Opulence Thai Spa"}, self.RD, self.RES, at, datetime.now(timezone.utc),
                              {"website": "https://opulence.example", "place_id": "ChIJ284"}, self.dec, refused=refused))
 
     def test_a_platform_is_prepared_by_agapi_and_handed_over_in_its_words(self):

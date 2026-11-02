@@ -243,19 +243,21 @@ def held_platform():
 
 
 class APlatformPageIsNeverStranded(unittest.TestCase):
-    def test_gate_the_phone_failed_and_she_says_so_with_the_card_on_screen(self):
-        """THE GATE (his tattoo link): the send met "outside the 24-hour window", nothing said, nothing arrived."""
+    def test_gate_the_card_on_screen_and_never_the_phone(self):
+        """THE GATE (his tattoo link) — Sasha 326: asked on S2, the page is S2's card ONLY: nothing goes to his WhatsApp, and she never
+        talks about his phone (the work in progress stays where he asked)."""
         out = book("page", held_platform(), tap="not told: outside the 24-hour window")
         self.assertEqual(out["page_url"], "https://booksy.com/es-es/1_sinkply")                 # the card, always, in the app
         self.assertEqual(S.render("book_venue", out, {})["kind"], "handover")
         line = V.page_line("book_venue", {"ok": True, "result": out})
-        self.assertTrue(line.startswith(out["page_says"]), line)
-        self.assertIn("I couldn't send it to your phone — you haven't messaged me there in the last day", line)
+        self.assertEqual(line, out["page_says"])
+        self.assertNotIn("phone", line)
         self.assertEqual(V.channel_words(line), [])
 
-    def test_sent_to_the_phone_too(self):
+    def test_never_sent_to_the_phone_from_s2(self):
         out = book("page", held_platform(), tap="sent")
-        self.assertEqual(V.page_line("book_venue", {"ok": True, "result": out}), out["page_says"])   # nothing about the phone: it arrived
+        self.assertEqual(out["status"], "page_link")                                           # Sasha 326: the phone never got it
+        self.assertEqual(V.page_line("book_venue", {"ok": True, "result": out}), out["page_says"])
 
     def test_gate_item_8_one_line_one_button_never_an_internal_address(self):
         """Row 929 (Ichikani Madrid): "Shall I send this?" on a platform she never sends on, and a card telling him to forward the

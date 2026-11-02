@@ -201,12 +201,11 @@ async def settle(sid: str) -> Optional[dict]:
         await _release(row["id"], payload)   # the next look tries again
         return {"status": "booking"}
     TD.note(sid, r.get("status") == "booked", str(r.get("say") or "")[:300])
-    if r.get("status") != "booked":   # Sasha 279 · booked: live_events.completed tells BOTH doors, once (its words, the closing line)
-        await _tell(payload["account"], r)
-    try:   # Sasha 212 · the open page hears it at once, and the confirmation email goes (booked only)
+    try:   # Sasha 326 · booked or not, said ONCE on one channel (live_events → channel.tell): never this line on WhatsApp AND the page
         from . import live_events as LE, plan_store as PS
         p = await PS.latest(payload["account"]) if payload.get("kind") == "trip" else None
-        await LE.on_settled(payload["account"], r, (p or {}).get("title") or r.get("title"), key=sid, wa_extra=_extras(r))
+        wa = await wa_line(payload["account"], r) if r.get("status") != "booked" else None
+        await LE.on_settled(payload["account"], r, (p or {}).get("title") or r.get("title"), key=sid, wa_extra=_extras(r), wa_text=wa)
     except Exception as e:
         log.error("[paid_watch] the page was not told: %s: %s", type(e).__name__, e)
     return r
@@ -219,20 +218,14 @@ def _extras(r: dict) -> list:
 
 
 async def _tell(account: str, r: dict) -> None:
-    """Said once on WhatsApp, whichever device paid (the phone pays; the laptop shows it too)."""
-    from . import guest_whatsapp as GW
+    """Said once, on ONE channel (Sasha 326 · channel.tell: S2 when they're on it now, else their WhatsApp) — a Duffel change."""
+    from . import channel as CH
     try:
-        ch = await GW.STORE.channel_of_account(account) if GW.STORE else None
-        if ch:
-            st = await GW.STORE.get_state(ch["wa_id_sha256"])
-            # Sasha 206 (EU 186 R1) · from the number they last wrote to, else the permanent sender — it used to need last_to,
-            # which was never saved, so the payment-result and Duffel-change messages were never sent
-            res = await GW.deliver(ch, GW.sender_for(st), GW.Out().text(await wa_line(account, r)), st.get("last_inbound_at"))
-            log.info("[paid_watch] told on WhatsApp: %s", res)
-        else:
-            log.info("[paid_watch] not told on WhatsApp: no WhatsApp linked to the account")
+        line = await wa_line(account, r)
+        res = await CH.tell(account, line)
+        log.info("[paid_watch] told on %s", res["to"])
     except Exception as e:
-        log.warning("[paid_watch] not told on WhatsApp: %s: %s", type(e).__name__, e)
+        log.warning("[paid_watch] not told: %s: %s", type(e).__name__, e)
 
 
 async def wa_line(account: str, r: dict) -> str:

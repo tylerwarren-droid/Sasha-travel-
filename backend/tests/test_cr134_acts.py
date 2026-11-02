@@ -24,7 +24,11 @@ ASKS = [{"act_id": f"act_{k}", "venue": "Taverna Correo (sandbox)", "when": SOON
 
 
 def run(c):
-    return asyncio.get_event_loop().run_until_complete(c)
+    loop = asyncio.new_event_loop()   # its own loop: never one another suite closed
+    try:
+        return loop.run_until_complete(c)
+    finally:
+        loop.close()
 
 
 class SlowReads(unittest.TestCase):

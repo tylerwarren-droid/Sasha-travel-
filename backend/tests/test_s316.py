@@ -71,7 +71,7 @@ class Base(unittest.TestCase):
 
     def hand_over(self):
         self.dec = platform_dec(self.PLATFORM, self.PAGE)   # venue.profile's decision: its button is the platform's own page
-        return run(VN.follow(T.Ctx(), {"name": "La Mi Venta"}, self.RD, FIELDS_RES, "2026-11-14T14:00", datetime.now(timezone.utc),
+        return run(VN.follow(T.Ctx(via="wa"), {"name": "La Mi Venta"}, self.RD, FIELDS_RES, "2026-11-14T14:00", datetime.now(timezone.utc),
                              {"website": "https://lamiventa.example", "place_id": "ChIJ316"}, self.dec))
 
 
@@ -122,7 +122,7 @@ class EveryPlatform(Base):
     def test_b_no_platform_page_from_agapi_keeps_the_decisions_own(self):   # hand_over missing: venue.profile's button, never /prepared/
         self.PAGE = None
         self.dec = platform_dec(self.PLATFORM, CM)
-        run(VN.follow(T.Ctx(), {"name": "La Mi Venta"}, self.RD, FIELDS_RES, "2026-11-14T14:00", datetime.now(timezone.utc),
+        run(VN.follow(T.Ctx(via="wa"), {"name": "La Mi Venta"}, self.RD, FIELDS_RES, "2026-11-14T14:00", datetime.now(timezone.utc),
                       {"website": "https://lamiventa.example", "place_id": "ChIJ316"}, self.dec))
         self.assertTrue(self.told[-1].endswith(CM))
 

@@ -722,6 +722,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     wa = surface == "wa"
     if wa:
         surface = "s2"
+    from booking_signer import channel as _CH   # Sasha 326 · the channel of this turn, for the ONE routing decision
+    await _CH.used(account, _CH.WA if wa else _CH.S2)
     from agapi import person_access as _PA
     await _PA.warm(account)   # Sasha 254 · the one record (founder, calls, real venues …), fresh for this turn's sync checks
     remembered = _HANDOVER.pop(session or "-", None)   # Sasha 239 · on the first turn back only: what was (and wasn't) decided

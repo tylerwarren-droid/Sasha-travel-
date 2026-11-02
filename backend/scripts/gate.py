@@ -92,6 +92,12 @@ async def main() -> int:
             await voice_proof.run(real_call, real_engine)
         except Exception as e:
             print(f"voice proof: ⚠ {type(e).__name__}")
+    if not bad:   # Sasha 327 · after the verdict, never part of it: pay in one tap on Stripe TEST (its own test cards)
+        from scripts import pay_proof
+        try:
+            await pay_proof.run()
+        except Exception as e:
+            print(f"pay proof: ⚠ {type(e).__name__}: {e}")
     return 1 if bad else 0
 
 

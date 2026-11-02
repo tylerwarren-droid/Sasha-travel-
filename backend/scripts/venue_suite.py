@@ -21,9 +21,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
 
-def _ctx(a: str, said: str = ""):
+def _ctx(a: str, said: str = "", via: str = "page"):
     from agapi import v0 as API
-    return API.Ctx(account=a, mode="test", user_said=said)
+    return API.Ctx(account=a, mode="test", user_said=said, via=via)   # Sasha 326 · via "wa": asked on WhatsApp
 
 
 async def real_test_venue(a: str) -> None:
@@ -137,11 +137,11 @@ async def routes_offline(a: str) -> None:
     later = (date.today() + timedelta(days=6)).isoformat()
     v = {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": "dinner", "party": 2}
 
-    async def two_turns(args: dict, key: str) -> tuple:
+    async def two_turns(args: dict, key: str, via: str = "page") -> tuple:
         VN._SENT.pop(a, None)   # Sasha 319 · each route is its own booking here (AgAPI's path answers a repeated yes "already sent")
         VN._HELD.pop(a, None)
-        h = await API.call(_ctx(a, "book it"), "hold_venue", {**v, **args, "idempotency_key": key + "h"})
-        b = await API.call(_ctx(a, "Yes"), "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": key + "b"})
+        h = await API.call(_ctx(a, "book it", via), "hold_venue", {**v, **args, "idempotency_key": key + "h"})
+        b = await API.call(_ctx(a, "Yes", via), "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": key + "b"})
         return h, b
     from agapi import booking_decide as BD
     from agapi.booking_rules import booking_rules as BR
@@ -168,10 +168,15 @@ async def routes_offline(a: str) -> None:
            d.get("ok") and d["result"]["status"] == "choose_route" and d["result"]["ask"] == BR.PHRASES["ask_book"],
            str(d.get("result"))[:160])
         VN._read = read_with({"link": {"value": "TheFork"}})
-        h, b = await two_turns({"day": later, "time": "21:00", "route": "page"}, "vo-p")
-        ok("VENUE ROUTE · page (a platform only): its page goes to the phone on the yes — never booked by Sasha (R14)",
+        h, b = await two_turns({"day": later, "time": "21:00", "route": "page"}, "vo-p", via="wa")
+        ok("VENUE ROUTE · page (a platform only), asked on WhatsApp: its page goes to the phone on the yes — never booked by Sasha (R14)",
            h.get("ok") and b.get("ok") and b["result"]["status"] == "page_on_phone" and taps == ["https://www.thefork.es/restaurante/x-r1"],
            f"{b.get('error') or b.get('result')} taps={taps}")
+        nt = len(taps)
+        h, b = await two_turns({"day": later, "time": "21:00", "route": "page"}, "vo-p2")
+        ok("VENUE ROUTE · page, asked on S2: S2's card only — nothing to his WhatsApp during the form (326)",
+           h.get("ok") and b.get("ok") and b["result"]["status"] == "page_link" and len(taps) == nt and b["result"].get("page_url"),
+           f"{b.get('error') or b.get('result')} taps={taps[nt:]}")
         own = lambda: [p for _m, p, _b in fake.calls if p.startswith(("/api/booking/emails", "/api/booking/calls", "/api/booking/forms"))]
         VN._read = read_with({"email": {}, "phone": {"fact_index": 0}}, PHONE)
         h, b = await two_turns({"day": later, "time": "21:00", "route": "email"}, "vo-e")
@@ -193,8 +198,8 @@ async def routes_offline(a: str) -> None:
         # Sasha 212 · a SPA on a platform (Fresha): its page to the phone; a spa with its own form behind a CAPTCHA: Tap to finish
         VN._read = read_with({"link": {"value": "Fresha"}})
         nt = len(taps)
-        h, b = await two_turns({"day": later, "time": "11:00", "route": "page", "what": "a massage", "name": "Spa Gate"}, "vo-spa1")
-        ok("VENUE ROUTE · a spa on Fresha: its page to the phone on the yes (she never books on a platform)",
+        h, b = await two_turns({"day": later, "time": "11:00", "route": "page", "what": "a massage", "name": "Spa Gate"}, "vo-spa1", via="wa")
+        ok("VENUE ROUTE · a spa on Fresha, asked on WhatsApp: its page to the phone on the yes (she never books on a platform)",
            b.get("ok") and b["result"]["status"] == "page_on_phone" and len(taps) == nt + 1, str(b.get("error") or b.get("result"))[:160])
         VN._read = read_with({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}])
         h, b = await two_turns({"day": later, "time": "11:00", "route": "page", "what": "a massage", "name": "Spa Gate"}, "vo-spa2")

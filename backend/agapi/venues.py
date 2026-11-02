@@ -1876,7 +1876,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             await note_prepared(ctx.account, venue, held["when"], held["party"], url, link_id=held["id"], route="platform",
                                 platform=held.get("platform"), place_id=held.get("place_id"))
         sent = "sent" in out and "not" not in out
-        if not sent:   # Sasha 264 · item 3: the reason was dropped — Tyler's tattoo link "never arrived" and nothing said why
+        if not sent and CH.wip_on_phone(ctx):   # Sasha 264 · item 3: the reason was dropped (326: asked on S2 it was never meant to go)
             log.warning("[venues] %s's page not sent to the phone: %s", venue, out)
         from app.agent import voice as V
         from agapi import venue_submit as VS

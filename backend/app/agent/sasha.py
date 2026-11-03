@@ -1071,6 +1071,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 _amounts(r["result"], allowed)
                 if honest and isinstance(r["result"], dict):   # Sasha 264 · item 5: what this card says, she never says again
                     tstate["seen"] += [str(l) for l in (r["result"].get("read_back") or []) if isinstance(l, str)]
+                if honest and _V.route_told(r["result"]):   # Sasha 331 · how she'll book and why: said once, in front, by code
+                    told.insert(0, _V.route_told(r["result"]))
                 if honest and _V.told_line(r["result"]):   # Sasha 254 · off on /next with parity off (byte-identical)
                     told.append(_V.told_line(r["result"]))
             line = outage(r)

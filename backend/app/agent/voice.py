@@ -406,6 +406,80 @@ _LIMIT = re.compile(
     r"|\b(?:phone|a call|calls?|messages?|e-?mail)\s+(?:is|are)\s+(?:the|their)\s+only\b", re.I)
 
 
+# Sasha 331 · HOW SHE'LL BOOK AND WHY, IN ONE LINE (Tyler, 3 Nov 19:50 — amends rule 15 / 15 Oct: before the one booking question she says
+# ONCE how she'll book and why). ONE table keyed by AgAPI's decision (venue.profile → handoff.decide: route · channel · sender · row ·
+# hours): AgAPI's ordering IS the reason (decide() takes the first that applies — form, its robot check, Google, a platform, a message, no
+# reservations, a call, the floor). Said by code (a told line: sasha.turn puts it in front, once), the same on S2, WhatsApp and voice.
+# The floor (none / none_listing) has its own words: no line. No decision → no line (never a guess). docs/sasha/S-331-route-line.md
+ROUTE_LINES = {
+    "email": "They don't take bookings online, so I'll email them your request — I'll tell you when they reply.",
+    "whatsapp_kanoe": "They book on WhatsApp — I'll message them for you.",
+    "whatsapp_person": "They book on WhatsApp — I'll write the message for you to send.",
+    "social": "They take bookings by {channel} message — I'll write it for you to send.",
+    "platform": "They use {platform} — I'll get the booking ready for you to finish there.",
+    "platform_book": "They use {platform} — I can book it directly once you confirm.",
+    "send_form": "They have their own booking form — I'll fill it in and send it once you confirm.",
+    "prefilled_page": "Their booking form has a robot check, so I'll fill it in and you press send.",
+    "reserve_with_google": "They take bookings through Google — I'll open their listing for you to reserve.",
+    "call": "They take bookings by phone — I'll call them once you confirm.",
+    "call_at_opening": "They take bookings by phone and they're closed now — I'll call when they open at {opens}.",
+    "call_no_voice": "They take bookings by phone — I'll call them in English once you confirm.",
+    "no_reservations": "Their listing says they don't take reservations.",
+}
+NO_ROUTE_LINE = ("none", "none_listing")   # the floor: its own words (FLOOR), never a line in front of it
+
+
+def _route_key(dec: dict) -> Optional[str]:
+    route, ch = str(dec.get("route") or ""), str(dec.get("channel") or "")
+    row = str(dec.get("row") or "")
+    if row in ("call_at_opening", "call_no_voice"):
+        return row
+    if route == "message":
+        low = ch.lower()
+        if low == "email":
+            return "email"
+        if low == "whatsapp":
+            return "whatsapp_kanoe" if dec.get("sender") == "kanoe" else "whatsapp_person"
+        return "social" if ch else None
+    if route == "ask_then_send":
+        return "send_form"
+    return route if route in ROUTE_LINES else None
+
+
+def route_line(dec: Optional[dict]) -> Optional[str]:
+    """AgAPI's decision → the one line saying how she'll book and why; None when there is no decision, the floor, or a route this table
+    doesn't word (never a guess)."""
+    if not isinstance(dec, dict) or not dec.get("route") or dec.get("route") in NO_ROUTE_LINE:
+        return None
+    key = _route_key(dec)
+    if not key:
+        return None
+    ch = str(dec.get("channel") or "")
+    platform = re.sub(r"\s+booking$", "", ch).strip() or None
+    opens = str(((dec.get("hours") or {}).get("opens_at")) or "")[11:16] or None
+    if "{platform}" in ROUTE_LINES[key] and not platform:
+        return None
+    if "{opens}" in ROUTE_LINES[key] and not opens:
+        return ROUTE_LINES["call"]
+    return ROUTE_LINES[key].format(platform=platform or "", opens=opens or "", channel=ch)
+
+
+_ROUTE_RX = [re.compile("^" + re.escape(t).replace(r"\{platform\}", r"[^—.]{1,40}").replace(r"\{opens\}", r"\d{2}:\d{2}")
+                        .replace(r"\{channel\}", r"[A-Za-z]{2,20}") + "$") for t in ROUTE_LINES.values()]
+
+
+def is_route_line(sentence: str) -> bool:
+    """One sentence IS one of the route lines (said by code) — the channel-word and limit checks let it through, and nothing else."""
+    t = " ".join(str(sentence or "").split())
+    return any(rx.match(t) for rx in _ROUTE_RX)
+
+
+def route_told(result) -> str:
+    """The route line a booking tool's result carries to be said in front of her reply ("" when none)."""
+    line = result.get("route_line") if isinstance(result, dict) else None
+    return line if isinstance(line, str) and is_route_line(line) else ""
+
+
 def limits_channel(text: str) -> bool:
     """Sasha 273 · one thing she says names a single way a place books as its only one ("by phone only", "the only route…")."""
     return bool(_LIMIT.search(text or ""))
@@ -423,6 +497,7 @@ def faults(transcript: Iterable[Tuple[str, str]]) -> List[str]:
     for i, (role, text) in enumerate(transcript):
         if role != "assistant":
             continue
+        text = " ".join(x for x in _SENT_SPLIT.split(text or "") if not is_route_line(x))   # Sasha 331 · the route line, said by code
         for w in channel_words(text):
             out.append(f"turn {i}: names the channel {w!r}")
         if limits_channel(text):   # Sasha 273 · rule 15: nor limits it
@@ -1127,7 +1202,7 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
            "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
            "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "KIND_ASK_ES", "KIND_CHOICES_ES", "kind_ask",
-           "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
+           "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "route_line", "is_route_line", "route_told", "ROUTE_LINES", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",

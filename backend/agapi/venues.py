@@ -857,6 +857,37 @@ SAVE_CONTACT_DESC = ("When a booking needs their name and mobile (hold_venue sai
                      "name and mobile) — venues get that address from then on.")
 
 
+def _says_route(fn):
+    """Sasha 331 · the booking question, with AgAPI's route said ONCE in front of it (voice.route_line: how she'll book and why, from
+    AgAPI's decision — never a guess) — on every answer hold_venue gives."""
+    import functools
+
+    @functools.wraps(fn)
+    async def wrapped(ctx, a: dict) -> dict:
+        ctx.route_dec = None
+        return with_route_line(ctx, await fn(ctx, a))
+    return wrapped
+
+
+def with_route_line(ctx, out: dict) -> dict:
+    """Sasha 331 · AgAPI's route line on the ONE booking question (awaiting_yes / choose_route), once per booking: `route_line` on the
+    result, said by code in front of her reply (sasha.turn's told lines) on S2, WhatsApp and voice."""
+    from app.agent import voice as V
+    dec = getattr(ctx, "route_dec", None)
+    if not isinstance(out, dict) or out.get("status") not in ("awaiting_yes", "choose_route") or not isinstance(dec, dict):
+        return out
+    if out.get("route") == "platform_book":   # CR 160 · AgAPI books it for them (the beta): its own line
+        dec = {**dec, "route": "platform_book"}
+    line = V.route_line(dec)
+    held = _HELD.get(ctx.account) if out.get("status") == "awaiting_yes" else None
+    if not line or (held and held.get("route_said") == line):
+        return out
+    if held is not None:
+        held["route_said"] = line
+    return {**out, "route_line": line}
+
+
+@_says_route
 async def hold_venue(ctx, a: dict) -> dict:
     """Prepare the booking → what the booking rules decided (agapi.booking_decide → booking_rules.decide): the ONE question, the
     read-back the yes binds to, their page, or the rules' refusal — said in the rules' words with the take-over. Nothing is sent."""
@@ -911,12 +942,14 @@ async def hold_venue(ctx, a: dict) -> dict:
     eng = await engine_channel(card or (listing_card(rd) if path else None), listing=path) or read_channel(rd, card, one_path=path)
     from agapi import venue_truth as VT
     dec = VT.decision(card or listing_card(rd)) if path else None
+    ctx.route_dec = dec   # Sasha 331 · the decision the route line is said from
     if kanoe_route(dec) and at and not _open_slot(ctx, a):   # Sasha 287 · a WhatsApp venue: AgAPI's gate decides who sends it
         return _with_card(card, await kanoe_whatsapp(ctx, a, rd, res, at, now, card, dec))
     if follows(dec, at):   # Sasha 284 · the person finishes it: handed over as AgAPI decided (its words, its button)
         return _with_card(card, await follow(ctx, a, rd, res, at, now, card, dec))
     d = await rules_for(ctx, a, rd, res, at, eng, card, route, now)
     if dec and dec["route"] != "none" and d.get("say") in REFUSED:   # Sasha 284 · Kanoe may not act here: never "can't" — AgAPI's
+        ctx.route_dec = None   # Sasha 331 · handed over instead of AgAPI's route: its line would say what isn't happening
         return _with_card(card, await follow(ctx, a, rd, res, at, now, card, dec, refused=True))   # prepared page, theirs to finish
     return _with_card(card, await _execute(ctx, a, rd, res, at, now, d, eng, card))
 
@@ -1909,7 +1942,9 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
     _HELD[ctx.account] = {"rung": rung, "id": rid, "sha": read_back["sha256"], "at": at, "venue": rd["venue"], "summary": GW.summary(res),
                           "place_id": rd.get("place_id"), "country": rd.get("country") or (res.get("where") or {}).get("country"),   # 259 · its calendar zone
                           "when": res["when"].get("at") or "", "party": res["how_many"]["count"], "same": same,
-                          "sector": (res.get("what") or {}).get("category"), **(extra or {})}   # CR 87 · the sector, for the outcomes ledger
+                          "sector": (res.get("what") or {}).get("category"), **(extra or {}),   # CR 87 · the sector, for the outcomes ledger
+                          # Sasha 331 · the same booking held again: its route line was already said (never twice)
+                          **({"route_said": prev["route_said"]} if prev and prev.get("route_said") and at == prev.get("at") else {})}
     lines = GW.guest_lines(rung, read_back.get("lines") or [])
     out = {"status": "awaiting_yes", "venue": GW.plain_venue(rd["venue"]), "route": rung, "when": GW.summary(res),
             "read_back": lines, "what_happens": {

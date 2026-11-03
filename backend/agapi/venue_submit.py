@@ -264,16 +264,19 @@ def _err(r: dict) -> dict:
 
 
 async def prepare(account: str, place: dict, person: dict, date: str, time_: str, party: int, notes: Optional[str] = None,
-                  call: Optional[dict] = None, link: Optional[str] = None, stay: Optional[dict] = None) -> Dict[str, Any]:
+                  call: Optional[dict] = None, link: Optional[str] = None, stay: Optional[dict] = None,
+                  answers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """venue.prepare_booking → {ok, prepared_id, link, zero_touch_allowed, say, …} or {ok: False, error}. Nothing is submitted.
     Sasha 265 · item 4 (CR 99): + call {phone E.164, opens_at "HH:MM" local, open_now} — the venue can be called (routes page, call).
     Sasha 270 · CR 101: + link {url} — the booking link the person handed over (the engine fills THAT form, its own read of it).
     Sasha 271 · CR 102: + stay {nights, room?} — a hotel stay is a booking act like a table (date = check-in, party = guests); its
-    read-back, its calls (R5/R6) and its status are the engine's."""
+    read-back, its calls (R5/R6) and its status are the engine's.
+    Sasha 328 · + answers {label: value} — CR 107's "the ONE question's answers": the PERSON's choice for a question their booking asked
+    (a platform's "Zona": {"Zona": "Terraza"}), exactly as they chose it."""
     body = {"place": {k: v for k, v in place.items() if v and k in ("name", "website", "place_id", "city", "category")},
             "person": {k: v for k, v in person.items() if v}, "date": date, "time": time_, "party": int(party),
             **({"notes": notes[:500]} if notes else {}), **({"call": call} if call else {}), **({"link": {"url": link[:500]}} if link else {}),
-            **({"stay": stay} if stay else {})}
+            **({"stay": stay} if stay else {}), **({"answers": {str(k): str(v) for k, v in answers.items()}} if answers else {})}
     eu = await end_user(account)   # Sasha 285 · CR 118 (a): whose access record decides "Kanoe sends it" (their kanoe_whatsapp switch)
     if eu:
         body["end_user"] = eu
@@ -347,6 +350,7 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
                                       **({"country": held["country"]} if held.get("country") else {}),   # Sasha 259 · its calendar zone
                                       **({"route": "call"} if res.get("route") == "call" else {}),      # Sasha 265 · a phone booking
                                       **_message_of(res, held, said),   # Sasha 287/288 · Kanoe's message: its channel, its consent, its reference
+                                      **_platform_of(res, held),        # Sasha 328 · AgAPI pressed Book on their platform page
                                       **({"reference": res["reference"]} if res.get("reference") else {}), **_pointer_of(account, held)})
         return {"ok": True, **res}
     if await target(account) == "sandbox":
@@ -370,8 +374,96 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
         await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
                                   "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
                                   **({"route": "call"} if res.get("route") == "call" else {}), **_message_of(res, held, said),
+                                  **_platform_of(res, held),
                                   **({"reference": res["reference"]} if res.get("reference") else {}), **_pointer_of(account, held)})
     return {"ok": True, **res}
+
+
+def _platform_of(res: dict, held: dict) -> dict:
+    """Sasha 328 · CR 160 · a booking AgAPI made on a platform's own page (venue.submit_booking how "platform_form"): its route, the platform,
+    the person's answers to its questions (their "Zona"), and — when the walk stopped on such a question — that question, so the act is not a
+    booking in My bookings while it is being asked (it is asked once, on screen)."""
+    if str(res.get("how") or "") != "platform_form" and not held.get("platform_book"):
+        return {}
+    q = choice_of(res) if res.get("status") == "failed" else None
+    return {"route": "platform", **({"platform": str(held["platform"])} if held.get("platform") else {}),
+            **({"answers": dict(held["answers"])} if held.get("answers") else {}), **({"question": q["field"]} if q else {})}
+
+
+# ── Sasha 328 · the platform walk's ONE question (CR 160: "Their booking asks for <field>: <a>, <b>, … Which one?") ───────────────
+# AgAPI gives the stop's why ("choice", in hand_over.why) as structure, and its options only inside this fixed sentence (platform_form.walk).
+# Structured options are AgAPI's to add (the CR, docs/sasha/S-328-platform-loop.md): until then THIS is the one place that reads it.
+_CHOICE = re.compile(r"Their booking asks for (?P<field>[^:\n]{1,60}): (?P<opts>.+?)(?: — “(?P<want>[^”]*)” isn't one of them)?\. Which one\?")
+
+
+def choice_of(res: dict) -> Optional[Dict[str, Any]]:
+    """A walk that stopped to ask the PERSON which option (their "Zona") → {field, options (exactly AgAPI's), sentence, want?, link?};
+    else None. Never a guess: no options read → None (then it is the stop it is, with their page)."""
+    ho = res.get("hand_over") if isinstance(res.get("hand_over"), dict) else {}
+    vw = res.get("venue_words") or {}
+    texts = [str(res.get("say") or ""), str((vw.get("untrusted_text") or vw.get("text") or "") if isinstance(vw, dict) else vw)]
+    if ho.get("why") not in (None, "choice"):
+        return None
+    for t in texts:
+        m = _CHOICE.search(t)
+        if m:
+            opts = [o.strip() for o in m["opts"].split(", ") if o.strip()]
+            if opts:
+                link = ho.get("link") if str(ho.get("link") or "").startswith("https://") else None
+                return {"field": m["field"].strip(), "options": opts[:12], "sentence": m[0], **({"want": m["want"]} if m["want"] else {}),
+                        **({"link": link} if link else {})}
+    return None
+
+
+async def _amend(account: str, act_id: str, **kw: Any) -> Optional[dict]:
+    """A pointer added to ONE act as it is kept (its sent time unchanged — never _remember's new "at")."""
+    acts = await acts_of(account)
+    hit = next((a for a in acts if a.get("act_id") == act_id), None)
+    if hit is None:
+        return None
+    hit = {**hit, **kw}
+    _ACTS[account] = [hit if a.get("act_id") == act_id else a for a in acts]
+    record_changed(account)
+    try:
+        from agapi import s2_memory as M
+        await M.put_kind(account, "venue_acts", _ACTS[account])
+    except Exception as e:
+        log.warning("[venue_submit] act not amended: %s", type(e).__name__)
+    return hit
+
+
+def _fold(s: str) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFD", s or "") if unicodedata.category(ch) != "Mn").lower()
+
+
+async def attach_from_mail(account: str, facts: dict, cancel_link: Optional[str]) -> Optional[dict]:
+    """Sasha 328 · the platform's confirmation email (the ONE Gmail reader: booking_signer.mailbox) for a booking AgAPI made there → THAT act
+    (its reference; else the venue on its day within 90 minutes), and its cancel link kept on it — a POINTER beside the act, like its
+    place_id (_pointer_of): never its state, never a card. → the act, or None (not one of AgAPI's platform bookings)."""
+    from datetime import datetime as _dt
+    acts = [a for a in await acts_of(account) if a.get("route") == "platform" and not a.get("question") and not a.get("cancels")]
+    ref = str(facts.get("reference") or "").strip().upper()
+    hit = next((a for a in acts if ref and str(a.get("reference") or "").strip().upper() == ref), None)
+    if hit is None and facts.get("venue") and "T" in str(facts.get("at") or ""):
+        mine = {w for w in re.findall(r"[a-z0-9]+", _fold(facts["venue"])) if len(w) > 2}
+        for a in acts:
+            try:
+                near = abs((_dt.fromisoformat(str(a.get("when"))[:16]) - _dt.fromisoformat(str(facts["at"])[:16])).total_seconds()) <= 90 * 60
+            except ValueError:
+                continue
+            theirs = {w for w in re.findall(r"[a-z0-9]+", _fold(a.get("venue") or "")) if len(w) > 2}
+            if near and mine and theirs and (mine <= theirs or theirs <= mine):   # "La Taberna" ⊂ "La Taberna del Puerto", either way
+                hit = a
+                break
+    if hit is None:
+        return None
+    kw: Dict[str, Any] = {"confirmed_by_mail": True}
+    if cancel_link and cancel_link.startswith("https://"):
+        kw["cancel_link"] = cancel_link[:500]
+    if ref and not hit.get("reference"):
+        kw["reference"] = facts["reference"]
+    return await _amend(account, hit["act_id"], **kw)
 
 
 def _message_of(res: dict, held: dict, said: str) -> dict:
@@ -542,6 +634,8 @@ async def bookings(account: str, read: bool = True) -> List[dict]:
     for a in acts:
         if a.get("cancels") or a.get("changes"):
             continue   # the cancellation (Sasha 300: or the change) itself is said on the booking it's about
+        if a.get("question"):
+            continue   # Sasha 328 · the platform walk stopped to ask the person (their "Zona"): not a booking — the question is on screen
         state = "cancelled" if a["act_id"] in cancelled else STATE.get(str(a.get("state") or "sent"), "requested")
         if state == "confirmed" and a.get("channel") in MESSAGE_CHANNELS and unclear(a.get("words")):
             state = "requested"   # Sasha 288 · "ok, we'll check" is never said as booked: what they wrote, and still a request
@@ -560,6 +654,10 @@ async def bookings(account: str, read: bool = True) -> List[dict]:
                     **({"calls": a["calls"]} if a.get("calls") else {}),
                     **({"stay": stay_of(a["booking"])} if (a.get("booking") or {}).get("kind") == "stay" else {}),   # Sasha 271 · CR 102
                     **({"route": "call"} if a.get("route") == "call" else {}),
+                    # Sasha 328 · AgAPI pressed Book on their platform page: the platform, the person's answers (their area), and the cancel
+                    # link from the platform's own confirmation email (the ONE Gmail reader)
+                    **({"route": "platform", **{k: a[k] for k in ("platform", "answers", "cancel_link") if a.get(k)}}
+                       if a.get("route") == "platform" else {}),
                     **({"wa": wa_line(a, state)} if a.get("channel") in MESSAGE_CHANNELS else {}),
                     **({"cancel": "asked — waiting for the venue"} if pend else {}),
                     **({"change": _change_of(acts, a["act_id"])} if _change_of(acts, a["act_id"]) else {})})

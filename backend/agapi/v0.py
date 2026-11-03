@@ -1697,7 +1697,7 @@ TOOLS: List[dict] = [
        "to their phone, the email, or the call. Its status says what's true: confirmed only on the venue's own confirmation.",
        {"approval": {"type": "object", "properties": {"said": {"type": "string"}}}}, [],
        {"type": "object", "properties": {"status": {"type": "string"}}}, ["no_explicit_yes", "nothing_held", "read_back_first", "read_back_stale", "not_sent", "already_done", "store_unreachable",
-        "hold_first"], austen=True),
+        "hold_first", "which_option"], austen=True),
     _t("cancel_venue", "Austen", cancel_venue, "Cancel a venue booking, back the way it was made. First call: the read-back (say it, ask); "
        "after their explicit yes in a LATER turn, call again to send it.",
        {"trip_item_id": {"type": "string"}, "venue": {"type": "string"}, "approval": {"type": "object", "properties": {"said": {"type": "string"}}}},

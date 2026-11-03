@@ -208,9 +208,12 @@ def tools() -> List[dict]:
            {"name": {"type": "string", "maxLength": 80, "description": "their name as they said it"},
             "mobile": {"type": "string", "description": "the mobile as they said it, ideally with its country code"},
             "this_number": {"type": "boolean", "description": "WhatsApp: they said 'this number'"},
-            "country": {"type": "string", "description": "ISO-2 of the venue, if the mobile has no country code"}}, [],
+            "country": {"type": "string", "description": "ISO-2 of the venue, if the mobile has no country code"},
+            # Sasha 328 · THE booking email (the address venues send the confirmation and its cancel link to), as they wrote it
+            "email": {"type": "string", "maxLength": 254, "description": "the ONE email they said to use for their bookings, as they wrote it"}}, [],
            {"type": "object", "properties": {"saved": {"type": "boolean"}}},
-           ["not_their_words", "name_missing", "mobile_missing", "mobile_unclear", "not_saved", "store_unreachable"]),
+           ["not_their_words", "name_missing", "mobile_missing", "mobile_unclear", "not_saved", "store_unreachable", "email_invalid",
+            "contact_first"]),
     ]
 
 

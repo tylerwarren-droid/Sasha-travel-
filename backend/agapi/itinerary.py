@@ -119,6 +119,8 @@ def act_route(a: dict) -> str:
     """An act's route — the channel AgAPI sent it on (venue_submit keeps it), a call act's call, else their form (zero-touch)."""
     if a.get("route") == "call":
         return "call"
+    if a.get("route") == "platform":   # Sasha 328 · CR 160: AgAPI pressed Book on their platform page
+        return "platform"
     if a.get("channel") == "email":
         return "email"
     if a.get("channel") == "whatsapp":
@@ -178,7 +180,9 @@ def _from_record(g: dict, a: Optional[dict] = None) -> dict:
             # Sasha 312 · WHEN the record says it was cancelled / changed (the venue's answer's own time): a calendar update's SEQUENCE
             **({"cancelled_at": _answered_at(g, "cancel")} if _answered_at(g, "cancel") else {}),
             **({"changed_at": _answered_at(g, "change")} if _answered_at(g, "change") else {}),
-            **({"change": g["change"]} if g.get("change") else {})}
+            **({"change": g["change"]} if g.get("change") else {}),
+            # Sasha 328 · a platform booking AgAPI made: the cancel link from the platform's own confirmation email (kept on the act)
+            **({"cancel_link": a["cancel_link"]} if (a or {}).get("cancel_link") else {})}
 
 
 def _answered_at(g: dict, kind: str) -> Optional[str]:
@@ -207,8 +211,8 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
     # Sasha 327 · a train item IS its ticket: its AgAPI act's own row is not listed again (one booking, one row)
     trains = {str(b["agapi_act"]) for b in records if b.get("type") == "train" and b.get("agapi_act")}
     for g in on_agapi.values():   # CR 132 · AgAPI's record is the truth for every booking on it (the hand-overs too); from today on
-        if g["act_id"] in trains:
-            continue
+        if g["act_id"] in trains or (acts.get(g["act_id"]) or {}).get("question"):
+            continue   # Sasha 328 · a platform walk that stopped to ask the person (their "Zona") is the question on screen, not a booking
         if (str(g.get("at") or "")[:10] or today) >= today:
             out.append(_from_record(g, acts.get(g["act_id"])))
     for b in records:
@@ -220,7 +224,8 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
             status = _ACT.get(str(b.get("status") or ""), "asked")
             row = {"id": b["act_id"], "source": "act", "act_id": b["act_id"], "route": route, "status": status,
                    **({"place_id": a["place_id"]} if a.get("place_id") else {}), **({"trip_id": a["trip_id"]} if a.get("trip_id") else {}),
-                   **({"stay": True} if a.get("stay") or b.get("stay") else {})}   # Sasha 302 · a hotel stay's act (CR 102)
+                   **({"stay": True} if a.get("stay") or b.get("stay") else {}),   # Sasha 302 · a hotel stay's act (CR 102)
+                   **({"cancel_link": a["cancel_link"]} if a.get("cancel_link") else {})}   # Sasha 328 · the platform's own cancel link
         else:
             route = _LADDER_ROUTE.get(str(b.get("channel") or "form"), "form")
             status = _LADDER.get(str(b.get("status") or ""), "asked")

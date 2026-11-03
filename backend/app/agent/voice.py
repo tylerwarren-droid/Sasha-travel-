@@ -582,6 +582,16 @@ def manage_line(kind: str, route: str, venue: str, platform: Optional[str] = Non
     return f"{venue} is {where}, so you {act} there" + (" — here's their page." if link else ".") + " Nothing is sent from here."
 
 
+def platform_cancel_line(venue: str, link: bool, phone: Optional[str] = None) -> str:
+    """Sasha 328 · a booking AgAPI made on a platform's page, which AgAPI can't cancel yet: their confirmation's OWN cancel link (from the
+    ONE Gmail reader), and their phone when known — nothing sent. Never the platform's name in her voice (249: it is the button's label)."""
+    call = f"call them on {phone}" if phone else ""
+    if link:
+        return f"I can't cancel {venue} for you yet — their own cancel link is below" + (f", or {call}" if call else "") + ". Nothing was sent."
+    return (f"I can't cancel {venue} for you yet, and their confirmation email with its cancel link hasn't reached your Gmail"
+            + (f" — {call}" if call else " — open the confirmation they emailed you and cancel there") + ". Nothing was sent.")
+
+
 def manage_button(route: str, platform: Optional[str] = None) -> str:
     return "Open your WhatsApp chat" if route == "your_whatsapp" else (f"Open {platform}" if platform else OPEN_THEIR_PAGE)
 

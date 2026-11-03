@@ -1854,6 +1854,8 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
         return
     rid = str(tap.get("read_back_id") or "")[:80]
     choice = tap.get("choice") if tap.get("choice") in ("page", "send") else "call"   # Sasha 287 · "send": Kanoe's one line, its yes
+    if str(tap.get("choice") or "").startswith("pick:"):   # Sasha 328 · an option of the platform's ONE question (their "Zona")
+        choice = str(tap["choice"])[:200]
     ctx.idem = f"card_tap:{account}:{rid}:{choice}"
     tool = "hold_venue" if choice == "page" else "book_venue"
     try:

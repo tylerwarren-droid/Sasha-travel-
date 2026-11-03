@@ -147,6 +147,13 @@ def _options(ev: dict, out) -> None:
 
 def _read_back(ev: dict, out) -> None:
     lines = [l for l in ev.get("read_back") or [] if str(l).strip() and not str(l).lstrip().startswith("⚠")]
+    picks = [str(c.get("title") or "") for c in ev.get("choices") or [] if isinstance(c, dict) and str(c.get("route") or "").startswith("pick:")]
+    if ev.get("ask") and picks:   # Sasha 328 · the platform's ONE question (their "Zona"): its options as taps, exactly AgAPI's — a tap
+        if len(picks) <= 3:       # says the option (say:…), which answers it; never Yes / No
+            out.ask(str(ev["ask"])[:1000], [(_cut(t, 20), "say:" + t[:190]) for t in picks])
+        else:
+            out.pick(str(ev["ask"])[:1000], "Choose", [(_cut(t, TITLE), "", "say:" + t[:190]) for t in picks[:LIST_ROWS]])
+        return
     if not lines and ev.get("ask") and ev.get("choices"):   # Sasha 314 · the SHORT read-back: its one line IS the card, with Yes / No
         out.ask(str(ev["ask"])[:1000], [("Yes", "yn:yes"), ("No", "yn:no")])
         return

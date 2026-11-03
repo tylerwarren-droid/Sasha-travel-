@@ -721,6 +721,14 @@ async def _known_name(account: str) -> Optional[str]:
         return None
 
 
+async def booking_person(account: str, res: dict) -> Dict[str, Any]:
+    """Sasha 328 · THE ONE PERSON every venue.prepare_booking is given (AgAPI fills a platform's form from it: CR 160's contact): the
+    booking name (theirs, or the one they gave: `under`), their mobile — both from the ONE contact record — and THE booking email
+    (contacts.booking_email: the address they named for bookings, else their linked Gmail's, else their sign-in address)."""
+    from booking_signer import contacts as CT
+    return {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await CT.booking_email(account)}
+
+
 async def _contact_ask(ctx, a: dict, rd: dict, consent: dict) -> str:
     from booking_signer import contacts as CT
     sentence = consent.get("text") or CT.consent()["text"]
@@ -772,9 +780,13 @@ def _mobile(raw: str, country: Optional[str]) -> Optional[str]:
 
 
 async def save_contact(ctx, a: dict) -> dict:
-    """Sasha 253 · their booking name and mobile, from their own words, saved with the consent they were told."""
+    """Sasha 253 · their booking name and mobile, from their own words, saved with the consent they were told.
+    Sasha 328 · + email: THE address for their bookings ("use tylerwarren@gmail.com for my bookings"), in their own words, on the same
+    ONE contact record — given to every venue from then on (booking_person). Alone, it changes only the email."""
     GW = _API()
     said = str(ctx.user_said or "")
+    if a.get("email") and not (a.get("name") or a.get("mobile") or a.get("this_number")):
+        return await _save_booking_email(ctx, a["email"])
     asked = _ASKED.get(ctx.account) or {}
     fresh = asked.get("session") == ctx.session and asked.get("at") and \
         (datetime.now(timezone.utc) - asked["at"]).total_seconds() < ASK_WINDOW_S
@@ -813,14 +825,36 @@ async def save_contact(ctx, a: dict) -> dict:
         raise _err("not_saved", f"I couldn't save that — {GW.refusal_words(j, s)}. Nothing was saved or booked.")
     _ASKED.pop(ctx.account, None)
     saved = (j or {}).get("contact") or {"name": name, "mobile_e164": mobile}
+    em = (await _save_booking_email(ctx, a["email"]))["booking_email"] if a.get("email") else None   # Sasha 328 · with them, same record
     return {"saved": True, "name": saved.get("name") or name, "mobile_e164": saved.get("mobile_e164") or mobile,
+            **({"booking_email": em} if em else {}),
             "how": f"Say in a few words that bookings go under {saved.get('name') or name}, then call hold_venue again for the same "
                    "booking (same details) — never ask for these again."}
 
 
+async def _save_booking_email(ctx, raw: Any) -> dict:
+    """Sasha 328 · the address they named for bookings — only as they wrote it this turn — on their ONE contact record."""
+    from booking_signer import contacts as CT
+    email = CT.email_of(raw)
+    if not email:
+        raise _err("email_invalid", "that isn't an email address — ask them for it; nothing was saved")
+    if email not in str(ctx.user_said or "").lower():
+        raise _err("not_their_words", "they didn't write that address this turn — ask them for it; never write one for them")
+    r = await CT.set_booking_email(ctx.account, email)
+    if not r.get("ok"):
+        if r.get("rule") == "contact_first":
+            raise _err("contact_first", "their booking name and mobile aren't saved yet — ask for them once (with the consent sentence), "
+                                        "then call save_contact with name, mobile AND this email together")
+        raise _err("not_saved", f"I couldn't save that — {r.get('message')}. Nothing was saved.")
+    return {"saved": True, "booking_email": email,
+            "how": f"Say in a few words that their bookings use {email} from now on (confirmations and cancel links go there). Nothing else."}
+
+
 SAVE_CONTACT_DESC = ("When a booking needs their name and mobile (hold_venue said contact_missing) and they've just told you: save "
                      "them on their account (with the consent sentence you said), then call hold_venue again. Pass only what they "
-                     "said — never make up a name or a number. On WhatsApp leave mobile out (or this_number) for this WhatsApp number.")
+                     "said — never make up a name or a number. On WhatsApp leave mobile out (or this_number) for this WhatsApp number. "
+                     "When they name ONE email for their bookings (\"use x@y.com for my bookings\"), pass email (alone, or with the "
+                     "name and mobile) — venues get that address from then on.")
 
 
 async def hold_venue(ctx, a: dict) -> dict:
@@ -835,6 +869,13 @@ async def hold_venue(ctx, a: dict) -> dict:
         a = {**a, "route": picked}
     GW = _API()
     held = _HELD.get(ctx.account)
+    if held and held.get("rung") == "platform_choice" and \
+            ((a.get("place_id") and a.get("place_id") == held.get("place_id")) or _base(a.get("name") or "") == _base(held.get("venue") or "")):
+        # Sasha 328 · the walk's question about THIS booking is open: their words answer it — else it stands, asked once (never a new hold)
+        got = await platform_answer(ctx, ctx.user_said)
+        if got is not None:
+            return got
+        return {**held["out"], "same_read_back": "asked already — the options are buttons on their screen; never ask a new question"}
     # Sasha 217 · THE SAME BOOKING held again (she re-holds on the yes turn): the read-back they already heard, as it is. A new hold
     # made a new form with a new sha256, so the yes was "read back first" again — and the booking looped, never sent.
     if held and held.get("out") and held["at"] < ctx.started and not stale(held["at"]) \
@@ -900,10 +941,20 @@ async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card
     GW = _API()
     venue = GW.plain_venue(rd["venue"])
     link = (dec.get("button") or {}).get("link") or (card or {}).get("website")
+    prep = None
+    if at and not _open_slot(ctx, a) and dec.get("route") == "platform" and not refused:
+        # Sasha 328 · CR 160 · a platform venue: venue.prepare_booking WITH this person decides whether AgAPI books it for them (the platform
+        # beta: route platform_book — its read-back, their yes, AgAPI presses Book). Anyone else: that same prepared booking is the hand-over.
+        got = await _platform_book(ctx, a, rd, res, at, card, dec)
+        if got.get("status"):
+            return got
+        prep = got.get("prep")
     if at and not _open_slot(ctx, a) and link:
         held = await _prepared(ctx, a, rd, res, at, now, {"kind": "agapi", "url": link, "name": dec.get("channel")}, card)
         if held.get("status") == "awaiting_yes" and ctx.account in _HELD:
             _HELD[ctx.account]["follow"] = {"decision": dec, "refused": refused}
+            if prep:   # Sasha 328 · prepared once: the hand-over uses it (never a second venue.prepare_booking for the same booking)
+                _HELD[ctx.account]["prep"] = prep
             out = await _finish(ctx, _HELD[ctx.account])
             out["how"] = "Say `say` exactly — never that it's booked."
             return out
@@ -920,6 +971,166 @@ async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card
             "say": V.REACH_THEM + " Say exactly that — never that it's booked."}
 
 
+# ── Sasha 328 · CR 160 · THE PLATFORM BOOKING LOOP: AgAPI fills the platform's form and presses Book, on the person's ONE yes ────────────
+# ONE booking path: venue.prepare_booking (VS.prepare, with booking_person) → venue.submit_booking's read-back → their yes → book_venue →
+# _finish → _agapi_send → VS.submit. When the walk stops to ask THE PERSON (their "Zona": Terraza or Salón?),
+# it is asked ONCE, its options as taps (the card's buttons / WhatsApp's), and their pick goes back to AgAPI as prepare_booking's
+# `answers` (CR 107's "the ONE question's answers") on the same booking. docs/sasha/S-328-platform-loop.md.
+PLATFORM_ACTION = "fill_platform_form"   # booking_rules 2.5's action for a person in the platform beta (route platform_book)
+
+
+async def _platform_book(ctx, a: dict, rd: dict, res: dict, at: str, card: Optional[dict], dec: dict) -> dict:
+    """venue.prepare_booking with this person. AgAPI decided platform_book (they're in the beta) → its read-back, held for their yes:
+    the awaiting_yes card. Anything else → {"prep": that prepared booking} (the hand-over uses it) or {} (not prepared)."""
+    from agapi import itinerary as IT, venue_submit as VS
+    GW = _API()
+    venue = GW.plain_venue(rd["venue"])
+    place = {"name": (card or {}).get("name") or venue, "website": (card or {}).get("website") or a.get("website"),
+             "place_id": rd.get("place_id") or (card or {}).get("place_id"), "city": a.get("city"), "category": (res.get("what") or {}).get("category")}
+    person = await booking_person(ctx.account, res)
+    args = {"place": place, "person": person, "date": at[:10], "time": at[11:16], "party": int(res["how_many"]["count"])}
+    p = await VS.prepare(ctx.account, place, person, args["date"], args["time"], args["party"])
+    if not p.get("ok"):
+        return {}
+    prep = {k: p[k] for k in ("link", "say", "human_step", "missing", "expires_at", "decision", "hand_over", "prepared_id") if p.get(k) is not None} \
+        if str(p.get("link") or "").startswith("https://") else None
+    pdec = p.get("decision") if isinstance(p.get("decision"), dict) else {}
+    if pdec.get("route") != "platform_book":
+        return {"prep": prep}
+    rb = await VS.read_back(ctx.account, p["prepared_id"])
+    if not rb.get("ok"):   # refused at the read-back (not this person after all): the hand-over, as for everyone else
+        log.info("[venues] %s: platform_book not read back (%s) — handed over", venue, rb["error"]["code"])
+        return {"prep": prep}
+    ho = p.get("hand_over") if isinstance(p.get("hand_over"), dict) else {}
+    page = ho.get("link") if _platform_page(ho.get("link")) else (p.get("link") if str(p.get("link") or "").startswith("https://") else None)
+    platform = ho.get("platform") or IT.platform_name(dec.get("channel"), (dec.get("button") or {}).get("label")) or "their booking page"
+    out = _hold(ctx, "agapi", p["prepared_id"], {"lines": rb["lines"], "sha256": rb["sha256"]}, rd, res,
+                extra={"prepared_id": p["prepared_id"], "read_back_id": rb["read_back_id"], "end_user": rb["end_user"],
+                       "agapi_action": PLATFORM_ACTION, "platform_book": True, "platform": platform, "prep_args": args,
+                       **({"link": page} if page else {}), "booking": {k: v for k, v in a.items() if k not in _NOT_BOOKING},
+                       "category": (res.get("what") or {}).get("category")})
+    out["what_happens"] = pdec.get("say_text") or f"on their yes, Sasha fills in their booking on {platform} and presses Book"
+    out["route"] = "platform_book"
+    return out
+
+
+def _option_named(held: dict, words: Optional[str]) -> Optional[str]:
+    """Their words (or a tap's) name exactly ONE of AgAPI's options — the option as AgAPI wrote it; else None (never a guess)."""
+    from agapi.venue_submit import _fold
+    b = lambda x: _fold(_base(str(x or ""))).strip()   # noqa: E731 · "salon" names "Salón"
+    w = b(words)
+    if not w:
+        return None
+    opts = list(held.get("options") or [])
+    exact = [o for o in opts if b(o) == w]
+    if len(exact) == 1:
+        return exact[0]
+    named = [o for o in opts if b(o) and f" {b(o)} " in f" {w} "]
+    return named[0] if len(named) == 1 else None
+
+
+def _platform_question(ctx, held: dict, q: dict, venue: str, r: dict) -> dict:
+    """The walk stopped on a question only the PERSON can answer: asked ONCE — AgAPI's own sentence, its options as buttons (exactly
+    AgAPI's), on the channel they asked on (Sasha 326: work in progress is the turn's own answer). Held for their pick (15 minutes)."""
+    import hashlib as _h
+    qid = "q_" + _h.sha256(f"{held.get('prepared_id')}|{q['field']}|{'|'.join(q['options'])}".encode()).hexdigest()[:24]
+    choices = [{"title": o, "route": "pick:" + o} for o in q["options"]]
+    out = {"status": "awaiting_yes", "venue": venue, "when": held.get("summary"), "booked": False, "route": "platform_book",
+           "question": q["field"], "ask": q["sentence"], "say": q["sentence"], "choices": choices, "read_back_id": qid, "read_back": [],
+           "how": "Say `ask` word for word — the options are buttons on their screen. Never choose for them. When they answer (a tap, or "
+                  "their words naming ONE option), call book_venue for this same booking; nothing else is asked."}
+    _HELD[ctx.account] = {**{k: v for k, v in held.items() if k not in ("out",)}, "rung": "platform_choice", "id": qid, "read_back_id": qid,
+                          "field": q["field"], "options": list(q["options"]), "asked_at": datetime.now(timezone.utc),
+                          "failed_act": r.get("act_id"), "out": out}
+    return out
+
+
+async def platform_answer(ctx, words: Optional[str], tapped: bool = False) -> Optional[dict]:
+    """Their answer to the walk's question (a tap on its card, or their words) → the same booking prepared again with answers
+    {field: option} → its read-back → sent. Their pick from the app or their verified WhatsApp, to the question about THIS booking whose
+    read-back words they already said yes to, is the yes (Sasha 314's rule: their own instruction, claimed once) — but only when the new
+    read-back's words are exactly those words; otherwise the new read-back is shown and their next yes sends it. None: nothing asked."""
+    from agapi import venue_submit as VS
+    from agapi.v0 import stale
+    held = _HELD.get(ctx.account)
+    if not held or held.get("rung") != "platform_choice":
+        return None
+    opt = _option_named(held, words)
+    if opt is None:
+        return None
+    if stale(held.get("asked_at")):
+        _HELD.pop(ctx.account, None)
+        raise _err("read_back_stale", "that was asked over 15 minutes ago — call hold_venue again for the same booking")
+    GW = _API()
+    venue = GW.plain_venue(held["venue"])
+    pa = held["prep_args"]
+    answers = {**(held.get("answers") or {}), held["field"]: opt}
+    p = await VS.prepare(ctx.account, pa["place"], pa["person"], pa["date"], pa["time"], pa["party"], answers=answers)
+    if not p.get("ok"):
+        raise _err("not_prepared", f"{venue} couldn't be prepared again just now — {p['error']['message']}. Nothing is booked.")
+    if ((p.get("decision") or {}) if isinstance(p.get("decision"), dict) else {}).get("route") != "platform_book":
+        _HELD.pop(ctx.account, None)
+        link = held.get("link") or p.get("link")
+        return {"status": "not_booked", "venue": venue, "when": held.get("summary"), "booked": False, **_link_out(link),
+                "say": f"I can't press Book for you there now — {venue}'s page is yours to finish, with your details ready."}
+    rb = await VS.read_back(ctx.account, p["prepared_id"])
+    if not rb.get("ok"):
+        raise _err("not_prepared", f"{venue} couldn't be read back just now — {rb['error']['message']}. Nothing is booked.")
+    nxt = {**{k: v for k, v in held.items() if k not in ("out", "field", "options", "asked_at", "failed_act")},
+           "rung": "agapi", "id": p["prepared_id"], "prepared_id": p["prepared_id"], "read_back_id": rb["read_back_id"],
+           "end_user": rb["end_user"], "sha": rb["sha256"], "same": _same_words(rb["lines"]), "answers": answers}
+    if held.get("failed_act"):   # the stop that asked is not a booking (My bookings skips it); the booking is the act that follows
+        await VS._amend(ctx.account, held["failed_act"], question=held["field"], answered=opt)
+    own = VS.TAP.get() is not None or VS.WA.get() is not None
+    if not (own and nxt["same"] == held.get("same")):
+        # the read-back changed (or not from the app / their WhatsApp): THIS one is shown, and their yes sends it — never assumed
+        nxt["at"] = datetime.now(timezone.utc)
+        lines = GW.guest_lines("agapi", rb["lines"]) + [f"{held['field']}: {opt}"]
+        out = {"status": "awaiting_yes", "venue": venue, "route": "platform_book", "when": held.get("summary"), "read_back": lines}
+        if one_path(ctx) and getattr(ctx, "surface", "") in ("s2", "s1"):
+            from app.agent.voice import READ_BACK_ASK
+            out.update(ask=READ_BACK_ASK.format(venue=venue), how="Say `ask` word for word — every detail is on the card.")
+        nxt["out"] = out
+        _HELD[ctx.account] = nxt
+        return out
+    if not await claim_words(ctx, f"platform_choice|{held['id']}|{opt}"):
+        _HELD.pop(ctx.account, None)
+        return {"status": "already_sent", "venue": venue, "line": f"I've already sent your {held['field']} to {venue}.",
+                "how": "Say `line` word for word — nothing else."}
+    return await _finish(ctx, nxt, {"how": "tap" if tapped else "words", "said": f"{held['field']}: {opt}"}, claimed=True)
+
+
+async def _platform_result(ctx, held: dict, r: dict, venue: str, where) -> dict:
+    """AgAPI pressed Book (or stopped): booked → ONE line with venue, day, time, people, their area and the reference, said where they
+    asked (this turn's answer); its act, with the reference, is in My bookings (VS.submit kept it). The walk's question → asked once.
+    Any other stop, or the same question after their answer → nothing is booked: said, with their page and their details ready."""
+    from agapi import venue_submit as VS
+    from app.agent import voice as V
+    in_app = {"in_app": True} if VS.TAP.get() is not None else {}
+    area = ", ".join(str(v) for v in (held.get("answers") or {}).values())
+    if r.get("status") == "confirmed":
+        _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}
+        ref = r.get("reference")
+        when = f"{held['summary']}" + (f", {area}" if area else "")
+        return {"status": "confirmed", "venue": venue, "when": held["summary"], "itinerary": where, "route": "platform",
+                **({"platform": held["platform"]} if held.get("platform") else {}), **({"area": area} if area else {}),
+                **({"reference": ref} if ref else {}), "act_id": r.get("act_id"), "line": V.booked_line(venue, when, ref), **in_app,
+                "how": "Say `line` word for word, then at most ONE short question (e.g. the calendar) — nothing else."}
+    q = VS.choice_of(r) if r.get("status") == "failed" else None
+    asked = {str(k).casefold() for k in (held.get("answers") or {})}
+    if q and q["field"].casefold() not in asked:
+        return _platform_question(ctx, held, q, venue, r)
+    link = (r.get("hand_over") or {}).get("link") if isinstance(r.get("hand_over"), dict) else None
+    link = link if str(link or "").startswith("https://") else held.get("link")
+    if q:   # Sasha 328 · asked once: AgAPI's walk doesn't read the answer yet (the CR) — never asked twice, never a loop
+        say = (f"Their booking still asks for {q['field']} after I gave {area}, so I stopped before Book — nothing is booked. "
+               "Their page has your details ready.")
+    else:
+        say = str(r.get("say") or f"{venue}'s page stopped me before Book — nothing is booked.")
+    return {"status": "not_booked", "venue": venue, "when": held["summary"], "booked": False, "route": "platform", "say": say,
+            **_link_out(link), **in_app, "how": "Say `say` word for word — nothing is booked."}
+
+
 def kanoe_route(dec: Optional[dict]) -> bool:
     """Sasha 287 · AgAPI decided this venue books by a WhatsApp message (handoff.decide route message, channel WhatsApp)."""
     return bool(dec) and dec.get("route") == "message" and dec.get("channel") == "WhatsApp"
@@ -932,12 +1143,11 @@ async def kanoe_whatsapp(ctx, a: dict, rd: dict, res: dict, at: str, now, card: 
     S2 filled any in → ONE line asks ("Casa, Friday 21:00 for 2. Shall I send?"), never the message's text. Any no from the gate → the
     same line as their own WhatsApp (285's hand-over). S2 has no flag, no list and no sender of its own here."""
     from agapi import venue_submit as VS
-    from booking_signer import guest_receipt as GR
     GW = _API()
     venue = GW.plain_venue(rd["venue"])
     place = {"name": (card or {}).get("name") or venue, "website": (card or {}).get("website") or a.get("website"),
              "place_id": rd.get("place_id") or (card or {}).get("place_id"), "city": a.get("city"), "category": (res.get("what") or {}).get("category")}
-    person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
+    person = await booking_person(ctx.account, res)   # Sasha 328 · the ONE person (its booking email)
     p = await VS.prepare(ctx.account, place, person, at[:10], at[11:16], int(res["how_many"]["count"]))
     pdec = p.get("decision") if p.get("ok") and isinstance(p.get("decision"), dict) else (dec or {})
     own = own_link(pdec, p)
@@ -1286,7 +1496,6 @@ async def _call_question(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dic
     buttons ("Fill in their page": their prepared page, nothing sent, no approval · "Call them": the tap IS the approval); ask_call → ONE
     "OK". Answered already in words ("call them" — on_it) with this card on screen: that answer is the approval (the held read-back)."""
     from agapi import booking_decide as BD, venue_submit as VS
-    from booking_signer import guest_receipt as GR
     GW = _API()
     venue = GW.plain_venue(rd["venue"])
     held = _HELD.get(ctx.account) or _PREV.get(ctx.account)   # hold_venue set the card aside (_PREV) before deciding again
@@ -1301,7 +1510,7 @@ async def _call_question(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dic
     if not call:
         return await _no_call(ctx, a, rd, res, at, now, d, card, venue, "there's no number for them to call")
     call = {**call, **({"opens_at": v["opens_at"]} if v.get("opens_at") else {}), "open_now": bool(v.get("open_now"))}
-    person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
+    person = await booking_person(ctx.account, res)   # Sasha 328 · the ONE person (its booking email)
     p = await VS.prepare(ctx.account, place, person, at[:10], at[11:16], int(res["how_many"]["count"]), call=call,
                          **({"stay": _stay(ctx, a)} if _stay(ctx, a) else {}))   # Sasha 271 · CR 102: a stay's call says the stay
     if not p.get("ok") and p["error"]["code"] == "not_configured":   # no venues key on this server: no act — so no call (never the old path)
@@ -1390,6 +1599,11 @@ async def answer_card(ctx, read_back_id: str, choice: str) -> dict:
     """Sasha 265 · item 4 · THE TAP: the card's button, straight from the page (no model between). "call" → the tap IS the approval
     (approvals.in_app_tap on THIS read-back) → the act → "On it — …". "page" → their prepared page (nothing sent, no approval)."""
     held = _HELD.get(ctx.account)
+    if str(choice or "").startswith("pick:"):   # Sasha 328 · a tap on the platform question's card: THAT card's option, as AgAPI wrote it
+        if not held or held.get("rung") != "platform_choice" or held.get("read_back_id") != read_back_id:
+            return {"status": "nothing_waiting", "booked": False, "in_app": True}
+        got = await platform_answer(ctx, choice[5:], tapped=True)
+        return got if got is not None else {"status": "nothing_waiting", "booked": False, "in_app": True}
     if held and held.get("kanoe") and held.get("rung") == "agapi" and held.get("read_back_id") == read_back_id and choice == "send":
         # Sasha 287 · Kanoe's one line: "Yes, send it" IS the consent (in_app_tap on THIS read-back), once
         return await _finish(ctx, held, {"how": "tap", "said": "tap: Yes, send it"})
@@ -1415,12 +1629,11 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
     Sasha 271 · stay (CR 102): a hotel stay, with the venue's number for the calls the booking rules attach (R6 with the send, R5 when
     booking_status says it's due) — the engine's, under this same yes; Sasha keeps no time of its own for them."""
     from agapi import venue_submit as VS
-    from booking_signer import guest_receipt as GR
     GW = _API()
     venue = GW.plain_venue(rd["venue"])
     place = {"name": (card or {}).get("name") or venue, "website": (card or {}).get("website") or a.get("website"), "place_id": rd.get("place_id") or (card or {}).get("place_id"),
              "city": a.get("city"), "category": (res.get("what") or {}).get("category")}
-    person = {"name": res["who"]["name"], "phone": res["who"]["contact"].get("mobile_e164"), "email": await GR.address_of(ctx.account)}
+    person = await booking_person(ctx.account, res)   # Sasha 328 · the ONE person (its booking email)
     asked = _what(a)
     # Sasha 272 · CR 103 · the stay's number for the engine's R5/R6 calls: given ONCE here (a listing as its place_id), kept by the record
     call = call_of(rd, card, place.get("place_id")) if stay else None
@@ -1608,12 +1821,11 @@ async def _prepared(ctx, a: dict, rd: dict, res: dict, at: str, now, eng: dict, 
     with every detail shown and one-tap copy — they confirm there (a CAPTCHA, if any, is theirs). Read back first; on the yes,
     book_venue sends it. The attempt goes in the outcomes ledger as human_tap."""
     import hashlib as _h
-    from booking_signer import guest_receipt as GR
     GW = _API()
     url = eng.get("url") or (card or {}).get("website")
     if not url:
         return {"status": "no_route", "venue": rd["venue"], "say": "Their booking page isn't on their site — ask how they'd like to book."}
-    email = await GR.address_of(ctx.account)
+    email = (await booking_person(ctx.account, res))["email"]   # Sasha 328 · the ONE booking email, as AgAPI is given it
     fields = [{"label": "Day", "value": GW.summary(res).split(" at ")[0]}, {"label": "Time", "value": at[11:16]},
               {"label": "People", "value": str(res["how_many"]["count"])}, {"label": "Name", "value": res["who"]["name"]},
               *([{"label": "Email", "value": email}] if email else []),
@@ -1722,6 +1934,13 @@ async def book_venue(ctx, a: dict) -> dict:
     """After the person's explicit yes in a LATER turn: the prepared booking, by its route."""
     from agapi.v0 import claim, stale, yes_to_book
     GW = _API()
+    q = _HELD.get(ctx.account)
+    if q and q.get("rung") == "platform_choice":   # Sasha 328 · the walk's question is open: their words answer it (or it's asked again)
+        got = await platform_answer(ctx, getattr(ctx, "user_said", None) or ((a.get("approval") or {}).get("said")))
+        if got is not None:
+            return got
+        raise _err("which_option", f"their booking asks for {q['field']}: {', '.join(q['options'])} — the options are buttons on their "
+                                   "screen; ask them which (never choose for them), then call book_venue with their answer this turn")
     said = ((a.get("approval") or {}).get("said")) or ""
     if not yes_to_book(said):
         picked = chosen_route(ctx.user_said)
@@ -1749,12 +1968,13 @@ async def book_venue(ctx, a: dict) -> dict:
     return await _finish(ctx, held, {"how": "voice", "said": said})
 
 
-async def _finish(ctx, held: dict, how: Optional[dict] = None) -> dict:
+async def _finish(ctx, held: dict, how: Optional[dict] = None, claimed: bool = False) -> dict:
     """Book what's held, once: claimed, recorded in the outcomes ledger (CR 87), its card with it. book_venue after a yes; a
-    prefilled form straight away (Sasha 249 — the form is their go-ahead)."""
+    prefilled form straight away (Sasha 249 — the form is their go-ahead). `claimed`: already claimed by its caller (Sasha 328 · the
+    platform question's answer: claim_words, the one-instruction rule)."""
     from agapi.v0 import claim
     GW = _API()
-    if how:   # an act on their yes: claimed first (a prefilled form sends nothing to the venue — nothing to claim)
+    if how and not claimed:   # an act on their yes: claimed first (a prefilled form sends nothing to the venue — nothing to claim)
         await claim(ctx)   # Sasha 215 · durable: sent once, across restarts and workers
     how = how or {"how": "chose_form", "said": "prefilled form"}
     venue, rung = GW.plain_venue(held["venue"]), held["rung"]
@@ -1804,7 +2024,7 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
     if rung == "prepared":   # Sasha 248 · "fill it now": their own page + every detail, on their phone; they confirm there
         from agapi import venue_truth as VT
         f = {x["label"]: x["value"] for x in held["fields"]}
-        prep = await VT.prepare({"name": venue, "website": held.get("website"), "place_id": held.get("place_id")},
+        prep = held.get("prep") or await VT.prepare({"name": venue, "website": held.get("website"), "place_id": held.get("place_id")},
                                 {"name": f.get("Name"), "phone": f.get("Mobile"), "email": f.get("Email")},
                                 held["when"][:10], held["when"][11:16], int(held["party"]), account=ctx.account)   # CR 89 · nothing submitted
         if prep and one_path(ctx) and (prep.get("decision") or (held.get("follow") or {}).get("decision") or {}).get("route") == "platform":
@@ -1974,6 +2194,8 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
                 "line": "It's on your phone: tap Yes there, then it goes."}
     if st == "confirm_number":   # Sasha 309 · no link could go either: their WhatsApp number is confirmed once — never "tap Yes"
         return await confirm_number(ctx, held, venue)
+    if held.get("platform_book"):   # Sasha 328 · CR 160 · AgAPI pressed Book on their platform page (or stopped): said as it is
+        return await _platform_result(ctx, held, r, venue, where)
     if held.get("kanoe"):   # Sasha 287 · Kanoe's WhatsApp: sent → when, and who it waits for; AgAPI's gate said no at the send → their own
         return await _kanoe_sent(ctx, held, r, venue, where)
     if st == "confirmed":
@@ -2248,6 +2470,10 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
     own page, said kindly."""
     from agapi.v0 import claim
     from agapi import venue_submit as VS
+    if a.get("act_id"):
+        act = next((x for x in await VS.acts_of(ctx.account) if x.get("act_id") == a["act_id"]), None)
+        if act and act.get("route") == "platform":   # Sasha 328 · AgAPI pressed Book on their platform page and can't cancel it there yet
+            return platform_cancel(ctx, act)
     if not (held and held.get("act_id")) and a.get("act_id"):
         # Sasha 323 · CR 152 · a booking he made himself (a train): AgAPI's fare answers what can be cancelled, and he does it on the
         # operator's own page (one button) — nothing is sent. A booking AgAPI sent itself has no such page: its own cancel act, below.
@@ -2294,6 +2520,25 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
         # Sasha 314 / 317 · "cancel my DiverXO booking", exactly one booking, from the app or their verified WhatsApp: that message IS the approval
         return await _cancel_now(ctx, _CANCEL[ctx.account], said)
     return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"]}
+
+
+def platform_cancel(ctx, act: dict) -> dict:
+    """Sasha 328 · "Cancel La Taberna" for a booking AgAPI made on a platform (route platform, CR 160): until AgAPI can cancel there itself,
+    the platform's OWN cancel link from its confirmation email (kept on the act by the ONE Gmail reader) and the venue's phone when its
+    card is on screen — said; NOTHING is sent (no venue.cancel_booking, no approval, no claim)."""
+    from app.agent import voice as V
+    _CANCEL.pop(ctx.account, None)
+    venue = _API().plain_venue(act.get("venue")) or "them"
+    link = act.get("cancel_link") if str(act.get("cancel_link") or "").startswith("https://") else None
+    card = card_of(ctx.account, act.get("place_id"), venue)
+    phone = (card or {}).get("phone") if str((card or {}).get("phone") or "").startswith("+") else None   # shown now, never kept (row 942)
+    platform = act.get("platform") or "their booking page"
+    out = {"status": "yours_there", "venue": venue, "route": "platform", "sent": False, "booked": True,
+           "line": V.platform_cancel_line(venue, bool(link), phone), "how": "Say `line` word for word — nothing was sent.",
+           **({"phone": phone} if phone else {})}
+    if link:
+        out.update(open=link, page_url=link, button={"label": f"Cancel on {platform}", "link": link})
+    return out
 
 
 _CANCEL_WORDS = re.compile(r"\b(?:cancel|cancela|cancelar|anula|anular|annule|annuler)\b", re.I)

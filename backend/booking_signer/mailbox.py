@@ -358,7 +358,7 @@ class PostgresMailboxStore:
             row["consent_text_sha256"]))
 
     async def set_link(self, account, **kw):
-        cols = [k for k in kw if k in ("last_sync_at", "history_id", "needs_reconnect_at", "told_reconnect_at")]
+        cols = [k for k in kw if k in ("last_sync_at", "history_id", "needs_reconnect_at", "told_reconnect_at", "address")]   # 328 · address: sql/047
         if cols:
             sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(cols))
             await self._run(lambda c: c.execute(f"update mailbox_links set {sets} where account_id = $1", uuid.UUID(account), *[kw[k] for k in cols]))
@@ -476,6 +476,62 @@ def _header(payload: dict, name: str) -> str:
     return next((h.get("value") or "" for h in (payload or {}).get("headers") or [] if (h.get("name") or "").lower() == name.lower()), "")
 
 
+# ── Sasha 328 · the linked mailbox's OWN address (Gmail's profile: emailAddress) — the default booking email (contacts.booking_email),
+# so a platform's confirmation and its cancel link arrive where Sasha reads. Kept on the link (sql/047's mailbox_links.address), read
+# once: at connect, else at the first sync after 328 (a link made before it). Never asked for.
+
+async def address_of(account: str) -> Optional[str]:
+    if STORE is None:
+        return None
+    try:
+        link = await STORE.get_link(account)
+    except Exception as e:
+        log.info("[mailbox] link not read for its address: %s", type(e).__name__)
+        return None
+    from .contacts import email_of
+    return email_of((link or {}).get("address"))
+
+
+async def _learn_address(account: str, token: str) -> Optional[str]:
+    """Gmail's own answer to "whose mailbox is this" (users.getProfile — gmail.readonly covers it), kept on the link."""
+    from .contacts import email_of
+    try:
+        status, j = await GMAIL_HTTP("GET", f"{GMAIL}/profile", token)
+        addr = email_of((j or {}).get("emailAddress")) if status == 200 and isinstance(j, dict) else None
+        if addr:
+            await STORE.set_link(account, address=addr)
+        return addr
+    except Exception as e:   # never the sync's failure (sql/047 not applied yet: the column isn't there)
+        log.info("[mailbox] the mailbox's address not kept: %s", type(e).__name__)
+        return None
+
+
+# ── Sasha 328 · a platform's confirmation → its CANCEL LINK, on the booking AgAPI made (venue_submit.attach_from_mail) ─────────────
+_LINK = re.compile(r"https://[^\s<>\"'\])]+")
+_CANCEL_NEAR = re.compile(r"cancel|anula|annul|modifica\w* o cancel|gestionar|manage", re.I)
+
+
+def cancel_link(sender: str, text: str) -> Optional[str]:
+    """The confirmation's cancel link: https only, on the PLATFORM's own host (the sender's platform domain, or a subdomain of it), and
+    named as a cancel — in its path or in the words just before it. None rather than a guess (a link is never a card)."""
+    s = _fold(sender or "")
+    addr = (re.search(r"<([^>]+)>", s) or [None, s])[1]
+    dom = addr.rsplit("@", 1)[-1].strip()
+    plat = next((p for p in PLATFORMS if dom == p or dom.endswith("." + p)), None)
+    if not plat:
+        return None
+    from urllib.parse import urlsplit
+    for m in _LINK.finditer(text or ""):
+        url = m[0].rstrip(".,;")
+        host = (urlsplit(url).hostname or "").lower()
+        if not (host == plat or host.endswith("." + plat)):
+            continue
+        before = (text or "")[max(0, m.start() - 80):m.start()]
+        if re.search(r"cancel|anul|annul", urlsplit(url).path, re.I) or re.search(r"cancel|anul|annul", before, re.I):
+            return url[:500]
+    return None
+
+
 async def sync(account: str) -> List[dict]:
     """One narrow search; each new matching message read by rules; facts kept, bodies never. Returns the new finds."""
     from . import guest_whatsapp as GW
@@ -517,6 +573,21 @@ async def sync(account: str) -> List[dict]:
         body = _body_text(payload)
         kind, facts, parsed_by = read(_header(payload, "Subject"), _header(payload, "From"), body, now)
         row, basis = match(facts, rows)
+        if not row and facts.get("via") and kind in ("confirmation", "change"):
+            # Sasha 328 · a PLATFORM's email for a booking AgAPI made (it pressed Book on their page): it IS that booking — matched on the
+            # ONE booking record (the act, by its reference, else the venue at its time), its cancel link kept there. Never a second
+            # copy ("Add it to your itinerary?"), never offered.
+            from agapi import venue_submit as VS
+            from agapi.s2_gmail_receipts import _html_text
+            frm = _header(payload, "From")
+            act = await VS.attach_from_mail(account, facts, cancel_link(frm, body or _html_text(payload)))
+            if act:
+                find0 = {"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": m["id"], "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+                         "kind": kind, "facts": {**facts, "agapi_act": act["act_id"]}, "parsed_by": parsed_by, "trip_item_id": None,
+                         "match_basis": "agapi_act", "offered_action": None, "offered_sentence": None, "offer_sha256": None, "action_status": "done"}
+                await STORE.put_find(find0)
+                found.append(find0)
+                continue
         if not row:   # Sasha 323 · CR 152 · a booking he made himself (a train): AgAPI's ONE reader decides whose it is and opens the record
             from agapi import self_booked as SB
             got = await SB.from_mail(account, {"from": _header(payload, "From"), "subject": _header(payload, "Subject"),
@@ -567,6 +638,8 @@ async def sync(account: str) -> List[dict]:
         await TR.reread(account)
     except Exception as e:
         log.warning("[mailbox] the train re-read failed: %s", type(e).__name__)
+    if not link.get("address"):   # Sasha 328 · a link made before 328: its own address, once
+        await _learn_address(account, token)
     await STORE.set_link(account, last_sync_at=now)
     await _offer_on_whatsapp(account, [f for f in found if f["offered_action"]])
     return found
@@ -799,6 +872,10 @@ async def on_connected(account: str, refresh_token: str, version: str, now: date
                           "consent_text_sha256": c["sha256"]})
     if old:
         await VC.STORE.revoke(account, old["vault_item_id"], now)
+    try:   # Sasha 328 · a (re)connected mailbox may be another address: its own is read again at the first sync, below
+        await STORE.set_link(account, address=None)
+    except Exception as e:
+        log.info("[mailbox] the old address not cleared: %s", type(e).__name__)
     try:
         await sync(account)
     except Exception as e:

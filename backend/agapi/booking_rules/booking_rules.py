@@ -47,7 +47,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-VERSION = "booking-rules/2.5 · 2026-11-02"
+VERSION = "booking-rules/2.6 · 2026-11-03"
 
 # ── the constants, as data (never env vars) ──────────────────────────────────────────────────────────────────────────────
 URGENT_HOURS = 48                           # R3/R4 · more than this → request and wait; within it → call or their own page
@@ -80,6 +80,8 @@ PHRASES = {
     "call_and_email": "It's soon, so I'll call them and email them too, and tell you what they say.",
     "platform": "They book on {platform}: their page is ready for you — you press Book there. I never book on a platform for you.",
     "platform_book": "They book on {platform} — I'll fill in their booking and press Book for you.",
+    "platform_cancel": "I'll open {platform}'s own cancellation for your booking and press cancel for you.",
+    "platform_cancel_hand_over": "It was booked on {platform} — you cancel it there: here's their own link.",
     "prepared_link": "Here's their booking page, filled in for you — you confirm it there.",
     "prepared_link_captcha": "Here's their booking page, filled in for you — you confirm it there (it asks you to prove you're human, which only you can do).",
     "wait_to_call": "Their only way to book is by phone, and it's still a while away — I'll call them closer to the day.",
@@ -116,7 +118,7 @@ CALL_RULES = ("Say you are an AI from Kanoe Technologies at the start; if asked,
 CALL_PAYLOAD = {"voicemail": {"action": "hangup"}, "record": False, "max_minutes": MAX_CALL_MINUTES}                    # R9
 _MONEY_OR_TIME = ("deposit", "depósito", "fianza", "señal", "prepay", "pago por adelantado", "card", "tarjeta", "fee", "cargo", "suplemento",
                   "another time", "different time", "otra hora", "a las", "only at", "solo a las", "would", "could you do")
-_RUNG = {"fill_platform_form": "zero_touch", "fill_form_zero_touch": "zero_touch", "prepared_link": "human_tap", "ask_one_question": "human_tap", "ask_call": "phone", "hand_over_platform_link": "human_tap",
+_RUNG = {"cancel_on_platform": "zero_touch", "hand_over_cancel_link": "human_tap", "fill_platform_form": "zero_touch", "fill_form_zero_touch": "zero_touch", "prepared_link": "human_tap", "ask_one_question": "human_tap", "ask_call": "phone", "hand_over_platform_link": "human_tap",
          "request_whatsapp": "request_reply", "request_email": "request_reply", "wait": "request_reply", "call": "phone", "call_and_email": "phone",
          "refuse": None}
 
@@ -295,6 +297,26 @@ def _decision(action: str, say: str, channel: Optional[dict], link: Optional[str
             "follow_ups": follow_ups or [], "refusals": refusals or [], "rules_version": VERSION}
 
 
+def decide_cancel(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """booking-rules/2.6 (CR 161 · Tyler, 3 Nov 11:51) · may Kanoe press the venue's OWN cancel for a booking made on a platform? Only for a
+    person in the platform beta (person_access platform_submit = beta), on a platform the channel policy permits a beta cancel on (the
+    caller reads it: beta_cancel), with the venue's own cancel link on the booking's record (state.cancel_link), no challenge, sign-in or
+    fee seen, and Kanoe's own test venue or a live person with real-venue sends on. Everyone else: their link, handed over. The person's
+    explicit yes is the act's (the read-back), as it is for every act."""
+    venue, person, state = ctx.get("venue") or {}, ctx.get("person") or {}, ctx.get("state") or {}
+    access = person.get("access") or {"mode": "test", "calls": "off", "real_venue_sends": "off"}
+    link = state.get("cancel_link")
+    c = next((x for x in venue.get("channels") or [] if x.get("kind") == "platform"), None)
+    p = (c and (platform_of(c) and platform_words(c, platform_of(c)) or c.get("host"))) or "the booking platform"
+    if c and link and access.get("platform_submit") == "beta" and c.get("beta_cancel") is True and \
+            not (c.get("captcha") or c.get("needs_sign_in") or c.get("fee")) and \
+            (venue.get("test") or (access.get("mode") == "live" and access.get("real_venue_sends") == "on")):
+        return _decision("cancel_on_platform", "platform_cancel", c, link, fmt={"platform": p})
+    why = "no cancel link of theirs on the booking" if not link else f"{p}: cancelled only for persons in the platform beta, on their own page"
+    return _decision("hand_over_cancel_link", "platform_cancel_hand_over", c, link, fmt={"platform": p},
+                     refusals=[{"rule": "R14", "reason": why}])
+
+
 def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
     venue, when, person, state = ctx.get("venue") or {}, ctx.get("when") or {}, ctx.get("person") or {}, ctx.get("state") or {}
     hd = head(ctx)
@@ -405,6 +427,6 @@ def _call_allowed(access: dict, state: dict, now: Optional[datetime]) -> tuple:
     return True, None
 
 
-__all__ = ["decide", "stopped", "call_opening", "call_answer", "is_platform", "platform_of", "head", "call_when", "on_it", "call_allowed", "no_answer", "PHRASES", "PLATFORM_HOSTS", "CALL_PAYLOAD", "CALL_RULES",
+__all__ = ["decide", "decide_cancel", "stopped", "call_opening", "call_answer", "is_platform", "platform_of", "head", "call_when", "on_it", "call_allowed", "no_answer", "PHRASES", "PLATFORM_HOSTS", "CALL_PAYLOAD", "CALL_RULES",
            "CALL_DISCLOSURE", "VERSION", "URGENT_HOURS", "HOTEL_ARRIVAL_CALL_HOURS", "HOTEL_NO_REPLY_HOURS", "CALLS_PER_PERSON_PER_DAY",
            "MIN_MINUTES_BETWEEN_CALLS_SAME_VENUE", "MAX_CALL_MINUTES", "CHANNEL_ORDER"]

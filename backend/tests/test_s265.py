@@ -130,9 +130,11 @@ class NewChatClearsTheConversationOnly(unittest.TestCase):
 # CR 129 · moved to booking-rules/2.4 (AgAPI v1.40.0): R14 reads every field a channel carries (a platform's widget on their own page is never
 # "I'll book it"); 2.2 / 2.3 come with it (check_in_at, watch, search: added functions — no decision changed)
 # CR 160 · booking-rules/2.5 (Tyler's go, 2 Nov; merged with Sasha 327): byte-identical to AgAPI's agapi_service/booking_rules
-ROW_965 = {"booking_rules.py": "48cc2715dccd98fe3abcbe969fd7370af9fac61e82451d29be9c9af538c6af3a",
-           "vectors.json": "f37f4fdf6b3cd822f5f2d94701111e656fbb287d1559f87655471b2bf427ecab",
-           "test_booking_rules.py": "bd602e8e3ac974b0b957e89a3223978395c2b38c95252924b003c7c5abe5de1b"}
+# Sasha 329 · CR 161 · booking-rules/2.6 (+ decide_cancel, the ONE cancel rule): byte-identical to AgAPI origin/main's. A PATCH copy
+# (docs/sasha/S-329-cr161.md): the follow-up reads it from AgAPI
+ROW_965 = {"booking_rules.py": "c7a434b01a40d6441b16f11d2058f6af6880655698114f1bf54e7b038e4de53d",
+           "vectors.json": "3289e8f395a525f694657f1d05a7566d71a5932223693f6a4f170b2a447a04d2",
+           "test_booking_rules.py": "5b6aa3de445a70c604c3bddea17cb71de57ed299b7fe1878eeac162ea6801e3e"}
 PAGE_AND_PHONE = {"form": {}, "phone": {"fact_index": 0, "value": "+34910000000"}}
 
 

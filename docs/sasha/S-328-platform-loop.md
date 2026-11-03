@@ -2,6 +2,11 @@
 
 Tyler, 3 Nov: "finish the platform booking loop (CR 160) — do all of that, then cancel".
 
+> **Superseded in part by Sasha 329 (CR 161, `docs/sasha/S-329-cr161.md`).** The answer now goes back as `choices` on
+> `venue.submit_booking` with the same `prepared_id`, not as `answers` on a second `venue.prepare_booking`. The sentence reader
+> (`choice_of`, PATCH b) is deleted, and so is the link-only `platform_cancel`: "Cancel La Taberna" now goes through AgAPI's
+> `venue.cancel_booking`, with a read-back and the person's yes. The PATCHes below on those three points are closed.
+
 ## Root test (written before the code)
 
 ### ONE trip record

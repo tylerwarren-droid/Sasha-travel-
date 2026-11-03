@@ -4,8 +4,9 @@ ROOT TEST (written first: docs/sasha/S-328-platform-loop.md)
   ONE trip record — AgAPI's act (kept in s2_memory venue_acts, pointers beside it) is the ONE booking record: My bookings reads it, the
   Gmail reader attaches the platform's cancel link TO it, cancel reads it. ONE AgAPI booking path — venue.prepare_booking (VS.prepare with
   booking_person, the ONE person) → venue.submit_booking's read-back → the person's yes → VS.submit. The walk's question is asked once and
-  answered on that same path (prepare_booking `answers`). The whole class, held below: no venue person built anywhere but booking_person;
-  the walk's sentence read in one place (venue_submit.choice_of); the cancel link kept only on the act.
+  answered on that same path — Sasha 329 · CR 161: AgAPI's ask {choice, label, options}, answered as venue.submit_booking `choices` on the
+  SAME prepared_id (328's prepare_booking `answers` and its sentence reader are gone: tests/test_s329.py). The whole class, held below: no
+  venue person built anywhere but booking_person; the cancel link kept only on the act.
 Offline: AgAPI, Gmail, the stores and the model are stood in; nothing leaves the process.
 
     cd backend && python3 -m unittest tests.test_s328 -v
@@ -30,7 +31,8 @@ run = asyncio.run
 ACCT = "00000000-0000-4000-8000-000000000328"
 CM_PAGE = "https://www.covermanager.com/reserve/module_restaurant/la-taberna/spanish"
 CANCEL = "https://www.covermanager.com/reservation/cancel/la-taberna/CM48213?token=8f3e2a91"
-ZONA = ("Their booking asks for Zona: Terraza, Salón, Barra. Which one? Here's their page with your details ready: " + CM_PAGE)
+ASK = {"choice": "zona", "label": "Zona", "options": ["Terraza", "Salón", "Barra"]}   # Sasha 329 · CR 161's structured ask
+ZONA = "Their page asks which Zona you'd like. Here's their page with your details ready: " + CM_PAGE
 RD = {"venue": "La Taberna", "rungs": {}, "place_id": "ChIJ328", "read_id": "r328", "country": "ES"}
 RES = {"who": {"name": "Tyler Warren", "contact": {"mobile_e164": "+34608445715"}}, "how_many": {"count": 2},
        "when": {"at": "2026-11-13T21:00"}, "what": {"category": "restaurant"}}
@@ -71,7 +73,7 @@ class AgAPI:
     the read-back; the in-app tap → the walk's outcome, scripted (first: the Zona stop; then: Booked with CoverManager's reference)."""
 
     def __init__(self, outcomes):
-        self.calls, self.outcomes, self.n, self.extra_line = [], list(outcomes), 0, []
+        self.calls, self.outcomes, self.n, self.extra_line, self.choices = [], list(outcomes), 0, [], {}
 
     async def call(self, op, body, approval=None, account=None):
         self.calls.append((op, json.loads(json.dumps(body))))
@@ -85,8 +87,10 @@ class AgAPI:
                                                         "say_text": "They book on CoverManager — I'll fill in their booking and press Book for you.",
                                                         "button": {"label": "Yes, book it", "link": None, "sends": True}},
                                            "hand_over": {"link": CM_PAGE, "platform": "CoverManager", "carried": [], "copy": []}}}
-        if op == "venue.submit_booking" and not approval:
-            lines = LINES + (self.extra_line if self.n > 1 else [])
+        if op == "venue.submit_booking" and not approval:   # CR 161 · choices kept on the prepared booking and read back
+            self.choices.update(body.get("choices") or {})
+            picked = "; ".join(f"{k}: {v}" for k, v in self.choices.items())
+            lines = [LINES[0][:-1] + (f"; {picked}." if picked else "."), *LINES[1:]] + (self.extra_line if self.choices else [])
             return {"ok": False, "error": {"code": "approval_required", "details": {
                 "read_back_id": f"rb_{body['prepared_id'][-4:]}", "read_back": {"lines": lines},
                 "read_back_sha256": hashlib.sha256("\n".join(lines).encode()).hexdigest()}}}
@@ -94,6 +98,9 @@ class AgAPI:
             return {"ok": True, "result": {"approval_id": "apv", "result": self.outcomes.pop(0)}}
         if op in ("venue.bookings", "venue.booking_status", "venue.manage_options"):
             return {"ok": False, "error": {"code": "unknown_operation"}}
+        if op == "venue.cancel_booking":   # Sasha 329 · CR 161 · a person outside the platform-cancel beta: their link, nothing pressed
+            return {"ok": True, "result": {"act_id": body["act_id"], "status": "not_allowed", "why": ["not in the beta"],
+                                           "say": "I can't cancel it on their page for you."}}
         return {"ok": False, "error": {"code": "unexpected", "message": op}}
 
     def ops(self):
@@ -104,7 +111,8 @@ class AgAPI:
 
 
 STOPPED = {"status": "failed", "act_id": "act_zona", "how": "platform_form", "rung": "zero_touch", "venue": "La Taberna", "say": ZONA,
-           "venue_words": {"untrusted_text": ZONA[:ZONA.index(" Here's")]}, "hand_over": {"link": CM_PAGE, "copy": [], "why": "choice"}}
+           "venue_words": {"untrusted_text": ZONA[:ZONA.index(" Here's")]}, "hand_over": {"link": CM_PAGE, "copy": [], "why": "choice"},
+           "ask": ASK}
 BOOKED = {"status": "confirmed", "act_id": "act_booked", "how": "platform_form", "rung": "zero_touch", "venue": "La Taberna",
           "reference": "CM48213", "say": "Booked: La Taberna, 2026-11-13 21:00, 2 people, ref CM48213."}
 
@@ -167,18 +175,19 @@ class TheZonaQuestion(Base):
         self.assertEqual((held["status"], held["route"]), ("awaiting_yes", "platform_book"))
         q = self.yes()
         print("\n── the walk stopped; Sasha asks ONCE ──\n" + json.dumps({k: q[k] for k in ("ask", "choices", "read_back_id")}, ensure_ascii=False))
-        self.assertEqual(q["ask"], "Their booking asks for Zona: Terraza, Salón, Barra. Which one?")   # AgAPI's own words
+        self.assertEqual(q["ask"], "La Taberna's booking asks for your Zona: Terraza, Salón, Barra. Which one?")   # AgAPI's ask, said
         self.assertEqual([c["title"] for c in q["choices"]], ["Terraza", "Salón", "Barra"])        # exactly AgAPI's options
         self.assertTrue(all(c["route"] == "pick:" + c["title"] for c in q["choices"]))
         from app.agent import sasha as S
         card = S.render("book_venue", q, {})
         self.assertEqual((card["kind"], card["read_back_id"]), ("read_back", q["read_back_id"]))     # S2's one-tap card
         done = self.tap(q["read_back_id"], "Terraza")
-        prep = self.ag.bodies("venue.prepare_booking")
-        print("── the prepare_booking body after the tap ──\n" + json.dumps(prep[-1], ensure_ascii=False))
-        self.assertEqual(prep[-1]["answers"], {"Zona": "Terraza"})                                  # the PERSON's choice, to AgAPI
-        self.assertNotIn("answers", prep[0])                                                        # never guessed before
-        self.assertEqual({k: prep[-1][k] for k in ("date", "time", "party")}, {"date": "2026-11-13", "time": "21:00", "party": 2})
+        sub = self.ag.bodies("venue.submit_booking")
+        print("── the submit_booking body after the tap (Sasha 329 · CR 161) ──\n" + json.dumps(sub[-1], ensure_ascii=False))
+        self.assertEqual(sub[-1]["choices"], {"zona": "Terraza"})                                   # the PERSON's choice, to AgAPI
+        self.assertEqual(sub[-1]["prepared_id"], sub[0]["prepared_id"])                             # the SAME prepared booking
+        self.assertNotIn("choices", sub[0])                                                         # never guessed before
+        self.assertEqual(len(self.ag.bodies("venue.prepare_booking")), 1)                           # prepared once — no `answers`
         self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)   # their yes, then their tap — no third ask
         print("── said ──\n" + done["line"])
         self.assertEqual(done["status"], "confirmed")
@@ -192,9 +201,9 @@ class TheZonaQuestion(Base):
         with self.assertRaises(V0.ToolError) as e:   # "the one by the window" names no option: asked, never chosen for them
             run(VN.book_venue(Ctx("the one by the window"), {"approval": {"said": "the one by the window"}}))
         self.assertEqual(e.exception.code, "which_option")
-        self.assertEqual(self.ag.bodies("venue.prepare_booking")[-1].get("answers"), None)
+        self.assertEqual(self.ag.choices, {})
         done = run(VN.book_venue(Ctx("salon please"), {"approval": {"said": "salon please"}}))
-        self.assertEqual(self.ag.bodies("venue.prepare_booking")[-1]["answers"], {"Zona": "Salón"})
+        self.assertEqual(self.ag.bodies("venue.submit_booking")[-1]["choices"], {"zona": "Salón"})
         self.assertEqual(done["status"], "confirmed")
         self.assertTrue(q["read_back_id"].startswith("q_"))
 
@@ -205,8 +214,8 @@ class TheZonaQuestion(Base):
         rows = run(VS.bookings(ACCT))
         print("── My bookings ──\n" + json.dumps(rows, ensure_ascii=False))
         self.assertEqual([r["act_id"] for r in rows], ["act_booked"])
-        self.assertEqual((rows[0]["status"], rows[0]["reference"], rows[0]["route"], rows[0]["answers"]),
-                         ("confirmed", "CM48213", "platform", {"Zona": "Terraza"}))
+        self.assertEqual((rows[0]["status"], rows[0]["reference"], rows[0]["route"], rows[0]["chosen"]),
+                         ("confirmed", "CM48213", "platform", {"zona": "Terraza"}))
 
     def test_on_whatsapp_the_options_are_taps_never_yes_no(self):
         from booking_signer import guest_whatsapp as GWM, wa_agent as WA
@@ -227,7 +236,7 @@ class TheTapIsTheYesOnlyForTheSameWords(Base):
         q = self.yes()
         got = self.tap(q["read_back_id"], "Terraza")
         self.assertEqual(got["status"], "awaiting_yes")
-        self.assertIn("Zona: Terraza", got["read_back"])
+        self.assertIn("zona: Terraza", got["read_back"][0])   # Sasha 329 · CR 161 · AgAPI's own read-back carries the choice
         self.assertIn("Their deposit: €10 per person, charged by CoverManager.", got["read_back"])
         self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 1)   # nothing sent on the tap
         done = run(VN.book_venue(Ctx("Yes, book it"), {"approval": {"said": "Yes, book it"}}))   # their yes to THESE words sends it
@@ -237,23 +246,23 @@ class TheTapIsTheYesOnlyForTheSameWords(Base):
         VS.TAP.reset(self.tok)
         self.tok = VS.TAP.set(None)
         self.hold()
-        VN._HELD[ACCT].update(rung="platform_choice", id="q_x", read_back_id="q_x", field="Zona", options=["Terraza", "Salón"],
-                              asked_at=datetime.now(timezone.utc), out={})
+        VN._HELD[ACCT].update(rung="platform_choice", id="q_x", read_back_id="q_x", choice="zona", field="Zona", options=["Terraza", "Salón"],
+                              base=VN._HELD[ACCT]["same"], asked_at=datetime.now(timezone.utc), out={})
         got = run(VN.book_venue(Ctx("Terraza", surface="voice"), {"approval": {"said": "Terraza"}}))
         self.assertEqual(got["status"], "awaiting_yes")
         self.assertNotIn("approvals.in_app_tap", self.ag.ops())
 
 
 class AskedOnceNeverALoop(Base):
-    """Until AgAPI's walk reads `answers` (the CR), it stops again on the same question: said plainly, with their page — never asked twice."""
+    """If the walk stops again on the SAME question after their answer, it is said plainly, with their page — never asked twice."""
     OUTCOMES = (STOPPED, {**STOPPED, "act_id": "act_zona2"})
 
     def test_the_same_question_after_the_answer_is_said_not_asked(self):
         self.hold()
         q = self.yes()
         again = self.tap(q["read_back_id"], "Terraza")
-        print("\n── the walk stopped again (AgAPI's walk doesn't read answers yet) ──\n" + again["say"])
-        self.assertEqual(self.ag.bodies("venue.prepare_booking")[-1]["answers"], {"Zona": "Terraza"})   # sent all the same
+        print("\n── the walk stopped again on the same question ──\n" + again["say"])
+        self.assertEqual(self.ag.bodies("venue.submit_booking")[-1]["choices"], {"zona": "Terraza"})   # sent all the same
         self.assertEqual(again["status"], "not_booked")
         self.assertNotIn("choices", again)
         self.assertNotIn("Which one", again["say"])
@@ -303,28 +312,27 @@ class TheConfirmationEmailAndCancel(Base):
         self.assertIsNone(MB.cancel_link("La Taberna <hola@lataberna.example>", "cancel: https://lataberna.example/cancel"))
         self.assertEqual(MB.cancel_link(frm, CM_MAIL[2]), CANCEL)
 
-    def test_cancel_la_taberna_gives_the_link_and_the_phone_nothing_sent(self):
+    def test_outside_the_cancel_beta_the_emails_link_and_the_phone_nothing_pressed(self):
+        """Sasha 329 · CR 161: "Cancel La Taberna" goes to AgAPI's venue.cancel_booking (the ONE cancel path). Outside the beta AgAPI says
+        not_allowed with no link of its own here: the link their confirmation email gave (on the act) and the phone — nothing pressed."""
         self._booked()
         self._sync({"m1": CM_MAIL})
         n = len(self.ag.calls)
         out = run(VN.cancel_venue(Ctx("Cancel La Taberna"), {"venue": "La Taberna"}))
-        print("\n── \"Cancel La Taberna\" ──\n" + out["line"] + "\n" + json.dumps(out.get("button")))
+        print("\n── \"Cancel La Taberna\" (outside the beta) ──\n" + out["line"] + "\n" + json.dumps(out.get("button")))
         self.assertEqual((out["status"], out["sent"], out["page_url"]), ("yours_there", False, CANCEL))
         self.assertEqual(out["button"], {"label": "Cancel on CoverManager", "link": CANCEL})
         self.assertIn("+34910000328", out["line"])
-        self.assertIn("Nothing was sent", out["line"])
-        sent = [op for op, _ in self.ag.calls[n:]]
-        self.assertFalse({"venue.cancel_booking", "approvals.in_app_tap", "venue.submit_booking"} & set(sent), sent)
+        sent = [(op, b) for op, b in self.ag.calls[n:]]
+        self.assertEqual([op for op, _ in sent if op == "venue.cancel_booking"], ["venue.cancel_booking"])   # asked of AgAPI, once
+        self.assertFalse({"approvals.in_app_tap", "venue.submit_booking"} & {op for op, _ in sent}, sent)
         from app.agent import sasha as S
         self.assertEqual(S.render("cancel_venue", out, {})["url"], CANCEL)
-        it = run(VN.cancel_venue(Ctx("cancel it"), {"act_id": "act_booked"}))   # "cancel it": the same answer
-        self.assertEqual(it["page_url"], CANCEL)
 
-    def test_before_the_email_arrives_it_says_so_with_the_phone(self):
+    def test_before_the_email_arrives_the_phone(self):
         self._booked()
         out = run(VN.cancel_venue(Ctx("Cancel La Taberna"), {"venue": "La Taberna"}))
         self.assertNotIn("page_url", out)
-        self.assertIn("hasn't reached your Gmail", out["line"])
         self.assertIn("+34910000328", out["line"])
 
 
@@ -388,18 +396,12 @@ class TheWholeClass(unittest.TestCase):
         hits = sorted(str(f.relative_to(ROOT)) for f, s in self._py() if re.search(r'(?:CALL|_call)\((?:account, )?"venue\.prepare_booking"', s))
         self.assertEqual(hits, ["agapi/venue_submit.py", "agapi/venue_truth.py"])   # venue_truth: the PATCH named in the doc
 
-    def test_the_walks_sentence_is_read_in_one_place(self):
-        hits = sorted(str(f.relative_to(ROOT)) for f, s in self._py() if "Their booking asks for" in s and f.name != "test_s328.py")
-        self.assertEqual(hits, ["agapi/venue_submit.py"])
+    # Sasha 329 · MOVED: "the walk's sentence read in one place" → read NOWHERE (CR 161's ask; test_s329.TheWholeClass), and "the platform
+    # cancel sends nothing" → the platform cancel goes through AgAPI's venue.cancel_booking after the read-back yes (test_s329)
 
     def test_the_cancel_link_is_kept_only_on_the_act(self):
         writers = sorted(str(f.relative_to(ROOT)) for f, s in self._py() if re.search(r'\["cancel_link"\]\s*=|"cancel_link":\s*cancel', s))
         self.assertEqual(writers, ["agapi/venue_submit.py"])
-
-    def test_the_platform_cancel_sends_nothing(self):
-        src = inspect.getsource(VN.platform_cancel)
-        for never in ("cancel_submit(", "cancel_read_back(", "claim(", "claim_words(", "_call(", "tell("):
-            self.assertNotIn(never, src)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 {
- "version": "booking-rules/2.5 · 2026-11-02",
+ "version": "booking-rules/2.6 · 2026-11-03",
  "vectors": [
   {
    "rule": "R1",
@@ -3158,6 +3158,271 @@
     "action": "fill_platform_form",
     "rung": "zero_touch",
     "say": "platform_book"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · a beta person, CoverManager, their cancel link on the record → Kanoe presses their cancel",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": true
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "cancel_link": "https://www.covermanager.com/cancel/abc"
+    }
+   },
+   "expect": {
+    "action": "cancel_on_platform",
+    "rung": "zero_touch"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · a person outside the beta → their link, handed over",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": true
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "off"
+     }
+    },
+    "state": {
+     "cancel_link": "https://www.covermanager.com/cancel/abc"
+    }
+   },
+   "expect": {
+    "action": "hand_over_cancel_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · no cancel link on the record → handed over",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": true
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {}
+   },
+   "expect": {
+    "action": "hand_over_cancel_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · a platform the policy keeps closed (beta_cancel false) → handed over",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": false
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "cancel_link": "https://www.covermanager.com/cancel/abc"
+    }
+   },
+   "expect": {
+    "action": "hand_over_cancel_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · a fee shown → handed over",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": true,
+       "fee": true
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "cancel_link": "https://www.covermanager.com/cancel/abc"
+    }
+   },
+   "expect": {
+    "action": "hand_over_cancel_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · a challenge → handed over",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": true,
+       "captcha": true
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "cancel_link": "https://www.covermanager.com/cancel/abc"
+    }
+   },
+   "expect": {
+    "action": "hand_over_cancel_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · test mode, a real venue → handed over (the sandbox never cancels a real venue)",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": true
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "test",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "cancel_link": "https://www.covermanager.com/cancel/abc"
+    }
+   },
+   "expect": {
+    "action": "hand_over_cancel_link"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "2.6 · test mode, Kanoe's own stand-in → Kanoe presses its cancel",
+   "fn": "decide_cancel",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": true,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/x",
+       "host": "www.covermanager.com",
+       "beta_cancel": true
+      }
+     ]
+    },
+    "person": {
+     "access": {
+      "mode": "test",
+      "calls": "off",
+      "real_venue_sends": "on",
+      "platform_submit": "beta"
+     }
+    },
+    "state": {
+     "cancel_link": "https://www.covermanager.com/cancel/abc"
+    }
+   },
+   "expect": {
+    "action": "cancel_on_platform"
    }
   }
  ]

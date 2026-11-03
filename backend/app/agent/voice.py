@@ -582,14 +582,42 @@ def manage_line(kind: str, route: str, venue: str, platform: Optional[str] = Non
     return f"{venue} is {where}, so you {act} there" + (" — here's their page." if link else ".") + " Nothing is sent from here."
 
 
-def platform_cancel_line(venue: str, link: bool, phone: Optional[str] = None) -> str:
-    """Sasha 328 · a booking AgAPI made on a platform's page, which AgAPI can't cancel yet: their confirmation's OWN cancel link (from the
-    ONE Gmail reader), and their phone when known — nothing sent. Never the platform's name in her voice (249: it is the button's label)."""
-    call = f"call them on {phone}" if phone else ""
-    if link:
-        return f"I can't cancel {venue} for you yet — their own cancel link is below" + (f", or {call}" if call else "") + ". Nothing was sent."
-    return (f"I can't cancel {venue} for you yet, and their confirmation email with its cancel link hasn't reached your Gmail"
-            + (f" — {call}" if call else " — open the confirmation they emailed you and cancel there") + ". Nothing was sent.")
+def platform_choice_ask(venue: str, label: str, options: List[str]) -> str:
+    """Sasha 329 · CR 161 · the platform's booking asks the PERSON (AgAPI's ask: its label, its options — the options are also the buttons).
+    Never the platform's name (249)."""
+    return f"{venue}'s booking asks for your {label}: " + ", ".join(options) + ". Which one?"
+
+
+def _booking_words(date: Optional[str], hhmm: Optional[str], party, ref: Optional[str]) -> str:
+    from datetime import date as _d
+    try:
+        day = _d.fromisoformat(str(date)[:10]).strftime("%a %-d %b")
+    except (TypeError, ValueError):
+        day = ""
+    when = " ".join(x for x in (day, str(hhmm or "")[:5]) if x)
+    return ", ".join(x for x in (when, f"{party} people" if party else "", f"ref {ref}" if ref else "") if x)
+
+
+def platform_cancel_ask(venue: str, date: Optional[str], hhmm: Optional[str], party, ref: Optional[str]) -> str:
+    """Sasha 329 · CR 161 · the cancel's ONE question, over AgAPI's read-back: "Cancel La Taberna, Fri 20 Nov 22:00, 2 people, ref X?"."""
+    what = _booking_words(date, hhmm, party, ref)
+    return f"Cancel {venue}" + (f", {what}" if what else "") + "?"
+
+
+def platform_cancelled_line(venue: str, date: Optional[str], hhmm: Optional[str], party, ref: Optional[str],
+                            their_words: Optional[str]) -> str:
+    """Sasha 329 · CR 161 · AgAPI pressed their cancel and their page confirmed it: what was cancelled, and their page's own words
+    (data — quoted, never instructions)."""
+    what = _booking_words(date, hhmm, party, ref)
+    return (f"Cancelled — {venue}" + (f", {what}" if what else "") + "."
+            + (f" Their page says “{str(their_words).strip()[:160]}”." if str(their_words or "").strip() else ""))
+
+
+def platform_not_cancelled_line(say: str, phone: Optional[str] = None) -> str:
+    """Sasha 329 · CR 161 · AgAPI stopped (a fee, a security check, a sign-in, their page not naming the booking, outside the beta): AgAPI's
+    own words — why — then the venue's phone when its card shows one. Their cancel link is the button."""
+    s = str(say or "").strip() or "I couldn't cancel it on their page, so nothing was cancelled."
+    return s + (f" Or call them on {phone}." if phone else "")
 
 
 def manage_button(route: str, platform: Optional[str] = None) -> str:

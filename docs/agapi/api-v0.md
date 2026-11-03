@@ -25,7 +25,7 @@ One contract for every client.
 
 | Agent | Role | Tools |
 |---|---|---|
-| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_start`, `group_upload`, `group_limits`, `group_plan`, `group_list` |
+| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_start`, `group_upload`, `group_limits`, `group_plan`, `group_invite_vault`, `group_list` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
 | **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email`, `send_whatsapp` |
 | **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `remove_saved_card`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
@@ -609,6 +609,38 @@ Plan everyone on the group's list, one by one, within their limits (planning onl
 {
  "type": "object",
  "properties": {},
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
+}
+```
+
+### `group_invite_vault`
+
+Invite group members (by name, or everyone) to add their passport and loyalty numbers on their OWN secure page. NEVER ask for a passport or any number in chat. Say its `say`.
+
+**Errors:** `no_movement`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "who": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  }
+ },
  "required": [],
  "additionalProperties": false
 }

@@ -44,3 +44,54 @@ async def upload(request: Request):
         else:
             raise HTTPException(400, {"ok": False, "rule": "file_type", "message": "send a .csv or .xlsx file, a photo of the list, or paste it"})
     return await G.upload(account, rows, body.get("movement") or None)
+
+
+# ── Sasha 333 · the traveller vault ──────────────────────────────────────────────────────────────────────────────────────
+
+@router.post("/invite")
+async def invite_vault(request: Request):
+    """The organiser's "Invite to vault": one member, several, or all ({who: null}). Emailed where the list has their email; the rest
+    come back as links to forward. The links carry no number."""
+    from . import traveller_vault as TV
+    body = await request.json()
+    who = body.get("who")
+    return await TV.invite(account_for(request), [str(x) for x in who] if isinstance(who, list) else None, body.get("movement") or None)
+
+
+# the member's own page: NO account — the signed, single-person, 7-day token IS the key (gate.py lets /api/booking/vault/ through)
+vault = APIRouter(prefix="/vault", tags=["vault"])
+
+
+def _refused(e):
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"ok": False, "rule": e.rule, "message": e.message}, status_code=403 if e.rule == "link_expired" else 400,
+                        headers={"Cache-Control": "no-store"})
+
+
+@vault.get("/{token}")
+async def vault_page(token: str):
+    from . import traveller_vault as TV
+    try:
+        return await TV.page(token)
+    except TV.VaultRefused as e:
+        return _refused(e)
+
+
+@vault.post("/{token}")
+async def vault_save(token: str, request: Request):
+    from . import traveller_vault as TV
+    body = await request.json()
+    try:
+        return await TV.save(token, body.get("passport") if isinstance(body.get("passport"), dict) else None,
+                             [x for x in body.get("loyalty") or [] if isinstance(x, dict)][:10])
+    except TV.VaultRefused as e:
+        return _refused(e)
+
+
+@vault.delete("/{token}")
+async def vault_delete(token: str, request: Request):
+    from . import traveller_vault as TV
+    try:
+        return await TV.erase(token, request.query_params.get("item") or None)
+    except TV.VaultRefused as e:
+        return _refused(e)

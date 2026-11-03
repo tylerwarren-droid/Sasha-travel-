@@ -1529,6 +1529,19 @@ async def group_plan(ctx: Ctx, a: dict) -> dict:
             "the master list fills in as I go. Nothing is booked yet."}
 
 
+async def group_invite_vault(ctx: Ctx, a: dict) -> dict:
+    """Sasha 333 · each member's own secure page for their passport and loyalty numbers — NEVER collected in chat."""
+    from booking_signer import traveller_vault as TV
+    r = _group_err(await TV.invite(ctx.account, a.get("who") or None))
+    e, f = r["emailed"], r["forward"]
+    say = (f"I've emailed {len(e)} {'person' if len(e) == 1 else 'people'} their own secure link." if e else "")
+    if f:
+        say += (" " if say else "") + (f"{len(f)} {'has' if len(f) == 1 else 'have'} no email on the list — their links are on the master "
+                                       "list page to forward.")
+    return {"emailed": len(e), "to_forward": len(f), "say": say + " They add their passport there; you'll see a ✓, never the numbers.",
+            "page": "/group", "links": f}
+
+
 async def group_list(ctx: Ctx, a: dict) -> dict:
     from booking_signer import groups as G
     v = await G.view(ctx.account)
@@ -1789,6 +1802,9 @@ TOOLS: List[dict] = [
        {"by_grade": {"type": "object"}, "by_person": {"type": "object"}}, [], {"type": "object"}, ["no_movement", "unknown_person"]),
     _t("group_plan", "Magellan", group_plan, "Plan everyone on the group's list, one by one, within their limits (planning only — nothing is "
        "booked). Say its `say`.", {}, [], {"type": "object"}, ["no_movement"]),
+    _t("group_invite_vault", "Magellan", group_invite_vault, "Invite group members (by name, or everyone) to add their passport and "
+       "loyalty numbers on their OWN secure page. NEVER ask for a passport or any number in chat. Say its `say`.",
+       {"who": {"type": "array", "items": {"type": "string"}}}, [], {"type": "object"}, ["no_movement"]),
     _t("group_list", "Magellan", group_list, "The group's master list: each person's status (planned / needs vault / over limit / booked / "
        "cancelled). Say its `say`; the full list is on the master list page.", {}, [], {"type": "object"}, ["no_movement"]),
     _t("remove_saved_card", "Pacioli", remove_saved_card, "Remove the card Stripe saved for them (\"remove my saved card\", \"forget my card\"). "

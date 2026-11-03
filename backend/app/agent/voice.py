@@ -317,7 +317,7 @@ SAYS = ("prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_
         "call_again",   # Sasha 269 · the act's own `say`
         "booking_outcomes", "start_count",   # Sasha 324 · the founder's count, said (its `say`), no card
         "remove_saved_card",   # Sasha 327
-        "group_start", "group_upload", "group_limits", "group_plan", "group_list")   # Sasha 332
+        "group_start", "group_upload", "group_limits", "group_plan", "group_list", "group_invite_vault")   # Sasha 332
 
 FAILED = "{what} didn't work{why}. Say the word and I'll try again."
 

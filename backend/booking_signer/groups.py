@@ -39,6 +39,8 @@ COLUMNS = {
     "out_date": ("out", "out date", "outbound", "arrive", "arrival", "start", "ida", "fecha ida", "llegada", "departure"),
     "back_date": ("back", "back date", "return", "return date", "end", "vuelta", "fecha vuelta", "regreso"),
     "grade": ("grade", "role", "level", "category", "categoria", "categoría", "puesto", "rank"),
+    "email": ("email", "e-mail", "mail", "correo", "email address"),   # Sasha 333 · where their vault invite goes
+    "phone": ("phone", "mobile", "whatsapp", "teléfono", "telefono", "móvil", "movil"),
 }
 ORDER = ("name", "home_city", "out_date", "back_date", "grade")   # a list with no header: in this order
 _MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))}
@@ -212,7 +214,11 @@ def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: O
             unclear.append({"line": r.get("_line"), "row": {k: v for k, v in r.items() if not k.startswith("_")}, "why": why})
             continue
         seen.add(name.lower())
-        good.append({"name": name, "home_city": city, "out_date": out, "back_date": back, "grade": grade})
+        email = _norm(r.get("email")).lower() or None
+        phone = re.sub(r"[^\d+]", "", _norm(r.get("phone"))) or None
+        good.append({"name": name, "home_city": city, "out_date": out, "back_date": back, "grade": grade,
+                     **({"email": email} if email and re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", email) else {}),
+                     **({"phone": phone} if phone and re.fullmatch(r"\+\d{8,15}", phone) else {})})
     return good, unclear
 
 
@@ -260,10 +266,12 @@ class PgStore:
             n = 0
             for m in members:
                 n += 1 if await c.fetchval(
-                    "insert into group_members (movement_id, name, home_city, out_date, back_date, grade) values ($1,$2,$3,$4,$5,$6) "
-                    "on conflict (movement_id, name) do update set home_city = excluded.home_city, out_date = excluded.out_date, "
-                    "back_date = excluded.back_date, grade = excluded.grade returning id",
-                    uuid.UUID(movement_id), m["name"], m["home_city"], _d(m["out_date"]), _d(m["back_date"]), m.get("grade")) else 0
+                    "insert into group_members (movement_id, name, home_city, out_date, back_date, grade, email, phone) values "
+                    "($1,$2,$3,$4,$5,$6,$7,$8) on conflict (movement_id, name) do update set home_city = excluded.home_city, "
+                    "out_date = excluded.out_date, back_date = excluded.back_date, grade = excluded.grade, "
+                    "email = coalesce(excluded.email, group_members.email), phone = coalesce(excluded.phone, group_members.phone) returning id",
+                    uuid.UUID(movement_id), m["name"], m["home_city"], _d(m["out_date"]), _d(m["back_date"]), m.get("grade"),
+                    m.get("email"), m.get("phone")) else 0
             return n
         return await self._run(go)
 
@@ -271,6 +279,11 @@ class PgStore:
         async def go(c):
             return [_row(r) for r in await c.fetch("select * from group_members where movement_id = $1 order by created_at, name",
                                                    uuid.UUID(movement_id))]
+        return await self._run(go)
+
+    async def members_by_phone(self, number: str) -> List[dict]:
+        async def go(c):
+            return [_row(r) for r in await c.fetch("select * from group_members where phone = $1", number)]
         return await self._run(go)
 
     async def trip_of(self, owner: str, member: dict, title: str) -> str:
@@ -318,6 +331,9 @@ class MemStore:
 
     async def members(self, movement_id):
         return [dict(x) for x in self.rows[movement_id]]
+
+    async def members_by_phone(self, number):
+        return [dict(x) for rows in self.rows.values() for x in rows if x.get("phone") == number]
 
     async def trip_of(self, owner, member, title):
         row = next(x for rows in self.rows.values() for x in rows if x["id"] == member["id"])
@@ -468,7 +484,7 @@ async def plan(account: str, movement_id: Optional[str] = None, only: Optional[L
 # ── 5 · THE MASTER LIST: a view over each worker's trip, read now ─────────────────────────────────────────────────────────────
 
 ITEMS: Optional[Callable[[str, str], Awaitable[List[dict]]]] = None   # tests replace it (else basket.items)
-VAULT: Optional[Callable[[dict], Awaitable[bool]]] = None             # Sasha 333 builds the vault: until then nobody's documents are in it
+VAULT: Optional[Callable[[dict], Awaitable[bool]]] = None             # tests replace it (else traveller_vault.has_passport — Sasha 333)
 
 
 async def _items(account: str, trip_id: str) -> List[dict]:
@@ -479,7 +495,11 @@ async def _items(account: str, trip_id: str) -> List[dict]:
 
 
 async def _has_documents(member: dict) -> bool:
-    return bool(VAULT and await VAULT(member))
+    """Sasha 333 · the member's passport is in THEIR vault (the Keep, under their member id) — known as ✓ / missing, never a number."""
+    if VAULT is not None:
+        return bool(await VAULT(member))
+    from . import traveller_vault as TV
+    return await TV.has_passport(member)
 
 
 def status_of(rows: List[dict], lim: dict, documents: bool) -> str:
@@ -505,6 +525,18 @@ def _transport(rows: List[dict]) -> Optional[str]:
                       f"{(r.get('snapshot') or {}).get('to') or ''} {str(r.get('day') or '')[:10]}".strip() for r in fl)
 
 
+async def _vault_marks(m: dict) -> Dict[str, Any]:
+    """Sasha 333 · what the organiser sees of a member's vault: ✓ / missing and a programme's name — never a number."""
+    if VAULT is not None:
+        return {"vault": {"passport": bool(await VAULT(m)), "loyalty": []}}
+    try:
+        from . import traveller_vault as TV
+        v = await TV.vault_view(m)
+        return {"vault": {"passport": v["passport"], "loyalty": v["loyalty"]}}
+    except Exception:
+        return {"vault": {"passport": False, "loyalty": []}}
+
+
 async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any]:
     """THE MASTER LIST, computed from each worker's ONE trip as it is now — never stored."""
     st = store()
@@ -524,6 +556,7 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
                     "out": m.get("out_date"), "back": m.get("back_date"), "trip_id": m.get("trip_id"),
                     "transport": _transport(rows), "hotel": (stay.get("snapshot") or {}).get("name") if stay else None,
                     "flight_eur": f_eur, "hotel_eur_per_night": h_eur, "price_eur": price, "limit": lim,
+                    **(await _vault_marks(m)),
                     "status": status_of(rows, lim, await _has_documents(m))})
     counts = {s: sum(1 for r in out if r["status"] == s) for s in STATUSES if any(r["status"] == s for r in out)}
     return {"movement": {k: mv.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on", "hotel_area")},

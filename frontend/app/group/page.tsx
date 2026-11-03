@@ -10,7 +10,7 @@ import { bookingReq } from '@/lib/booking-client'
 
 type Row = { member_id: string; name: string; grade?: string | null; home_city?: string | null; out?: string | null; back?: string | null
   transport?: string | null; hotel?: string | null; price_eur?: number | null; flight_eur?: number | null; hotel_eur_per_night?: number | null
-  limit: { flight_return_eur?: number; hotel_night_eur?: number }; status: string }
+  limit: { flight_return_eur?: number; hotel_night_eur?: number }; status: string; vault?: { passport: boolean; loyalty: string[] } }
 type View = { movement?: { company?: string; destination?: string; starts_on?: string; ends_on?: string; hotel_area?: string }
   rows: Row[]; counts?: Record<string, number>; why?: string }
 
@@ -23,6 +23,7 @@ export default function GroupPage() {
   const [text, setText] = useState('')
   const [said, setSaid] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [links, setLinks] = useState<{ name: string; link: string }[]>([])
 
   useEffect(() => {
     let off = false
@@ -41,6 +42,14 @@ export default function GroupPage() {
     setBusy(false)
     const j = (r?.json || {}) as { added?: number; ask?: string | null; why?: string; message?: string }
     setSaid(r?.ok ? `Added ${j.added ?? 0}.${j.ask ? ' ' + j.ask : ''}` : (j.why || j.message || 'That list couldn’t be read — try again.'))
+  }
+  const invite = async (who: string[] | null) => {   // Sasha 333 · each member's own secure page — never collected in chat
+    setBusy(true)
+    const r = await bookingReq('/api/booking/group/invite', { who }, 60000).catch(() => null)
+    setBusy(false)
+    const j = (r?.json || {}) as { emailed?: string[]; forward?: { name: string; link: string }[]; why?: string }
+    setLinks(j.forward || [])
+    setSaid(r?.ok ? `Emailed ${j.emailed?.length ?? 0}.${j.forward?.length ? ` ${j.forward.length} to forward below.` : ''}` : (j.why || 'Not sent — try again.'))
   }
   const onFile = (f: File | undefined) => {
     if (!f) return
@@ -62,11 +71,13 @@ export default function GroupPage() {
           rows={3} style={{ display: 'block', width: '100%', marginTop: 8, boxSizing: 'border-box' }} />
         <button type="button" disabled={busy || !text.trim()} onClick={() => send({ text })} style={{ marginTop: 8 }}>Add these</button>
         {said && <p data-upload-said style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{said}</p>}
+        <button type="button" disabled={busy || !v?.rows?.length} onClick={() => invite(null)} style={{ marginTop: 8 }}>Invite everyone to the vault</button>
+        {links.length > 0 && <ul data-forward>{links.map(l => <li key={l.link}>{l.name}: <a href={l.link}>their secure link</a></li>)}</ul>}
       </section>
       {!v ? <p>Loading…</p> : v.why ? <p>{v.why}</p> : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead><tr>{['Name', 'Grade', 'From', 'Transport', 'Hotel', 'Price', 'Limit', 'Status'].map(h =>
+            <thead><tr>{['Name', 'Grade', 'From', 'Transport', 'Hotel', 'Price', 'Limit', 'Vault', 'Status'].map(h =>
               <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #eaecf0', padding: '6px 8px' }}>{h}</th>)}</tr></thead>
             <tbody>{v.rows.map(r => (
               <tr key={r.member_id} data-status={r.status}>
@@ -78,6 +89,8 @@ export default function GroupPage() {
                 <td style={{ padding: '6px 8px' }}>{eur(r.price_eur)}</td>
                 <td style={{ padding: '6px 8px' }}>{[r.limit.flight_return_eur && `flight ≤ ${eur(r.limit.flight_return_eur)}`,
                   r.limit.hotel_night_eur && `hotel ≤ ${eur(r.limit.hotel_night_eur)}/night`].filter(Boolean).join(' · ') || '—'}</td>
+                <td style={{ padding: '6px 8px' }} data-vault>{r.vault?.passport ? 'Passport ✓' : 'Passport missing'}{r.vault?.loyalty?.length ? ` · ${r.vault.loyalty.map(x => `${x} ✓`).join(' · ')}` : ''}
+                  {!r.vault?.passport && <button type="button" disabled={busy} onClick={() => invite([r.member_id])} style={{ marginLeft: 6 }}>Invite</button>}</td>
                 <td style={{ padding: '6px 8px', color: TONE[r.status] || '#101828', fontWeight: 600 }}>{r.status}</td>
               </tr>))}</tbody>
           </table>

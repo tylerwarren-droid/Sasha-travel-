@@ -185,7 +185,7 @@ def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optiona
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venues",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
-          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_start": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
+          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_start": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "inline", "group_invite_vault": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})

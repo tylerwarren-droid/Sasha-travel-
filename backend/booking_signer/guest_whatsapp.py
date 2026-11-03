@@ -687,6 +687,14 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     stopped = await IV.on_invitee_stop(sender, p.get("Body") or "")
     if stopped:
         return _twiml_message(stopped)
+    try:   # Sasha 333 · "delete my passport" from a group member's OWN number (this webhook's signed sender): their vault deleted
+        from . import traveller_vault as TV
+        gone = await TV.delete_by_phone(sender, p.get("Body") or "")
+    except Exception as e:
+        log.warning("[guest_whatsapp] vault delete not done: %s", type(e).__name__)
+        gone = None
+    if gone:
+        return _twiml_message(gone)
     # Sasha 253 · item 5 — RETIRED: Sasha 153's automatic guest account for a new number (GA.create_guest("whatsapp") + STORE.link
     # + a turn, behind SASHA_AUTO_GUESTS). Tyler (mailbox 807): a new user links their number once on /you; an unlinked number gets
     # the ONE line below — never the old flow, never an account made for it.

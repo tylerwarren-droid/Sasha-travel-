@@ -614,6 +614,7 @@ from products import routes as _products  # noqa: E402
 router.include_router(_products.router)   # CR 1 products · /api/booking/products/* (CampusMe, relocation; backend/products/)
 from . import group_routes as _group_routes  # noqa: E402
 router.include_router(_group_routes.router)   # Sasha 332 · /api/booking/group/* (the master list, the list upload)
+router.include_router(_group_routes.vault)   # Sasha 333 · /api/booking/vault/{token} — the member's own page (the token is the key)
 
 
 # S-53 · the daily retention job (retention.py) starts with the app; off in tests and without a database

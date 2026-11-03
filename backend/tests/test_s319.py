@@ -88,6 +88,7 @@ WHO = {
     "booking_signer/proactive.py": "the GUEST — their own WhatsApp reminder",
     "booking_signer/invitations.py": "a person the guest invites to their trip — never a venue",
     "booking_signer/live_events.py": "the person — their own email of a live event",
+    "booking_signer/traveller_vault.py": "a group member — their own vault invite link (Sasha 333), never a venue",
     "booking_signer/ops.py": "a new Sasha user — their sign-in invitation (founder op)",
     "booking_signer/ops_log.py": "the founder's own test line (a test call, never a venue)",
     "booking_signer/demo_ops.py": "the person's own Gmail — Kanoe's own test venue's confirmation (a demo; never a real venue)",

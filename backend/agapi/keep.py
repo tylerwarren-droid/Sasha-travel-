@@ -48,7 +48,10 @@ TYPES: Dict[str, dict] = {
                                                                           "city": (1, 80, "text"), "postcode": (1, 16, "text"),
                                                                           "country": (2, 2, "iso2")}},
     "passport":          {"tier": YES, "name": "Passport", "fields": {"number": (5, 20, "id"), "country": (2, 2, "iso2"),
-                                                                   "expires_on": (10, 10, "date")}},
+                                                                   "expires_on": (10, 10, "date"),
+                                                                   # Sasha 333 · what an airline needs with it (optional here: the frozen vectors
+                                                                   # stand; the traveller vault page asks for both) — AgAPI's copy: same CR ask
+                                                                   "name": (0, 80, "text"), "born_on": (0, 10, "date")}},
     "national_id":       {"tier": YES, "name": "National ID", "fields": {"kind": (2, 5, "enum:dni|nie|other"), "number": (5, 20, "id"),
                                                                        "country": (2, 2, "iso2")}},
     "trusted_traveller": {"tier": YES, "name": "Trusted traveller", "fields": {

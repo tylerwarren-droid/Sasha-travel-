@@ -8,6 +8,7 @@ Taps come back as the same turns /s2 sends:
     pick:<place_id>   a venue row in the list picker → the row's name + pick_hint (that card's place_id)
     say:<words>       a flight / stay row → its words, as /next's Choose button says them ("the Iberia flight out at 10:35")
     yn:yes / yn:no    the [Yes] [No] under a read-back → "yes" / "no" — in a LATER turn than the read-back, as on /s2
+    card:<rid>:<route> Sasha 330 · a read-back card's own tap (the cancel's Yes / No) → sasha.card_tap, the SAME claim-once as /s2's
 
 Never a card on "your screen": every card is text (and, where it helps, its /s2 page).
 """
@@ -33,7 +34,7 @@ GREETING = re.compile(r"(?i)^\s*(?:(?:hi|hello|hey|hiya|hola|buenas|ola|good\s+(
 
 def ours(payload: str) -> bool:
     """A button from THIS brain (not an in-flight one from the old flows, which finish there)."""
-    return payload.startswith(("pick:", "say:", "yn:", "photo:", "keep:"))
+    return payload.startswith(("pick:", "say:", "yn:", "photo:", "keep:", "card:"))
 
 
 # ── Sasha 238 · the agent's own WhatsApp state ──
@@ -155,7 +156,7 @@ def _read_back(ev: dict, out) -> None:
             out.pick(str(ev["ask"])[:1000], "Choose", [(_cut(t, TITLE), "", "say:" + t[:190]) for t in picks[:LIST_ROWS]])
         return
     if not lines and ev.get("ask") and ev.get("choices"):   # Sasha 314 · the SHORT read-back: its one line IS the card, with Yes / No
-        out.ask(str(ev["ask"])[:1000], [("Yes", "yn:yes"), ("No", "yn:no")])
+        out.ask(str(ev["ask"])[:1000], _buttons(ev))
         return
     if not lines:
         return
@@ -164,7 +165,24 @@ def _read_back(ev: dict, out) -> None:
         return
     # Sasha 309 · ONE message: the request as it goes (AgAPI's lines), her one line, and its buttons — a tap or a typed yes sends it once
     body = "\n".join(lines) + (f"\n\n{ev['ask']}" if ev.get("ask") else "")
-    out.ask(body[:1000], [("Yes", "yn:yes"), ("No", "yn:no")])
+    out.ask(body[:1000], _buttons(ev))
+
+
+#: Sasha 330 · the card routes WhatsApp sends to sasha.card_tap (the cancel read-back's Yes / No) — the SAME claim as /s2's tap
+CARD_ROUTES = ("cancel", "keep")
+
+
+def _buttons(ev: dict) -> list:
+    """Sasha 330 · a read-back's reply buttons, DRAWN from its own `choices` (sasha.yes_buttons — the one place): the cancel's Yes / No
+    → card:<read_back_id>:<route> (card_tap); typed-word taps (say:<words>) as they are. PATCH (pre-existing): the venue booking
+    card's send / call / page keep WhatsApp's typed [Yes] [No] (yn:) — claimed once by the act's own read-back-bound claim."""
+    rid = str(ev.get("read_back_id") or "")
+    cs = [c for c in ev.get("choices") or [] if isinstance(c, dict) and c.get("title") and c.get("route")]
+    if rid and cs and all(str(c["route"]) in CARD_ROUTES for c in cs):
+        return [(_cut(c["title"], 20), f"card:{rid[:80]}:{c['route']}") for c in cs]
+    if cs and all(str(c["route"]).startswith("say:") for c in cs):
+        return [(_cut(c["title"], 20), str(c["route"])[:200]) for c in cs]
+    return [("Yes", "yn:yes"), ("No", "yn:no")]
 
 
 def _card(ev: dict, out, title: str) -> None:
@@ -331,6 +349,8 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
     account, key = ch["account_id"], ch["wa_id_sha256"]
     if payload.startswith("photo:"):
         return await _photo_purpose(ch, payload, st, out, now)
+    if payload.startswith("card:"):   # Sasha 330 · a read-back card's own tap: straight to card_tap, no model between (as /s2)
+        return await card_tap(ch, payload, st, out, now, button_text)
     said_keep = await _keep_answer(account, body, payload, st, out, now)
     if said_keep is not None:
         return said_keep
@@ -434,6 +454,33 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         await MEM.remember(account, "wa:" + key, message[:4000], text, seen)
     except Exception as e:
         log.warning("[wa_agent] turn not kept in memory: %s", type(e).__name__)
+    return text
+
+
+async def card_tap(ch: dict, payload: str, st: dict, out, now, button_text: str = "") -> str:
+    """Sasha 330 · [Yes, cancel it] / [No, keep it] on WhatsApp → sasha.card_tap — the SAME function /s2's tap calls, with the SAME
+    claim (card_tap:<account>:<read_back_id>:<choice>, durable): a second tap on that card sends nothing. Surface "s2" (WhatsApp's brain
+    is S2: the one-yes gate); its yes is signed by this message's verified WhatsApp (venue_submit.WA, set by inbound_phone)."""
+    from agapi import s2_memory as MEM
+    from app.agent import sasha as AG
+    _, rid, route = (payload.split(":", 2) + ["", ""])[:3]
+    account, key = ch["account_id"], ch["wa_id_sha256"]
+    said = button_text or next((c["title"] for c in AG._V.CANCEL_CHOICES if c["route"] == route), route)
+    text, renders, calls = "", [], []
+    async for ev in AG.card_tap(account, "wa:" + key, "s2", {"read_back_id": rid, "choice": route}, said):
+        if ev.get("type") == "render":
+            renders.append(ev)
+        elif ev.get("type") == "done":
+            text, calls = str(ev.get("text") or ""), ev.get("tools") or []
+    for part in split(text):
+        out.text(part)
+    for ev in renders:
+        render(ev, out, st, now)
+    _remember_history(st, said, text)
+    try:   # awaited, in the turn — never fire-and-forget
+        await MEM.remember(account, "wa:" + key, said, text, {"calls": calls})
+    except Exception as e:
+        log.warning("[wa_agent] tap not kept in memory: %s", type(e).__name__)
     return text
 
 
@@ -665,5 +712,5 @@ def note_audio(token: str) -> Optional[bytes]:
     return n["audio"] if n and time.time() - n["at"] <= NOTE_TTL_S else None
 
 
-__all__ = ["ours", "message_of", "render", "KIND_MAP", "agent_turn", "split", "photo_intake", "tts_note", "note_audio",
+__all__ = ["ours", "message_of", "render", "KIND_MAP", "agent_turn", "card_tap", "split", "photo_intake", "tts_note", "note_audio",
            "agent_state", "set_agent_state", "unpack_state", "pack_pending", "purpose_of", "is_photo"]

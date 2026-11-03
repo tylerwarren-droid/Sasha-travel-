@@ -151,6 +151,14 @@ FLOOR = floor_line()
 # "no" from AgAPI's gate is the same line as their own WhatsApp. Her voice names no channel here (AgAPI's "{venue} takes booking
 # requests by WhatsApp — …" names and limits it: her own line instead).
 KANOE_CHOICES = ({"title": "Yes, send it", "route": "send"},)
+# Sasha 330 · "give me a button": the cancel read-back's two taps (card_tap → venues.cancel_card, the booking card's claim-once rule)
+CANCEL_CHOICES = ({"title": "Yes, cancel it", "route": "cancel"}, {"title": "No, keep it", "route": "keep"})
+# Sasha 330 · a read-back whose yes must be the person's OWN words (book(): yes_to_book · a venue read-back with no card of its own): its
+# buttons are typed-word taps — the tap sends these words as their message, as WhatsApp's [Yes] always has ("say:<words>")
+TYPED_YES_CHOICES = ({"title": "Yes, book it", "route": "say:Yes, book it"}, {"title": "No", "route": "say:No"})
+CANCEL_KEPT = "Kept — nothing changed."
+CARD_ANSWERED = "That card's already answered."
+CANCEL_NOT_TAKEN = "Nothing was cancelled — say “yes, cancel it” and I'll do it."
 SEND_ON_WHATSAPP = "Send on WhatsApp"   # the hand-over button's label (AgAPI's), never said
 OWN_WHATSAPP = "I've written it for you: tap the button and it goes from your phone; they'll reply to you."
 
@@ -1122,5 +1130,5 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
-           "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
+           "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
            "wa_done_line", "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]

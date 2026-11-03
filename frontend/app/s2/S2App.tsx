@@ -391,22 +391,28 @@ function After({ k }: { k: string }) {
 
 
 
-/** Sasha 287 · the card's yes button (gold): "Call them" (265) and Kanoe's WhatsApp "Yes, send it" — the tap IS the approval. */
-const YES = new Set(['call', 'send'])
+/** Sasha 287 · the card's yes button (gold): "Call them" (265) and Kanoe's WhatsApp "Yes, send it" — the tap IS the approval.
+ *  Sasha 330 · + the cancel read-back's "Yes, cancel it"; a typed-word yes ("say:Yes, book it") is gold too. */
+const YES = new Set(['call', 'send', 'cancel'])
+const isYes = (route: string) => YES.has(route) || /^say:yes\b/i.test(route)
 
 /** Sasha 265 · item 4 (CR 99): THE ONE QUESTION IS THE CARD — "Fill in their page" / "Call them" (or one "OK"). The tap goes to the server
- *  with the card's read_back_id: there it IS the approval (approvals.in_app_tap), no model between. One tap: the buttons go. */
+ *  with the card's read_back_id: there it IS the approval (approvals.in_app_tap), no model between. One tap: the buttons go.
+ *  Sasha 330 · THE ONE CARD for every read-back that needs a yes (book, pay, cancel — the server's sasha.yes_buttons): the cancel's
+ *  "Yes, cancel it" / "No, keep it" go to the same tap; a "say:<words>" route sends its words as their own message. */
 function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (title: string, readBackId: string, route: string) => void }) {
   const [tapped, setTapped] = useState<string | null>(null)
+  const head = c.act === 'cancel' ? 'Ready to cancel · one tap'
+    : c.total ? `Ready to book · €${Math.round(c.total).toLocaleString()} all in` : 'Your booking · one tap'
   return (
-    <Box k="Your booking · one tap" h={untag(c.ask || '')}>
+    <Box k={head} h={untag(c.ask || '')}>
       {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
         {(c.choices || []).map(o => (
           <button key={o.route} type="button" disabled={!!tapped} data-card-choice={o.route}
             onClick={() => { setTapped(o.route); tap(o.title, c.read_back_id || '', o.route) }}
-            style={{ padding: '10px 18px', borderRadius: 999, border: YES.has(o.route) ? 0 : `1px solid ${C.gold}`, background: YES.has(o.route) ? C.gold : 'transparent',
-              color: YES.has(o.route) ? '#111' : C.gold, fontWeight: 700, opacity: tapped && tapped !== o.route ? 0.4 : 1 }}>{o.title}</button>))}
+            style={{ padding: '10px 18px', borderRadius: 999, border: isYes(o.route) ? 0 : `1px solid ${C.gold}`, background: isYes(o.route) ? C.gold : 'transparent',
+              color: isYes(o.route) ? '#111' : C.gold, fontWeight: 700, opacity: tapped && tapped !== o.route ? 0.4 : 1 }}>{o.title}</button>))}
       </div>
     </Box>)
 }
@@ -1123,7 +1129,7 @@ export default function S2App() {
                     {m.text}</div>
                 ) : <div aria-busy="true" data-sasha-working style={{ color: C.dim, padding: '8px 4px' }}>{m.hold || '…'}</div>}{/* Sasha 259 · ONE working mark: the holding line, else "…" (aria-busy says she's working) */}
                 {/* Sasha 230 · a pick sends the card's name QUOTED: a listing like "Comida Hindu - Restaurante India, NAMASTE INDIA(…)" + ", please." read as TWO places — she asked which, the yes didn't answer it, the loop */}
-                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} tap={(title, rid, route) => { speaker.unlock(); send(title, undefined, route === 'call_again' ? { act_id: rid, choice: route } : { read_back_id: rid, choice: route }) }} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} tap={(title, rid, route) => { speaker.unlock(); if (route.startsWith('say:')) { send(route.slice(4)); return }   /* Sasha 330 · a typed-word tap: their own words */ send(title, undefined, route === 'call_again' ? { act_id: rid, choice: route } : { read_back_id: rid, choice: route }) }} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>

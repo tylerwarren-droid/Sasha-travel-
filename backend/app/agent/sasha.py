@@ -252,7 +252,10 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         # Sasha 256 · demo path item 10: on a screen the venue read-back is a CARD (she says one line over it, venues.READ_BACK_ASK)
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]],
                 # Sasha 265 · item 4: the call's card IS the ONE question — its words and its buttons (the tap is the approval)
-                **({"ask": res["ask"], "choices": res["choices"], "read_back_id": res.get("read_back_id")} if res.get("choices") else {})}
+                **yes_buttons(tool, res)}   # Sasha 330 · from THE ONE PLACE
+    if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 330 · "give me a button": the
+        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "cancel",   # cancel's read-back, on
+                **yes_buttons(tool, res)}                                                                       # the SAME card
     if tool in ("hold_venue", "book_venue") and res.get("status") == "draft_message" and res.get("read_back"):   # Sasha 273 · item 2: the
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]]}               # draft's booking card too
     if tool in ("book_venue", "hold_venue") and isinstance(res.get("prepared"), dict):   # Sasha 248 · "fill it now": their page + every detail, one-tap copy
@@ -339,8 +342,32 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
                 **({"what": "email" if tool == "send_email" else "whatsapp", "live": bool(res.get("live"))}
                    if tool in ("send_email", "send_whatsapp") else {}),   # Sasha 216 · its own card words
                 **({"total": res["breakdown"]} if res.get("breakdown") else {}),   # Sasha 215 · the re-quote refreshes the pill
-                **({"handoff": (res.get("keep") or {})["handoff"]} if tool == "hold_booking" and (res.get("keep") or {}).get("handoff") else {})}   # Sasha 228 · "Add from your phone", beside it
+                **({"handoff": (res.get("keep") or {})["handoff"]} if tool == "hold_booking" and (res.get("keep") or {}).get("handoff") else {}),   # Sasha 228 · "Add from your phone", beside it
+                **yes_buttons(tool, res)}   # Sasha 330 · the pay read-back's Yes / No, from THE ONE PLACE
     return None
+
+
+def yes_buttons(tool: str, res: dict) -> dict:
+    """Sasha 330 · THE ONE PLACE a read-back gets its Yes / No: {ask, choices, read_back_id} for a read-back that needs a yes, else {}.
+    Every render of such a read-back takes its buttons from here (/s2 draws them with CallCard, WhatsApp with wa_agent._buttons) — never
+    a second set. tests/test_s330.py TheOnePlace enumerates them:
+      book   — hold_venue / book_venue awaiting_yes: the tool's own choices (Kanoe's "Yes, send it", the call card's, the platform
+               question's pick:<option>) → card_tap → venues.answer_card; a read-back with none: typed-word taps (its yes is their words)
+      pay    — hold_booking: typed-word taps — book()'s yes must be the person's own words (yes_to_book), so the tap SENDS them
+      cancel — cancel_venue awaiting_yes: "Yes, cancel it" / "No, keep it" → card_tap → venues.cancel_card (the claim-once rule)"""
+    if not isinstance(res, dict) or not res.get("read_back"):
+        if not (tool in ("hold_venue", "book_venue") and isinstance(res, dict) and res.get("choices")):   # Kanoe's short read-back:
+            return {}                                                                                   # its one line, its button
+    if tool in ("hold_venue", "book_venue") and res.get("status") == "awaiting_yes":
+        choices = [dict(c) for c in res.get("choices") or []] or [dict(c) for c in _V.TYPED_YES_CHOICES]
+        rid = res.get("read_back_id")
+        return {"ask": str(res.get("ask") or ""), "choices": choices, "read_back_id": rid} if rid else {}
+    if tool == "hold_booking" and res.get("read_back_sha256"):
+        return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.TYPED_YES_CHOICES],
+                "read_back_id": str(res["read_back_sha256"])[:40]}
+    if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back_id"):
+        return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.CANCEL_CHOICES], "read_back_id": res["read_back_id"]}
+    return {}
 
 
 def stays_card(res: dict) -> dict:
@@ -1853,21 +1880,27 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
             yield ev
         return
     rid = str(tap.get("read_back_id") or "")[:80]
-    choice = tap.get("choice") if tap.get("choice") in ("page", "send") else "call"   # Sasha 287 · "send": Kanoe's one line, its yes
+    # Sasha 287 · "send": Kanoe's one line, its yes · Sasha 330 · "cancel" / "keep": the cancel read-back's Yes / No (same claim, same card)
+    choice = tap.get("choice") if tap.get("choice") in ("page", "send", "cancel", "keep") else "call"
     if str(tap.get("choice") or "").startswith("pick:"):   # Sasha 328 · an option of the platform's ONE question (their "Zona")
         choice = str(tap["choice"])[:200]
-    ctx.idem = f"card_tap:{account}:{rid}:{choice}"
-    tool = "hold_venue" if choice == "page" else "book_venue"
+    ctx.idem = f"card_tap:{account}:{rid}:{choice}"   # THE CLAIM-ONCE RULE: this card, this choice — once, durably
+    cancel = choice in ("cancel", "keep")
+    tool = "cancel_venue" if cancel else "hold_venue" if choice == "page" else "book_venue"
     try:
-        res = await VN.answer_card(ctx, rid, choice)
+        res = await (VN.cancel_card if cancel else VN.answer_card)(ctx, rid, choice)
         r = {"ok": True, "result": res}
     except API.ToolError as e:
         res, r = {"status": "refused", "say": e.message}, {"ok": False, "error": {"code": e.code, "message": e.message}}
+        if cancel and e.code not in API.UNREACHABLE:   # her words, never the tool's note to the model
+            res["say"] = _V.CANCEL_NOT_TAKEN
     ev = render(tool, res, {}) if r["ok"] else None
     if ev:
         yield ev
+    if cancel and r["ok"] and res.get("status") not in ("nothing_waiting", "kept"):
+        yield {"type": "trip_changed"}   # as a typed yes's cancel_venue: the Trip view and My bookings refresh
     if res.get("status") == "nothing_waiting":
-        line = _V.NOTHING_WAITING
+        line = str(res.get("line") or _V.NOTHING_WAITING)
     else:
         line = (_V.yes_line(tool, r) or _V.page_line(tool, r) or str(res.get("line") or res.get("say") or "")).strip()
     yield {"type": "text", "delta": line}

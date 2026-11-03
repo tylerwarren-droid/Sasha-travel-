@@ -74,6 +74,12 @@ def shown(ctx, name: str, result) -> None:
     _APV.pop(key, None)
 
 
+def dropped(account: str, act: str) -> None:
+    """Sasha 330 · the person said no to the read-back (the card's "No, keep it"): it, and any yes to it, are gone — never acted on."""
+    _RB.pop((account, act), None)
+    _APV.pop((account, act), None)
+
+
 def heard(ctx, name: str, said: Optional[str]) -> None:
     """Before an S2 act runs: their words this turn, if a yes to a read-back from an EARLIER turn, are the approval."""
     key = (ctx.account, name)

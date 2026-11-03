@@ -1935,6 +1935,8 @@ def _hold(ctx, rung: str, rid: str, read_back: dict, rd: dict, res: dict, extra:
         # WhatsApp and voice have no card: they keep the read-back in words.
         out["ask"] = READ_BACK_ASK.format(venue=out["venue"])
         out["how"] = "Say `ask` word for word — every detail is on the card on their screen; never read the details out."
+    # Sasha 330 · the card's id (AgAPI's read_back_id, else this read-back's own sha): its Yes / No (sasha.yes_buttons) answer THIS one only
+    out["read_back_id"] = str((extra or {}).get("read_back_id") or read_back["sha256"])[:80]
     _HELD[ctx.account]["out"] = out   # Sasha 217 · the same booking held again gets these words, unchanged
     # Sasha 236 · held again in the turn they said yes to it (found live on /s2: she re-held and asked again, turn after turn):
     # the read-back is the one they heard in an EARLIER turn, and this turn's words are an explicit yes → book it now
@@ -2549,12 +2551,54 @@ async def _cancel_act(ctx, a: dict, held: Optional[dict], said: str, explicit_ye
         c = _CANCEL[ctx.account]
         ask = V.platform_cancel_ask(_API().plain_venue(venue) or "them", c["date"], c["time"], c["party"], c.get("reference"))
         return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"], "ask": ask,
+                "read_back_id": rb["read_back_id"],   # Sasha 330 · its card's Yes / No (sasha.yes_buttons) answer THIS read-back only
                 "how": "Say `ask` word for word — nothing is cancelled until they say yes. On their yes, call cancel_venue again with "
                        "approval.said = their words."}
     if await one_instruction(ctx, venue, "cancel", rows):
         # Sasha 314 / 317 · "cancel my DiverXO booking", exactly one booking, from the app or their verified WhatsApp: that message IS the approval
         return await _cancel_now(ctx, _CANCEL[ctx.account], said)
-    return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"]}
+    from app.agent import voice as V
+    c = _CANCEL[ctx.account]   # Sasha 330 · the same ONE question as a platform cancel's, over its card's Yes / No
+    return {"status": "awaiting_yes", "venue": venue, "route": "agapi", "read_back": rb["lines"], "read_back_id": rb["read_back_id"],
+            "ask": V.platform_cancel_ask(_API().plain_venue(venue) or "them", c.get("date"), c.get("time"), c.get("party"), row.get("reference"))}
+
+
+async def cancel_card(ctx, read_back_id: str, choice: str) -> dict:
+    """Sasha 330 · "give me a button" · a tap on the cancel read-back's card (sasha.card_tap, /s2 or WhatsApp) — the booking card's rule:
+    ONLY for the read-back held now (its read_back_id), once (card_tap's ctx.idem, claimed durably). "cancel" → the SAME path as a typed
+    yes (_cancel_act, said = the button's words: an explicit yes in a later turn, CR 76's one-yes gate, venue.cancel_booking with the
+    tap). "keep" → the held cancel dropped, nothing sent. A card already answered → nothing_waiting (AgAPI is not called)."""
+    from agapi.v0 import ToolError, claim, stale, yes_to_cancel, _unclaim
+    from agapi import yes_gate as YG
+    from app.agent import voice as V
+    held = _CANCEL.get(ctx.account)
+    if not held or held.get("read_back_id") != read_back_id or not held.get("act_id"):
+        return {"status": "nothing_waiting", "line": V.CARD_ANSWERED}
+    if stale(held["at"]):   # over 15 minutes: never acted on (as cancel_venue) — read back afresh when they ask again
+        _CANCEL.pop(ctx.account, None)
+        return {"status": "nothing_waiting", "line": V.CARD_ANSWERED}
+    if choice == "keep":
+        try:
+            await claim(ctx)   # card_tap's key: this card's "keep", once
+        except ToolError:
+            return {"status": "nothing_waiting", "line": V.CARD_ANSWERED}
+        _CANCEL.pop(ctx.account, None)
+        YG.dropped(ctx.account, "cancel_venue")
+        return {"status": "kept", "venue": held.get("venue"), "sent": False, "line": V.CANCEL_KEPT,
+                "how": "Say `line` word for word — nothing was sent."}
+    said = next(c["title"] for c in V.CANCEL_CHOICES if c["route"] == "cancel")
+    if getattr(ctx, "surface", "") == "s2":   # CR 76 · the ONE-YES gate, as for a typed yes: this tap, heard as the yes to the read-back shown
+        ctx.act_name, ctx.act_said = "cancel_venue", said
+        YG.heard(ctx, "cancel_venue", said)
+    try:
+        return await _cancel_act(ctx, {"act_id": held["act_id"]}, held, said, yes_to_cancel)
+    except ToolError as e:
+        if e.code == "already_done":   # the same card tapped twice at once: the first one went
+            return {"status": "nothing_waiting", "line": V.CARD_ANSWERED}
+        await _unclaim(ctx)   # refused before anything was sent: the card's next yes may act
+        raise
+    finally:
+        ctx.act_name = ctx.act_said = None
 
 
 def _platform_cancelled(held: dict, r: dict) -> dict:
@@ -2675,4 +2719,4 @@ def V_cancel_line(held: dict) -> str:
     return V.cancel_sent_line(held.get("venue") or "them", held.get("date"), held.get("time"), held.get("party"))
 
 
-__all__ = ["read_booking_route", "hold_venue", "book_venue", "cancel_venue", "venue_bookings"]
+__all__ = ["read_booking_route", "hold_venue", "book_venue", "cancel_venue", "cancel_card", "venue_bookings"]

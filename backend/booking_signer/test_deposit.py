@@ -135,6 +135,11 @@ async def session_state(session_id: str) -> Optional[dict]:
             "amount": (cs.get("amount_total") or 0) / 100}
 
 
+async def read_session(session_id: str):
+    """Read-only: a checkout session as Stripe returns it (the pay proof checks its fields). → (status, body)."""
+    return await HTTP("GET", f"/checkout/sessions/{session_id}", {})
+
+
 async def expire(session_id: str) -> bool:
     """Sasha 215 · a checkout that must never be paid (its booking record wasn't written): expired at Stripe, so the page refuses."""
     if not key():

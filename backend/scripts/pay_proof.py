@@ -28,12 +28,12 @@ async def run() -> bool:
     TD.customer_of = mine
     try:
         page = await TD.checkout("12.00", "EUR", "pay proof", "proof327", account="proof")   # the Pay-now page: wallets first, save ON
-        s2, cs = await TD.HTTP("GET", f"/checkout/sessions/{page.get('id')}", {})
+        s2, cs = await TD.read_session(page.get("id") or "")   # read-only, through the one place
         ok &= _p(s2 == 200 and cs.get("customer") == cid and (cs.get("custom_text") or {}).get("submit") is not None
                  and "card" in (cs.get("payment_method_types") or []),
                  "the Pay-now page: his customer, the save wording, its payment methods", {"methods": cs.get("payment_method_types"),
                                                                                          "save": (cs.get("custom_text") or {}).get("submit")})
-        await TD.HTTP("POST", f"/checkout/sessions/{page['id']}/expire", {})
+        await TD.expire(page["id"])   # through the one place, like every payment call
 
         s3, pm = await TD.HTTP("POST", "/payment_methods/pm_card_visa/attach", {"customer": cid})   # what "save" leaves at Stripe
         card = await TD.saved_card("proof")

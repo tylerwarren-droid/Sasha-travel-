@@ -25,7 +25,7 @@ One contract for every client.
 
 | Agent | Role | Tools |
 |---|---|---|
-| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay` |
+| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_start`, `group_upload`, `group_limits`, `group_plan`, `group_list` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
 | **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email`, `send_whatsapp` |
 | **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `remove_saved_card`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
@@ -474,6 +474,176 @@ Change where they stay in one city of the trip (take a name from search_stays). 
    }
   }
  }
+}
+```
+
+### `group_start`
+
+Start a GROUP MOVEMENT for an organiser: their company moving people somewhere (e.g. 20 workers to Madrid), with the dates and ONE hotel area (e.g. "near the factory in Getafe"). Then ask for the list.
+
+**Errors:** `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "company": {
+   "type": "string"
+  },
+  "destination": {
+   "type": "string"
+  },
+  "starts_on": {
+   "type": "string"
+  },
+  "ends_on": {
+   "type": "string"
+  },
+  "hotel_area": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "company",
+  "destination"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "say": {
+   "type": "string"
+  }
+ }
+}
+```
+
+### `group_upload`
+
+The organiser's list of people, pasted or typed (one person per line: name, home city, out date, back date, grade). Pass their text EXACTLY. Say its `say` as it is — it asks ONE question for every unclear row.
+
+**Errors:** `no_movement`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "text": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "text"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "added": {
+   "type": "integer"
+  },
+  "say": {
+   "type": "string"
+  }
+ }
+}
+```
+
+### `group_limits`
+
+The group's price limits, per grade ({"worker": {"flight_return_eur": 600, "hotel_night_eur": 110}}) or per person by name. Only the numbers they said.
+
+**Errors:** `no_movement`, `unknown_person`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "by_grade": {
+   "type": "object"
+  },
+  "by_person": {
+   "type": "object"
+  }
+ },
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
+}
+```
+
+### `group_plan`
+
+Plan everyone on the group's list, one by one, within their limits (planning only — nothing is booked). Say its `say`.
+
+**Errors:** `no_movement`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {},
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
+}
+```
+
+### `group_list`
+
+The group's master list: each person's status (planned / needs vault / over limit / booked / cancelled). Say its `say`; the full list is on the master list page.
+
+**Errors:** `no_movement`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {},
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
 }
 ```
 

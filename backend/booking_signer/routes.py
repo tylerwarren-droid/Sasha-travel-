@@ -612,6 +612,8 @@ router.include_router(venue_notice.router)
 # S-55 · the Work-with-Sasha page is retired (Sasha 319: never used; its venue email was Sasha's own send). Its tables stay.
 from products import routes as _products  # noqa: E402
 router.include_router(_products.router)   # CR 1 products · /api/booking/products/* (CampusMe, relocation; backend/products/)
+from . import group_routes as _group_routes  # noqa: E402
+router.include_router(_group_routes.router)   # Sasha 332 · /api/booking/group/* (the master list, the list upload)
 
 
 # S-53 · the daily retention job (retention.py) starts with the app; off in tests and without a database

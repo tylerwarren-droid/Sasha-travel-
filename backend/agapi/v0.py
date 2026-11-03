@@ -19,6 +19,7 @@ docs/agapi/api-v0.md is GENERATED from TOOLS (scripts/agapi_doc.py).
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -1472,6 +1473,71 @@ async def book(ctx: Ctx, a: dict) -> dict:
     return await _paid_out(ctx, got, where)
 
 
+# ── Sasha 332 · GROUP MOVEMENT v1: the organiser's steps (booking_signer/groups.py — each worker's ONE trip, the master list a view) ──
+
+def _group_err(r: dict) -> dict:
+    if r.get("why"):
+        raise ToolError("no_movement", r["why"])
+    return r
+
+
+async def group_start(ctx: Ctx, a: dict) -> dict:
+    from booking_signer import groups as G
+    r = await G.start(ctx.account, a["company"], a["destination"], a.get("starts_on"), a.get("ends_on"), a.get("hotel_area"))
+    return {**r, "say": f"Got it — {a['company']} to {a['destination']}" + (f", hotel near {a['hotel_area']}" if a.get("hotel_area") else "")
+            + ". Send me the list of people: a spreadsheet, a photo of it, or paste it here."}
+
+
+async def group_upload(ctx: Ctx, a: dict) -> dict:
+    """The list as pasted / typed text (a file or a photo comes through the master list page's upload)."""
+    from booking_signer import groups as G
+    r = _group_err(await G.upload(ctx.account, G.read_text(a["text"])))
+    say = f"I've added {r['added']} {'person' if r['added'] == 1 else 'people'} to the list."
+    return {**r, "say": f"{say} {r['ask']}" if r.get("ask") else say}
+
+
+async def group_limits(ctx: Ctx, a: dict) -> dict:
+    """Price limits per grade ({grade: {flight_return_eur, hotel_night_eur}}) or per person (by name) — on the movement's ONE rules."""
+    from booking_signer import groups as G
+    by_member = None
+    if a.get("by_person"):
+        mv = await G.store().movement(ctx.account)
+        names = {m["name"].lower(): m["id"] for m in (await G.store().members(mv["id"]) if mv else [])}
+        missing = [n for n in a["by_person"] if n.lower() not in names]
+        if missing:
+            raise ToolError("unknown_person", "not on the list: " + ", ".join(missing))
+        by_member = {names[n.lower()]: v for n, v in a["by_person"].items()}
+    r = _group_err(await G.set_limits(ctx.account, a.get("by_grade"), by_member))
+    return {**r, "say": "Limits set — I'll plan everyone within them, and flag anyone over."}
+
+
+_GROUP_PLANS: Dict[str, Any] = {}
+
+
+async def group_plan(ctx: Ctx, a: dict) -> dict:
+    """Work through the list one by one — planning only (booking is CR 163). It runs on its own; the master list fills in as it goes."""
+    from booking_signer import groups as G
+    run = _GROUP_PLANS.get(ctx.account)
+    if run is not None and not run.done():
+        return {"status": "planning", "say": "I'm already working through the list — the master list fills in as each person is planned."}
+    mv = await G.store().movement(ctx.account)
+    if not mv:
+        raise ToolError("no_movement", "there's no group movement yet")
+    _GROUP_PLANS[ctx.account] = asyncio.ensure_future(G.plan(ctx.account, mv["id"]))
+    n = len(await G.store().members(mv["id"]))
+    return {"status": "planning", "people": n, "say": f"I'm working through all {n} now, one by one, each within their limit — "
+            "the master list fills in as I go. Nothing is booked yet."}
+
+
+async def group_list(ctx: Ctx, a: dict) -> dict:
+    from booking_signer import groups as G
+    v = await G.view(ctx.account)
+    if v.get("why"):
+        raise ToolError("no_movement", v["why"])
+    return {"counts": v["counts"], "people": len(v["rows"]), "say": G.summary(v, top=8 if ctx.via != "wa" else 25),
+            "page": "/group"}
+
+
 async def remove_saved_card(ctx: Ctx, a: dict) -> dict:
     """Sasha 327 · "remove my saved card": every card Stripe saved for him, detached (Stripe holds it; Sasha never had the number)."""
     from booking_signer import test_deposit as TD
@@ -1711,6 +1777,20 @@ TOOLS: List[dict] = [
     _t("start_count", "Pacioli", start_count, "FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookings before it "
        "aren't counted and aren't changed. Only when the founder says to start it.", {"from": {"type": "string"}}, [],
        {"type": "object", "properties": {"from": {"type": "string"}, "say": {"type": "string"}}}, ["founder_only", "invalid_input"]),
+    _t("group_start", "Magellan", group_start, "Start a GROUP MOVEMENT for an organiser: their company moving people somewhere (e.g. 20 workers to "
+       "Madrid), with the dates and ONE hotel area (e.g. \"near the factory in Getafe\"). Then ask for the list.",
+       {"company": {"type": "string"}, "destination": {"type": "string"}, "starts_on": {"type": "string"}, "ends_on": {"type": "string"},
+        "hotel_area": {"type": "string"}}, ["company", "destination"], {"type": "object", "properties": {"say": {"type": "string"}}}, []),
+    _t("group_upload", "Magellan", group_upload, "The organiser's list of people, pasted or typed (one person per line: name, home city, out "
+       "date, back date, grade). Pass their text EXACTLY. Say its `say` as it is — it asks ONE question for every unclear row.",
+       {"text": {"type": "string"}}, ["text"], {"type": "object", "properties": {"added": {"type": "integer"}, "say": {"type": "string"}}}, ["no_movement"]),
+    _t("group_limits", "Magellan", group_limits, "The group's price limits, per grade ({\"worker\": {\"flight_return_eur\": 600, "
+       "\"hotel_night_eur\": 110}}) or per person by name. Only the numbers they said.",
+       {"by_grade": {"type": "object"}, "by_person": {"type": "object"}}, [], {"type": "object"}, ["no_movement", "unknown_person"]),
+    _t("group_plan", "Magellan", group_plan, "Plan everyone on the group's list, one by one, within their limits (planning only — nothing is "
+       "booked). Say its `say`.", {}, [], {"type": "object"}, ["no_movement"]),
+    _t("group_list", "Magellan", group_list, "The group's master list: each person's status (planned / needs vault / over limit / booked / "
+       "cancelled). Say its `say`; the full list is on the master list page.", {}, [], {"type": "object"}, ["no_movement"]),
     _t("remove_saved_card", "Pacioli", remove_saved_card, "Remove the card Stripe saved for them (\"remove my saved card\", \"forget my card\"). "
        "Their next booking shows the payment page again. Say its `say` as it is.", {}, [],
        {"type": "object", "properties": {"removed": {"type": "integer"}, "say": {"type": "string"}}}, ["payments_unreachable"]),

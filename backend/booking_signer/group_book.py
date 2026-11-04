@@ -97,7 +97,11 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
     items = []
     planned = await _planned(account, m)   # Sasha 337 · from the worker's ONE trip, at this moment
     for frm, to, day in ((m["home_city"], mv["destination"], m["out_date"]), (mv["destination"], m["home_city"], m["back_date"])):
-        r = await _call(account, "travel.find_flights", {"origin": {"query": frm}, "destination": {"query": to}, "date": str(day)[:10], "passengers": 1})
+        q = {"origin": {"query": frm}, "destination": {"query": to}, "date": str(day)[:10], "passengers": 1}
+        r = await _call(account, "travel.find_flights", q)
+        if not r.get("ok") and (r.get("error") or {}).get("code") in ("upstream_failed", "upstream_rate_limited"):   # Sasha 339 · once more
+            await SLEEP(5)
+            r = await _call(account, "travel.find_flights", q)
         offers = (r.get("result") or {}).get("offers") or [] if r.get("ok") else []
         if not offers:
             return None, f"no flight {frm} → {to} on {str(day)[:10]} on AgAPI's sandbox" + (f" ({(r.get('error') or {}).get('code')})" if not r.get("ok") else "")
@@ -126,7 +130,8 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
 
 # ── Sasha 339 · the limit at booking, AgAPI's busy answer, a gone offer ─────────────────────────────────────────────────────────
 
-BOOK_PARALLEL = 4          # read-backs prepared at once (AgAPI and Duffel TEST share one token: bounded, never 18 at a time)
+BOOK_PARALLEL = 2          # read-backs prepared at once (AgAPI and Duffel TEST share ONE token: 4 at once drew its limits — the 339 proof)
+ACT_PARALLEL = 1           # acts after the yes: one at a time (Duffel TEST refused orders 4 at once; the job makes the time free)
 SLEEP = asyncio.sleep      # tests replace it
 
 
@@ -464,7 +469,7 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     st = G.store()
     mv = await st.movement(account)
     members = {m["id"]: m for m in await st.members(mv["id"])}
-    done, failed, sem, n = [], [], asyncio.Semaphore(BOOK_PARALLEL), [0]   # Sasha 339 · each act in parallel (bounded), counted
+    done, failed, sem, n = [], [], asyncio.Semaphore(ACT_PARALLEL), [0]   # Sasha 339 · each act (bounded: one at a time), counted
     if progress:
         progress(0, len(c["items"]))
 

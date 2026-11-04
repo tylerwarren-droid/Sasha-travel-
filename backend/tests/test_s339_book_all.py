@@ -75,7 +75,7 @@ class OneJobOneCard(unittest.TestCase):
         self.assertEqual(card["read_back"].count(""), 19)                                   # 19 read-backs on ONE card …
         self.assertTrue(card["read_back_id"].startswith("grp_"))                             # … with ONE id → ONE Yes
         self.assertEqual((seen[0], seen[-1]), ((0, 20), (20, 20)))                           # progress, counted
-        self.assertTrue(1 < w.agapi.peak <= GB.BOOK_PARALLEL, w.agapi.peak)                 # in parallel, never more than 4
+        self.assertTrue(1 < w.agapi.peak <= GB.BOOK_PARALLEL, w.agapi.peak)                 # in parallel, never more than BOOK_PARALLEL
 
     def test_the_job_answers_at_once_and_never_reads_nothing_to_do(self):
         with World(PricedAgAPI(slow=0.05)):

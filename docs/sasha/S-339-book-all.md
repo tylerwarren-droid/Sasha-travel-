@@ -4,7 +4,7 @@
 
 **1. Book all is ONE background job.** `group_book.start(account, …)` runs the ONE `prepare`. The job's own state is the only thing the page reads: preparing N, k ready, then the result.
 
-- Each worker's read-back is prepared in parallel, at most `BOOK_PARALLEL` (4) at a time.
+- Each worker's read-back is prepared in parallel, at most `BOOK_PARALLEL` (2) at a time. The acts after the Yes run one at a time (`ACT_PARALLEL` = 1): the proof showed Duffel TEST, on one shared token, refusing orders four at once and failing long-haul searches. A search answered `upstream_failed` or `upstream_rate_limited` is tried once more after 5 s.
 - AgAPI's "busy" answer (`upstream_rate_limited`) is waited out once, for the `retry_after_s` it gives.
 - The result is ONE card listing every bookable worker's read-back, with ONE Yes (330's one place, the same `_CARDS`).
 - /group shows the progress: "Preparing 18… 12 ready".
@@ -27,7 +27,7 @@ AgAPI's approval_required answer has no structured prices (only the lines). Sash
 
 **The whole class** (`tests/test_s339_book_all.py`):
 
-- 18 workers prepare in parallel (never more than 4 at once), with progress counted;
+- 18 workers prepare in parallel (never more than BOOK_PARALLEL at once), with progress counted;
 - a slow AgAPI never reaches the page as "Nothing to do";
 - ONE card, ONE Yes;
 - a gone offer is re-planned once, then held per worker;

@@ -122,6 +122,14 @@ def _with_buttons(out: dict) -> dict:
     return out
 
 
+@router.get("/waiting")
+async def group_waiting(request: Request):
+    """Sasha 340 · the moved-fare cards still waiting for a yes (each its own Yes / No) — the page asks on load."""
+    from . import group_book as GB
+    return {"reasked": _with_buttons({"reasked": GB.waiting_cards(account_for(request))})["reasked"]
+            if GB.waiting_cards(account_for(request)) else []}
+
+
 @router.get("/job")
 async def group_job(request: Request):
     """Sasha 339 · the book job's progress ("Preparing 18… 12 ready"), then its ONE card (with its Yes / No) or what held each worker."""

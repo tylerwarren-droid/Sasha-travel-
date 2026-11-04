@@ -73,10 +73,14 @@ class MovedFareReaskedAlone(unittest.TestCase):
             self.assertIn("The fare moved for Bruno Example", out["say"])
             from app.agent.sasha import yes_buttons
             self.assertEqual([c["route"] for c in yes_buttons("group_book", re)["choices"]], ["group_yes", "group_no"])   # its own Yes
+            waiting_before = [x["name"] for x in GB.waiting_cards(OWNER)]
             again = run(GB.confirm(OWNER, re["read_back_id"], "group_yes", "Yes, go ahead."))
+            waiting_after = [x["name"] for x in GB.waiting_cards(OWNER)]
             listed = {r["name"]: r["status"] for r in run(G.view(OWNER))["rows"]}
             inv = run(GB.invoice(OWNER))
         self.assertEqual((len(again["done"]), again["failed"], again["reasked"]), (1, [], []))
+        self.assertEqual(waiting_before, ["Bruno Example"])                                    # a reload finds THAT card
+        self.assertEqual(waiting_after, [])
         self.assertEqual(sum(1 for s in listed.values() if s == "booked"), 19)               # the master list = AgAPI's record
         self.assertEqual(len(inv["lines"]), 19)
 

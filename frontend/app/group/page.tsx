@@ -40,6 +40,10 @@ export default function GroupPage() {
       if (!off && r?.ok) setV(r.json as unknown as View)
     }
     pull()
+    bookingReq('/api/booking/group/waiting').then(r => {   // Sasha 340 · a moved fare's card survives a reload
+      const re = ((r?.json || {}) as { reasked?: NonNullable<typeof card>[] }).reasked || []
+      if (!off && re.length) { setCard(re[0]); setQueue(re.slice(1)) }
+    }).catch(() => {})
     const t = setInterval(pull, 6000)
     return () => { off = true; clearInterval(t) }
   }, [])

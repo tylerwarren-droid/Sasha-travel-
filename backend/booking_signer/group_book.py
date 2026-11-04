@@ -579,6 +579,18 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     return {"status": "done", "done": done, "failed": failed, "reasked": cards, "say": say}
 
 
+def waiting_cards(account: str) -> List[Dict[str, Any]]:
+    """Sasha 340 · the moved-fare cards still waiting for THIS organiser's yes (the ONE card store, in time) — a reload never loses one."""
+    out = []
+    for cid, c in list(_CARDS.items()):
+        it = (c.get("items") or [{}])[0]
+        if c["account"] == account and len(c.get("items") or []) == 1 and it.get("moved") and time.time() - c["at"] <= CARD_S:
+            out.append({"status": "awaiting_yes", "action": c["action"], "read_back": list(it.get("lines") or []), "read_back_id": cid,
+                        "name": it["name"], "ask": f"Book {it['name']} at the new fare? Everything is on the card (TEST — nothing is charged now).",
+                        "verb": "Book"})
+    return out
+
+
 def _card_for(account: str, action: str, it: dict) -> Dict[str, Any]:
     """ONE worker's own card (a moved fare, re-asked alone): the SAME card store, the same Yes / No (yes_buttons in the route)."""
     cid = "grp_" + secrets.token_hex(10)

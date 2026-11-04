@@ -36,7 +36,7 @@ AgAPI's approval_required answer has no structured prices (only the lines). Sash
 
 ## Found in the proof (live, agapi-sandbox 08ffd01), fixed here
 
-- **The trip follows AgAPI's ONE booking record** (Tyler). A worker's trip said "planned" while AgAPI's record said "booked", because a settle failed after the act. Now `group_book.reconcile` settles each worker's current plan rows to the state of their latest `group.bookings` record: booked, or cancelled / swapped out. It runs on every master-list read and once after every yes, so the two can't disagree for longer than one read. Book all's skip of a worker with a live AgAPI booking stays only as a belt: **PATCH (said)**.
+- **The trip follows AgAPI's ONE booking record** (Tyler). A worker's trip said "planned" while AgAPI's record said "booked", because a settle failed after the act. Now `group_book.reconcile` settles each worker's current plan rows to the state of their latest `group.bookings` record: booked, or cancelled / swapped out. It runs on every master-list read and once after every yes. The master list's STATUS is the record itself (`record_states`): booked, or cancelled / swapped out. The trip rows decide only for a worker AgAPI never booked, and superseded rows never count. Book all's skip of a worker with a live AgAPI booking stays only as a belt: **PATCH (said)**.
 - **The settle** touches only the current plan's rows. A re-plan's superseded rows collided (`AlreadyRecorded`), and the act AgAPI had made was wrongly said as "nothing was changed".
 - **The invoice** is this movement's only. AgAPI keeps one record list per organiser, across their movements.
 - **A planned newcomer's rows ARE the swap's booking.** There is no second set of rows.

@@ -188,6 +188,16 @@ class NeverTwice(unittest.TestCase):
         self.assertIn(("old-booked", "suggested"), w.settled)                                  # released first …
         self.assertEqual({r["state"] for r in w.trips[m["trip_id"]] if r.get("id") != "old-booked" and r["kind"] == "flight"}, {"booked"})
 
+    def test_the_status_is_the_record_even_beside_a_stale_plan(self):
+        with World() as w:
+            card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
+            run(w.tap(card["read_back_id"]))
+            m = next(x for x in w.members() if x["name"] == "Amara Sample")
+            w.trips[m["trip_id"]].append({"id": "stale", "kind": "flight", "state": "suggested", "snapshot": {"owner": "Old plan"}})   # an older plan's row
+            row = next(r for r in run(G.view(OWNER))["rows"] if r["name"] == "Amara Sample")
+        self.assertEqual(row["status"], "booked")                                              # AgAPI's record says so: booked
+        self.assertNotIn("Old plan", row["transport"] or "")                                   # and the list shows what was booked
+
     def test_a_cancel_at_agapi_is_followed_too(self):
         with World() as w:
             card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))

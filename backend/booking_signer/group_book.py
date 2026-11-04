@@ -237,16 +237,26 @@ def _latest(records: List[dict], member_id: str) -> Optional[dict]:
     return next((b for b in reversed(records) if (b.get("worker") or {}).get("key") == member_id), None)
 
 
-async def reconcile(account: str, members: List[dict], records: Optional[List[dict]] = None) -> int:
+def record_states(records: List[dict], members: List[dict]) -> Dict[str, str]:
+    """Sasha 339 (Tyler) · each worker's state AS AgAPI'S ONE RECORD SAYS: booked / cancelled (cancelled or swapped out) — absent when AgAPI has
+    no record of them. The master list's status reads THIS first; the trip rows only decide for a worker AgAPI never booked."""
+    out = {}
+    for m in members:
+        b = _latest(records, m["id"])
+        if b and b.get("state") in ("booked", "cancelled", "swapped_out"):
+            out[m["id"]] = "booked" if b["state"] == "booked" else "cancelled"
+    return out
+
+
+async def reconcile(account: str, members: List[dict], records: Optional[List[dict]] = None) -> Dict[str, str]:
     """Sasha 339 (Tyler) · THE ONE BOOKING RECORD DECIDES: each worker's trip follows AgAPI's group.bookings — their latest record booked →
     their current plan's rows booked (with its references); cancelled / swapped out → cancelled. Run on every master-list read and once
     after every yes, so a trip row and AgAPI's record can never disagree for longer than one read. → rows changed."""
     from . import groups as G, basket as BK
     if records is None:
         if not await _agapi_reachable(account):
-            return 0
+            return {}
         records = await _records(account)
-    n = 0
     for m in members:
         b = _latest(records, m["id"])
         if not b or not m.get("trip_id"):
@@ -255,13 +265,12 @@ async def reconcile(account: str, members: List[dict], records: Optional[List[di
         if not want:
             continue
         rows = [r for r in await G._items(account, str(m["trip_id"])) if not BK.superseded(r) and r.get("state") in ("suggested", "chosen", "booked")]
-        if rows and any(r.get("state") != want for r in rows):
+        if rows and not any(r.get("state") == want for r in rows):   # the trip hasn't heard yet: it follows (once)
             try:
                 await _settle(account, str(m["trip_id"]), want, b.get("parts") or [] if want == "booked" else [])
-                n += 1
             except Exception as e:
                 log.warning("[group_book] %s not reconciled: %s", m["name"], type(e).__name__)
-    return n
+    return record_states(records, members)
 
 
 # ── prepare: AgAPI's read-backs, ONE card ───────────────────────────────────────────────────────────────────────────────────

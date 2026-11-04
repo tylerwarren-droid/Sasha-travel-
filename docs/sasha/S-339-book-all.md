@@ -33,3 +33,12 @@ AgAPI's approval_required answer has no structured prices (only the lines). Sash
 - a gone offer is re-planned once, then held per worker;
 - a stay over the limit is held with the words, and booked only after "book anyway";
 - a swap's body carries the newcomer's own flights, each with its planned price.
+
+## Found in the proof (live, agapi-sandbox 08ffd01), fixed here
+
+- **The trip follows AgAPI's ONE booking record** (Tyler). A worker's trip said "planned" while AgAPI's record said "booked", because a settle failed after the act. Now `group_book.reconcile` settles each worker's current plan rows to the state of their latest `group.bookings` record: booked, or cancelled / swapped out. It runs on every master-list read and once after every yes, so the two can't disagree for longer than one read. Book all's skip of a worker with a live AgAPI booking stays only as a belt: **PATCH (said)**.
+- **The settle** touches only the current plan's rows. A re-plan's superseded rows collided (`AlreadyRecorded`), and the act AgAPI had made was wrongly said as "nothing was changed".
+- **The invoice** is this movement's only. AgAPI keeps one record list per organiser, across their movements.
+- **A planned newcomer's rows ARE the swap's booking.** There is no second set of rows.
+- **`trip_basket_items.snapshot` is an object.** The pool's jsonb codec already JSON-encodes, so `json.dumps(…)::jsonb` stored a string, and a re-search's `||` made arrays, which crashed the master list. Writes now use `$n::text::jsonb`, and the merge is object-safe. The readers turn the old shapes into dicts: **PATCH (said)** until 051 runs. 051 repairs the rows. Proved on real Postgres with production's codec.
+- **Duffel TEST shares one token.** Four orders at once were refused, and long-haul searches failed. So the acts after the yes run one at a time, read-backs two at a time, and a failed search is tried once more.

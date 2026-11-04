@@ -544,7 +544,13 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     if not mv:
         return {"rows": [], "why": "there's no group movement yet"}
     out = []
-    for m in await st.members(mv["id"]):
+    members = await st.members(mv["id"])
+    try:   # Sasha 339 (Tyler) · every read: the trips follow AgAPI's ONE booking record first (group_book.reconcile)
+        from . import group_book as GB
+        await GB.reconcile(account, members)
+    except Exception as e:
+        log.warning("[groups] the list not reconciled with AgAPI's record: %s", type(e).__name__)
+    for m in members:
         rows = await _items(account, m["trip_id"]) if m.get("trip_id") else []
         lim = limit_for(mv.get("rules") or {}, m)
         fl = [r for r in rows if r.get("kind") == "flight"]

@@ -224,6 +224,46 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
     return "skip", {"name": m["name"], "member_id": m["id"], "kind": "no_fare", "why": "no fare left — nothing held"}
 
 
+async def _agapi_reachable(account: str) -> bool:
+    """A key for the group family's target exists (or a test's AgAPI) — else no record can be read, and nothing is settled from it."""
+    if CALL is not None:
+        return True
+    import os
+    from agapi import agapi_route as AR
+    return bool(os.getenv(AR.key_name(await AR.target_for(FAMILY, account)), "").strip())
+
+
+def _latest(records: List[dict], member_id: str) -> Optional[dict]:
+    return next((b for b in reversed(records) if (b.get("worker") or {}).get("key") == member_id), None)
+
+
+async def reconcile(account: str, members: List[dict], records: Optional[List[dict]] = None) -> int:
+    """Sasha 339 (Tyler) · THE ONE BOOKING RECORD DECIDES: each worker's trip follows AgAPI's group.bookings — their latest record booked →
+    their current plan's rows booked (with its references); cancelled / swapped out → cancelled. Run on every master-list read and once
+    after every yes, so a trip row and AgAPI's record can never disagree for longer than one read. → rows changed."""
+    from . import groups as G, basket as BK
+    if records is None:
+        if not await _agapi_reachable(account):
+            return 0
+        records = await _records(account)
+    n = 0
+    for m in members:
+        b = _latest(records, m["id"])
+        if not b or not m.get("trip_id"):
+            continue
+        want = "booked" if b.get("state") == "booked" else "cancelled" if b.get("state") in ("cancelled", "swapped_out") else None
+        if not want:
+            continue
+        rows = [r for r in await G._items(account, str(m["trip_id"])) if not BK.superseded(r) and r.get("state") in ("suggested", "chosen", "booked")]
+        if rows and any(r.get("state") != want for r in rows):
+            try:
+                await _settle(account, str(m["trip_id"]), want, b.get("parts") or [] if want == "booked" else [])
+                n += 1
+            except Exception as e:
+                log.warning("[group_book] %s not reconciled: %s", m["name"], type(e).__name__)
+    return n
+
+
 # ── prepare: AgAPI's read-backs, ONE card ───────────────────────────────────────────────────────────────────────────────────
 
 def summary_taps(skipped: List[dict]) -> List[Dict[str, Any]]:
@@ -270,7 +310,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
     if action == "book":   # Sasha 339 · each worker in parallel (bounded), progress counted — the card in member order
         pick = [by_name[w.lower()] for w in who or [] if w.lower() in by_name] if who else members
         todo = [(m, view.get(m["id"], {}).get("status")) for m in pick if view.get(m["id"], {}).get("status") != "booked"
-                and not _live_record(records, m["id"])]   # booked at AgAPI = booked, whatever the trip row says
+                and not _live_record(records, m["id"])]   # PATCH (said, Tyler): a belt only — reconcile() makes the trip follow the record
         sem, done = asyncio.Semaphore(BOOK_PARALLEL), [0]
         if progress:
             progress(0, len(todo))
@@ -487,6 +527,10 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
         if progress:
             progress(n[0], len(c["items"]))
     await asyncio.gather(*(act(it) for it in c["items"]))
+    try:   # Sasha 339 (Tyler) · the trips follow AgAPI's ONE record after every yes
+        await reconcile(account, list(members.values()))
+    except Exception as e:
+        log.warning("[group_book] reconcile after the yes: %s", type(e).__name__)
     order = {it["name"]: i for i, it in enumerate(c["items"])}
     done.sort(key=lambda d: order.get(d["name"], 0))
     failed.sort(key=lambda d: order.get(d["name"], 0))

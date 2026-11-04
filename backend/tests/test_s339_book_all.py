@@ -173,9 +173,19 @@ class NeverTwice(unittest.TestCase):
                 raise RuntimeError("trip down")
             with mock.patch.object(GB, "SETTLE", lost):
                 run(w.tap(card["read_back_id"]))
+            listed = {r["name"]: r["status"] for r in run(G.view(OWNER))["rows"]}               # the read reconciles with AgAPI's record
             again = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
-        self.assertEqual(again["status"], "nothing")                                           # never a second booking
+        self.assertEqual(listed["Amara Sample"], "booked")                                      # the trip FOLLOWS the one record (Tyler)
+        self.assertEqual(again["status"], "nothing")                                            # never a second booking
         self.assertEqual(sum(1 for b in w.agapi.records if b["worker"]["name"] == "Amara Sample"), 1)
+
+    def test_a_cancel_at_agapi_is_followed_too(self):
+        with World() as w:
+            card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
+            run(w.tap(card["read_back_id"]))
+            next(b for b in w.agapi.records if b["worker"]["name"] == "Amara Sample")["state"] = "cancelled"   # changed at AgAPI
+            listed = {r["name"]: r["status"] for r in run(G.view(OWNER))["rows"]}
+        self.assertEqual(listed["Amara Sample"], "cancelled")
 
 
 class OfferGone(unittest.TestCase):

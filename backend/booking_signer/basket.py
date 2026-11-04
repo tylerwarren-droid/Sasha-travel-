@@ -40,6 +40,24 @@ def _run():
     return PS._run()
 
 
+def snapshot_of(v: Any) -> Dict[str, Any]:
+    """Sasha 339 · a snapshot as the dict it is: an object; an old double-encoded string; an old ARRAY ([string, {superseded_at}] —
+    supersede's `||` on a string) merged in order. PATCH (said): reads the old shapes until 051 repairs the rows; new writes are objects."""
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            return {}
+    if isinstance(v, str):
+        return snapshot_of(v)
+    if isinstance(v, list):
+        out: Dict[str, Any] = {}
+        for e in v:
+            out.update(snapshot_of(e))
+        return out
+    return v if isinstance(v, dict) else {}
+
+
 def _row(r) -> Dict[str, Any]:
     d = dict(r)
     for k, v in list(d.items()):
@@ -47,8 +65,8 @@ def _row(r) -> Dict[str, Any]:
             d[k] = str(v)
         elif isinstance(v, (datetime, date)):
             d[k] = v.isoformat()
-        elif k == "snapshot" and isinstance(v, str):
-            d[k] = json.loads(v)
+        elif k == "snapshot":
+            d[k] = snapshot_of(v)
         elif hasattr(v, "as_tuple"):   # Decimal
             d[k] = float(v)
     return d
@@ -234,7 +252,7 @@ async def suggest(account: str, trip_id: str, kind: str, found: List[Dict[str, A
                 ids.append(await conn.fetchval(
                     "insert into trip_basket_items (trip_id, account_id, kind, state, slice_key, day, starts_at, ends_at, party, provider, "
                     "provider_ref, offer_request_id, snapshot, expires_at, price_amount, price_currency, price_source, is_test) "
-                    "values ($1,$2,$3,'suggested',$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,$17) returning id",
+                    "values ($1,$2,$3,'suggested',$4,$5,$6,$7,$8,$9,$10,$11,$12::text::jsonb,$13,$14,$15,$16,$17) returning id",   # Sasha 339 · an OBJECT
                     uuid.UUID(trip_id), uuid.UUID(account), kind, slice_key or f.get("slice_key"), _d(f.get("day")), _t(f.get("starts_at")),
                     _t(f.get("ends_at")), f.get("party"), f["provider"], f.get("provider_ref"), f.get("offer_request_id"),
                     json.dumps(f.get("snapshot") or {}), _t(f.get("expires_at")), f.get("price_amount"), f.get("price_currency"),
@@ -297,9 +315,7 @@ def supersede_plan(existing: List[Dict[str, Any]], new_refs: List[Optional[str]]
     refs = {r for r in new_refs if r}
     drop, mark = [], []
     for r in existing:
-        snap = r.get("snapshot") or {}
-        if isinstance(snap, str):
-            snap = json.loads(snap)
+        snap = snapshot_of(r.get("snapshot"))   # Sasha 339 · any old shape, as the dict it is
         if r.get("provider_ref") and r["provider_ref"] in refs:
             drop.append(str(r["id"]))
             continue
@@ -327,9 +343,19 @@ async def _supersede(conn, account: str, trip_id: str, slice_key: Optional[str],
         await conn.execute("delete from trip_basket_items where account_id = $1 and id = any($2::uuid[]) and state = 'suggested'",
                            uuid.UUID(account), [uuid.UUID(i) for i in plan["drop"]])
     if plan["mark"]:
-        await conn.execute("update trip_basket_items set snapshot = snapshot || jsonb_build_object('superseded_at', $3::text), "
+        await conn.execute(f"update trip_basket_items set snapshot = {SNAP_OBJECT} || jsonb_build_object('superseded_at', $3::text), "
                            "updated_at = now() where account_id = $1 and id = any($2::uuid[]) and state = 'suggested'",
                            uuid.UUID(account), [uuid.UUID(i) for i in plan["mark"]], now.isoformat())
+
+
+#: Sasha 339 · a row's snapshot AS AN OBJECT, whatever shape the old writes left: the pool's jsonb codec already JSON-encodes, so
+#: `json.dumps(…)::jsonb` stored every snapshot as a JSON STRING (1,454 rows by 4 Nov), and `string || object` made an ARRAY (57 rows —
+#: the 335 proof's master list crashed on one). Writes are `$n::text::jsonb` now (an object); 051 repairs the old rows; until it runs,
+#: this keeps a merge on an old row an object.
+SNAP_OBJECT = ("(case jsonb_typeof(snapshot) when 'object' then snapshot when 'string' then (snapshot #>> '{}')::jsonb "
+               "when 'array' then (select coalesce(jsonb_object_agg(kv.key, kv.value order by e.n), '{}'::jsonb) from "
+               "jsonb_array_elements(snapshot) with ordinality e(el, n), jsonb_each(case jsonb_typeof(e.el) when 'object' then e.el "
+               "when 'string' then (e.el #>> '{}')::jsonb else '{}'::jsonb end) kv) else '{}'::jsonb end)")
 
 
 def superseded(r: Dict[str, Any]) -> bool:
@@ -352,7 +378,7 @@ async def refresh(account: str, item_id: str, *, provider_ref: Optional[str] = N
     id, the guest's choice kept). Never changes the state."""
     async def fn(conn):
         return await conn.fetchrow(
-            "update trip_basket_items set provider_ref = coalesce($3, provider_ref), snapshot = coalesce($4::jsonb, snapshot), "
+            "update trip_basket_items set provider_ref = coalesce($3, provider_ref), snapshot = coalesce($4::text::jsonb, snapshot), "
             "expires_at = coalesce($5, expires_at), price_amount = coalesce($6, price_amount), price_currency = coalesce($7, price_currency), "
             "updated_at = now() where account_id = $1 and id = $2 and state in ('suggested','chosen') returning *",
             uuid.UUID(account), uuid.UUID(item_id), provider_ref, json.dumps(snapshot) if snapshot is not None else None,
@@ -516,15 +542,15 @@ async def booked(account: str, item_id: str, *, booking_reference: str, order_id
 async def add_to_record(account: str, item_id: str, extra: Dict[str, Any]) -> bool:
     """Sasha 235 · PACIOLI · facts added to a booked item's record (its snapshot), e.g. the loyalty programme it was booked with —
     the number's MASK only, never the number (that goes to the provider, not into this table)."""
-    async def fn(conn):   # read, merge, write back — the snapshot is written as refresh() writes it (json.dumps; _row reads both shapes)
+    async def fn(conn):   # read, merge, write back — as an OBJECT (Sasha 339: $n::text::jsonb)
         async with conn.transaction():
             cur = await conn.fetchval("select snapshot from trip_basket_items where account_id = $1 and id = $2 for update",
                                       uuid.UUID(account), uuid.UUID(item_id))
             if cur is None and not await conn.fetchval("select 1 from trip_basket_items where account_id = $1 and id = $2",
                                                        uuid.UUID(account), uuid.UUID(item_id)):
                 return None
-            snap = json.loads(cur) if isinstance(cur, str) else dict(cur or {})
-            return await conn.fetchval("update trip_basket_items set snapshot = $3::jsonb, updated_at = now() where account_id = $1 and id = $2 "
+            snap = snapshot_of(cur)   # Sasha 339 · any old shape; written back as an object
+            return await conn.fetchval("update trip_basket_items set snapshot = $3::text::jsonb, updated_at = now() where account_id = $1 and id = $2 "
                                        "returning id", uuid.UUID(account), uuid.UUID(item_id), json.dumps({**snap, **extra}))
     try:
         ok = bool(await _go(fn))

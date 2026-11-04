@@ -27,8 +27,8 @@ One contract for every client.
 |---|---|---|
 | **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_start`, `group_upload`, `group_limits`, `group_plan`, `group_invite_vault`, `group_list` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
-| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `send_email`, `send_whatsapp` |
-| **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `remove_saved_card`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
+| **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `group_book`, `group_swap`, `group_cancel`, `send_email`, `send_whatsapp` |
+| **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `group_invoice`, `remove_saved_card`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
 
 ## Magellan
 
@@ -1272,6 +1272,132 @@ Cancel a venue booking, back the way it was made. First call: the read-back (say
 }
 ```
 
+### `group_book`
+
+Book the group's workers through AgAPI (TEST): everyone planned, or the names given. Over-limit workers are only included when the organiser names them AND says to book them anyway (over_limit_ok). Shows AgAPI's read-backs on ONE card with Yes / No — nothing is booked until they tap Yes. Say its `ask`.
+
+**Errors:** `nothing_to_do`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "who": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "over_limit_ok": {
+   "type": "boolean"
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
+}
+```
+
+### `group_swap`
+
+"Luis replaces Ana": swap one worker for another on the list (TEST). The new worker's vault must have their passport — else they're invited. Shows the difference on a card with Yes / No. Say its `ask`.
+
+**Errors:** `nothing_to_do`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "out": {
+   "type": "string"
+  },
+  "in": {
+   "type": "string"
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "out",
+  "in",
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
+}
+```
+
+### `group_cancel`
+
+Cancel workers' trips (TEST) — the refund on a card with Yes / No. Say its `ask`.
+
+**Errors:** `nothing_to_do`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "who": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "idempotency_key": {
+   "type": "string",
+   "minLength": 8,
+   "maxLength": 128,
+   "description": "Idempotency key: the same key returns the first result."
+  }
+ },
+ "required": [
+  "who",
+  "idempotency_key"
+ ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
+}
+```
+
 ### `send_email`
 
 Email someone the person names, FROM SASHA'S OWN ADDRESS (never their mailbox). The first call returns the exact message to read back; say it, ask 'shall I send it?', and call again with the SAME message after their yes in a later turn. Any change is a new read-back. A question is never a yes.
@@ -1545,6 +1671,31 @@ FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookin
    "type": "string"
   }
  }
+}
+```
+
+### `group_invoice`
+
+The movement's ONE invoice (to the company): its total and its link. Say its `say`.
+
+**Errors:** `no_movement`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {},
+ "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
 }
 ```
 

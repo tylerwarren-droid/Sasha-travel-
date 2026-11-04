@@ -1542,6 +1542,41 @@ async def group_invite_vault(ctx: Ctx, a: dict) -> dict:
             "page": "/group", "links": f}
 
 
+async def _group_card(ctx: Ctx, out: dict) -> dict:
+    """AgAPI's read-backs on ONE card (sasha.render + yes_buttons — 330's one place; the tap → card_tap); else what happened, said."""
+    if out.get("status") == "nothing":
+        raise ToolError("nothing_to_do", out.get("say") or "nothing to do")
+    return out
+
+
+async def group_book(ctx: Ctx, a: dict) -> dict:
+    """Sasha 334 · book everyone planned (or the names given) through AgAPI — its read-backs on ONE card, nothing booked until the yes."""
+    from booking_signer import group_book as GB
+    return await _group_card(ctx, await GB.prepare(ctx.account, "book", a.get("who") or None, over_ok=bool(a.get("over_limit_ok"))))
+
+
+async def group_swap(ctx: Ctx, a: dict) -> dict:
+    from booking_signer import group_book as GB
+    return await _group_card(ctx, await GB.prepare(ctx.account, "swap", [a["out"]], a["in"]))
+
+
+async def group_cancel(ctx: Ctx, a: dict) -> dict:
+    from booking_signer import group_book as GB
+    return await _group_card(ctx, await GB.prepare(ctx.account, "cancel", a["who"]))
+
+
+async def group_invoice(ctx: Ctx, a: dict) -> dict:
+    from booking_signer import group_book as GB, groups as G
+    inv = await GB.invoice(ctx.account)
+    if inv.get("why"):
+        raise ToolError("no_movement", inv["why"])
+    mv = await G.store().movement(ctx.account)
+    link = GB.invoice_link(ctx.account, mv["id"])
+    return {"total": inv["total"], "lines": len(inv["lines"]), "adjustments": len(inv["adjustments"]), "link": link,
+            "say": f"The invoice for {inv['to']}: {len(inv['lines'])} {'person' if len(inv['lines']) == 1 else 'people'} booked, total "
+                   f"{inv['total']}{' (TEST)' if inv['test'] else ''}. It's here: {link}"}
+
+
 async def group_list(ctx: Ctx, a: dict) -> dict:
     from booking_signer import groups as G
     v = await G.view(ctx.account)
@@ -1805,6 +1840,17 @@ TOOLS: List[dict] = [
     _t("group_invite_vault", "Magellan", group_invite_vault, "Invite group members (by name, or everyone) to add their passport and "
        "loyalty numbers on their OWN secure page. NEVER ask for a passport or any number in chat. Say its `say`.",
        {"who": {"type": "array", "items": {"type": "string"}}}, [], {"type": "object"}, ["no_movement"]),
+    _t("group_book", "Austen", group_book, "Book the group's workers through AgAPI (TEST): everyone planned, or the names given. Over-limit "
+       "workers are only included when the organiser names them AND says to book them anyway (over_limit_ok). Shows AgAPI's read-backs "
+       "on ONE card with Yes / No — nothing is booked until they tap Yes. Say its `ask`.",
+       {"who": {"type": "array", "items": {"type": "string"}}, "over_limit_ok": {"type": "boolean"}}, [], {"type": "object"}, ["nothing_to_do"], austen=True),
+    _t("group_swap", "Austen", group_swap, "\"Luis replaces Ana\": swap one worker for another on the list (TEST). The new worker's vault must "
+       "have their passport — else they're invited. Shows the difference on a card with Yes / No. Say its `ask`.",
+       {"out": {"type": "string"}, "in": {"type": "string"}}, ["out", "in"], {"type": "object"}, ["nothing_to_do"], austen=True),
+    _t("group_cancel", "Austen", group_cancel, "Cancel workers' trips (TEST) — the refund on a card with Yes / No. Say its `ask`.",
+       {"who": {"type": "array", "items": {"type": "string"}}}, ["who"], {"type": "object"}, ["nothing_to_do"], austen=True),
+    _t("group_invoice", "Pacioli", group_invoice, "The movement's ONE invoice (to the company): its total and its link. Say its `say`.",
+       {}, [], {"type": "object"}, ["no_movement"]),
     _t("group_list", "Magellan", group_list, "The group's master list: each person's status (planned / needs vault / over limit / booked / "
        "cancelled). Say its `say`; the full list is on the master list page.", {}, [], {"type": "object"}, ["no_movement"]),
     _t("remove_saved_card", "Pacioli", remove_saved_card, "Remove the card Stripe saved for them (\"remove my saved card\", \"forget my card\"). "

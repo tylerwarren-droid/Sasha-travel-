@@ -50,6 +50,10 @@ async def require_booking_key(request: Request) -> None:
         return   # Sasha 99 · the test venue's own cancel links — a public page, like any venue's
     if request.url.path.startswith("/api/booking/invite/") and (request.method == "GET" or request.url.path.endswith("/choose")):
         return   # S-80 · the invited guest's page: no account; the 8-character code is the key, rate-limited per address
+    if request.method == "POST" and request.url.path.rstrip("/") == "/api/booking/keep/resolve":
+        return   # Sasha 334 · AgAPI, server to server: the HMAC signature over the body is the key (keep_resolver.resolve checks it)
+    if request.method == "GET" and request.url.path.startswith("/api/booking/group-invoice/"):
+        return   # Sasha 334 · the invoice's own signed link (30 days, that organiser's movement only)
     if request.url.path.startswith("/api/booking/vault/") and request.method in ("GET", "POST", "DELETE"):
         return   # Sasha 333 · a group member's own vault page: no account; the signed, single-person, 7-day token is the key
     if request.method == "GET" and request.url.path.startswith("/api/booking/handover/"):

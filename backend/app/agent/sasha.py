@@ -185,7 +185,7 @@ def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optiona
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venues",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
-          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_start": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "inline", "group_invite_vault": "inline", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
+          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_start": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "inline", "group_invite_vault": "inline", "group_invoice": "inline", "group_book": "read_back", "group_swap": "read_back", "group_cancel": "read_back", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})
@@ -253,6 +253,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]],
                 # Sasha 265 · item 4: the call's card IS the ONE question — its words and its buttons (the tap is the approval)
                 **yes_buttons(tool, res)}   # Sasha 330 · from THE ONE PLACE
+    if tool in ("group_book", "group_swap", "group_cancel") and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 334
+        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group", **yes_buttons(tool, res)}
     if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 330 · "give me a button": the
         return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "cancel",   # cancel's read-back, on
                 **yes_buttons(tool, res)}                                                                       # the SAME card
@@ -367,6 +369,9 @@ def yes_buttons(tool: str, res: dict) -> dict:
                 "read_back_id": str(res["read_back_sha256"])[:40]}
     if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back_id"):
         return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.CANCEL_CHOICES], "read_back_id": res["read_back_id"]}
+    if tool in ("group_book", "group_swap", "group_cancel") and res.get("status") == "awaiting_yes" and res.get("read_back_id"):
+        # Sasha 334 · the master list's actions: AgAPI's read-backs for each worker, ONE card → card_tap → group_book.confirm
+        return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.GROUP_CHOICES[tool[6:]]], "read_back_id": res["read_back_id"]}
     return {}
 
 
@@ -1883,10 +1888,24 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
         return
     rid = str(tap.get("read_back_id") or "")[:80]
     # Sasha 287 · "send": Kanoe's one line, its yes · Sasha 330 · "cancel" / "keep": the cancel read-back's Yes / No (same claim, same card)
-    choice = tap.get("choice") if tap.get("choice") in ("page", "send", "cancel", "keep") else "call"
+    choice = tap.get("choice") if tap.get("choice") in ("page", "send", "cancel", "keep", "group_yes", "group_no") else "call"
     if str(tap.get("choice") or "").startswith("pick:"):   # Sasha 328 · an option of the platform's ONE question (their "Zona")
         choice = str(tap["choice"])[:200]
     ctx.idem = f"card_tap:{account}:{rid}:{choice}"   # THE CLAIM-ONCE RULE: this card, this choice — once, durably
+    if choice in ("group_yes", "group_no"):   # Sasha 334 · a master-list action's card: the same claim, then group_book.confirm
+        from booking_signer import group_book as GB
+        try:
+            await API.claim(ctx)
+            res = await GB.confirm(account, rid, choice, message or ("Yes, go ahead." if choice == "group_yes" else ""))
+        except API.ToolError:
+            res = {"status": "nothing_waiting", "say": _V.CARD_ANSWERED}
+        line = str(res.get("say") or "")
+        if res.get("status") == "done":
+            yield {"type": "trip_changed"}
+        yield {"type": "text", "delta": line}
+        yield {"type": "say", "text": line}
+        yield {"type": "done", "text": line, "guard": [], "tools": [{"tool": "group_confirm", "ok": True, "status": res.get("status")}]}
+        return
     cancel = choice in ("cancel", "keep")
     tool = "cancel_venue" if cancel else "hold_venue" if choice == "page" else "book_venue"
     try:

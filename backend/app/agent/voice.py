@@ -157,6 +157,10 @@ CANCEL_CHOICES = ({"title": "Yes, cancel it", "route": "cancel"}, {"title": "No,
 # buttons are typed-word taps — the tap sends these words as their message, as WhatsApp's [Yes] always has ("say:<words>")
 TYPED_YES_CHOICES = ({"title": "Yes, book it", "route": "say:Yes, book it"}, {"title": "No", "route": "say:No"})
 CANCEL_KEPT = "Kept — nothing changed."
+# Sasha 334 · a group action's card (AgAPI's read-backs for each worker): its Yes / No → card_tap → group_book.confirm (the same claim)
+GROUP_CHOICES = {"book": ({"title": "Yes, book them", "route": "group_yes"}, {"title": "No", "route": "group_no"}),
+                 "swap": ({"title": "Yes, swap them", "route": "group_yes"}, {"title": "No, keep it", "route": "group_no"}),
+                 "cancel": ({"title": "Yes, cancel it", "route": "group_yes"}, {"title": "No, keep it", "route": "group_no"})}
 CARD_ANSWERED = "That card's already answered."
 CANCEL_NOT_TAKEN = "Nothing was cancelled — say “yes, cancel it” and I'll do it."
 SEND_ON_WHATSAPP = "Send on WhatsApp"   # the hand-over button's label (AgAPI's), never said
@@ -296,6 +300,7 @@ SHOWS = {
     "choose_offer": "Changing the flight", "hold_booking": "Getting the booking ready", "book": "Setting up the payment",
     "get_total": "Adding it up", "get_trip": "Looking up your trip", "get_status": "Looking up your trip",
     "hold_venue": "Getting the booking ready", "book_venue": "The booking", "cancel_venue": "The cancellation",
+    "group_book": "Getting the group's booking ready", "group_swap": "Getting the swap ready", "group_cancel": "Getting the cancellation ready",
     "my_plans": "Looking up your plans", "running_late": "Getting that message ready", "change_booking": "Getting the change ready",
     "cancel_booking": "Getting the cancellation ready", "send_email": "Sending that", "send_whatsapp": "Sending that",
     "hotel_request": "Sending that", "add_to_calendar": "The calendar links", "what_i_can_do": "Pulling that up",
@@ -317,7 +322,8 @@ SAYS = ("prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_
         "call_again",   # Sasha 269 · the act's own `say`
         "booking_outcomes", "start_count",   # Sasha 324 · the founder's count, said (its `say`), no card
         "remove_saved_card",   # Sasha 327
-        "group_start", "group_upload", "group_limits", "group_plan", "group_list", "group_invite_vault")   # Sasha 332
+        "group_start", "group_upload", "group_limits", "group_plan", "group_list", "group_invite_vault",
+        "group_invoice")   # Sasha 334   # Sasha 332
 
 FAILED = "{what} didn't work{why}. Say the word and I'll try again."
 

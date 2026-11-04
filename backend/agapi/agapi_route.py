@@ -33,11 +33,12 @@ log = logging.getLogger("agapi.route")
 
 FAMILIES = ("activities", "entry", "cards", "subscriptions", "money", "venues")   # Sasha 248 · venues: the venue engine (dive.onboard → venue.profile)
 FAMILIES = FAMILIES + ("outcomes",)             # Sasha 249 · the outcomes ledger joins the one table
-PINNED = ("s2_reads",)                           # Sasha 249 · /s2's AgAPI reads: live by default, moved only by its own name, never by "all"
+PINNED = ("s2_reads", "group")                   # Sasha 249 · /s2's AgAPI reads: live by default, moved only by its own name, never by "all"
+#                                                  Sasha 334 · group: CR 163's group bookings are TEST only — the sandbox, by name only
 ROUTED = FAMILIES + PINNED                       # every family the table can name
 #: Sasha 249 · each family's old switch (its default is the sandbox), read only when the table doesn't name the family
 _LEGACY = {"subscriptions": "SASHA_SUBSCRIPTIONS_VIA", "outcomes": "SASHA_OUTCOMES_VIA"}
-_LEGACY_FIXED = {"s2_reads": "live"}             # via_agapi had no switch: its _url() was always live
+_LEGACY_FIXED = {"s2_reads": "live", "group": "sandbox"}   # via_agapi had no switch: its _url() was always live · 334: group TEST
 #: Sasha 249 · target → (URL variable, its default, key variable). The one copy of what was copied five times.
 ENDPOINTS = {"live": ("SASHA_AGAPI_URL", "https://agapi-live-production.up.railway.app", "SASHA_AGAPI_KEY"),
              "sandbox": ("SASHA_AGAPI_TEST_URL", "https://agapi-sandbox-production.up.railway.app", "SASHA_AGAPI_TEST_KEY")}

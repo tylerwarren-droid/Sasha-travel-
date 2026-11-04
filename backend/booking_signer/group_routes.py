@@ -95,3 +95,75 @@ async def vault_delete(token: str, request: Request):
         return await TV.erase(token, request.query_params.get("item") or None)
     except TV.VaultRefused as e:
         return _refused(e)
+
+
+# ── Sasha 334 · the master list's actions, the invoice, and the Keep resolver ─────────────────────────────────────────────
+
+@router.post("/act")
+async def group_act(request: Request):
+    """{action: book|swap|cancel, who: [names] | null, to: name (swap), over_ok} → AgAPI's read-backs as ONE card (its Yes / No)."""
+    from . import group_book as GB
+    body = await request.json()
+    out = await GB.prepare(account_for(request), str(body.get("action") or ""), body.get("who") or None, body.get("to"), bool(body.get("over_ok")))
+    if out.get("status") == "awaiting_yes":
+        from app.agent.sasha import yes_buttons
+        out = {**out, **(yes_buttons(f"group_{out['action']}", out) or {})}   # Sasha 330 · the ONE place a read-back gets its Yes / No
+    return out
+
+
+@router.post("/confirm")
+async def group_confirm(request: Request):
+    """{card, choice} — once per card (card_tap's claim rule: the durable key card_tap:<account>:<card>:<choice>)."""
+    from . import group_book as GB
+    from agapi import v0 as API
+    account = account_for(request)
+    body = await request.json()
+    card, choice = str(body.get("card") or "")[:80], str(body.get("choice") or "")
+    ctx = API.Ctx(account=account, mode="test", user_said=str(body.get("said") or ""))
+    ctx.idem = f"card_tap:{account}:{card}:{choice}"
+    try:
+        await API.claim(ctx)
+    except API.ToolError:
+        return {"status": "nothing_waiting", "say": "That card's already answered."}
+    return await GB.confirm(account, card, choice, str(body.get("said") or ("Yes, go ahead." if choice == "group_yes" else "")))
+
+
+@router.get("/invoice")
+async def group_invoice(request: Request):
+    from . import group_book as GB
+    account = account_for(request)
+    inv = await GB.invoice(account)
+    if not inv.get("why"):
+        from . import groups as G
+        mv = await G.store().movement(account)
+        inv["link"] = GB.invoice_link(account, mv["id"])
+    return inv
+
+
+invoice_public = APIRouter(prefix="/group-invoice", tags=["group"])
+
+
+@invoice_public.get("/{token}")
+async def invoice_by_link(token: str):
+    """The invoice's own link (sent on WhatsApp): signed, that organiser's movement only, 30 days — no sign-in."""
+    from fastapi.responses import JSONResponse
+    from . import group_book as GB
+    t = GB.read_invoice_token(token)
+    if not t:
+        return JSONResponse({"ok": False, "rule": "link_expired", "message": "This invoice link has expired — ask Sasha for a new one."}, status_code=403)
+    return await GB.invoice(t["owner"])
+
+
+resolver = APIRouter(prefix="/keep", tags=["keep"])
+
+
+@resolver.post("/resolve")
+async def keep_resolve(request: Request):
+    """CR 163's ask: AgAPI opens a keep:<id> reference at booking time — HMAC-signed, fresh, and only for the worker Sasha is booking now."""
+    from fastapi.responses import JSONResponse
+    from . import keep_resolver as KR
+    body = await request.body()
+    try:
+        return JSONResponse(await KR.resolve(body, request.headers.get("x-agapi-signature")), headers={"Cache-Control": "no-store"})
+    except KR.Refused as e:
+        return JSONResponse({"ok": False, "rule": e.rule}, status_code=e.status)

@@ -24,6 +24,10 @@ export default function GroupPage() {
   const [said, setSaid] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [links, setLinks] = useState<{ name: string; link: string }[]>([])
+  // Sasha 334 · a master-list action's card: AgAPI's read-backs + the Yes / No the server gives (sasha.yes_buttons — 330's one place)
+  const [card, setCard] = useState<{ read_back_id: string; read_back: string[]; ask: string; choices: { title: string; route: string }[] } | null>(null)
+  const [swapIn, setSwapIn] = useState('')
+  const [swapOut, setSwapOut] = useState('')
 
   useEffect(() => {
     let off = false
@@ -51,6 +55,28 @@ export default function GroupPage() {
     setLinks(j.forward || [])
     setSaid(r?.ok ? `Emailed ${j.emailed?.length ?? 0}.${j.forward?.length ? ` ${j.forward.length} to forward below.` : ''}` : (j.why || 'Not sent — try again.'))
   }
+  const act = async (action: 'book' | 'swap' | 'cancel', who: string[] | null, to?: string) => {
+    setBusy(true); setCard(null)
+    const r = await bookingReq('/api/booking/group/act', { action, who, to }, 120000).catch(() => null)
+    setBusy(false)
+    const j = (r?.json || {}) as Record<string, unknown>
+    if (r?.ok && j.status === 'awaiting_yes' && Array.isArray(j.choices)) setCard(j as unknown as NonNullable<typeof card>)
+    else setSaid(String(j.say || j.message || 'Nothing to do.'))
+  }
+  const answer = async (choice: string) => {   // once per card: the server holds the claim; a second tap finds nothing
+    if (!card) return
+    const id = card.read_back_id
+    setCard(null); setBusy(true)
+    const r = await bookingReq('/api/booking/group/confirm', { card: id, choice }, 300000).catch(() => null)
+    setBusy(false)
+    setSaid(String(((r?.json || {}) as { say?: string }).say || 'Done.'))
+  }
+  const invoice = async () => {
+    const r = await bookingReq('/api/booking/group/invoice').catch(() => null)
+    const link = ((r?.json || {}) as { link?: string }).link
+    if (link) window.open(link, '_blank', 'noopener')
+    else setSaid(String(((r?.json || {}) as { why?: string }).why || 'The invoice isn’t ready.'))
+  }
   const onFile = (f: File | undefined) => {
     if (!f) return
     const rd = new FileReader()
@@ -72,6 +98,18 @@ export default function GroupPage() {
         <button type="button" disabled={busy || !text.trim()} onClick={() => send({ text })} style={{ marginTop: 8 }}>Add these</button>
         {said && <p data-upload-said style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{said}</p>}
         <button type="button" disabled={busy || !v?.rows?.length} onClick={() => invite(null)} style={{ marginTop: 8 }}>Invite everyone to the vault</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          <button type="button" disabled={busy} onClick={() => act('book', null)}>Book all planned</button>
+          <input value={swapOut} onChange={e => setSwapOut(e.target.value)} placeholder="Swap… (who leaves)" />
+          <input value={swapIn} onChange={e => setSwapIn(e.target.value)} placeholder="for… (who comes)" />
+          <button type="button" disabled={busy || !swapOut || !swapIn} onClick={() => act('swap', [swapOut], swapIn)}>Swap</button>
+          <button type="button" onClick={invoice}>The invoice</button>
+        </div>
+        {card && <div data-group-card style={{ border: '1px solid #d0d5dd', borderRadius: 12, padding: 12, marginTop: 10 }}>
+          {card.read_back.map((l, i) => <div key={i} style={{ fontSize: 14 }}>{l || '\u00a0'}</div>)}
+          <p style={{ fontWeight: 600 }}>{card.ask}</p>
+          {card.choices.map(c => <button key={c.route} type="button" disabled={busy} onClick={() => answer(c.route)} style={{ marginRight: 8 }}>{c.title}</button>)}
+        </div>}
         {links.length > 0 && <ul data-forward>{links.map(l => <li key={l.link}>{l.name}: <a href={l.link}>their secure link</a></li>)}</ul>}
       </section>
       {!v ? <p>Loading…</p> : v.why ? <p>{v.why}</p> : (
@@ -90,7 +128,9 @@ export default function GroupPage() {
                 <td style={{ padding: '6px 8px' }}>{[r.limit.flight_return_eur && `flight ≤ ${eur(r.limit.flight_return_eur)}`,
                   r.limit.hotel_night_eur && `hotel ≤ ${eur(r.limit.hotel_night_eur)}/night`].filter(Boolean).join(' · ') || '—'}</td>
                 <td style={{ padding: '6px 8px' }} data-vault>{r.vault?.passport ? 'Passport ✓' : 'Passport missing'}{r.vault?.loyalty?.length ? ` · ${r.vault.loyalty.map(x => `${x} ✓`).join(' · ')}` : ''}
-                  {!r.vault?.passport && <button type="button" disabled={busy} onClick={() => invite([r.member_id])} style={{ marginLeft: 6 }}>Invite</button>}</td>
+                  {!r.vault?.passport && <button type="button" disabled={busy} onClick={() => invite([r.member_id])} style={{ marginLeft: 6 }}>Invite</button>}
+                  {r.vault?.passport && r.status !== 'booked' && r.status !== 'cancelled' && <button type="button" disabled={busy} onClick={() => act('book', [r.name])} style={{ marginLeft: 6 }}>Book</button>}
+                  {r.status === 'booked' && <button type="button" disabled={busy} onClick={() => act('cancel', [r.name])} style={{ marginLeft: 6 }}>Cancel</button>}</td>
                 <td style={{ padding: '6px 8px', color: TONE[r.status] || '#101828', fontWeight: 600 }}>{r.status}</td>
               </tr>))}</tbody>
           </table>

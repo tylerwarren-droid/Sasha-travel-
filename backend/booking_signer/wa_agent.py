@@ -169,7 +169,7 @@ def _read_back(ev: dict, out) -> None:
 
 
 #: Sasha 330 · the card routes WhatsApp sends to sasha.card_tap (the cancel read-back's Yes / No) — the SAME claim as /s2's tap
-CARD_ROUTES = ("cancel", "keep")
+CARD_ROUTES = ("cancel", "keep") + ("group_yes", "group_no")   # Sasha 334 · a master-list action's card
 
 
 def _buttons(ev: dict) -> list:

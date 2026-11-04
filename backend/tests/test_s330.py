@@ -242,7 +242,7 @@ class TheOnePlace(unittest.TestCase):
     def test_no_second_button_set(self):
         src = inspect.getsource(S.render)
         self.assertEqual(len(re.findall(r'"choices":', src)), 0)                                  # render builds no choices itself
-        self.assertEqual(src.count("yes_buttons(tool, res)"), 3)                                  # book, cancel, the generic read-back (pay)
+        self.assertEqual(src.count("yes_buttons(tool, res)"), 4)                                  # book, cancel, the group card (334), the generic read-back (pay)
         app = (ROOT / "frontend/app/s2/S2App.tsx").read_text()
         self.assertEqual(len(re.findall(r"function \w*Card\(\{ c, tap \}", app)), 2)             # CallCard + the no-answer card, as before
         self.assertIn("if (c.k === 'read_back' && c.choices && c.choices.length && c.read_back_id) return <CallCard", app)

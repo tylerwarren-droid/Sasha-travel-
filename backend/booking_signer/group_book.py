@@ -158,6 +158,23 @@ def over_at_booking(items: List[dict], lim: Dict[str, float], kinds=("flight", "
     return " · ".join(words) or None
 
 
+def over_priced(priced: List[dict], lim: Dict[str, float], items: Optional[List[dict]] = None, kinds=("flight", "stay")) -> Optional[str]:
+    """Sasha 340 · the worker's limit against the READ-BACK's own prices (CR 166: approval_required details.priced — per item {kind,
+    offer_id, amount_minor, currency, per_night_minor?}): the flights' amounts (out + back) against flight_return_eur, the stay's per
+    night against hotel_night_eur. Never a sentence; a currency other than EUR is never guessed. → the words, or None."""
+    eur = lambda x, k="amount_minor": x[k] / 100 if str(x.get("currency") or "").upper() == "EUR" and isinstance(x.get(k), int) else None
+    words = []
+    fl = [eur(x) for x in priced or [] if x.get("kind") == "flight"]
+    if "flight" in kinds and lim.get("flight_return_eur") is not None and fl and None not in fl and sum(fl) > lim["flight_return_eur"]:
+        words.append(f"flights €{sum(fl):,.0f} > €{lim['flight_return_eur']:,.0f} limit")
+    stay = next((x for x in priced or [] if x.get("kind") == "stay"), None)
+    pn = eur(stay, "per_night_minor") if stay else None
+    if "stay" in kinds and pn is not None and lim.get("hotel_night_eur") is not None and pn > lim["hotel_night_eur"]:
+        name = next((i.get("_name") for i in items or [] if i.get("kind") == "stay" and i.get("ref") == stay.get("offer_id")), None) or "the hotel"
+        words.append(f"{name}: hotel €{pn:,.0f}/night > €{lim['hotel_night_eur']:,.0f} limit")
+    return " · ".join(words) or None
+
+
 def _gone(e: dict) -> bool:
     d = e.get("details") or {}
     return e.get("code") == "upstream_refused" and (d.get("reason") == "offer_gone" or
@@ -201,14 +218,15 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
         its, why = await _items(account, m, mv)
         if not its:
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": why}
-        over = over_at_booking(its, lim)
-        if over and not asked:
-            return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
         body = {"end_user": org, "worker": w, "items": _wire(its)}
         r = await _read_back(account, "group.book", body)
         e = r.get("error") or {}
         if e.get("code") == "approval_required":
             d = e.get("details") or {}
+            # Sasha 340 · the limit against the read-back's OWN prices (details.priced, CR 166); AgAPI without them: its offer prices
+            over = over_priced(d["priced"], lim, its) if d.get("priced") else over_at_booking(its, lim)
+            if over and not asked:
+                return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
             return "item", {"op": "group.book", "member": m["id"], "name": m["name"], "worker": w, "body": body,
                             "over": st_ == "over limit" or bool(over), "over_words": over, "replanned": replanned,
                             "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
@@ -529,14 +547,14 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     st = G.store()
     mv = await st.movement(account)
     members = {m["id"]: m for m in await st.members(mv["id"])}
-    done, failed, sem, n = [], [], asyncio.Semaphore(ACT_PARALLEL), [0]   # Sasha 339 · each act (bounded: one at a time), counted
+    done, failed, reasked, sem, n = [], [], [], asyncio.Semaphore(ACT_PARALLEL), [0]   # Sasha 339 · each act (bounded: one at a time), counted
     if progress:
         progress(0, len(c["items"]))
 
     async def act(it: dict) -> None:
         async with sem:
             try:
-                await _act_one(account, it, said, mv, members, done, failed)
+                await _act_one(account, it, said, mv, members, done, failed, reasked)
             except Exception as e:   # one worker's failure is that worker's, said
                 log.warning("[group_book] %s not done: %s", it["name"], type(e).__name__)
                 failed.append({"name": it["name"], "why": "couldn't be completed just now — nothing was changed for them"})
@@ -552,12 +570,26 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     done.sort(key=lambda d: order.get(d["name"], 0))
     failed.sort(key=lambda d: order.get(d["name"], 0))
     verb = {"book": "booked", "swap": "swapped", "cancel": "cancelled"}[c["action"]]
+    cards = [_card_for(account, c["action"], x) for x in reasked]   # Sasha 340 · each moved fare: its OWN card, its own Yes
     say = (f"Done — {len(done)} {verb} (TEST)." if done else "Nothing was done.") + \
-        (" Not done: " + "; ".join(f"{f['name']} ({f['why']})" for f in failed) + "." if failed else "") + " The master list shows it now."
-    return {"status": "done", "done": done, "failed": failed, "say": say}
+        (" Not done: " + "; ".join(f"{f['name']} ({f['why']})" for f in failed) + "." if failed else "") + \
+        (f" The fare moved for {', '.join(x['name'] for x in reasked)} — {'a new card' if len(reasked) == 1 else 'new cards'} below, "
+         f"{'its' if len(reasked) == 1 else 'each with its'} own Yes; nothing was booked for {'them' if len(reasked) > 1 else 'them'} yet." if reasked else "") + \
+        " The master list shows it now."
+    return {"status": "done", "done": done, "failed": failed, "reasked": cards, "say": say}
 
 
-async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, done: list, failed: list) -> None:
+def _card_for(account: str, action: str, it: dict) -> Dict[str, Any]:
+    """ONE worker's own card (a moved fare, re-asked alone): the SAME card store, the same Yes / No (yes_buttons in the route)."""
+    cid = "grp_" + secrets.token_hex(10)
+    _CARDS[cid] = {"account": account, "action": action, "items": [it], "at": time.time()}
+    lines = list(it.get("lines") or []) + ([f"⚠ {it['name']} is OVER the group's limit ({it.get('over_words')}) — included only because you asked."]
+                                           if it.get("over") and it.get("over_words") else [])
+    return {"status": "awaiting_yes", "action": action, "read_back": lines, "read_back_id": cid, "name": it["name"],
+            "ask": f"Book {it['name']} at the new fare? Everything is on the card (TEST — nothing is charged now).", "verb": "Book"}
+
+
+async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, done: list, failed: list, reasked: Optional[list] = None) -> None:
     """ONE worker's act after the organiser's yes: the approval of THAT read-back, the references granted for this act only, the act,
     then the worker's ONE trip settled from AgAPI's answer."""
     from . import keep_resolver as KR
@@ -571,8 +603,26 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
         r = await _call(account, it["op"], it["body"], approval=apv)
     finally:
         KR.revoke(refs)
+    e = r.get("error") or {}
+    d = e.get("details") or {}
+    if e.get("code") == "approval_void" and d.get("void_reason") == "payload_changed" and reasked is not None:
+        # Sasha 340 · CR 166: nothing was booked for THIS worker; the rest stand. A fresh read-back → their own card, their own Yes;
+        # an offer gone (no read-back) → this worker prepared again (re-planned once), then their own card — or held, said.
+        if d.get("read_back_id"):
+            reasked.append({**it, "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
+                            "lines": list((d.get("read_back") or {}).get("lines") or []), "moved": True})
+            return
+        if it["op"] == "group.book":
+            m = members.get(it["member"])
+            org = (it.get("body") or {}).get("end_user")
+            kind, x = await _prepare_worker(account, m, None, [m["name"]], bool(it.get("over")), org, mv) if m and org else ("skip", {"why": "not on the list"})
+            if kind == "item":
+                reasked.append({**x, "moved": True})
+            else:
+                failed.append({"name": it["name"], "why": x.get("why") or "the fare is gone and none was found again"})
+            return
     if not r.get("ok"):
-        failed.append({"name": it["name"], "why": (r.get("error") or {}).get("message") or "AgAPI refused"})
+        failed.append({"name": it["name"], "why": e.get("message") or "AgAPI refused"})
         return
     res = r.get("result") or {}
     parts = res.get("parts") or []

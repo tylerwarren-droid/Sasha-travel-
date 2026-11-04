@@ -1908,6 +1908,10 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
             yield {"type": "trip_changed"}
         yield {"type": "text", "delta": line}
         yield {"type": "say", "text": line}
+        for x in res.get("reasked") or []:   # Sasha 340 · a moved fare: THAT worker's own card here too, with its own Yes
+            ev = render("group_book", x, {})
+            if ev:
+                yield ev
         yield {"type": "done", "text": line, "guard": [], "tools": [{"tool": "group_confirm", "ok": True, "status": res.get("status")}]}
         return
     cancel = choice in ("cancel", "keep")

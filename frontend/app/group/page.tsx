@@ -26,6 +26,7 @@ export default function GroupPage() {
   // Sasha 334 · a master-list action's card: AgAPI's read-backs + the Yes / No the server gives (sasha.yes_buttons — 330's one place)
   const [card, setCard] = useState<{ read_back_id: string; read_back: string[]; ask: string; choices: { title: string; route: string }[] } | null>(null)
   const [swapIn, setSwapIn] = useState('')
+  const [queue, setQueue] = useState<NonNullable<typeof card>[]>([])   // Sasha 340 · moved fares: one card each, shown in turn
   const [swapOut, setSwapOut] = useState('')
   const [swapCity, setSwapCity] = useState('')   // Sasha 336 · a newcomer: the swap adds them and invites them to their vault
   const [swapGrade, setSwapGrade] = useState('')
@@ -61,6 +62,8 @@ export default function GroupPage() {
   // Sasha 339 · what an act answered: ONE card (its Yes / No), or what held each worker (taps), said as it is
   const show = (j: Record<string, unknown>) => {
     if (j.status === 'awaiting_yes' && Array.isArray(j.choices)) setCard(j as unknown as NonNullable<typeof card>)
+    const re = (Array.isArray(j.reasked) ? j.reasked : []) as NonNullable<typeof card>[]
+    if (re.length) { setCard(re[0]); setQueue(re.slice(1)) }   // Sasha 340 · a moved fare: THAT worker's card, its own Yes
     setSaid(j.status === 'awaiting_yes' ? (Array.isArray(j.taps) && j.taps.length ? 'Some are held — see below the card.' : null) : String(j.say || j.message || ''))
     if (Array.isArray(j.taps)) setTaps(j.taps as typeof taps)
     if (Array.isArray(j.links)) setLinks(j.links as { name: string; link: string }[])
@@ -96,7 +99,9 @@ export default function GroupPage() {
     if (!r?.ok) { setBusy(false); setSaid('Sasha didn’t answer in time — the master list shows what was done.'); return }
     if (j.status === 'booking') { if (j.say) setSaid(String(j.say)); return follow() }   // Sasha 339 · several acts: ONE job, followed
     setBusy(false)
+    if (Array.isArray(j.reasked) && j.reasked.length) return show(j)
     setSaid(String(j.say || 'Done.'))
+    if (queue.length) { setCard(queue[0]); setQueue(queue.slice(1)) }   // the next moved fare's own card
   }
   const invoice = async () => {
     const r = await bookingReq('/api/booking/group/invoice').catch(() => null)

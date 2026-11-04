@@ -84,28 +84,24 @@ class SnapshotIsAnObject(unittest.TestCase):
             arr = self.old_write({"owner": "easyJet", "from": "LTN", "to": "MAD"}, "off_arr")
             go(c.execute("update trip_basket_items set snapshot = snapshot || jsonb_build_object('superseded_at', 'x') where id = $1", arr))
             self.assertEqual(self.kinds(), {"string": 1, "array": 1})
-            # every reader: the dict it is
+            # Sasha 340 · 051 repairs the old rows FIRST (production: applied 4 Nov, 1,520 rows all objects) — the readers' PATCH is gone
+            before = go(c.fetchval("select count(*) from trip_basket_items"))
+            go(c.execute(_block("051_basket_snapshot_repair.sql")))
+            go(c.execute(_block("051_basket_snapshot_repair.sql")))                       # twice: idempotent
+            self.assertEqual(self.kinds(), {"object": before})
+            self.assertEqual(go(c.fetchval("select snapshot->>'owner' || '|' || (snapshot->>'superseded_at') from trip_basket_items "
+                                           "where provider_ref = 'off_arr'")), "easyJet|x")
             rows = {r["provider_ref"]: r for r in go(BK.items(str(ACCT), str(TRIP), ("suggested",)))}
             self.assertEqual(rows["off_old"]["snapshot"]["owner"], "Iberia")
-            self.assertEqual((rows["off_arr"]["snapshot"]["owner"], rows["off_arr"]["snapshot"]["superseded_at"]), ("easyJet", "x"))
-            # a new search of the slice: the new row an OBJECT; the old string row superseded — still an object
+            # a new search of the slice: the new row an OBJECT; the old row superseded — still an object (plain ||, objects only now)
             go(BK.suggest(str(ACCT), str(TRIP), "flight", [{"provider": "duffel", "provider_ref": "off_new", "price_amount": 73.1,
                                                             "price_currency": "EUR", "snapshot": {"owner": "Duffel Airways", "from": "LTN", "to": "MAD"}}],
                           slice_key="LTN-MAD 2026-11-23"))
             t = {r["provider_ref"]: r["t"] for r in go(c.fetch("select provider_ref, jsonb_typeof(snapshot) t from trip_basket_items"))}
             self.assertEqual((t["off_new"], t["off_old"]), ("object", "object"))
-            sup = go(c.fetchval("select snapshot->>'superseded_at' from trip_basket_items where provider_ref = 'off_old'"))
-            self.assertTrue(sup)
-            self.assertEqual(go(c.fetchval("select snapshot->>'owner' from trip_basket_items where provider_ref = 'off_old'")), "Iberia")
-            # 051 repairs what's left (the array), twice: idempotent, nothing lost
-            before = go(c.fetchval("select count(*) from trip_basket_items"))
-            go(c.execute(_block("051_basket_snapshot_repair.sql")))
-            go(c.execute(_block("051_basket_snapshot_repair.sql")))
-            self.assertEqual(self.kinds(), {"object": before})
-            self.assertEqual(go(c.fetchval("select snapshot->>'owner' || '|' || (snapshot->>'superseded_at') from trip_basket_items "
-                                           "where provider_ref = 'off_arr'")), "easyJet|x")
-        print(f"\n[s339 snapshot · real Postgres] bug reproduced (string + array) → new writes objects, supersede keeps objects, "
-              f"readers see dicts, 051 repaired {before} rows to objects (twice: idempotent)")
+            self.assertTrue(go(c.fetchval("select snapshot->>'superseded_at' from trip_basket_items where provider_ref = 'off_old'")))
+        print(f"\n[s339 snapshot · real Postgres] bug reproduced (string + array) → 051 repaired {before} rows (twice: idempotent) → "
+              f"new writes objects, supersede keeps objects")
 
 
 def tearDownModule():

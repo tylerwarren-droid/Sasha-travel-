@@ -41,20 +41,13 @@ def _run():
 
 
 def snapshot_of(v: Any) -> Dict[str, Any]:
-    """Sasha 339 · a snapshot as the dict it is: an object; an old double-encoded string; an old ARRAY ([string, {superseded_at}] —
-    supersede's `||` on a string) merged in order. PATCH (said): reads the old shapes until 051 repairs the rows; new writes are objects."""
+    """A snapshot as the dict it is (Sasha 340: 051 repaired every row to an object, so the old-shape PATCH is gone). A connection without
+    the jsonb codec hands back the text: read as JSON."""
     if isinstance(v, str):
         try:
             v = json.loads(v)
         except ValueError:
             return {}
-    if isinstance(v, str):
-        return snapshot_of(v)
-    if isinstance(v, list):
-        out: Dict[str, Any] = {}
-        for e in v:
-            out.update(snapshot_of(e))
-        return out
     return v if isinstance(v, dict) else {}
 
 
@@ -315,7 +308,7 @@ def supersede_plan(existing: List[Dict[str, Any]], new_refs: List[Optional[str]]
     refs = {r for r in new_refs if r}
     drop, mark = [], []
     for r in existing:
-        snap = snapshot_of(r.get("snapshot"))   # Sasha 339 · any old shape, as the dict it is
+        snap = snapshot_of(r.get("snapshot"))
         if r.get("provider_ref") and r["provider_ref"] in refs:
             drop.append(str(r["id"]))
             continue
@@ -343,19 +336,9 @@ async def _supersede(conn, account: str, trip_id: str, slice_key: Optional[str],
         await conn.execute("delete from trip_basket_items where account_id = $1 and id = any($2::uuid[]) and state = 'suggested'",
                            uuid.UUID(account), [uuid.UUID(i) for i in plan["drop"]])
     if plan["mark"]:
-        await conn.execute(f"update trip_basket_items set snapshot = {SNAP_OBJECT} || jsonb_build_object('superseded_at', $3::text), "
+        await conn.execute("update trip_basket_items set snapshot = snapshot || jsonb_build_object('superseded_at', $3::text), "
                            "updated_at = now() where account_id = $1 and id = any($2::uuid[]) and state = 'suggested'",
                            uuid.UUID(account), [uuid.UUID(i) for i in plan["mark"]], now.isoformat())
-
-
-#: Sasha 339 · a row's snapshot AS AN OBJECT, whatever shape the old writes left: the pool's jsonb codec already JSON-encodes, so
-#: `json.dumps(…)::jsonb` stored every snapshot as a JSON STRING (1,454 rows by 4 Nov), and `string || object` made an ARRAY (57 rows —
-#: the 335 proof's master list crashed on one). Writes are `$n::text::jsonb` now (an object); 051 repairs the old rows; until it runs,
-#: this keeps a merge on an old row an object.
-SNAP_OBJECT = ("(case jsonb_typeof(snapshot) when 'object' then snapshot when 'string' then (snapshot #>> '{}')::jsonb "
-               "when 'array' then (select coalesce(jsonb_object_agg(kv.key, kv.value order by e.n), '{}'::jsonb) from "
-               "jsonb_array_elements(snapshot) with ordinality e(el, n), jsonb_each(case jsonb_typeof(e.el) when 'object' then e.el "
-               "when 'string' then (e.el #>> '{}')::jsonb else '{}'::jsonb end) kv) else '{}'::jsonb end)")
 
 
 def superseded(r: Dict[str, Any]) -> bool:
@@ -549,7 +532,7 @@ async def add_to_record(account: str, item_id: str, extra: Dict[str, Any]) -> bo
             if cur is None and not await conn.fetchval("select 1 from trip_basket_items where account_id = $1 and id = $2",
                                                        uuid.UUID(account), uuid.UUID(item_id)):
                 return None
-            snap = snapshot_of(cur)   # Sasha 339 · any old shape; written back as an object
+            snap = snapshot_of(cur)   # written back as an object
             return await conn.fetchval("update trip_basket_items set snapshot = $3::text::jsonb, updated_at = now() where account_id = $1 and id = $2 "
                                        "returning id", uuid.UUID(account), uuid.UUID(item_id), json.dumps({**snap, **extra}))
     try:

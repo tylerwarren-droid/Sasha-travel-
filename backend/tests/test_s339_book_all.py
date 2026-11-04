@@ -235,7 +235,8 @@ class LimitsAtBooking(unittest.TestCase):
             self.assertEqual(out["status"], "nothing")
             self.assertEqual(out["skipped"][0]["kind"], "over_at_booking")
             self.assertEqual(out["taps"][0]["label"], "Amara Sample — Hotel Alba (test): hotel €190/night > €150 limit — book anyway?")
-            self.assertEqual([b for op, b in w.agapi.bodies], [])                             # never even asked for a read-back
+            self.assertEqual(w.agapi.supplier, [])                                            # never booked (Sasha 340: the read-back's
+            self.assertEqual(w.agapi.records, [])                                             # own price is read first, then held)
             tap = out["taps"][0]["act"]
             card = run(GB.prepare(OWNER, tap["action"], tap["who"], over_ok=tap["over_ok"]))
         self.assertEqual(card["status"], "awaiting_yes")

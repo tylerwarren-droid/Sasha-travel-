@@ -114,9 +114,11 @@ async def group_act(request: Request):
 
 
 def _with_buttons(out: dict) -> dict:
+    from app.agent.sasha import yes_buttons
     if out.get("status") == "awaiting_yes":
-        from app.agent.sasha import yes_buttons
         out = {**out, **(yes_buttons(f"group_{out['action']}", out) or {})}   # Sasha 330 · the ONE place a read-back gets its Yes / No
+    if out.get("reasked"):   # Sasha 340 · each moved fare's own card — the same one place
+        out = {**out, "reasked": [{**x, **(yes_buttons(f"group_{x['action']}", x) or {})} for x in out["reasked"]]}
     return out
 
 
@@ -144,7 +146,7 @@ async def group_confirm(request: Request):
         await API.claim(ctx)
     except API.ToolError:
         return {"status": "nothing_waiting", "say": "That card's already answered."}
-    return await GB.answer(account, card, choice, str(body.get("said") or ("Yes, go ahead." if choice == "group_yes" else "")))   # Sasha 339 · a job when several
+    return _with_buttons(await GB.answer(account, card, choice, str(body.get("said") or ("Yes, go ahead." if choice == "group_yes" else ""))))   # Sasha 339 · a job when several
 
 
 @router.get("/invoice")

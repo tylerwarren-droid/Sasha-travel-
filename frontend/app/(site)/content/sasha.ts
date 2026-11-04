@@ -17,7 +17,7 @@ export const sasha: Tab = {
   statusLine: 'Live in closed beta in Madrid. WhatsApp runs on Twilio\'s sandbox until Meta verifies us. Our confirmation rate isn\'t published yet: the sample is too small.',
   demo: { kind: 'live', sentence: 'Live: the real product. Our test venue is ours and says so.',
     links: [
-      { href: '/sign-in', label: 'Sign in to book (invite-only)' },
+      { href: '/sign-in', label: 'Sign in to book' },
       { href: 'https://sasha-travel-production.up.railway.app/api/booking/test-venue/plain', label: 'Our test venue (ours — not a real restaurant)', external: true },
     ] },
 }

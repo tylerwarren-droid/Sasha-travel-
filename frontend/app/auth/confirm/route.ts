@@ -1,8 +1,8 @@
 /**
  * Sasha 121 · /auth/confirm — an INVITATION (or a fresh sign-in link the founder sent from ops) lands here: the token is
  * verified with Supabase (verifyOtp), the session cookies are set by @supabase/ssr, then on to "You". ⛔ Closed while
- * guest sign-in is (GUEST_SIGN_IN_ENABLED). Sign-up stays invite-only: Supabase's public sign-up is disabled, so only
- * an address the founder invited can ever hold a session. A failed link goes back to /sign-in with Supabase's reason.
+ * guest sign-in is (GUEST_SIGN_IN_ENABLED). Sasha 338: who may sign in is booking_signer/sign_up.py (open); Supabase's public sign-up is disabled, so that
+ * rule is the only way to a session. A failed link goes back to /sign-in with Supabase's reason.
  */
 import { NextResponse } from 'next/server'
 import { guestClient, guestSignInOpen, safeNext, supabaseConfigured } from '@/lib/guest-session'

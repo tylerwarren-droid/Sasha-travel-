@@ -65,7 +65,7 @@ class Base(unittest.TestCase):
         self.call.start()
         from agapi import agapi_route as AR
         from booking_signer import ops
-        AR._MODE.clear()
+        pass   # Sasha 338 · no marker cache any more (the record alone decides)
 
         async def admin(method, path, body=None):   # the guest marker (no row): a suite guest carries kanoe_test
             return 200, {"app_metadata": {"kanoe_test": True} if path.endswith(SCRATCH) else {}}

@@ -3,6 +3,7 @@
 /** S-62 step 3 · the email → a magic link. It says only what happened: sent, or Supabase's own reason it wasn't. */
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
+import { apiUrl } from '@/lib/api'
 
 // Sasha 215 (b) / 216 · the sign-in email carries a 6-digit code as well as the link once its Supabase template has
 // {{ .Token }} (the founder's yes, 9 Oct). The box says "if your email shows a code", so it's true whether or not the
@@ -55,12 +56,16 @@ export default function SignInForm({ next }: { next: string }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { setState({ phase: 'failed', why: 'that is not an email address' }); return }
     setState({ phase: 'sending' })
     try {
+      // Sasha 338 · WHO may sign in is ONE place (backend booking_signer/sign_up.py — anyone, Tyler 4 Nov): it opens their account
+      // first; Supabase's own public sign-up stays off. Then Supabase emails the link, as before.
+      const open = await fetch(apiUrl('/api/booking/sign-up'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to }) })
+        .then(r => r.json()).catch(() => null) as { ok?: boolean; why?: string } | null
+      if (!open?.ok) { setState({ phase: 'failed', why: open?.why || 'Sasha couldn\u2019t open your account just now — try again in a minute' }); return }
       const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
       const { error } = await supabase.auth.signInWithOtp({
         email: to, options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`, shouldCreateUser: true },
       })
-      // Sasha 121 · invite-only: an address nobody invited gets that, plainly — never Supabase's internal words
-      setState(error ? { phase: 'failed', why: /signups? not allowed/i.test(error.message) ? 'Sasha is invite-only for now — this address hasn\u2019t been invited' : error.message } : { phase: 'sent', to })
+      setState(error ? { phase: 'failed', why: error.message } : { phase: 'sent', to })   // Sasha 338 · no invite wall: Supabase's own reason, if any
     } catch (err) {
       setState({ phase: 'failed', why: (err as Error).message })
     }

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from agapi import s2_gmail_receipts as GR
+from agapi import person_access as PA   # Sasha 338 · live means a live person_access record
 from agapi import s2_subscriptions as SUBS
 from agapi import v0 as API
 
@@ -98,7 +99,7 @@ class GmailReceipts(unittest.TestCase):
         self.assertEqual(r["result"]["render"]["source"], "receipts in your Gmail")
         self.assertEqual(self.finds()[-1]["emails"]["messages"], mails)                          # sent once to AgAPI (then dropped here)
         self.assertTrue(GR.QUERY.startswith("newer_than:400d subject:("))
-        with mock.patch.dict(os.environ, {"SASHA_SUBSCRIPTIONS_VIA": "live"}), mock.patch.object(GR, "connected", mock.AsyncMock(return_value=False)):
+        with mock.patch.dict(os.environ, {"SASHA_SUBSCRIPTIONS_VIA": "live"}), PA.records({ctx().account: PA.LIVE_PERSON}), mock.patch.object(GR, "connected", mock.AsyncMock(return_value=False)):
             self.assertEqual(run(SUBS.run_tool(ctx(), "find_subscriptions", {"from_gmail": True}))["error"]["code"], "gmail_not_connected")
 
     def test_receipts_uses_only_the_one_search(self):

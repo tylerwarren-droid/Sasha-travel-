@@ -76,7 +76,7 @@ class OnlyTheRouteDecides(unittest.TestCase):
 class ByThePerson(unittest.TestCase):
     def setUp(self):
         PA.clear()
-        AR._MODE.clear()
+        pass   # Sasha 338 · no marker cache (the record alone decides)
         PA.install({TEST: {"mode": "test"}, REAL: PA.LIVE_PERSON})
         self.seen = []
 
@@ -103,7 +103,6 @@ class ByThePerson(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.addCleanup(PA.clear)
-        self.addCleanup(AR._MODE.clear)
 
     class Ctx:
         def __init__(self, account):

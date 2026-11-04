@@ -617,6 +617,8 @@ router.include_router(_group_routes.router)   # Sasha 332 · /api/booking/group/
 router.include_router(_group_routes.vault)   # Sasha 333 · /api/booking/vault/{token} — the member's own page (the token is the key)
 router.include_router(_group_routes.invoice_public)   # Sasha 334 · /api/booking/group-invoice/{token} — the invoice's signed link
 router.include_router(_group_routes.resolver)   # Sasha 334 · /api/booking/keep/resolve — AgAPI opens a keep: reference (HMAC)
+from . import sign_up as _sign_up   # noqa: E402
+router.include_router(_sign_up.router)   # Sasha 338 · /api/booking/sign-up — WHO may sign in, the one place
 
 
 # S-53 · the daily retention job (retention.py) starts with the app; off in tests and without a database

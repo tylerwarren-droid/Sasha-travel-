@@ -52,6 +52,8 @@ async def require_booking_key(request: Request) -> None:
         return   # S-80 · the invited guest's page: no account; the 8-character code is the key, rate-limited per address
     if request.method == "POST" and request.url.path.rstrip("/") == "/api/booking/keep/resolve":
         return   # Sasha 334 · AgAPI, server to server: the HMAC signature over the body is the key (keep_resolver.resolve checks it)
+    if request.method == "POST" and request.url.path.rstrip("/") == "/api/booking/sign-up":
+        return   # Sasha 338 · the sign-in page, before anyone is signed in: sign_up.may_sign_in is the rule (rate-limited per IP)
     if request.method == "GET" and request.url.path.startswith("/api/booking/group-invoice/"):
         return   # Sasha 334 · the invoice's own signed link (30 days, that organiser's movement only)
     if request.url.path.startswith("/api/booking/vault/") and request.method in ("GET", "POST", "DELETE"):

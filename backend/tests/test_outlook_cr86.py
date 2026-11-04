@@ -13,6 +13,7 @@ from datetime import date
 from unittest import mock
 
 from agapi import s2_outlook_receipts as OR
+from agapi import person_access as PA   # Sasha 338 · live means a live person_access record
 from agapi import s2_subscriptions as SUBS
 from booking_signer import calendar_sync as CS, outlook as OL
 from booking_signer.vault import crypto as VC
@@ -147,5 +148,5 @@ class Chat(TC.Base):
             r = run(SUBS.run_tool(ctx(), "find_subscriptions", {"from_gmail": True}))
         self.assertEqual(r["result"]["render"]["source"], "receipts in your Outlook")
         self.assertEqual(self.finds()[-1]["emails"]["messages"], msgs)
-        with mock.patch.dict(os.environ, {"SASHA_SUBSCRIPTIONS_VIA": "live"}), mock.patch.object(OR, "connected", mock.AsyncMock(return_value=False)):
+        with mock.patch.dict(os.environ, {"SASHA_SUBSCRIPTIONS_VIA": "live"}), PA.records({ctx().account: PA.LIVE_PERSON}), mock.patch.object(OR, "connected", mock.AsyncMock(return_value=False)):
             self.assertEqual(run(SUBS.run_tool(ctx(), "find_subscriptions", {"from_outlook": True}))["error"]["code"], "outlook_not_connected")

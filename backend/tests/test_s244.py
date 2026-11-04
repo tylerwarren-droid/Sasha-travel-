@@ -10,6 +10,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
+from agapi import person_access as PA   # Sasha 338
+
 from agapi import agapi_route as AR
 
 ACCOUNT = "7536a3f0-0000-4000-8000-000000000244"
@@ -99,6 +101,8 @@ class FinePrintCallsGoWhereTheirFamilyGoes(unittest.TestCase):
                   mock.patch.dict(FP._MONEY_AT, {}, clear=True), mock.patch.dict(FP._PEND, {}, clear=True), mock.patch.dict(os.environ, LIVE)):
             p.start()
             self.addCleanup(p.stop)
+        PA.install({ACCOUNT: PA.LIVE_PERSON})   # Sasha 338 · a live person is a live person_access record
+        self.addCleanup(PA.uninstall, ACCOUNT)
 
     def run_tool(self, name, args):
         from agapi import v0 as API
@@ -135,6 +139,7 @@ class SubscriptionsFollowTheirFamily(unittest.TestCase):
         async def not_connected(account):
             return False
         with mock.patch.object(SUBS, "CALL", call), mock.patch.dict(SUBS._USERS, {}, clear=True), mock.patch.dict(os.environ, LIVE), \
+                PA.records({ACCOUNT: PA.LIVE_PERSON}), \
                 mock.patch.dict(SUBS._CONSENTED, {ACCOUNT: {"version": "x"}}), mock.patch.object(GR, "connected", not_connected):
             ctx = API.Ctx(account=ACCOUNT, user_said="", surface="s2", started=datetime.now(timezone.utc))
             r = asyncio.run(SUBS.run_tool(ctx, "find_subscriptions", {"from_gmail": True}))

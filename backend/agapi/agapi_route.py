@@ -191,41 +191,16 @@ class lane:
 
 
 async def person_mode(account: Optional[str]) -> str:
-    """Sasha 253 · "test" | "live" for a person. Sasha 254 item 5: the person's record (agapi.person_access — AgAPI's person_access,
-    through access.get; ≤ 60 s). No row (every guest our suites and scratch scripts make, every guest session) or a failed read →
-    "test": the sandbox. No person at all → "live" (the family's route decides). Until 254: app_metadata.kanoe_test."""
+    """Sasha 253 · "test" | "live" for a person — from THE ONE RECORD, AgAPI's person_access (agapi.person_access, read once a session).
+    Sasha 338 (Tyler, 4 Nov: "every new person starts as NOT live until Tyler marks them live on /admin/access"): live ONLY when their
+    row says live. No row (every new person, every guest, every suite guest) or an unreadable record → "test": the sandbox, payments TEST.
+    No person at all → "live" (the family's route decides). The old second list — the guest's app_metadata.kanoe_test marker — is no longer
+    read for this (a PATCH it was: two places deciding test vs live)."""
     if not account:
         return "live"
     from agapi import person_access as PA
     rec = await PA.get(account)
-    if rec.get("source") in ("person_access", "installed"):   # a person WITH a row: the record decides
-        return "live" if rec.get("mode") == "live" else "test"
-    # No row (a public guest) or an unreadable record: closed for POWERS, but the sandbox is not the safe side for a real guest's
-    # paid flows (subscriptions, money, activities would land on test inventory). Their mode is the guest's own marker — every
-    # suite and scratch guest carries kanoe_test (guest_accounts.create_guest) — and unreadable → live, as in 253.
-    return await _marker_mode(account)
-
-
-_MODE: Dict[str, Tuple[str, float]] = {}   # account → (mode, read at) — the guest marker, read once per 10 minutes
-MODE_TTL_S = 600
-
-
-async def _marker_mode(account: str) -> str:
-    import time as _time
-    hit = _MODE.get(account)
-    if hit and _time.time() - hit[1] < MODE_TTL_S:
-        return hit[0]
-    mode = "live"
-    try:
-        from booking_signer import ops
-        st, u = await ops.ADMIN("GET", f"/admin/users/{account}", None)
-        if st == 200 and ((u or {}).get("app_metadata") or {}).get("kanoe_test"):
-            mode = "test"
-    except Exception as e:
-        log.warning("[route] the guest's marker not read (live): %s", type(e).__name__)
-        return "live"   # not cached: read again next time
-    _MODE[account] = (mode, _time.time())
-    return mode
+    return "live" if rec.get("source") in ("person_access", "installed") and rec.get("mode") == "live" else "test"
 
 
 async def target_for(family: str, account: Optional[str] = None, flight: Optional[dict] = None,

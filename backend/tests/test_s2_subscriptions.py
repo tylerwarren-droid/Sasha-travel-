@@ -13,6 +13,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
+from agapi import person_access as PA   # Sasha 338 · live means a live person_access record
 from agapi import s2_subscriptions as SUBS
 from agapi import v0 as API
 from app.agent.fakes import Block, client
@@ -91,7 +92,7 @@ class Radar(unittest.TestCase):
         self.assertEqual([c for c in self.agapi.calls if c[0] == "subscriptions.cancel"][-1][2], "apv_1")
 
     def test_live_the_yes_is_their_tap_and_the_sample_is_refused(self):
-        with mock.patch.dict(os.environ, {"SASHA_SUBSCRIPTIONS_VIA": "live"}):
+        with mock.patch.dict(os.environ, {"SASHA_SUBSCRIPTIONS_VIA": "live"}), PA.records({ctx().account: PA.LIVE_PERSON}):
             self.assertEqual(run(SUBS.run_tool(ctx(), "find_subscriptions", {"use_sample": True}))["error"]["code"], "sample_test_only")
             run(SUBS.run_tool(ctx(), "cancel_subscription", {"subscription_id": "sub_calm"}))
             self.assertEqual(self.agapi.calls[-1][0], "approvals.request")                                 # AgAPI's link to their phone

@@ -53,7 +53,9 @@ TURN_DEADLINE_S = float(os.getenv("SASHA_TURN_DEADLINE_S", "100"))
 MODEL_TIMEOUT_S = float(os.getenv("SASHA_MODEL_TIMEOUT_S", "60"))
 MAX_TOOL_CALLS = int(os.getenv("SASHA_MAX_TOOL_CALLS", "12"))
 TURNS_PER_MIN = int(os.getenv("SASHA_TURNS_PER_MIN", "10"))
-DAILY_BUDGET = {"turns": int(os.getenv("SASHA_DAILY_TURNS", "300"))}
+DAILY_BUDGET = {"turns": int(os.getenv("SASHA_DAILY_TURNS", "300")),
+                # Sasha 338 · a person NOT live on their person_access record (every new sign-up, until Tyler marks them live): a smaller day
+                "new_turns": int(os.getenv("SASHA_DAILY_TURNS_NEW", "60"))}
 BUDGET_LINE = "I've done a lot for you today — I'll be back to full speed tomorrow. Anything booked is safe."
 _WEIGH = {"search_flights", "search_stays", "search_venues", "read_booking_route"}
 MAX_STEPS = 8
@@ -1692,7 +1694,9 @@ async def over_budget(account: str) -> Optional[str]:
         return None
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     try:
-        if await BK.count_events("agent-turn", f"{account}:{day}:") >= DAILY_BUDGET["turns"]:
+        from agapi import person_access as PA
+        cap = DAILY_BUDGET["turns"] if PA.cached(account).get("mode") == "live" else DAILY_BUDGET["new_turns"]   # the ONE record decides
+        if await BK.count_events("agent-turn", f"{account}:{day}:") >= cap:
             log.warning("[agent] daily budget reached for %s", account[:8])
             return BUDGET_LINE
         await BK.event("agent-turn", f"{account}:{day}:{now:.6f}", "turn", {}, verified=True)

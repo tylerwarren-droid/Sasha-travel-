@@ -2,8 +2,8 @@
 
   POST /api/booking/ops/invite  {email}  → an invitation to Sasha, emailed from Sasha's own address.
 
-Sign-up is INVITE-ONLY until counsel approves the privacy notice and the terms: Supabase keeps public sign-up DISABLED,
-so only an address the founder invites here can ever sign in. The link is Supabase's own (admin generate_link — an
+Sasha 338 (Tyler, 4 Nov): sign-up is OPEN — WHO may sign in is booking_signer/sign_up.py, the one place (Supabase's own public sign-up
+stays disabled, so that rule is the only way in). This route only EMAILS someone an invitation. The link is Supabase's own (admin generate_link — an
 "invite" for a new address, a "magiclink" for one already invited); it lands on the app's /auth/confirm, which verifies
 it with Supabase and opens "You". The token is never stored or logged here.
 """

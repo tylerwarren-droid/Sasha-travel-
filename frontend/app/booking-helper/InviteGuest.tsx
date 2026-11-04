@@ -1,6 +1,6 @@
 'use client'
 
-/** Sasha 121 · OPS: invite a guest — sign-up is invite-only until counsel approves the privacy notice and the terms. */
+/** Sasha 121 · OPS: invite a guest — Sasha 338: sign-up is open (booking_signer/sign_up.py); this only emails someone an invitation. */
 import { useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
@@ -21,7 +21,7 @@ export function InviteGuest() {
   return (
     <section className="space-y-2 rounded border p-3">
       <h2 className="font-semibold">Invite a guest</h2>
-      <p className="opacity-75">Sign-up is invite-only. Sasha emails them a link from her own address; it works once, for 24 hours.</p>
+      <p className="opacity-75">Anyone can sign in with their email; this sends them an invitation from Sasha's own address (the link works once, for 24 hours).</p>
       <input className="w-full rounded border px-2 py-1" placeholder="their email" value={email} onChange={(e) => setEmail(e.target.value)} />
       <GatedButton label="Send the invitation" onClick={() => { send() }} needs={[!ok && 'an email address', busy && 'the last step to finish']} />
       {words && <p>{words}</p>}

@@ -1,6 +1,6 @@
 """CR 128 · "DILIGENCE" — Applied Diligence's SPACE on WhatsApp, entered by its word like "campus", "relocate", "espana" (Tyler, 27 Oct:
 "give me an AD word — diligence"). The word is read in the ONE switch (products/whatsapp.py); on entry, ONE line (LINE); inside, every
-message is handed to AgAPI's ONE inbound op with space: "diligence" (CR 127's door: "link <email>", the 6-digit code, then AD itself —
+message is handed to AgAPI's ONE inbound op with space: "diligence" (CR 127's door: CR 165's tap-to-link, the 6-digit code, then AD itself —
 AgAPI sends AD's reply from Kanoe's number); "sasha" or another word leaves, as for the others. Outside the space nothing goes to AD.
 
 ⚠ RETIRED by CR 128 on WhatsApp: the CR 15 register PREVIEW below ("check TotalEnergies in France" → AD's preview endpoint). Its
@@ -242,12 +242,12 @@ async def lookup(country: str, name: Optional[str], number: Optional[str]) -> st
 
 # ── the space (CR 128): the word's ONE line, then every message to AgAPI's door ────────────────────────────────────────────
 
-LINE = "Applied Diligence — who should I investigate? (Send 'link <your AD email>' first if this number isn't linked.)"
+LINE = "Applied Diligence — who should I investigate?"   # CR 165 · an unlinked number is linked by a tap (AgAPI), never "send link"
 RESUME_LINE = LINE   # its word said again (or after another space): the same one line
 EVERY_MESSAGE = True   # CR 142 · in the space every message is AD's, routed by its meaning — no resume shortcut answers for it
 CLOSED = ("Applied Diligence on WhatsApp is in a private beta, and this number isn't in it yet — nothing was sent to Applied Diligence. "
-          "Say “sasha” for travel.")
-DOWN = "Applied Diligence couldn't be reached just now — nothing was sent. Try again in a minute, or say “sasha” for travel."
+          "Tap Menu for Kanoe's other tools.")
+DOWN = "Applied Diligence couldn't be reached just now — nothing was sent. Try again in a minute."
 WHATSAPP_ONLY = "Applied Diligence works on WhatsApp: send “diligence” there."
 _WORD = re.compile(r"(?i)^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])[\s:,-]*")
 
@@ -271,7 +271,14 @@ async def hand_over(ctx: dict, t: str, media: list) -> bool:
         out.text(WHATSAPP_ONLY)
         return True
     from agapi import venue_submit as VS
-    r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence",
+    email = None   # CR 165 · their own Kanoe account email, offered by AgAPI as "Is this you?" to link AD by a tap
+    try:
+        from booking_signer import ladder_routes as LR
+        if ctx.get("account") and hasattr(LR.LADDER_STORE, "account_email"):
+            email = await LR.LADDER_STORE.account_email(ctx["account"])
+    except Exception as e:
+        log.warning("[diligence] the account's email wasn't read: %s", type(e).__name__)
+    r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence", account_email=email,
                                   media=[{"url": m["url"], "type": m.get("type") or ""} for m in media],   # CR 136 · relayed onto the case
                                   replied_to=ctx.get("replied_to"), twilio=ctx.get("twilio"))
     if r.get("ad") == "closed":

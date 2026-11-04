@@ -13,6 +13,7 @@
     copy, with the cita route (servpub PAD, or 010 / 914 800 010) and what is in person — said plainly.
 """
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 import io
 import re
@@ -250,7 +251,7 @@ async def step(ctx: dict, which: str, web: str) -> bool:
         out.ask("Your Social Security form (TA.1) is filled — sign it and take it to a TGSS office.",
                 [("Next: your health card →", "rx:go:health")])
     elif which == "health":
-        out.text("Last: your health card. Say “españa” and EspañaMe fills its form from this file.")
+        out.text(f"Last: your health card. {TL.go('espana').capitalize()} and EspañaMe fills its form from this file.")
     return True
 
 

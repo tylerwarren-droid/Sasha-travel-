@@ -36,10 +36,11 @@ SPACE_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "Espa�
 
 
 def space_label(product: Optional[str]) -> str:
-    """Sasha 194 · the space, always said: "You're in CampusMe — say “sasha” for travel" / "You're in Sasha (travel)"."""
-    if product:
-        return f"You're in {SPACE_NAME.get(product, product)} — say “sasha” for travel"
-    return "You're in Sasha (travel)"
+    """Sasha 194 · the space, always said: "You're in 🎓 Campus" / "You're in ✈️ Travel". CR 165 · never "say “sasha” for travel" — the
+    Menu on every reply goes back to all the tools (products/tools.py)."""
+    from products import tools as TL
+    t = TL.BY_PRODUCT.get(product)
+    return f"You're in {TL.title(t)}" if t else f"You're in {SPACE_NAME.get(product, product)}"
 
 
 def label_space(out_items: list, product: Optional[str]) -> None:

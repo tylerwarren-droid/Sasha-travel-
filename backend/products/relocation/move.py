@@ -11,6 +11,7 @@ sheet or page it cites (after.reminders' sources: the consulate's own sheet, the
 A US consulate: only what its own page states (the TIE months), as after.reminders does. Days already past are left out.
 """
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 import logging
 from datetime import date, datetime, timedelta
@@ -72,7 +73,7 @@ def days(case: dict, origin: str, nights: int, today: date) -> List[dict]:
     add(entry + timedelta(days=35), town, "Paperwork", "Morning", "Social Security number: the TA.1",
         "Your TA.1, filled — in person at the TGSS. Say “after arrival” to me for the PDF.")
     add(entry + timedelta(days=40), town, "Paperwork", "Morning", "Health card (tarjeta sanitaria)",
-        "Say “españa” to me: the 1449F1 is filled, and your centro de salud found.")
+        f"{TL.go('espana').capitalize()}: the 1449F1 is filled, and your centro de salud found.")
     return [out[d] for d in sorted(out)]
 
 

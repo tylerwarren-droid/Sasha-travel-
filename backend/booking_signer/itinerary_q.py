@@ -7,6 +7,7 @@ don't say where they'll be, the answer says so.
   "do I have time to fly to Lisbon between 9 and 14 on 12 November?"
 """
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 import re
 from datetime import date, datetime, timedelta
@@ -242,7 +243,7 @@ async def ask_anything(account: str, text: str, rows: List[dict], now: datetime)
             return ["I can't read your relocation file just now."]
         ps = await package_status(account)
         if not ps:
-            return ["You don't have a relocation file yet — say “relocate” to start."]
+            return [f"You don't have a relocation file yet — {TL.go('relocate')} to start."]
         icon = {"filled": "✏️ filled", "signed": "✅ signed", "missing": "❗ missing", "waiting": "⏳ waiting"}
         lines = [f"🏠 Your relocation package (in your {ps.get('tab') or 'Move to Madrid'} tab):"]
         for fm in ps.get("forms") or []:
@@ -342,7 +343,7 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
     if HEALTH.search(text or ""):
         steps = await JN.health_card(account)
         if not steps:
-            return ["You don't have a health-card case yet — say “españa” to start one."]
+            return [f"You don't have a health-card case yet — {TL.go('espana')} to start one."]
         mark = {"filled": "✏️ prepared — sign it", "done": "✅", "doing": "⏳", "missing": "☐", "expired": "⌛ expired", "info": "ℹ️"}
         lines = ["🇪🇸 Your health card (tarjeta sanitaria) — also in the 🇪🇸 Health card tab:"]
         for f in steps:
@@ -365,7 +366,7 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
         if not t:   # never another journey in its place (it showed the campus tour)
             what = m[1].lower()
             return [f"There's no {'move' if what.startswith('move') else 'campus'} journey on your account yet — "
-                    + ("RelocateMe starts it: say “relocation”." if what.startswith("move") else "CampusMe starts it: say “campus”.")]
+                    + (f"RelocateMe starts it: {TL.go('relocate')}." if what.startswith("move") else f"CampusMe starts it: {TL.go('campus')}.")]
     if TRIP.search(text or ""):   # Sasha 165 · the plan + the bookings, day by day — when there is a plan
         from . import plan_store as PS
         p = await PS.latest(account, text)

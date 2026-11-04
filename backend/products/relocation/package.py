@@ -2,6 +2,7 @@
 form by form (filled · signed · missing · waiting), its next dated step on the "Move to Madrid" trip, and that tab's title.
 Nothing is written, sent or asked here."""
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 from datetime import date
 from typing import Optional
@@ -48,7 +49,7 @@ def _forms(st: dict) -> list:
          "note": f"{AR.P790_012_FEE}; every value ready to copy — the police's form has a CAPTCHA, so you fill it"},
         {"name": "Padrón", "state": "missing", "note": "in person with a cita (servpub PAD or 010); every value ready to copy"},
         {"name": "TA.1 (Social Security number)", "state": "filled", "note": "in person at the TGSS; signature yours"},
-        {"name": "Health card (1449F1)", "state": "missing", "note": "say “españa” — it fills from this file"},
+        {"name": "Health card (1449F1)", "state": "missing", "note": f"{TL.go('espana')} — it fills from this file"},
     ]
 
 

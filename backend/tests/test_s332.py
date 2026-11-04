@@ -57,7 +57,7 @@ class World:
         return self
 
     def __exit__(self, *a):
-        for x in self.p:
+        for x in reversed(self.p):   # Sasha 339 · last in, first out: a nested patch of the same name restores the real one, never a fake
             x.stop()
 
     def limits(self):

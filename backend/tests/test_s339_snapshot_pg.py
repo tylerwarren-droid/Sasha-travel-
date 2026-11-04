@@ -13,7 +13,19 @@ import uuid
 from unittest import mock
 
 from booking_signer import basket as BK
-from tests.test_s336_keep_owners import PG, _block
+import os
+import tempfile
+
+from tests.test_s336_keep_owners import _block
+
+PG, _SERVER = os.getenv("BOOKING_TEST_DATABASE_URL", ""), None
+if not PG:
+    try:
+        import pgserver   # its OWN throwaway local Postgres (336's module stops its own when it finishes)
+        _SERVER = pgserver.get_server(tempfile.mkdtemp(prefix="s339pg"), cleanup_mode="stop")
+        PG = _SERVER.get_uri()
+    except Exception:
+        PG = ""
 
 SQL = pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql"
 ACCT, TRIP = uuid.uuid4(), uuid.uuid4()
@@ -94,6 +106,14 @@ class SnapshotIsAnObject(unittest.TestCase):
                                            "where provider_ref = 'off_arr'")), "easyJet|x")
         print(f"\n[s339 snapshot · real Postgres] bug reproduced (string + array) → new writes objects, supersede keeps objects, "
               f"readers see dicts, 051 repaired {before} rows to objects (twice: idempotent)")
+
+
+def tearDownModule():
+    if _SERVER is not None:
+        try:
+            _SERVER.cleanup()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

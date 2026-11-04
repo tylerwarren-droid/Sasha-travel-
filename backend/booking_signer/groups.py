@@ -546,9 +546,10 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     out = []
     members = await st.members(mv["id"])
     recorded: Dict[str, str] = {}
+    booked_rec: Dict[str, Dict[str, Any]] = {}   # Sasha 340 · a booked worker's price and references, from AgAPI's record
     try:   # Sasha 339 (Tyler) · every read: AgAPI's ONE booking record first — the trips follow it, the status IS it
         from . import group_book as GB
-        recorded = await GB.reconcile(account, members)
+        recorded = await GB.reconcile(account, members, booked=booked_rec)
     except Exception as e:
         log.warning("[groups] the list not reconciled with AgAPI's record: %s", type(e).__name__)
     from . import basket as BK
@@ -567,7 +568,10 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
                     "transport": _transport(rows), "hotel": (stay.get("snapshot") or {}).get("name") if stay else None,
                     "flight_eur": f_eur, "hotel_eur_per_night": h_eur, "price_eur": price, "limit": lim,
                     **(await _vault_marks(m)),
-                    "status": recorded.get(m["id"]) or status_of(rows, lim, await _has_documents(m))})
+                    "status": recorded.get(m["id"]) or status_of(rows, lim, await _has_documents(m)),
+                    **({"price_eur": booked_rec[m["id"]]["price_eur"], "references": booked_rec[m["id"]]["references"],
+                        "transport": _transport(rows) or "Booked · " + " · ".join(booked_rec[m["id"]]["references"])}
+                       if m["id"] in booked_rec else {})})
     counts = {s: sum(1 for r in out if r["status"] == s) for s in STATUSES if any(r["status"] == s for r in out)}
     return {"movement": {k: mv.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on", "hotel_area")},
             "limits": (mv.get("rules") or {}).get("limits") or {}, "rows": out, "counts": counts}

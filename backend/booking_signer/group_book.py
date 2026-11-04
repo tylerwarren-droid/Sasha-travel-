@@ -255,6 +255,18 @@ def _latest(records: List[dict], member_id: str) -> Optional[dict]:
     return next((b for b in reversed(records) if (b.get("worker") or {}).get("key") == member_id), None)
 
 
+def record_booked(records: List[dict], members: List[dict]) -> Dict[str, Dict[str, Any]]:
+    """Sasha 340 · what a booked worker's master-list row shows, FROM AgAPI's record: the price booked (its parts) and its references."""
+    out = {}
+    for m in members:
+        b = _latest(records, m["id"])
+        if b and b.get("state") == "booked":
+            parts = b.get("parts") or []
+            out[m["id"]] = {"price_eur": round(sum(((p.get("price") or {}).get("amount_minor") or 0) for p in parts) / 100, 2),
+                            "references": [p.get("reference") for p in parts if p.get("reference")]}
+    return out
+
+
 def record_states(records: List[dict], members: List[dict]) -> Dict[str, str]:
     """Sasha 339 (Tyler) · each worker's state AS AgAPI'S ONE RECORD SAYS: booked / cancelled (cancelled or swapped out) — absent when AgAPI has
     no record of them. The master list's status reads THIS first; the trip rows only decide for a worker AgAPI never booked."""
@@ -266,7 +278,7 @@ def record_states(records: List[dict], members: List[dict]) -> Dict[str, str]:
     return out
 
 
-async def reconcile(account: str, members: List[dict], records: Optional[List[dict]] = None) -> Dict[str, str]:
+async def reconcile(account: str, members: List[dict], records: Optional[List[dict]] = None, booked: Optional[dict] = None) -> Dict[str, str]:
     """Sasha 339 (Tyler) · THE ONE BOOKING RECORD DECIDES: each worker's trip follows AgAPI's group.bookings — their latest record booked →
     their current plan's rows booked (with its references); cancelled / swapped out → cancelled. Run on every master-list read and once
     after every yes, so a trip row and AgAPI's record can never disagree for longer than one read. → rows changed."""
@@ -288,6 +300,8 @@ async def reconcile(account: str, members: List[dict], records: Optional[List[di
                 await _settle(account, str(m["trip_id"]), want, b.get("parts") or [] if want == "booked" else [])
             except Exception as e:
                 log.warning("[group_book] %s not reconciled: %s", m["name"], type(e).__name__)
+    if booked is not None:
+        booked.update(record_booked(records, members))
     return record_states(records, members)
 
 

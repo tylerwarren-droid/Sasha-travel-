@@ -76,12 +76,14 @@ class MovedFareReaskedAlone(unittest.TestCase):
             waiting_before = [x["name"] for x in GB.waiting_cards(OWNER)]
             again = run(GB.confirm(OWNER, re["read_back_id"], "group_yes", "Yes, go ahead."))
             waiting_after = [x["name"] for x in GB.waiting_cards(OWNER)]
-            listed = {r["name"]: r["status"] for r in run(G.view(OWNER))["rows"]}
+            rows = run(G.view(OWNER))["rows"]
+            listed = {r["name"]: r["status"] for r in rows}
             inv = run(GB.invoice(OWNER))
         self.assertEqual((len(again["done"]), again["failed"], again["reasked"]), (1, [], []))
         self.assertEqual(waiting_before, ["Bruno Example"])                                    # a reload finds THAT card
         self.assertEqual(waiting_after, [])
         self.assertEqual(sum(1 for s in listed.values() if s == "booked"), 19)               # the master list = AgAPI's record
+        self.assertEqual(round(sum(r["price_eur"] for r in rows if r["status"] == "booked"), 2), float(inv["total"].strip("€").replace(",", "")))
         self.assertEqual(len(inv["lines"]), 19)
 
     def test_an_offer_gone_at_the_act_is_prepared_again_for_that_worker(self):

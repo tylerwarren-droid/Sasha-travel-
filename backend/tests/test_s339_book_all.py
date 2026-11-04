@@ -117,6 +117,24 @@ class TheOneYesIsAJobToo(unittest.TestCase):
         self.assertEqual(len(w.agapi.supplier), 19)
 
 
+class SettleIsTheCurrentPlan(unittest.TestCase):
+    def test_superseded_rows_are_not_the_booking_and_a_trip_failure_is_still_done(self):
+        with World() as w:
+            m = next(x for x in w.members() if x["name"] == "Amara Sample")
+            w.trips[m["trip_id"]].append({"id": "old-1", "kind": "flight", "state": "suggested", "snapshot": {"superseded_at": "x"}})
+            card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
+            run(w.tap(card["read_back_id"]))
+            self.assertNotIn("old-1", [i for i, st in w.settled])                            # a superseded row is never settled
+            card = run(GB.prepare(OWNER, "book", ["Bruno Example"]))
+
+            async def broken(*a):
+                raise RuntimeError("trip down")
+            with mock.patch.object(GB, "SETTLE", broken):
+                out = run(w.tap(card["read_back_id"]))
+        self.assertEqual(out["failed"], [])                                                  # AgAPI booked it: never "nothing changed"
+        self.assertIn("done at AgAPI", out["done"][0]["note"])
+
+
 class OfferGone(unittest.TestCase):
     def test_replanned_once_then_held_per_worker(self):
         with World(PricedAgAPI(gone={"Amara Sample"}, gone_twice={"Bruno Example"})) as w:

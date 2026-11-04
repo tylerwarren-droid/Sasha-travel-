@@ -444,7 +444,9 @@ async def _settle(account: str, trip_id: Optional[str], state: str, parts: List[
     if not trip_id:
         return
     from . import groups as G
-    rows = [r for r in await G._items(account, trip_id) if r.get("state") in ("suggested", "chosen", "booked")]
+    from . import basket as BK
+    rows = [r for r in await G._items(account, trip_id) if r.get("state") in ("suggested", "chosen", "booked")
+            and not BK.superseded(r)]   # Sasha 339 · the CURRENT plan's rows only: a re-plan's superseded rows are not the booking
     refs = {"flight": [p.get("reference") for p in parts if p.get("kind") == "flight"], "stay": [p.get("reference") for p in parts if p.get("kind") == "stay"]}
     for r in rows:
         kind = "flight" if r.get("kind") == "flight" else "stay"
@@ -512,14 +514,19 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
         return
     res = r.get("result") or {}
     parts = res.get("parts") or []
-    if it["op"] == "group.book":
-        await _settle(account, members[it["member"]].get("trip_id"), "booked", parts)
-    elif it["op"] == "group.cancel":
-        await _settle(account, members[it["member"]].get("trip_id"), "cancelled", [])
-    else:   # a swap: the one who leaves — cancelled; the one who comes — their trip, booked with the new references
-        await _settle(account, members[it["from_member"]].get("trip_id"), "cancelled", [])
-        await _swap_in(account, mv, members[it["member"]], parts)
-    done.append({"name": it["name"], "state": res.get("state"), "parts": [p.get("reference") for p in parts],
+    note = None
+    try:   # AgAPI has DONE it: the trip follows — and if the trip can't, the act still happened and is said as done
+        if it["op"] == "group.book":
+            await _settle(account, members[it["member"]].get("trip_id"), "booked", parts)
+        elif it["op"] == "group.cancel":
+            await _settle(account, members[it["member"]].get("trip_id"), "cancelled", [])
+        else:   # a swap: the one who leaves — cancelled; the one who comes — their trip, booked with the new references
+            await _settle(account, members[it["from_member"]].get("trip_id"), "cancelled", [])
+            await _swap_in(account, mv, members[it["member"]], parts)
+    except Exception as e:   # Sasha 339 · never "nothing was changed" for an act AgAPI made
+        log.error("[group_book] %s: done at AgAPI, the trip not updated: %s", it["name"], type(e).__name__)
+        note = "done at AgAPI — the master list couldn't be updated; the invoice has it"
+    done.append({"name": it["name"], "state": res.get("state"), "parts": [p.get("reference") for p in parts], **({"note": note} if note else {}),
                  **({"refund": res["refund"]} if res.get("refund") else {}), **({"difference": res["difference"]} if res.get("difference") else {})})
 
 

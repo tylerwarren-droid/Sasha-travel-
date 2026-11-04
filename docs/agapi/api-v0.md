@@ -1317,7 +1317,7 @@ Book the group's workers through AgAPI (TEST): everyone planned, or the names gi
 
 ### `group_swap`
 
-"Luis replaces Ana": swap one worker for another on the list (TEST). The new worker's vault must have their passport — else they're invited. Shows the difference on a card with Yes / No. Say its `ask`.
+"Luis replaces Ana": swap one worker for another (TEST). If the new worker isn't on the list, give in_city and in_grade and they're added and invited to their vault in the same step. The new worker's vault must have their passport — else they're invited. Shows the difference on a card with Yes / No. Say its `ask` (or its `say`).
 
 **Errors:** `nothing_to_do`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
@@ -1331,6 +1331,12 @@ Book the group's workers through AgAPI (TEST): everyone planned, or the names gi
    "type": "string"
   },
   "in": {
+   "type": "string"
+  },
+  "in_city": {
+   "type": "string"
+  },
+  "in_grade": {
    "type": "string"
   },
   "idempotency_key": {

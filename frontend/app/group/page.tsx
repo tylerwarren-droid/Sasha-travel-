@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react'
 import { bookingReq } from '@/lib/booking-client'
+import { T, TONE, page, card as cardS, field, btn, btn2, small, off } from '@/lib/group-theme'   // Sasha 336 · readable on the dark theme
 
 type Row = { member_id: string; name: string; grade?: string | null; home_city?: string | null; out?: string | null; back?: string | null
   transport?: string | null; hotel?: string | null; price_eur?: number | null; flight_eur?: number | null; hotel_eur_per_night?: number | null
@@ -14,8 +15,6 @@ type Row = { member_id: string; name: string; grade?: string | null; home_city?:
 type View = { movement?: { company?: string; destination?: string; starts_on?: string; ends_on?: string; hotel_area?: string }
   rows: Row[]; counts?: Record<string, number>; why?: string }
 
-const TONE: Record<string, string> = { 'over limit': '#b42318', 'needs vault': '#b54708', planned: '#175cd3', booked: '#067647',
-  cancelled: '#667085', 'not planned': '#667085' }
 const eur = (n?: number | null) => (typeof n === 'number' ? `€${Math.round(n)}` : '—')
 
 export default function GroupPage() {
@@ -28,6 +27,10 @@ export default function GroupPage() {
   const [card, setCard] = useState<{ read_back_id: string; read_back: string[]; ask: string; choices: { title: string; route: string }[] } | null>(null)
   const [swapIn, setSwapIn] = useState('')
   const [swapOut, setSwapOut] = useState('')
+  const [swapCity, setSwapCity] = useState('')   // Sasha 336 · a newcomer: the swap adds them and invites them to their vault
+  const [swapGrade, setSwapGrade] = useState('')
+  // Sasha 336 · "Book all" with nothing bookable: a short list with taps (book anyway / invite)
+  const [taps, setTaps] = useState<{ label: string; act?: { action: 'book'; who: string[]; over_ok: boolean }; invite?: string[] }[]>([])
 
   useEffect(() => {
     let off = false
@@ -55,14 +58,19 @@ export default function GroupPage() {
     setLinks(j.forward || [])
     setSaid(r?.ok ? `Emailed ${j.emailed?.length ?? 0}.${j.forward?.length ? ` ${j.forward.length} to forward below.` : ''}` : (j.why || 'Not sent — try again.'))
   }
-  const act = async (action: 'book' | 'swap' | 'cancel', who: string[] | null, to?: string) => {
-    setBusy(true); setCard(null)
-    const r = await bookingReq('/api/booking/group/act', { action, who, to }, 120000).catch(() => null)
+  const act = async (action: 'book' | 'swap' | 'cancel', who: string[] | null, to?: string, more: Record<string, unknown> = {}) => {
+    setBusy(true); setCard(null); setTaps([])
+    const r = await bookingReq('/api/booking/group/act', { action, who, to, ...more }, 120000).catch(() => null)
     setBusy(false)
     const j = (r?.json || {}) as Record<string, unknown>
     if (r?.ok && j.status === 'awaiting_yes' && Array.isArray(j.choices)) setCard(j as unknown as NonNullable<typeof card>)
-    else setSaid(String(j.say || j.message || 'Nothing to do.'))
+    else {
+      setSaid(String(j.say || j.message || 'Nothing to do.'))
+      if (Array.isArray(j.taps)) setTaps(j.taps as typeof taps)
+      if (Array.isArray(j.links)) setLinks(j.links as { name: string; link: string }[])
+    }
   }
+  const swap = () => act('swap', [swapOut], swapIn, swapCity.trim() ? { to_city: swapCity.trim(), to_grade: swapGrade.trim() || 'worker' } : {})
   const answer = async (choice: string) => {   // once per card: the server holds the claim; a second tap finds nothing
     if (!card) return
     const id = card.read_back_id
@@ -86,39 +94,49 @@ export default function GroupPage() {
 
   const mv = v?.movement
   return (
-    <main style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 16px', fontFamily: 'system-ui, sans-serif', color: '#101828' }}>
+    <main style={{ ...page, maxWidth: 1100, margin: '0 auto', padding: '24px 16px' }}>
       <h1 style={{ fontSize: 22, margin: '0 0 4px' }}>{mv?.company ? `${mv.company} → ${mv.destination}` : 'Group movement'}</h1>
-      {mv && <p style={{ margin: '0 0 16px', color: '#475467' }}>{[mv.starts_on, mv.ends_on].filter(Boolean).join(' – ')}{mv.hotel_area ? ` · hotel ${mv.hotel_area}` : ''}</p>}
+      {mv && <p style={{ margin: '0 0 16px', color: T.muted }}>{[mv.starts_on, mv.ends_on].filter(Boolean).join(' – ')}{mv.hotel_area ? ` · hotel ${mv.hotel_area}` : ''}</p>}
       {v?.counts && <p data-counts style={{ margin: '0 0 16px' }}>{Object.entries(v.counts).map(([s, n]) => `${n} ${s}`).join(' · ')}</p>}
-      <section style={{ border: '1px solid #eaecf0', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+      <section style={{ ...cardS, marginBottom: 16 }}>
         <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Add the list — a spreadsheet, a photo of it, or paste it</label>
-        <input type="file" accept=".csv,.xlsx,image/*" disabled={busy} onChange={e => onFile(e.target.files?.[0])} />
+        <input type="file" accept=".csv,.xlsx,image/*" disabled={busy} onChange={e => onFile(e.target.files?.[0])} style={{ color: T.text }} />
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Name, home city, out, back, grade — one person per line"
-          rows={3} style={{ display: 'block', width: '100%', marginTop: 8, boxSizing: 'border-box' }} />
-        <button type="button" disabled={busy || !text.trim()} onClick={() => send({ text })} style={{ marginTop: 8 }}>Add these</button>
+          rows={3} style={{ ...field, display: 'block', width: '100%', marginTop: 8 }} />
+        <button type="button" disabled={busy || !text.trim()} onClick={() => send({ text })} style={{ ...off(btn2, busy || !text.trim()), marginTop: 8 }}>Add these</button>
         {said && <p data-upload-said style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{said}</p>}
-        <button type="button" disabled={busy || !v?.rows?.length} onClick={() => invite(null)} style={{ marginTop: 8 }}>Invite everyone to the vault</button>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-          <button type="button" disabled={busy} onClick={() => act('book', null)}>Book all planned</button>
-          <input value={swapOut} onChange={e => setSwapOut(e.target.value)} placeholder="Swap… (who leaves)" />
-          <input value={swapIn} onChange={e => setSwapIn(e.target.value)} placeholder="for… (who comes)" />
-          <button type="button" disabled={busy || !swapOut || !swapIn} onClick={() => act('swap', [swapOut], swapIn)}>Swap</button>
-          <button type="button" onClick={invoice}>The invoice</button>
+        {taps.length > 0 && <div data-taps style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          {taps.map(t => t.act ? <button key={t.label} type="button" disabled={busy} style={off(btn, busy)}
+              onClick={() => act('book', t.act!.who, undefined, { over_ok: true })}>{t.label}</button>
+            : t.invite ? <button key={t.label} type="button" disabled={busy} style={off(btn2, busy)} onClick={() => invite(t.invite!)}>{t.label}</button>
+            : <span key={t.label} style={{ color: T.muted, alignSelf: 'center' }}>{t.label}</span>)}
+        </div>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          <button type="button" disabled={busy || !v?.rows?.length} onClick={() => invite(null)} style={off(btn2, busy || !v?.rows?.length)}>Invite everyone to the vault</button>
+          <button type="button" disabled={busy} onClick={() => act('book', null)} style={off(btn, busy)}>Book all planned</button>
+          <button type="button" onClick={invoice} style={btn2}>The invoice</button>
         </div>
-        {card && <div data-group-card style={{ border: '1px solid #d0d5dd', borderRadius: 12, padding: 12, marginTop: 10 }}>
+        <div data-swap style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
+          <input value={swapOut} onChange={e => setSwapOut(e.target.value)} placeholder="Swap… (who leaves)" style={field} />
+          <input value={swapIn} onChange={e => setSwapIn(e.target.value)} placeholder="for… (who comes)" style={field} />
+          <input value={swapCity} onChange={e => setSwapCity(e.target.value)} placeholder="their home city (if new)" style={field} />
+          <input value={swapGrade} onChange={e => setSwapGrade(e.target.value)} placeholder="grade (if new)" style={{ ...field, width: 130 }} />
+          <button type="button" disabled={busy || !swapOut || !swapIn} onClick={swap} style={off(btn2, busy || !swapOut || !swapIn)}>Swap</button>
+        </div>
+        {card && <div data-group-card style={{ ...cardS, background: T.bg, marginTop: 10 }}>
           {card.read_back.map((l, i) => <div key={i} style={{ fontSize: 14 }}>{l || '\u00a0'}</div>)}
           <p style={{ fontWeight: 600 }}>{card.ask}</p>
-          {card.choices.map(c => <button key={c.route} type="button" disabled={busy} onClick={() => answer(c.route)} style={{ marginRight: 8 }}>{c.title}</button>)}
+          {card.choices.map((c, i) => <button key={c.route} type="button" disabled={busy} onClick={() => answer(c.route)} style={{ ...off(i === 0 ? btn : btn2, busy), marginRight: 8 }}>{c.title}</button>)}
         </div>}
-        {links.length > 0 && <ul data-forward>{links.map(l => <li key={l.link}>{l.name}: <a href={l.link}>their secure link</a></li>)}</ul>}
+        {links.length > 0 && <ul data-forward>{links.map(l => <li key={l.link}>{l.name}: <a href={l.link} style={{ color: T.link, textDecoration: 'underline' }}>their secure link</a></li>)}</ul>}
       </section>
       {!v ? <p>Loading…</p> : v.why ? <p>{v.why}</p> : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead><tr>{['Name', 'Grade', 'From', 'Transport', 'Hotel', 'Price', 'Limit', 'Vault', 'Status'].map(h =>
-              <th key={h} style={{ textAlign: 'left', borderBottom: '1px solid #eaecf0', padding: '6px 8px' }}>{h}</th>)}</tr></thead>
+              <th key={h} style={{ textAlign: 'left', borderBottom: `1px solid ${T.border}`, padding: '6px 8px', color: T.muted }}>{h}</th>)}</tr></thead>
             <tbody>{v.rows.map(r => (
-              <tr key={r.member_id} data-status={r.status}>
+              <tr key={r.member_id} data-status={r.status} style={{ borderBottom: `1px solid ${T.second}` }}>
                 <td style={{ padding: '6px 8px' }}>{r.name}</td>
                 <td style={{ padding: '6px 8px' }}>{r.grade || '—'}</td>
                 <td style={{ padding: '6px 8px' }}>{r.home_city || '—'}</td>
@@ -128,10 +146,10 @@ export default function GroupPage() {
                 <td style={{ padding: '6px 8px' }}>{[r.limit.flight_return_eur && `flight ≤ ${eur(r.limit.flight_return_eur)}`,
                   r.limit.hotel_night_eur && `hotel ≤ ${eur(r.limit.hotel_night_eur)}/night`].filter(Boolean).join(' · ') || '—'}</td>
                 <td style={{ padding: '6px 8px' }} data-vault>{r.vault?.passport ? 'Passport ✓' : 'Passport missing'}{r.vault?.loyalty?.length ? ` · ${r.vault.loyalty.map(x => `${x} ✓`).join(' · ')}` : ''}
-                  {!r.vault?.passport && <button type="button" disabled={busy} onClick={() => invite([r.member_id])} style={{ marginLeft: 6 }}>Invite</button>}
-                  {r.vault?.passport && r.status !== 'booked' && r.status !== 'cancelled' && <button type="button" disabled={busy} onClick={() => act('book', [r.name])} style={{ marginLeft: 6 }}>Book</button>}
-                  {r.status === 'booked' && <button type="button" disabled={busy} onClick={() => act('cancel', [r.name])} style={{ marginLeft: 6 }}>Cancel</button>}</td>
-                <td style={{ padding: '6px 8px', color: TONE[r.status] || '#101828', fontWeight: 600 }}>{r.status}</td>
+                  {!r.vault?.passport && <button type="button" disabled={busy} onClick={() => invite([r.member_id])} style={{ ...off(small, busy), marginLeft: 6 }}>Invite</button>}
+                  {r.vault?.passport && r.status !== 'booked' && r.status !== 'cancelled' && <button type="button" disabled={busy} onClick={() => act('book', [r.name])} style={{ ...off(small, busy), marginLeft: 6 }}>Book</button>}
+                  {r.status === 'booked' && <button type="button" disabled={busy} onClick={() => act('cancel', [r.name])} style={{ ...off(small, busy), marginLeft: 6 }}>Cancel</button>}</td>
+                <td style={{ padding: '6px 8px', color: TONE[r.status] || T.text, fontWeight: 600 }}>{r.status}</td>
               </tr>))}</tbody>
           </table>
         </div>)}

@@ -1557,7 +1557,8 @@ async def group_book(ctx: Ctx, a: dict) -> dict:
 
 async def group_swap(ctx: Ctx, a: dict) -> dict:
     from booking_signer import group_book as GB
-    return await _group_card(ctx, await GB.prepare(ctx.account, "swap", [a["out"]], a["in"]))
+    nc = {"city": a.get("in_city"), "grade": a.get("in_grade")} if a.get("in_city") else None   # Sasha 336 · a newcomer: added + invited
+    return await _group_card(ctx, await GB.prepare(ctx.account, "swap", [a["out"]], a["in"], newcomer=nc))
 
 
 async def group_cancel(ctx: Ctx, a: dict) -> dict:
@@ -1844,9 +1845,10 @@ TOOLS: List[dict] = [
        "workers are only included when the organiser names them AND says to book them anyway (over_limit_ok). Shows AgAPI's read-backs "
        "on ONE card with Yes / No — nothing is booked until they tap Yes. Say its `ask`.",
        {"who": {"type": "array", "items": {"type": "string"}}, "over_limit_ok": {"type": "boolean"}}, [], {"type": "object"}, ["nothing_to_do"], austen=True),
-    _t("group_swap", "Austen", group_swap, "\"Luis replaces Ana\": swap one worker for another on the list (TEST). The new worker's vault must "
-       "have their passport — else they're invited. Shows the difference on a card with Yes / No. Say its `ask`.",
-       {"out": {"type": "string"}, "in": {"type": "string"}}, ["out", "in"], {"type": "object"}, ["nothing_to_do"], austen=True),
+    _t("group_swap", "Austen", group_swap, "\"Luis replaces Ana\": swap one worker for another (TEST). If the new worker isn't on the list, "
+       "give in_city and in_grade and they're added and invited to their vault in the same step. The new worker's vault must have their "
+       "passport — else they're invited. Shows the difference on a card with Yes / No. Say its `ask` (or its `say`).",
+       {"out": {"type": "string"}, "in": {"type": "string"}, "in_city": {"type": "string"}, "in_grade": {"type": "string"}}, ["out", "in"], {"type": "object"}, ["nothing_to_do"], austen=True),
     _t("group_cancel", "Austen", group_cancel, "Cancel workers' trips (TEST) — the refund on a card with Yes / No. Say its `ask`.",
        {"who": {"type": "array", "items": {"type": "string"}}}, ["who"], {"type": "object"}, ["nothing_to_do"], austen=True),
     _t("group_invoice", "Pacioli", group_invoice, "The movement's ONE invoice (to the company): its total and its link. Say its `say`.",

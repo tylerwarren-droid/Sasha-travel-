@@ -49,6 +49,9 @@ class MemoryKeepStore:
     async def key(self, account):
         return self.keys.get(account)
 
+    async def ensure_owner(self, account):   # Sasha 336 · in memory every id may own a vault (the Postgres store's check is the rule)
+        return None
+
     async def put_key(self, account, wrapped, version):
         self.keys[account] = {"wrapped_dek": wrapped, "kek_version": version}
 
@@ -103,6 +106,17 @@ class PostgresKeepStore:
 
     async def key(self, account):
         return await self._q(lambda c: c.fetchrow("select wrapped_dek, kek_version from keep_keys where account_id = $1::uuid", account))
+
+    async def ensure_owner(self, account):
+        """Sasha 336 · 050's ONE owner row for this vault: the id resolved against auth.users AND group_members in one statement. Neither
+        (or both) → keep_owners' check refuses it, and the Keep says so as itself."""
+        try:
+            await self._q(lambda c: c.execute(
+                "insert into keep_owners (id, user_id, member_id) select $1::uuid, (select id from auth.users where id = $1::uuid), "
+                "(select id from public.group_members where id = $1::uuid) on conflict (id) do nothing", account))
+        except Exception as e:
+            if type(e).__name__ != "UndefinedTableError":   # before 050 is applied: 042's FK (accounts only) is still the rule
+                raise
 
     async def put_key(self, account, wrapped, version):
         await self._q(lambda c: c.execute("insert into keep_keys (account_id, wrapped_dek, kek_version) values ($1::uuid, $2, $3) "
@@ -184,6 +198,7 @@ async def _dek(account: str, create: bool) -> Optional[bytes]:
             return await kek.unwrap(bytes(row["wrapped_dek"]), K.dek_aad(account, account), row["kek_version"])
         if not create:
             return None
+        await st.ensure_owner(account)       # Sasha 336 · the vault's ONE owner row (an account or a group member) before its key
         dek = K.new_dek()
         wrapped, version = await kek.wrap(dek, K.dek_aad(account, account))
         await st.put_key(account, wrapped, version)
@@ -192,6 +207,8 @@ async def _dek(account: str, create: bool) -> Optional[bytes]:
     except KeepError:
         raise
     except Exception as e:
+        if type(e).__name__ in ("CheckViolationError", "ForeignKeyViolationError"):   # Sasha 336 · no such owner — said as it is
+            raise KeepError("keep_owner_unknown", "This vault's owner isn't a Sasha account or a group member — nothing was saved.") from None
         if type(e).__name__ in ("UndefinedTableError", "StorageUnavailable"):   # Sasha 224 · its tables (037) not there / not reachable:
             raise KeepError("keep_closed", "The Keep's storage isn't ready on this server yet — nothing was saved or used.") from None   # said as it is (not the key service)
         log.warning("[keep] the key couldn't be opened: %s", type(e).__name__)   # the type only: never a value, never a key

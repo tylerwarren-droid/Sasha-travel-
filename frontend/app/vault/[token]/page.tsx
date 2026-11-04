@@ -7,6 +7,7 @@
  */
 import { use, useCallback, useEffect, useState } from 'react'
 import { apiUrl } from '@/lib/api'
+import { T, page, card, field as fieldS, btn, btn2, small, off } from '@/lib/group-theme'   // Sasha 336 · readable on the dark theme
 
 type Page = { name: string; company?: string; destination?: string; saved: { type: string; masked: string; item_id: string }[] }
 const empty = { number: '', country: '', expires_on: '', name: '', born_on: '' }
@@ -44,25 +45,25 @@ export default function VaultPage({ params }: { params: Promise<{ token: string 
   }
 
   const field = (k: keyof typeof empty, label: string, type = 'text', ph = '') => (
-    <label style={{ display: 'block', margin: '8px 0' }}>{label}
+    <label style={{ display: 'block', margin: '10px 0', color: T.text }}>{label}
       <input type={type} autoComplete="off" value={pp[k]} placeholder={ph} onChange={e => setPp({ ...pp, [k]: e.target.value })}
-        style={{ display: 'block', width: '100%', padding: 8, boxSizing: 'border-box' }} /></label>)
+        style={{ ...fieldS, display: 'block', width: '100%', marginTop: 4, colorScheme: 'dark' }} /></label>)
 
-  if (err) return <main style={{ maxWidth: 520, margin: '40px auto', padding: '0 16px', fontFamily: 'system-ui' }}><p>{err}</p></main>
-  if (!p) return <main style={{ maxWidth: 520, margin: '40px auto', padding: '0 16px', fontFamily: 'system-ui' }}><p>Loading…</p></main>
+  if (err) return <main style={{ ...page, maxWidth: 520, margin: '40px auto', padding: '0 16px' }}><p>{err}</p></main>
+  if (!p) return <main style={{ ...page, maxWidth: 520, margin: '40px auto', padding: '0 16px' }}><p>Loading…</p></main>
   return (
-    <main style={{ maxWidth: 520, margin: '24px auto', padding: '0 16px', fontFamily: 'system-ui, sans-serif' }}>
+    <main style={{ ...page, maxWidth: 520, margin: '24px auto', padding: '0 16px' }}>
       <h1 style={{ fontSize: 22 }}>Hi {p.name.split(' ')[0]} — your travel details</h1>
-      <p style={{ color: '#475467' }}>{p.company} is booking your trip to {p.destination}. Your numbers are encrypted and only used to book
+      <p style={{ color: T.muted }}>{p.company} is booking your trip to {p.destination}. Your numbers are encrypted and only used to book
         your travel; the organiser sees only that they’re there, never the numbers.</p>
-      {p.saved.length > 0 && <section data-saved>
+      {p.saved.length > 0 && <section data-saved style={{ ...card, margin: '12px 0' }}>
         <h2 style={{ fontSize: 16 }}>Saved</h2>
         {p.saved.map(s => <div key={s.item_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-          <span>✓ {s.masked}</span><button type="button" disabled={busy} onClick={() => erase(s.item_id)}>Delete</button></div>)}
-        <button type="button" disabled={busy} onClick={() => erase()} style={{ marginTop: 8 }}>Delete everything</button>
+          <span>✓ {s.masked}</span><button type="button" disabled={busy} onClick={() => erase(s.item_id)} style={off(small, busy)}>Delete</button></div>)}
+        <button type="button" disabled={busy} onClick={() => erase()} style={{ ...off(btn2, busy), marginTop: 8 }}>Delete everything</button>
       </section>}
       <section>
-        <h2 style={{ fontSize: 16 }}>Passport</h2>
+        <h2 style={{ fontSize: 16, color: T.text }}>Passport</h2>
         {field('name', 'Name exactly as on the passport')}
         {field('number', 'Passport number')}
         {field('country', 'Issuing country (2 letters, e.g. ES)', 'text', 'ES')}
@@ -71,12 +72,12 @@ export default function VaultPage({ params }: { params: Promise<{ token: string 
         <h2 style={{ fontSize: 16 }}>Frequent-flyer and hotel loyalty</h2>
         {loy.map((l, i) => <div key={i} style={{ display: 'flex', gap: 8 }}>
           <input placeholder="Programme (e.g. Iberia Plus, Marriott Bonvoy)" value={l.program} autoComplete="off"
-            onChange={e => setLoy(loy.map((x, j) => j === i ? { ...x, program: e.target.value } : x))} style={{ flex: 1, padding: 8 }} />
+            onChange={e => setLoy(loy.map((x, j) => j === i ? { ...x, program: e.target.value } : x))} style={{ ...fieldS, flex: 1 }} />
           <input placeholder="Number" value={l.number} autoComplete="off"
-            onChange={e => setLoy(loy.map((x, j) => j === i ? { ...x, number: e.target.value } : x))} style={{ flex: 1, padding: 8 }} /></div>)}
-        <button type="button" onClick={() => setLoy([...loy, { program: '', number: '' }])} style={{ marginTop: 6 }}>Add another</button>
-        <div><button type="button" disabled={busy} onClick={save} style={{ marginTop: 14, padding: '10px 18px' }}>Save</button></div>
-        {said && <p data-said>{said}</p>}
+            onChange={e => setLoy(loy.map((x, j) => j === i ? { ...x, number: e.target.value } : x))} style={{ ...fieldS, flex: 1 }} /></div>)}
+        <button type="button" onClick={() => setLoy([...loy, { program: '', number: '' }])} style={{ ...small, marginTop: 8 }}>Add another</button>
+        <div><button type="button" disabled={busy} onClick={save} style={{ ...off(btn, busy), marginTop: 14 }}>Save</button></div>
+        {said && <p data-said role="status" style={{ color: T.text, fontWeight: 600 }}>{said}</p>}
       </section>
     </main>)
 }

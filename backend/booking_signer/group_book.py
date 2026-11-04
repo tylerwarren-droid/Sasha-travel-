@@ -110,8 +110,27 @@ def _live_record(records: List[dict], member_id: str) -> Optional[dict]:
 
 # ── prepare: AgAPI's read-backs, ONE card ───────────────────────────────────────────────────────────────────────────────────
 
+def summary_taps(skipped: List[dict]) -> List[Dict[str, Any]]:
+    """Sasha 336 · "Book all" with nothing bookable: a SHORT list with taps — never a paragraph per worker.
+    "18 over limit — book anyway?" (the same card and Yes, over_ok for exactly those) · "2 need their vault — invite" (their links)."""
+    by: Dict[str, List[dict]] = {}
+    for x in skipped:
+        by.setdefault(x.get("kind") or "other", []).append(x)
+    out: List[Dict[str, Any]] = []
+    if by.get("over_limit"):
+        n = len(by["over_limit"])
+        out.append({"label": f"{n} over limit — book anyway?", "act": {"action": "book", "who": [x["name"] for x in by["over_limit"]], "over_ok": True}})
+    if by.get("needs_vault"):
+        n = len(by["needs_vault"])
+        out.append({"label": f"{n} need{'s' if n == 1 else ''} their vault — invite", "invite": [x["member_id"] for x in by["needs_vault"]]})
+    rest = [x for k, v in by.items() if k not in ("over_limit", "needs_vault") for x in v]
+    if rest:
+        out.append({"label": f"{len(rest)} not bookable now — " + "; ".join(f"{x['name']}: {x['why']}" for x in rest[:3]) + ("…" if len(rest) > 3 else "")})
+    return out
+
+
 async def prepare(account: str, action: str, who: Optional[List[str]] = None, swap_to: Optional[str] = None,
-                  over_ok: bool = False) -> Dict[str, Any]:
+                  over_ok: bool = False, newcomer: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """→ {status: awaiting_yes, read_back, read_back_id (the card), ask, skipped} or {status: nothing, say}."""
     from . import groups as G
     st = G.store()
@@ -132,31 +151,45 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
             st_ = view.get(m["id"], {}).get("status")
             if st_ == "booked":
                 continue
-            if st_ == "over limit" and not (who and over_ok):   # never without the organiser's explicit yes to THAT worker over the limit
-                skipped.append({"name": m["name"], "why": "over the limit — say \"book " + m["name"].split()[0] + " anyway\" to include them"})
-                continue
-            w = await worker_of(m)
+            w = await worker_of(m)   # Sasha 336 · the vault first: without a passport nobody can be booked, over the limit or not
             if not w:
-                skipped.append({"name": m["name"], "why": "no passport in their vault yet (invite them)"})
+                skipped.append({"name": m["name"], "member_id": m["id"], "kind": "needs_vault", "why": "no passport in their vault yet (invite them)"})
+                continue
+            if st_ == "over limit" and not (who and over_ok):   # never without the organiser's explicit yes to THAT worker over the limit
+                skipped.append({"name": m["name"], "member_id": m["id"], "kind": "over_limit",
+                                "why": "over the limit — say \"book " + m["name"].split()[0] + " anyway\" to include them"})
                 continue
             its, why = await _items(account, m, mv)
             if not its:
-                skipped.append({"name": m["name"], "why": why})
+                skipped.append({"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": why})
                 continue
             items.append({"op": "group.book", "member": m["id"], "name": m["name"], "worker": w,
                           "body": {"end_user": org, "worker": w, "items": its}, "over": st_ == "over limit"})
     elif action == "swap":
         a, b = (by_name.get((who or [""])[0].lower()), by_name.get((swap_to or "").lower()))
-        if not a or not b:
-            return {"status": "nothing", "say": "Both have to be on the list — " + ", ".join(x for x, y in (((who or [""])[0], a), (swap_to or "", b)) if not y) + " isn't."}
+        if not a:
+            return {"status": "nothing", "say": f"{(who or [''])[0] or 'The one who leaves'} isn't on the list."}
         rec = _live_record(records, a["id"])
         if not rec:
             return {"status": "nothing", "say": f"{a['name']} has no booking to swap."}
+        if not b:   # Sasha 336 · the newcomer isn't on the list: the swap adds them (the list's own upload) and invites them, in this flow
+            nc = newcomer or {}
+            if not (swap_to or "").strip() or not str(nc.get("city") or "").strip():
+                return {"status": "needs_details", "need": ["city", "grade"],
+                        "say": f"{swap_to or 'The newcomer'} isn't on the list yet — give their home city and grade, and I'll add them "
+                               "and invite them to their vault."}
+            line = ", ".join([swap_to.strip(), str(nc["city"]).strip(), str(mv.get("starts_on") or ""), str(mv.get("ends_on") or ""),
+                              str(nc.get("grade") or "worker").strip()])
+            await G.upload(account, G.read_text(line), mv["id"])
+            b = next((m for m in await st.members(mv["id"]) if m["name"].lower() == swap_to.strip().lower()), None)
+            if not b:
+                return {"status": "nothing", "say": f"{swap_to} couldn't be added to the list — check the name and city."}
         w = await worker_of(b)
         if not w:
             from . import traveller_vault as TV
             inv = await TV.invite(account, [b["id"]])
-            return {"status": "needs_vault", "say": f"{b['name']}'s passport isn't in their vault yet — I've "
+            return {"status": "needs_vault", "added": b["name"] if newcomer else None, "say": (f"{b['name']} is on the list now. " if newcomer else "")
+                    + f"{b['name']}'s passport isn't in their vault yet — I've "
                     + ("emailed them their secure link." if inv.get("emailed") else "made their secure link (on the master list to forward).")
                     + " I'll swap as soon as it's there.", "links": inv.get("forward") or []}
         items.append({"op": "group.swap", "member": b["id"], "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
@@ -181,8 +214,8 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         lines += it["lines"] + ([f"⚠ {it['name']} is OVER the group's limit — included only because you asked."] if it.get("over") else []) + [""]
     items = [i for i in items if not i.get("skip")]
     if not items:
-        return {"status": "nothing", "say": "Nothing to do" + (": " + "; ".join(f"{s['name']} — {s['why']}" for s in skipped) if skipped else "."),
-                "skipped": skipped}
+        taps = summary_taps(skipped)
+        return {"status": "nothing", "say": (" · ".join(t["label"] for t in taps) if taps else "Nothing to do."), "taps": taps, "skipped": skipped}
     cid = "grp_" + secrets.token_hex(10)
     _CARDS[cid] = {"account": account, "action": action, "items": items, "at": time.time()}
     n = len(items)

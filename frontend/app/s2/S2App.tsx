@@ -331,11 +331,33 @@ const UPLOAD_MAX = 5 * 1024 * 1024   // the backend's own cap (agapi s2_subscrip
 /** Sasha 226 · the paperclip: a bank statement (→ statement_ref for find_subscriptions) or a card (→ card_image_ref for add_card).
  *  The file goes through /api/s2-upload/* to the backend's memory (never on disk); on success the ref is said in the chat so she
  *  passes it to her tool; on failure the server's own words are her line — never a fake "got it". */
-function Clip({ busy, send, say }: { busy: boolean; send: (t: string) => void; say: (t: string) => void }) {
+function Clip({ busy, send, say, onGroup }: { busy: boolean; send: (t: string) => void; say: (t: string) => void; onGroup?: () => void }) {
   const [open, setOpen] = useState(false)
   const [working, setWorking] = useState(false)
   const stmt = useRef<HTMLInputElement | null>(null)
   const card = useRef<HTMLInputElement | null>(null)
+  const grp = useRef<HTMLInputElement | null>(null)   // Sasha 336 · a group list: the SAME reader as /group (POST /api/booking/group/upload)
+  async function pickedGroup(f?: File | null) {
+    if (grp.current) grp.current.value = ''
+    if (!f) return
+    setWorking(true)
+    try {
+      const isImage = f.type.startsWith('image/')
+      const isXlsx = /\.xlsx$/i.test(f.name) || f.type.includes('spreadsheetml')
+      const isCsv = /\.(csv|txt)$/i.test(f.name) || f.type === 'text/csv' || f.type === 'text/plain'
+      if (!isImage && !isXlsx && !isCsv) { say('A group list is a .csv or .xlsx file, or a photo of the list — that file isn’t one of those.'); return }
+      if (f.size > UPLOAD_MAX && !isImage) { say('That file is too large — 5 MB at most.'); return }
+      const content = isImage ? await shrink(f) : await asBase64(f)
+      const media = isImage ? 'image/jpeg' : isXlsx ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv'
+      const r = await bookingReq('/api/booking/group/upload', { name: f.name, media_type: media, content_base64: content }, 60000)
+      const j = r.json as { added?: number; ask?: string | null; why?: string; message?: string }
+      if (r.ok && typeof j.added === 'number') {
+        say(`Added ${j.added} to the group list.${j.ask ? ' ' + j.ask : ''} The master list is on the Group page (/group).`)
+        onGroup?.()
+      } else say(untag(String(j.why || j.message || 'That list couldn’t be read — try again.')))
+    } catch { say('That list couldn’t be uploaded — try again?') }
+    finally { setWorking(false) }
+  }
   async function picked(what: 'statement' | 'card', f?: File | null) {
     if (stmt.current) stmt.current.value = ''
     if (card.current) card.current.value = ''
@@ -370,6 +392,7 @@ function Clip({ busy, send, say }: { busy: boolean; send: (t: string) => void; s
     <div style={{ position: 'relative', flex: 'none' }}>
       <input ref={stmt} type="file" accept=".csv,.pdf,image/*" hidden onChange={e => picked('statement', e.target.files?.[0])} aria-label="A bank statement" />
       <input ref={card} type="file" accept="image/*" hidden onChange={e => picked('card', e.target.files?.[0])} aria-label="A card (photo or Wallet screenshot)" />
+      <input ref={grp} type="file" accept=".csv,.xlsx,image/*" hidden onChange={e => pickedGroup(e.target.files?.[0])} aria-label="A group list (csv, xlsx or a photo)" />
       <button type="button" onClick={() => setOpen(o => !o)} disabled={busy || working} aria-label="Add a statement or a card" aria-expanded={open}
         style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 18, opacity: busy || working ? 0.5 : 1 }}>
         {working ? '…' : '📎'}</button>
@@ -377,6 +400,7 @@ function Clip({ busy, send, say }: { busy: boolean; send: (t: string) => void; s
         <div role="menu" style={{ position: 'absolute', bottom: 48, left: 0, minWidth: 250, background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,.5)', zIndex: 20 }}>
           <button type="button" role="menuitem" style={item} onClick={() => { setOpen(false); stmt.current?.click() }}>A bank statement</button>
           <button type="button" role="menuitem" style={{ ...item, borderTop: `1px solid ${C.line}` }} onClick={() => { setOpen(false); card.current?.click() }}>A card (photo or Wallet screenshot)</button>
+          <button type="button" role="menuitem" style={{ ...item, borderTop: `1px solid ${C.line}` }} onClick={() => { setOpen(false); grp.current?.click() }}>A group list (csv, xlsx or a photo)</button>
         </div>)}
     </div>
   )
@@ -564,6 +588,9 @@ function Activity() {
 
 export default function S2App() {
   const signedIn = useSignedIn()
+  const [hasGroup, setHasGroup] = useState(false)   // Sasha 336 · S2 links to /group once there is a movement
+  const checkGroup = useCallback(() => { bookingReq('/api/booking/group/list').then(r => setHasGroup(Boolean(r.ok && (r.json as { movement?: unknown }).movement))).catch(() => {}) }, [])
+  useEffect(() => { checkGroup() }, [checkGroup])
   const [tab, setTab] = useState<'sasha' | 'activity' | 'keep' | 'trip'>('sasha')   // Sasha 235 · 'keep': My Keep · 236 · 'trip': the trip board
   const [handover, setHandover] = useState<string | null>(null)   // Sasha 236 · Tap to finish, in a sheet over her
   useEffect(() => {
@@ -1096,6 +1123,7 @@ export default function S2App() {
           {(['sasha', 'trip', 'activity', 'keep'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === t ? C.gold : C.line}`, background: 'transparent', color: tab === t ? C.gold : C.dim, fontWeight: 600 }}>
               {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : t === 'trip' ? 'Trip' : 'Activity'}</button>))}
+          {hasGroup && <a href="/group" data-group-link style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${C.line}`, color: C.dim, fontWeight: 600, textDecoration: 'none' }}>Group</a>}
         </nav>
       </header>
       <AccountControl style={{ padding: '0 16px 8px', textAlign: 'right' }} onSignIn={() => putCarry(msgsRef.current, histRef.current, SIGN_IN_CARRY)} />{/* Sasha 274 · rows 1063/1064 */}{/* one quiet line, under the tabs — never over content */}
@@ -1172,7 +1200,7 @@ export default function S2App() {
               <span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-live="polite"
                 style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{cue.words}</span>{/* Sasha 295 · ONE cue: listening · thinking · speaking */}
             </div>) })()}
-            <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} />
+            <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} onGroup={checkGroup} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
               <input ref={typeBox} value={input} onChange={e => { if (asleepRef.current) sleepEvent('typed'); setInput(e.target.value) }} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />

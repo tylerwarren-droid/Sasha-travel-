@@ -104,7 +104,9 @@ async def group_act(request: Request):
     """{action: book|swap|cancel, who: [names] | null, to: name (swap), over_ok} → AgAPI's read-backs as ONE card (its Yes / No)."""
     from . import group_book as GB
     body = await request.json()
-    out = await GB.prepare(account_for(request), str(body.get("action") or ""), body.get("who") or None, body.get("to"), bool(body.get("over_ok")))
+    nc = {"city": body.get("to_city"), "grade": body.get("to_grade")} if body.get("to_city") else None   # Sasha 336 · a newcomer to the swap
+    out = await GB.prepare(account_for(request), str(body.get("action") or ""), body.get("who") or None, body.get("to"), bool(body.get("over_ok")),
+                           newcomer=nc)
     if out.get("status") == "awaiting_yes":
         from app.agent.sasha import yes_buttons
         out = {**out, **(yes_buttons(f"group_{out['action']}", out) or {})}   # Sasha 330 · the ONE place a read-back gets its Yes / No

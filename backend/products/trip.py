@@ -13,6 +13,7 @@ products". Her flow then asks its one yes per booking, with its TEST labels, exa
 Nothing is booked here. "Next" (or the button) moves to the following step.
 """
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 import logging
 import re
@@ -188,7 +189,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optiona
         else:
             vs = await _visits(ctx["account"])
             if not vs:
-                out.text("No campus visit prepared or registered yet — choose one first (say “campus …”), then I'll plan the trip around it.")
+                out.text(f"No campus visit prepared or registered yet — choose one first ({TL.go('campus')}), then I'll plan the trip around it.")
                 pend["step"] = "done"
                 return True
         return await _ask_origin(ctx, pend, out)

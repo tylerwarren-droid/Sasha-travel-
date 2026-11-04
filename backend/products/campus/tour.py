@@ -13,6 +13,7 @@ four-schools.md, read 6 Oct 2026).
      PDF in the chat, and the same trip on the account (Sasha's plan_store: the laptop's Trip panel, "show me my itinerary").
 """
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 import asyncio
 import hashlib
@@ -405,7 +406,7 @@ async def on_message(ctx: dict, body: str, payload: str) -> bool:
         sha = tr.get("sha", "")
         if payload == f"cm:tno:{sha}" or (not payload and re.match(r"(?i)^\s*no\b", t)):
             pend["step"] = "tour_done"
-            out.text("OK — nothing prepared. The plan stays here; say “campus” any time.")
+            out.text(f"OK — nothing prepared. The plan stays here; {TL.go('campus')} any time.")
             return True
         if payload == f"cm:tyes:{sha}" or (not payload and YS.is_yes(t)):
             await _prepare(ctx, {"how": "whatsapp_button" if payload else "whatsapp_text", "said": t, "at": ctx["now"].isoformat(),

@@ -443,6 +443,8 @@ class Out:
 
     def __init__(self) -> None:
         self.items: List[tuple] = []
+        self.menu: Optional[List[Tuple[str, str, str]]] = None   # CR 165 · this turn's Menu rows, set by the turn (products/tools.py)
+        self.space: Any = None                                   # CR 165 · → the tool the turn ended in (its Menu), read at delivery
 
     def text(self, s: str) -> "Out":
         self.items.append(("text", s))
@@ -474,6 +476,7 @@ async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[dateti
     if not last_inbound_at or NOW() - last_inbound_at > SESSION_WINDOW:
         log.info("[guest_whatsapp] not sent: outside the 24-hour window and no template is approved (sandbox)")
         return ["not sent: outside the 24-hour window"]
+    _with_menu(out)
     results = []
     for it in out.items:
         if it[0] == "text":
@@ -493,6 +496,23 @@ async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[dateti
                 opts = " · ".join(f"{t}" for t, _ in it[2])
                 results.append(await SENDER.send(frm, ch["number_e164"], body=f"{it[1]}\n(Reply: {opts})"))
     return results
+
+
+def _with_menu(out: Out) -> None:
+    """CR 165 · THE KANOE MENU ON EVERY REPLY: the turn's last text goes as a list message whose body IS that text, its button "Menu" —
+    the tools at the top level, the tool's own menu ("← All tools" first) inside one (products/tools.py, the ONE registry). Not when the
+    turn ends on its own buttons or list, or the text is too long for a list's body (then it goes as it is)."""
+    from products import tools as TL
+    rows = out.menu
+    if rows is None and callable(out.space):
+        try:
+            rows = TL.menu_rows(out.space())
+        except Exception as e:
+            log.warning("[guest_whatsapp] menu not built: %s", type(e).__name__)
+            rows = None
+    if not rows or not out.items or out.items[-1][0] != "text" or len(out.items[-1][1]) > 1024:
+        return
+    out.items[-1] = ("list", out.items[-1][1], TL.MENU_BUTTON, rows[:10])
 
 
 # ── the booking routes, in process, as the guest's own account ──────────────────────────────────────────────────────
@@ -701,9 +721,19 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     # an unknown sender: one short line, at most every ten minutes; only the hash and the time are kept
     tries = [t for t in st.get("link_tries") or [] if _dt(t) > now - timedelta(hours=1)]
     onboarded = [t for t in tries if t.startswith("onboard:")]
+    from products import tools as TL   # CR 165 · a tool tapped before linking: that tool needs their account — linked once, on the page
+    tap = TL.tapped(p.get("Body") or "", (p.get("ButtonPayload") or "").strip())
+    if tap and tap[0] == "tool":
+        return _twiml_message(f"To use {TL.title(tap[1])} here, link this number to your Kanoe account once at {web_url()} — it takes a minute.")
     if onboarded and _dt(onboarded[-1]) > now - timedelta(minutes=10):
         return ""
     await STORE.put_state(key, {**st, "link_tries": tries + [f"onboard:{now.isoformat()}"]})
+    if not onboarded:   # CR 165 · the first message from a new number: a short welcome and the tools as taps
+        sid = await SENDER.list_picker(TL.welcome_text(), TL.MENU_BUTTON, TL.tools_rows()) if hasattr(SENDER, "list_picker") else None
+        if sid:
+            await SENDER.send(to, sender, content_sid=sid)
+            return ""
+        return _twiml_message(TL.welcome_text() + "\n" + onboard_words().format(web=web_url()))
     return _twiml_message(onboard_words().format(web=web_url()))   # Sasha 249
 
 
@@ -866,6 +896,21 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await STORE.put_state(key, st)
         await deliver({**ch, "opted_out_at": None}, frm, out.text(STOPPED), now)   # said once, then silence
         return out
+    # CR 165 · KANOE'S TOOLS (products/tools.py, the ONE registry): "← All tools" → the tools; a tool's row → its keyword, through the ONE
+    # keyword switch below (typing the word works the same); a menu row that is a sentence → those words, as typed.
+    from products import tools as TL
+    out.space = lambda: ((st.get("pending") or {}).get("product") if (st.get("pending") or {}).get("kind") == "product" else None)
+    tap = TL.tapped(body, payload)
+    if tap and tap[0] == "tools":
+        out.text(TL.tools_text())
+        out.menu = TL.tools_rows()
+        await STORE.put_state(key, st)
+        await deliver(ch, frm, out, now)
+        return out
+    if tap:
+        body = tap[1]["word"] if tap[0] == "tool" else tap[1]
+        payload = ""
+        p = {**p, "Body": body, "ButtonPayload": ""}
     # Sasha 249 / 253 · ONE BRAIN FOR EVERYONE: everything after STOP / opt-out and the reminders consent words goes to sasha.turn —
     # empty messages, documents, every button. Only the FRONT items below stay in front of it (see the routing at the end).
     from . import wa_agent as WA

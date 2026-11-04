@@ -321,7 +321,7 @@ async def _walk_typed(ctx: dict, body: str) -> bool:
     if key and await TH.walk(ctx, key):
         return True
     at = pend.get("walk_at") or "fees"
-    ctx["out"].text("We're on your consulate steps — here's where you are (say “sasha” for travel):")
+    ctx["out"].text("We're on your consulate steps — here's where you are:")
     return await TH.walk(ctx, at)
 
 

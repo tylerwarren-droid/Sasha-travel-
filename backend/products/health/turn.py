@@ -1,5 +1,6 @@
 """CR 4 · the health conversation on WhatsApp. See __init__.py for the line it keeps (S-77). The model is never called."""
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 import hashlib
 import json
@@ -49,7 +50,7 @@ _ES_WORDS = [("salud", r"salud|health|doctor|m[eé]dico|sermas|tarjeta"), ("padr
              ("social", r"social security|seguridad social|tax|hacienda|agencia tributaria|nie|nif"),
              ("dgt", r"dgt|driving|licen[cs]e|carn[eé]t|permiso de conduc"), ("education", r"school|colegio|educaci|escuela")]
 MOVED = ("Phone, internet, electricity and a bank account are part of RelocateMe now — “setting up your home” (a concept "
-         "there). Say “relocate”.")
+         f"there). {TL.go('relocate').capitalize()}.")
 
 
 def es_pick(t: str, payload: str) -> str:

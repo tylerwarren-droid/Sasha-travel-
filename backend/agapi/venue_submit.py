@@ -113,7 +113,7 @@ def button_of(twilio: Optional[dict]) -> Optional[Dict[str, Any]]:
 
 async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = None, guest: bool = False,
                            space: Optional[str] = None, media: Optional[list] = None, replied_to: Optional[str] = None,
-                           twilio: Optional[dict] = None) -> Dict[str, Any]:
+                           twilio: Optional[dict] = None, account_email: Optional[str] = None) -> Dict[str, Any]:
     """Sasha 285 · CR 118 (b) · a WhatsApp that reached Kanoe's number from someone who is NOT a guest talking to Sasha → AgAPI's ONE
     inbound op (messages.whatsapp_inbound), exactly as it arrived: from a number Kanoe wrote to, AgAPI keeps it, records a STOP and
     files a venue's answer on ITS booking record → {"matched": True}. Anyone else → {"matched": False}: Sasha's own paths, as before.
@@ -122,6 +122,8 @@ async def whatsapp_inbound(sender: str, text: str, message_id: Optional[str] = N
                                                         **({"message_id": str(message_id)[:80]} if message_id else {}),   # Sasha 294 · CR 127
                                                         **({"guest": True} if guest else {}),   # a guest: only AD's door may take it (CR 127b)
                                                         **({"space": space} if space else {}),   # CR 128 · "diligence": AD's space
+                                                        # CR 165 · the guest's own Kanoe email: AgAPI offers it ("Is this you?") to link AD by a tap
+                                                        **({"account_email": str(account_email)[:254]} if space and account_email else {}),
                                                         # CR 136 · in AD's space: its files (Twilio's media URLs — AgAPI reads them) and
                                                         # the message it replies to
                                                         **({"media": [{"url": str(m["url"])[:2000], "type": str(m.get("type") or "")[:120]}

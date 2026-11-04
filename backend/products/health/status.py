@@ -1,6 +1,7 @@
 """CR 46 · EspañaMe's health card, for the platform's 🇪🇸 tab (like products.relocation.package_status): READ-ONLY — where the
 account's case got to, step by step: ID read → 1449F1 filled → centro de salud found → cita. Nothing is written or sent."""
 from __future__ import annotations
+from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
 from datetime import datetime, timezone
 from typing import Optional
@@ -30,7 +31,7 @@ async def health_status(account: str) -> Optional[dict]:
         {"name": "Your ID read", "state": "done" if case else "doing",
          "note": "your DNI or passport, read once and confirmed by you" if case else "send your DNI or passport photo", "pdf": None},
         {"name": "Health-card form (1449F1) filled", "state": "expired" if expired else "done" if case else "todo",
-         "note": ("filled; its details were deleted after 24 hours — say “españa” to fill it again" if expired else
+         "note": (f"filled; its details were deleted after 24 hours — {TL.go('espana')} to fill it again" if expired else
                   f"{len(st.get('rows') or [])} boxes filled; signature, date and §5–§6 are yours" if case else "after your ID"),
          "pdf": f"{web()}/api/products/health/{cid}/1449F1-prepared.pdf" if case and not expired else None},
         {"name": "Your centro de salud", "state": "done" if centre else "todo",

@@ -71,16 +71,37 @@ def _refs(w: Dict[str, Any]) -> List[str]:
     return [k.get("passport")] + list(k.get("loyalty") or []) + list(k.get("hotel_loyalty") or [])
 
 
+def _minor(row: Optional[dict]) -> Optional[Dict[str, Any]]:
+    """A trip row's price as AgAPI's money ({amount_minor, currency}) — None when the row has none (nothing invented)."""
+    if not row or row.get("price_amount") is None:
+        return None
+    return {"amount_minor": int(round(float(row["price_amount"]) * 100)), "currency": str(row.get("price_currency") or "EUR").upper()}
+
+
+async def _planned(account: str, m: Dict[str, Any]) -> Dict[str, Any]:
+    """Sasha 337 · what the master list showed for this worker, read NOW from their ONE trip (never a copy): the flight row of each day
+    and the stay row → {"flight": {day: price}, "stay": price}. CR 164: AgAPI re-prices and says "was €x when Sasha planned it"."""
+    from . import groups as G
+    if not m.get("trip_id"):
+        return {"flight": {}, "stay": None}
+    rows = [r for r in await G._items(account, str(m["trip_id"])) if r.get("state") in ("suggested", "chosen")]
+    day = lambda r: str(r.get("day") or r.get("starts_at") or "")[:10]
+    return {"flight": {day(r): _minor(r) for r in rows if r.get("kind") == "flight" and _minor(r)},
+            "stay": next((_minor(r) for r in rows if r.get("kind") == "stay" and _minor(r)), None)}
+
+
 async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[Optional[List[dict]], Optional[str]]:
     """The worker's flights out and back and the stay, as AgAPI's own offers (AgAPI books only what it found) — the planned flight when
     AgAPI has it, else its cheapest on that route and day. PATCH (said): Sasha planned with its own Duffel search (332); AgAPI finds again."""
     items = []
+    planned = await _planned(account, m)   # Sasha 337 · from the worker's ONE trip, at this moment
     for frm, to, day in ((m["home_city"], mv["destination"], m["out_date"]), (mv["destination"], m["home_city"], m["back_date"])):
         r = await _call(account, "travel.find_flights", {"origin": {"query": frm}, "destination": {"query": to}, "date": str(day)[:10], "passengers": 1})
         offers = (r.get("result") or {}).get("offers") or [] if r.get("ok") else []
         if not offers:
             return None, f"no flight {frm} → {to} on {str(day)[:10]} on AgAPI's sandbox" + (f" ({(r.get('error') or {}).get('code')})" if not r.get("ok") else "")
-        items.append({"kind": "flight", "ref": offers[0]["offer_ref"]})
+        was = planned["flight"].get(str(day)[:10])
+        items.append({"kind": "flight", "ref": offers[0]["offer_ref"], **({"planned_price": was} if was else {})})
     nights = max(1, (date.fromisoformat(str(m["back_date"])[:10]) - date.fromisoformat(str(m["out_date"])[:10])).days)
     r = await _call(account, "travel.find_stays", {"city": {"query": mv.get("hotel_area") or mv["destination"], "country": "ES"},
                                                    "check_in": str(m["out_date"])[:10], "nights": nights, "party": 1})
@@ -94,7 +115,8 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
     if not stays:
         return None, "no stay found on AgAPI's sandbox"
     s = stays[0]
-    items.append({"kind": "stay", "ref": s.get("stay_ref") or s.get("offer_ref") or s.get("ref"), "at": f"{str(m['out_date'])[:10]}T15:00:00", "nights": nights})
+    items.append({"kind": "stay", "ref": s.get("stay_ref") or s.get("offer_ref") or s.get("ref"), "at": f"{str(m['out_date'])[:10]}T15:00:00", "nights": nights,
+                  **({"planned_price": planned["stay"]} if planned["stay"] else {})})
     return items, None
 
 

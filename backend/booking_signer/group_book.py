@@ -373,7 +373,8 @@ def job_view(account: str) -> Dict[str, Any]:
         return {"state": "none"}
     out = {"job": j["id"], "state": j["state"], "total": j["total"], "ready": j["ready"]}
     if j["state"] == "preparing":
-        out["say"] = f"Preparing {j['total']}… {j['ready']} ready." if j["total"] else "Preparing…"
+        out["say"] = ((f"Booking {j['total']}… {j['ready']} done." if j.get("kind") == "confirm" else f"Preparing {j['total']}… {j['ready']} ready.")
+                      if j["total"] else "Preparing…")
     elif j["state"] == "ready":
         out["result"] = j["result"]
     else:
@@ -450,7 +451,8 @@ async def _settle(account: str, trip_id: Optional[str], state: str, parts: List[
         await BK._settle(account, r["id"], state, booking_reference=ref)
 
 
-async def confirm(account: str, card_id: str, choice: str, said: str = "") -> Dict[str, Any]:
+async def confirm(account: str, card_id: str, choice: str, said: str = "",
+                  progress: Optional[Callable[[int, int], None]] = None) -> Dict[str, Any]:
     from . import groups as G
     from . import keep_resolver as KR
     c = _CARDS.get(card_id)
@@ -462,36 +464,83 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "") -> Di
     st = G.store()
     mv = await st.movement(account)
     members = {m["id"]: m for m in await st.members(mv["id"])}
-    done, failed = [], []
-    for it in c["items"]:
-        apv = await _approval(account, it, said or "Yes, go ahead.")
-        if not apv:
-            failed.append({"name": it["name"], "why": "the yes wasn't accepted for this one"})
-            continue
-        refs = [r for r in _refs(it.get("worker") or {}) if r]
-        KR.grant(it.get("member"), refs)   # THIS worker's references, for THIS act only
-        try:
-            r = await _call(account, it["op"], it["body"], approval=apv)
-        finally:
-            KR.revoke(refs)
-        if not r.get("ok"):
-            failed.append({"name": it["name"], "why": (r.get("error") or {}).get("message") or "AgAPI refused"})
-            continue
-        res = r.get("result") or {}
-        parts = res.get("parts") or []
-        if it["op"] == "group.book":
-            await _settle(account, members[it["member"]].get("trip_id"), "booked", parts)
-        elif it["op"] == "group.cancel":
-            await _settle(account, members[it["member"]].get("trip_id"), "cancelled", [])
-        else:   # a swap: the one who leaves — cancelled; the one who comes — their trip, booked with the new references
-            await _settle(account, members[it["from_member"]].get("trip_id"), "cancelled", [])
-            await _swap_in(account, mv, members[it["member"]], parts)
-        done.append({"name": it["name"], "state": res.get("state"), "parts": [p.get("reference") for p in parts],
-                     **({"refund": res["refund"]} if res.get("refund") else {}), **({"difference": res["difference"]} if res.get("difference") else {})})
+    done, failed, sem, n = [], [], asyncio.Semaphore(BOOK_PARALLEL), [0]   # Sasha 339 · each act in parallel (bounded), counted
+    if progress:
+        progress(0, len(c["items"]))
+
+    async def act(it: dict) -> None:
+        async with sem:
+            try:
+                await _act_one(account, it, said, mv, members, done, failed)
+            except Exception as e:   # one worker's failure is that worker's, said
+                log.warning("[group_book] %s not done: %s", it["name"], type(e).__name__)
+                failed.append({"name": it["name"], "why": "couldn't be completed just now — nothing was changed for them"})
+        n[0] += 1
+        if progress:
+            progress(n[0], len(c["items"]))
+    await asyncio.gather(*(act(it) for it in c["items"]))
+    order = {it["name"]: i for i, it in enumerate(c["items"])}
+    done.sort(key=lambda d: order.get(d["name"], 0))
+    failed.sort(key=lambda d: order.get(d["name"], 0))
     verb = {"book": "booked", "swap": "swapped", "cancel": "cancelled"}[c["action"]]
     say = (f"Done — {len(done)} {verb} (TEST)." if done else "Nothing was done.") + \
         (" Not done: " + "; ".join(f"{f['name']} ({f['why']})" for f in failed) + "." if failed else "") + " The master list shows it now."
     return {"status": "done", "done": done, "failed": failed, "say": say}
+
+
+async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, done: list, failed: list) -> None:
+    """ONE worker's act after the organiser's yes: the approval of THAT read-back, the references granted for this act only, the act,
+    then the worker's ONE trip settled from AgAPI's answer."""
+    from . import keep_resolver as KR
+    apv = await _approval(account, it, said or "Yes, go ahead.")
+    if not apv:
+        failed.append({"name": it["name"], "why": "the yes wasn't accepted for this one"})
+        return
+    refs = [r for r in _refs(it.get("worker") or {}) if r]
+    KR.grant(it.get("member"), refs)   # THIS worker's references, for THIS act only
+    try:
+        r = await _call(account, it["op"], it["body"], approval=apv)
+    finally:
+        KR.revoke(refs)
+    if not r.get("ok"):
+        failed.append({"name": it["name"], "why": (r.get("error") or {}).get("message") or "AgAPI refused"})
+        return
+    res = r.get("result") or {}
+    parts = res.get("parts") or []
+    if it["op"] == "group.book":
+        await _settle(account, members[it["member"]].get("trip_id"), "booked", parts)
+    elif it["op"] == "group.cancel":
+        await _settle(account, members[it["member"]].get("trip_id"), "cancelled", [])
+    else:   # a swap: the one who leaves — cancelled; the one who comes — their trip, booked with the new references
+        await _settle(account, members[it["from_member"]].get("trip_id"), "cancelled", [])
+        await _swap_in(account, mv, members[it["member"]], parts)
+    done.append({"name": it["name"], "state": res.get("state"), "parts": [p.get("reference") for p in parts],
+                 **({"refund": res["refund"]} if res.get("refund") else {}), **({"difference": res["difference"]} if res.get("difference") else {})})
+
+
+async def answer(account: str, card_id: str, choice: str, said: str = "", wait_s: float = 0.0) -> Dict[str, Any]:
+    """Sasha 339 · THE one entry for a tap on a group card (the /group page, S2, WhatsApp): a card of one act is answered at once; a card of
+    several runs as the account's ONE background job ("Booking 16… 9 done"), followed by /group/job — never one 120 s request."""
+    c = _CARDS.get(card_id)
+    if not c or choice not in ("group_yes", "yes") or len(c.get("items") or []) <= 1:
+        return await confirm(account, card_id, choice, said)
+    j = {"id": "job_" + secrets.token_hex(8), "kind": "confirm", "state": "preparing", "total": len(c["items"]), "ready": 0, "at": time.time(), "result": None}
+    _JOBS[account] = j
+
+    def prog(k: int, total: int) -> None:
+        j.update(ready=k, total=total)
+
+    async def run() -> None:
+        try:
+            j["result"] = await confirm(account, card_id, choice, said, progress=prog)
+            j["state"] = "ready"
+        except Exception as e:
+            log.error("[group_book] the booking job failed: %s", type(e).__name__)
+            j.update(state="failed", why="The bookings couldn't be completed — the master list shows what was done.")
+    j["task"] = asyncio.create_task(run())
+    await asyncio.sleep(0)
+    v = await wait(account, wait_s) if wait_s else job_view(account)
+    return v["result"] if v.get("state") == "ready" else {"status": "booking", **v}
 
 
 async def _swap_in(account: str, mv: dict, m: dict, parts: List[dict]) -> None:

@@ -144,7 +144,7 @@ async def group_confirm(request: Request):
         await API.claim(ctx)
     except API.ToolError:
         return {"status": "nothing_waiting", "say": "That card's already answered."}
-    return await GB.confirm(account, card, choice, str(body.get("said") or ("Yes, go ahead." if choice == "group_yes" else "")))
+    return await GB.answer(account, card, choice, str(body.get("said") or ("Yes, go ahead." if choice == "group_yes" else "")))   # Sasha 339 · a job when several
 
 
 @router.get("/invoice")

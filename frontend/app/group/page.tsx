@@ -91,9 +91,12 @@ export default function GroupPage() {
     if (!card) return
     const id = card.read_back_id
     setCard(null); setBusy(true)
-    const r = await bookingReq('/api/booking/group/confirm', { card: id, choice }, 300000).catch(() => null)
+    const r = await bookingReq('/api/booking/group/confirm', { card: id, choice }, 120000).catch(() => null)
+    const j = (r?.json || {}) as Record<string, unknown>
+    if (!r?.ok) { setBusy(false); setSaid('Sasha didn’t answer in time — the master list shows what was done.'); return }
+    if (j.status === 'booking') { if (j.say) setSaid(String(j.say)); return follow() }   // Sasha 339 · several acts: ONE job, followed
     setBusy(false)
-    setSaid(String(((r?.json || {}) as { say?: string }).say || 'Done.'))
+    setSaid(String(j.say || 'Done.'))
   }
   const invoice = async () => {
     const r = await bookingReq('/api/booking/group/invoice').catch(() => null)

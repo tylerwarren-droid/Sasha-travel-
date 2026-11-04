@@ -1900,7 +1900,7 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
         from booking_signer import group_book as GB
         try:
             await API.claim(ctx)
-            res = await GB.confirm(account, rid, choice, message or ("Yes, go ahead." if choice == "group_yes" else ""))
+            res = await GB.answer(account, rid, choice, message or ("Yes, go ahead." if choice == "group_yes" else ""), wait_s=GB.CHAT_WAIT_S)   # Sasha 339
         except API.ToolError:
             res = {"status": "nothing_waiting", "say": _V.CARD_ANSWERED}
         line = str(res.get("say") or "")

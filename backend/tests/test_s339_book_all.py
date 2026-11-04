@@ -99,6 +99,24 @@ class OneJobOneCard(unittest.TestCase):
         self.assertEqual((card["status"], w.agapi.seen["Amara Sample"]), ("awaiting_yes", 2))
 
 
+class TheOneYesIsAJobToo(unittest.TestCase):
+    def test_nineteen_acts_after_one_yes(self):
+        with World() as w:
+            card = run(GB.prepare(OWNER, "book"))
+
+            async def go():
+                first = await GB.answer(OWNER, card["read_back_id"], "group_yes", "Yes, go ahead.")
+                await GB.wait(OWNER, 30)
+                return first, GB.job_view(OWNER)
+            first, done = run(go())
+            again = run(GB.answer(OWNER, card["read_back_id"], "group_yes"))
+        self.assertEqual(first["status"], "booking")                                          # answered at once …
+        self.assertRegex(first["say"], r"^Booking 19… \d+ done\.$")
+        self.assertEqual((done["state"], len(done["result"]["done"]), done["result"]["failed"]), ("ready", 19, []))   # … all 19 booked
+        self.assertEqual(again["status"], "nothing_waiting")                                   # once
+        self.assertEqual(len(w.agapi.supplier), 19)
+
+
 class OfferGone(unittest.TestCase):
     def test_replanned_once_then_held_per_worker(self):
         with World(PricedAgAPI(gone={"Amara Sample"}, gone_twice={"Bruno Example"})) as w:

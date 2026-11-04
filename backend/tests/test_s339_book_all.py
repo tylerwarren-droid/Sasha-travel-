@@ -179,6 +179,15 @@ class NeverTwice(unittest.TestCase):
         self.assertEqual(again["status"], "nothing")                                            # never a second booking
         self.assertEqual(sum(1 for b in w.agapi.records if b["worker"]["name"] == "Amara Sample"), 1)
 
+    def test_a_superseded_row_holding_the_booking_gives_it_back(self):
+        with World() as w:
+            m = next(x for x in w.members() if x["name"] == "Amara Sample")
+            w.trips[m["trip_id"]].append({"id": "old-booked", "kind": "flight", "state": "booked", "snapshot": {"superseded_at": "x"}})
+            card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
+            run(w.tap(card["read_back_id"]))
+        self.assertIn(("old-booked", "suggested"), w.settled)                                  # released first …
+        self.assertEqual({r["state"] for r in w.trips[m["trip_id"]] if r.get("id") != "old-booked" and r["kind"] == "flight"}, {"booked"})
+
     def test_a_cancel_at_agapi_is_followed_too(self):
         with World() as w:
             card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))

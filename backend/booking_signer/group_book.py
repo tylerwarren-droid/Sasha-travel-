@@ -486,8 +486,16 @@ async def _settle(account: str, trip_id: Optional[str], state: str, parts: List[
         return
     from . import groups as G
     from . import basket as BK
-    rows = [r for r in await G._items(account, trip_id) if r.get("state") in ("suggested", "chosen", "booked")
+    every = await G._items(account, trip_id)
+    rows = [r for r in every if r.get("state") in ("suggested", "chosen", "booked")
             and not BK.superseded(r)]   # Sasha 339 · the CURRENT plan's rows only: a re-plan's superseded rows are not the booking
+    if state == "booked":   # a superseded row holding the slice's booking (an earlier settle's) gives it back first — one booked row per slice
+        for r in every:
+            if BK.superseded(r) and r.get("state") in ("chosen", "pending_payment", "booked"):
+                if SETTLE is not None:
+                    await SETTLE(account, r["id"], "suggested", None)
+                else:
+                    await BK._settle(account, r["id"], "suggested")
     refs = {"flight": [p.get("reference") for p in parts if p.get("kind") == "flight"], "stay": [p.get("reference") for p in parts if p.get("kind") == "stay"]}
     for r in rows:
         kind = "flight" if r.get("kind") == "flight" else "stay"

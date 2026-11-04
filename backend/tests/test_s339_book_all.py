@@ -135,6 +135,49 @@ class SettleIsTheCurrentPlan(unittest.TestCase):
         self.assertIn("done at AgAPI", out["done"][0]["note"])
 
 
+class TheInvoiceIsThisMovements(unittest.TestCase):
+    def test_another_movements_records_never_appear(self):
+        with World() as w:
+            card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
+            run(w.tap(card["read_back_id"]))
+            w.agapi.records.append({"booking_id": "gbk_old", "worker": {"key": "member-of-an-earlier-movement", "name": "Old Worker"},
+                                    "state": "booked", "parts": [{"kind": "stay", "reference": "OLD1", "price": {"amount_minor": 99900, "currency": "EUR"}}]})
+            inv = run(GB.invoice(OWNER))
+        self.assertEqual([l["who"] for l in inv["lines"]], ["Amara Sample"])
+        self.assertEqual(inv["total"], "€540.00")
+        self.assertFalse(any("?" in l["route"] for l in inv["lines"]))
+
+
+class TheNewcomersPlanIsTheBooking(unittest.TestCase):
+    def test_no_second_rows_after_a_swap(self):
+        with World() as w:
+            card = run(GB.prepare(OWNER, "book"))
+            run(w.tap(card["read_back_id"]))
+            run(GB.prepare(OWNER, "swap", ["Bruno Example"], "Zoe Newhire", newcomer={"city": "London", "grade": "worker"}))
+            zoe = next(m for m in w.members() if m["name"] == "Zoe Newhire")
+            w.fill(zoe, 19)
+            sw = run(GB.prepare(OWNER, "swap", ["Bruno Example"], "Zoe Newhire"))
+            run(w.tap(sw["read_back_id"]))
+            zoe = next(m for m in w.members() if m["name"] == "Zoe Newhire")
+            flights = [r for r in w.trips[zoe["trip_id"]] if r["kind"] == "flight"]
+        self.assertEqual(len(flights), 2)                                                      # her two planned flights — no second set
+        self.assertEqual({r["state"] for r in flights}, {"booked"})
+
+
+class NeverTwice(unittest.TestCase):
+    def test_booked_at_agapi_is_booked_whatever_the_trip_says(self):
+        with World() as w:
+            card = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
+
+            async def lost(*a):   # AgAPI books, the trip never hears of it (the proof's AlreadyRecorded)
+                raise RuntimeError("trip down")
+            with mock.patch.object(GB, "SETTLE", lost):
+                run(w.tap(card["read_back_id"]))
+            again = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
+        self.assertEqual(again["status"], "nothing")                                           # never a second booking
+        self.assertEqual(sum(1 for b in w.agapi.records if b["worker"]["name"] == "Amara Sample"), 1)
+
+
 class OfferGone(unittest.TestCase):
     def test_replanned_once_then_held_per_worker(self):
         with World(PricedAgAPI(gone={"Amara Sample"}, gone_twice={"Bruno Example"})) as w:

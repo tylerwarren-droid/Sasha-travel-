@@ -266,10 +266,11 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         return {"status": "nothing", "say": "AgAPI's sandbox didn't answer — nothing was prepared."}
     view = {r["member_id"]: r for r in (await G.view(account))["rows"]}
     items, skipped, lines = [], [], []
-    records = await _records(account) if action in ("swap", "cancel") else []
+    records = await _records(account)   # Sasha 339 · AgAPI's ONE booking record, read for book too (never book a worker twice)
     if action == "book":   # Sasha 339 · each worker in parallel (bounded), progress counted — the card in member order
         pick = [by_name[w.lower()] for w in who or [] if w.lower() in by_name] if who else members
-        todo = [(m, view.get(m["id"], {}).get("status")) for m in pick if view.get(m["id"], {}).get("status") != "booked"]
+        todo = [(m, view.get(m["id"], {}).get("status")) for m in pick if view.get(m["id"], {}).get("status") != "booked"
+                and not _live_record(records, m["id"])]   # booked at AgAPI = booked, whatever the trip row says
         sem, done = asyncio.Semaphore(BOOK_PARALLEL), [0]
         if progress:
             progress(0, len(todo))
@@ -559,6 +560,11 @@ async def _swap_in(account: str, mv: dict, m: dict, parts: List[dict]) -> None:
     """The worker who comes in: their ONE trip gets the booked parts (references; prices from AgAPI's record), so the list shows them."""
     from . import groups as G, basket as BK
     tid = await G.store().trip_of(account, m, f"{mv['company']} — {m['name']} to {mv['destination']}")
+    # Sasha 339 · a newcomer who was planned (their own flights, as the swap now sends them): their plan's rows ARE the booking — settled
+    # with the references, never a second set of rows beside them (the proof's master list showed both)
+    if any(r.get("kind") == "flight" and r.get("state") in ("suggested", "chosen") and not BK.superseded(r) for r in await G._items(account, tid)):
+        await _settle(account, tid, "booked", parts)
+        return
     for p in parts:
         price = (p.get("price") or {})
         row = {"provider": "agapi_group", "provider_ref": p.get("reference"), "day": str(m.get("out_date") or "")[:10] or None, "party": 1,
@@ -585,7 +591,9 @@ async def invoice(account: str) -> Dict[str, Any]:
     if not mv:
         return {"why": "there's no group movement yet"}
     members = {m["id"]: m for m in await st.members(mv["id"])}
-    recs = await _records(account)
+    # Sasha 339 · THIS movement's records only: AgAPI keeps one list per organiser (every movement of theirs) — a record belongs to this
+    # invoice when its worker is one of this movement's members (the proof's invoice carried the previous movement's bookings)
+    recs = [b for b in await _records(account) if (b.get("worker") or {}).get("key") in members]
     lines, adj, total = [], [], 0
     for b in recs:
         m = members.get((b.get("worker") or {}).get("key")) or {}

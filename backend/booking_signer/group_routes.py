@@ -101,16 +101,33 @@ async def vault_delete(token: str, request: Request):
 
 @router.post("/act")
 async def group_act(request: Request):
-    """{action: book|swap|cancel, who: [names] | null, to: name (swap), over_ok} → AgAPI's read-backs as ONE card (its Yes / No)."""
+    """{action: book|swap|cancel, who: [names] | null, to: name (swap), over_ok} → AgAPI's read-backs as ONE card (its Yes / No).
+    Sasha 339 · BOOK runs as ONE background job (group_book.start): this answers at once with its progress; GET /group/job follows it."""
     from . import group_book as GB
     body = await request.json()
+    account, action = account_for(request), str(body.get("action") or "")
+    if action == "book":
+        return {"status": "preparing", **await GB.start(account, body.get("who") or None, bool(body.get("over_ok")))}
     nc = {"city": body.get("to_city"), "grade": body.get("to_grade")} if body.get("to_city") else None   # Sasha 336 · a newcomer to the swap
-    out = await GB.prepare(account_for(request), str(body.get("action") or ""), body.get("who") or None, body.get("to"), bool(body.get("over_ok")),
-                           newcomer=nc)
+    out = await GB.prepare(account, action, body.get("who") or None, body.get("to"), bool(body.get("over_ok")), newcomer=nc)
+    return _with_buttons(out)
+
+
+def _with_buttons(out: dict) -> dict:
     if out.get("status") == "awaiting_yes":
         from app.agent.sasha import yes_buttons
         out = {**out, **(yes_buttons(f"group_{out['action']}", out) or {})}   # Sasha 330 · the ONE place a read-back gets its Yes / No
     return out
+
+
+@router.get("/job")
+async def group_job(request: Request):
+    """Sasha 339 · the book job's progress ("Preparing 18… 12 ready"), then its ONE card (with its Yes / No) or what held each worker."""
+    from . import group_book as GB
+    v = GB.job_view(account_for(request))
+    if v.get("result"):
+        v = {**v, "result": _with_buttons(v["result"])}
+    return v
 
 
 @router.post("/confirm")

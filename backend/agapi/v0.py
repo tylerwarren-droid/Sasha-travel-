@@ -1552,7 +1552,13 @@ async def _group_card(ctx: Ctx, out: dict) -> dict:
 async def group_book(ctx: Ctx, a: dict) -> dict:
     """Sasha 334 · book everyone planned (or the names given) through AgAPI — its read-backs on ONE card, nothing booked until the yes."""
     from booking_signer import group_book as GB
-    return await _group_card(ctx, await GB.prepare(ctx.account, "book", a.get("who") or None, over_ok=bool(a.get("over_limit_ok"))))
+    # Sasha 339 · the SAME background job as /group: the card here if it is ready within the turn, else its progress (the card on /group)
+    await GB.start(ctx.account, a.get("who") or None, bool(a.get("over_limit_ok")))
+    v = await GB.wait(ctx.account, GB.CHAT_WAIT_S)
+    if v.get("state") == "ready":
+        return await _group_card(ctx, v["result"])
+    return {"status": "preparing", "say": (v.get("say") or "Preparing the read-backs…") + " The card with every read-back and ONE Yes "
+            "will be on the Group page (/group) in a moment — nothing is booked until you tap Yes."}
 
 
 async def group_swap(ctx: Ctx, a: dict) -> dict:

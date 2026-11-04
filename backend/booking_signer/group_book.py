@@ -15,11 +15,12 @@ Sasha's resolver (keep_resolver.py) inside its one supplier call, under a grant 
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
 from datetime import date
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 log = logging.getLogger("booking_signer.group_book")
 FAMILY = "group"
@@ -101,7 +102,8 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
         if not offers:
             return None, f"no flight {frm} → {to} on {str(day)[:10]} on AgAPI's sandbox" + (f" ({(r.get('error') or {}).get('code')})" if not r.get("ok") else "")
         was = planned["flight"].get(str(day)[:10])
-        items.append({"kind": "flight", "ref": offers[0]["offer_ref"], **({"planned_price": was} if was else {})})
+        items.append({"kind": "flight", "ref": offers[0]["offer_ref"], **({"planned_price": was} if was else {}),
+                      **({"_price": offers[0]["price"]} if isinstance(offers[0].get("price"), dict) else {})})   # Sasha 339 · AgAPI's own price
     nights = max(1, (date.fromisoformat(str(m["back_date"])[:10]) - date.fromisoformat(str(m["out_date"])[:10])).days)
     r = await _call(account, "travel.find_stays", {"city": {"query": mv.get("hotel_area") or mv["destination"], "country": "ES"},
                                                    "check_in": str(m["out_date"])[:10], "nights": nights, "party": 1})
@@ -116,8 +118,55 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
         return None, "no stay found on AgAPI's sandbox"
     s = stays[0]
     items.append({"kind": "stay", "ref": s.get("stay_ref") or s.get("offer_ref") or s.get("ref"), "at": f"{str(m['out_date'])[:10]}T15:00:00", "nights": nights,
-                  **({"planned_price": planned["stay"]} if planned["stay"] else {})})
+                  **({"planned_price": planned["stay"]} if planned["stay"] else {}),
+                  **({"_per_night": s["price_per_night"]} if isinstance(s.get("price_per_night"), dict) else {}),   # Sasha 339 · AgAPI's own
+                  "_name": ((s.get("name") or {}).get("text") if isinstance(s.get("name"), dict) else s.get("name")) or "the hotel"})
     return items, None
+
+
+# ── Sasha 339 · the limit at booking, AgAPI's busy answer, a gone offer ─────────────────────────────────────────────────────────
+
+BOOK_PARALLEL = 4          # read-backs prepared at once (AgAPI and Duffel TEST share one token: bounded, never 18 at a time)
+SLEEP = asyncio.sleep      # tests replace it
+
+
+def _wire(items: List[dict]) -> List[dict]:
+    """What AgAPI receives: the item without Sasha's private notes (its prices ride along as _price / _per_night, never sent)."""
+    return [{k: v for k, v in i.items() if not k.startswith("_")} for i in items]
+
+
+def _euros(money: Optional[dict]) -> Optional[float]:
+    return money["amount_minor"] / 100 if isinstance(money, dict) and str(money.get("currency") or "").upper() == "EUR" else None
+
+
+def over_at_booking(items: List[dict], lim: Dict[str, float], kinds=("flight", "stay")) -> Optional[str]:
+    """The worker's limit (groups.limit_for — the ONE rules record) against AgAPI's OWN prices for exactly the offers the read-back
+    prices: the flights (out + back) against flight_return_eur, the stay's price per night against hotel_night_eur. → the words, or None."""
+    words = []
+    fl = [_euros(i.get("_price")) for i in items if i.get("kind") == "flight"]
+    if "flight" in kinds and lim.get("flight_return_eur") is not None and fl and None not in fl and sum(fl) > lim["flight_return_eur"]:
+        words.append(f"flights €{sum(fl):,.0f} > €{lim['flight_return_eur']:,.0f} limit")
+    stay = next((i for i in items if i.get("kind") == "stay"), None)
+    pn = _euros((stay or {}).get("_per_night"))
+    if "stay" in kinds and stay and pn is not None and lim.get("hotel_night_eur") is not None and pn > lim["hotel_night_eur"]:
+        words.append(f"{stay.get('_name') or 'the hotel'}: hotel €{pn:,.0f}/night > €{lim['hotel_night_eur']:,.0f} limit")
+    return " · ".join(words) or None
+
+
+def _gone(e: dict) -> bool:
+    d = e.get("details") or {}
+    return e.get("code") == "upstream_refused" and (d.get("reason") == "offer_gone" or
+                                                    d.get("duffel_code") in ("offer_no_longer_available", "offer_expired", "not_found"))
+
+
+async def _read_back(account: str, op: str, body: dict) -> Dict[str, Any]:
+    """AgAPI's read-back for one act; its "busy" answer (upstream_rate_limited) waited out ONCE, for the time it gives."""
+    r = await _call(account, op, body)
+    e = r.get("error") or {}
+    if e.get("code") == "upstream_rate_limited":
+        await SLEEP(min(float(e.get("retry_after_s") or (e.get("details") or {}).get("retry_after_s") or 10), 20))
+        r = await _call(account, op, body)
+    return r
 
 
 async def _records(account: str) -> List[dict]:
@@ -128,6 +177,46 @@ async def _records(account: str) -> List[dict]:
 
 def _live_record(records: List[dict], member_id: str) -> Optional[dict]:
     return next((b for b in reversed(records) if (b.get("worker") or {}).get("key") == member_id and b.get("state") == "booked"), None)
+
+
+async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Optional[List[str]], over_ok: bool, org: str, mv: dict) -> Tuple[str, dict]:
+    """Sasha 339 · ONE worker's read-back for group.book → ("item", …) or ("skip", …): the vault, the plan's limit, AgAPI's offers, the
+    limit AT BOOKING (AgAPI's own prices), the read-back — a gone offer re-planned once (the planner, the same limits), then held."""
+    from . import groups as G
+    w = await worker_of(m)   # Sasha 336 · the vault first: without a passport nobody can be booked, over the limit or not
+    if not w:
+        return "skip", {"name": m["name"], "member_id": m["id"], "kind": "needs_vault", "why": "no passport in their vault yet (invite them)"}
+    asked = bool(who and over_ok)   # never over the limit without the organiser's explicit yes to THAT worker
+    if st_ == "over limit" and not asked:
+        return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_limit",
+                        "why": "over the limit — say \"book " + m["name"].split()[0] + " anyway\" to include them"}
+    lim = G.limit_for(mv.get("rules") or {}, m)
+    replanned = False
+    for attempt in (1, 2):
+        its, why = await _items(account, m, mv)
+        if not its:
+            return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": why}
+        over = over_at_booking(its, lim)
+        if over and not asked:
+            return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
+        body = {"end_user": org, "worker": w, "items": _wire(its)}
+        r = await _read_back(account, "group.book", body)
+        e = r.get("error") or {}
+        if e.get("code") == "approval_required":
+            d = e.get("details") or {}
+            return "item", {"op": "group.book", "member": m["id"], "name": m["name"], "worker": w, "body": body,
+                            "over": st_ == "over limit" or bool(over), "over_words": over, "replanned": replanned,
+                            "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
+                            "lines": list((d.get("read_back") or {}).get("lines") or [])}
+        if _gone(e) and attempt == 1:   # the fare was taken: re-plan THIS worker once (the planner, the same limits), find again
+            await G.plan(account, mv["id"], only=[m["id"]])
+            m = next((x for x in await G.store().members(mv["id"]) if x["id"] == m["id"]), m)
+            replanned = True
+            continue
+        if _gone(e):
+            return "skip", {"name": m["name"], "member_id": m["id"], "kind": "no_fare", "why": "no fare left on their flight, even after a new search — nothing held"}
+        return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": e.get("message") or "AgAPI didn't give a read-back"}
+    return "skip", {"name": m["name"], "member_id": m["id"], "kind": "no_fare", "why": "no fare left — nothing held"}
 
 
 # ── prepare: AgAPI's read-backs, ONE card ───────────────────────────────────────────────────────────────────────────────────
@@ -142,17 +231,23 @@ def summary_taps(skipped: List[dict]) -> List[Dict[str, Any]]:
     if by.get("over_limit"):
         n = len(by["over_limit"])
         out.append({"label": f"{n} over limit — book anyway?", "act": {"action": "book", "who": [x["name"] for x in by["over_limit"]], "over_ok": True}})
+    if by.get("over_at_booking"):   # Sasha 339 · over the limit at AgAPI's price now: held, flagged, never booked silently
+        ob = by["over_at_booking"]
+        label = (f"{ob[0]['name']} — {ob[0]['why']} — book anyway?" if len(ob) == 1 else
+                 f"{len(ob)} over the limit at booking ({ob[0]['why']}…) — book anyway?")
+        out.append({"label": label, "act": {"action": "book", "who": [x["name"] for x in ob], "over_ok": True}, "held": [f"{x['name']}: {x['why']}" for x in ob]})
     if by.get("needs_vault"):
         n = len(by["needs_vault"])
         out.append({"label": f"{n} need{'s' if n == 1 else ''} their vault — invite", "invite": [x["member_id"] for x in by["needs_vault"]]})
-    rest = [x for k, v in by.items() if k not in ("over_limit", "needs_vault") for x in v]
+    rest = [x for k, v in by.items() if k not in ("over_limit", "needs_vault", "over_at_booking") for x in v]
     if rest:
         out.append({"label": f"{len(rest)} not bookable now — " + "; ".join(f"{x['name']}: {x['why']}" for x in rest[:3]) + ("…" if len(rest) > 3 else "")})
     return out
 
 
 async def prepare(account: str, action: str, who: Optional[List[str]] = None, swap_to: Optional[str] = None,
-                  over_ok: bool = False, newcomer: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                  over_ok: bool = False, newcomer: Optional[Dict[str, Any]] = None,
+                  progress: Optional[Callable[[int, int], None]] = None) -> Dict[str, Any]:
     """→ {status: awaiting_yes, read_back, read_back_id (the card), ask, skipped} or {status: nothing, say}."""
     from . import groups as G
     st = G.store()
@@ -167,26 +262,26 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
     view = {r["member_id"]: r for r in (await G.view(account))["rows"]}
     items, skipped, lines = [], [], []
     records = await _records(account) if action in ("swap", "cancel") else []
-    if action == "book":
+    if action == "book":   # Sasha 339 · each worker in parallel (bounded), progress counted — the card in member order
         pick = [by_name[w.lower()] for w in who or [] if w.lower() in by_name] if who else members
-        for m in pick:
-            st_ = view.get(m["id"], {}).get("status")
-            if st_ == "booked":
-                continue
-            w = await worker_of(m)   # Sasha 336 · the vault first: without a passport nobody can be booked, over the limit or not
-            if not w:
-                skipped.append({"name": m["name"], "member_id": m["id"], "kind": "needs_vault", "why": "no passport in their vault yet (invite them)"})
-                continue
-            if st_ == "over limit" and not (who and over_ok):   # never without the organiser's explicit yes to THAT worker over the limit
-                skipped.append({"name": m["name"], "member_id": m["id"], "kind": "over_limit",
-                                "why": "over the limit — say \"book " + m["name"].split()[0] + " anyway\" to include them"})
-                continue
-            its, why = await _items(account, m, mv)
-            if not its:
-                skipped.append({"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": why})
-                continue
-            items.append({"op": "group.book", "member": m["id"], "name": m["name"], "worker": w,
-                          "body": {"end_user": org, "worker": w, "items": its}, "over": st_ == "over limit"})
+        todo = [(m, view.get(m["id"], {}).get("status")) for m in pick if view.get(m["id"], {}).get("status") != "booked"]
+        sem, done = asyncio.Semaphore(BOOK_PARALLEL), [0]
+        if progress:
+            progress(0, len(todo))
+
+        async def one(m, st_):
+            async with sem:
+                try:
+                    out = await _prepare_worker(account, m, st_, who, over_ok, org, mv)
+                except Exception as ex:   # one worker's failure is that worker's, said — never the whole card's
+                    log.warning("[group_book] %s not prepared: %s", m["name"], type(ex).__name__)
+                    out = ("skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": "couldn't be prepared just now — try again"})
+            done[0] += 1
+            if progress:
+                progress(done[0], len(todo))
+            return out
+        for kind, x in await asyncio.gather(*(one(m, st_) for m, st_ in todo)):
+            (items if kind == "item" else skipped).append(x)
     elif action == "swap":
         a, b = (by_name.get((who or [""])[0].lower()), by_name.get((swap_to or "").lower()))
         if not a:
@@ -214,8 +309,20 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
                     + f"{b['name']}'s passport isn't in their vault yet — I've "
                     + ("emailed them their secure link." if inv.get("emailed") else "made their secure link (on the master list to forward).")
                     + " I'll swap as soon as it's there.", "links": inv.get("forward") or []}
+        if not (await _planned(account, b))["flight"]:   # Sasha 339 · the newcomer planned from THEIR home city first (the planner)
+            await G.plan(account, mv["id"], only=[b["id"]])
+            b = next((x for x in await st.members(mv["id"]) if x["id"] == b["id"]), b)
+        its, why = await _items(account, b, mv)
+        own = [i for i in (its or []) if i.get("kind") == "flight"]
+        if not own:
+            return {"status": "nothing", "say": f"No flight found for {b['name']} from {b.get('home_city') or 'their home city'} — nothing changed. ({why or 'no offer'})"}
+        over = over_at_booking(own, G.limit_for(mv.get("rules") or {}, b), kinds=("flight",))
+        if over and not over_ok:
+            return {"status": "nothing", "say": f"{b['name']}'s own flights are over the limit: {over}.",
+                    "taps": [{"label": f"{b['name']} — {over} — swap anyway?", "act": {"action": "swap", "who": [a["name"]], "to": b["name"], "over_ok": True}}]}
         items.append({"op": "group.swap", "member": b["id"], "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
-                      "body": {"end_user": org, "booking_id": rec["booking_id"], "worker": w}})
+                      "over": bool(over), "over_words": over,
+                      "body": {"end_user": org, "booking_id": rec["booking_id"], "worker": w, "flights": _wire(own)}})   # CR 164 · HIS own flights
     elif action == "cancel":
         for nm in who or []:
             m = by_name.get(nm.lower())
@@ -225,7 +332,11 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
                 continue
             items.append({"op": "group.cancel", "member": m["id"], "name": m["name"], "body": {"end_user": org, "booking_id": rec["booking_id"]}})
     for it in items:   # AgAPI's read-back for each (nothing is done without the approval)
-        r = await _call(account, it["op"], it["body"])
+        if it.get("read_back_id"):   # Sasha 339 · a book item brings its own (prepared in parallel)
+            lines += it["lines"] + ([f"⚠ {it['name']} is OVER the group's limit ({it.get('over_words') or 'by the plan'}) — included only because you asked."]
+                                    if it.get("over") else []) + (["(Re-planned: the first fare was gone.)"] if it.get("replanned") else []) + [""]
+            continue
+        r = await _read_back(account, it["op"], it["body"])
         e = r.get("error") or {}
         if e.get("code") != "approval_required":
             skipped.append({"name": it["name"], "why": e.get("message") or "AgAPI didn't give a read-back"})
@@ -235,8 +346,8 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         it.update(read_back_id=d["read_back_id"], sha=d.get("read_back_sha256") or "", lines=list((d.get("read_back") or {}).get("lines") or []))
         lines += it["lines"] + ([f"⚠ {it['name']} is OVER the group's limit — included only because you asked."] if it.get("over") else []) + [""]
     items = [i for i in items if not i.get("skip")]
+    taps = summary_taps(skipped)
     if not items:
-        taps = summary_taps(skipped)
         return {"status": "nothing", "say": (" · ".join(t["label"] for t in taps) if taps else "Nothing to do."), "taps": taps, "skipped": skipped}
     cid = "grp_" + secrets.token_hex(10)
     _CARDS[cid] = {"account": account, "action": action, "items": items, "at": time.time()}
@@ -246,7 +357,62 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
            "swap": f"Swap {items[0]['name']}? The difference is on the card (TEST).",
            "cancel": f"Cancel {', '.join(i['name'] for i in items)}? The refund is on the card (TEST)."}[action]
     return {"status": "awaiting_yes", "action": action, "read_back": [l for l in lines if l is not None][:400], "read_back_id": cid, "ask": ask,
-            "verb": verb, "skipped": skipped, "how": "Say `ask` word for word — nothing happens until they say yes."}
+            "verb": verb, "skipped": skipped, "taps": taps, "how": "Say `ask` word for word — nothing happens until they say yes."}
+
+
+# ── Sasha 339 · BOOK ALL is ONE background job: the ONE prepare, its progress, its result — the page follows it ──────────────
+
+JOB_S = 900
+CHAT_WAIT_S = 60.0   # the chat waits this long for the card (a turn's deadline is 100 s); else /group shows it
+_JOBS: Dict[str, Dict[str, Any]] = {}   # account → its one book job (this worker's memory, R3: one worker)
+
+
+def job_view(account: str) -> Dict[str, Any]:
+    j = _JOBS.get(account)
+    if not j or time.time() - j["at"] > JOB_S:
+        return {"state": "none"}
+    out = {"job": j["id"], "state": j["state"], "total": j["total"], "ready": j["ready"]}
+    if j["state"] == "preparing":
+        out["say"] = f"Preparing {j['total']}… {j['ready']} ready." if j["total"] else "Preparing…"
+    elif j["state"] == "ready":
+        out["result"] = j["result"]
+    else:
+        out["say"] = j.get("why") or "The read-backs couldn't be prepared — nothing was booked. Try again."
+    return out
+
+
+async def start(account: str, who: Optional[List[str]] = None, over_ok: bool = False) -> Dict[str, Any]:
+    """Start (or rejoin) this organiser's book job → its view at once. Never waits for the read-backs."""
+    j = _JOBS.get(account)
+    if j and j["state"] == "preparing" and time.time() - j["at"] < JOB_S:
+        return job_view(account)
+    j = {"id": "job_" + secrets.token_hex(8), "state": "preparing", "total": 0, "ready": 0, "at": time.time(), "result": None}
+    _JOBS[account] = j
+
+    def prog(done: int, total: int) -> None:
+        j.update(ready=done, total=total)
+
+    async def run() -> None:
+        try:
+            j["result"] = await prepare(account, "book", who, over_ok=over_ok, progress=prog)
+            j["state"] = "ready"
+        except Exception as e:
+            log.error("[group_book] the book job failed: %s", type(e).__name__)
+            j.update(state="failed", why="The read-backs couldn't be prepared — nothing was booked. Try again.")
+    j["task"] = asyncio.create_task(run())
+    await asyncio.sleep(0)
+    return job_view(account)
+
+
+async def wait(account: str, timeout: float) -> Dict[str, Any]:
+    """The chat's path: the job's result if it is ready within `timeout`, else its progress (the card then waits on /group)."""
+    j = _JOBS.get(account)
+    if j and j.get("task") and j["state"] == "preparing":
+        try:
+            await asyncio.wait_for(asyncio.shield(j["task"]), timeout)
+        except asyncio.TimeoutError:
+            pass
+    return job_view(account)
 
 
 # ── confirm: once, the organiser's yes → each act ───────────────────────────────────────────────────────────────────────────

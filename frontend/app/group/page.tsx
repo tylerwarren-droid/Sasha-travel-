@@ -30,7 +30,7 @@ export default function GroupPage() {
   const [swapCity, setSwapCity] = useState('')   // Sasha 336 · a newcomer: the swap adds them and invites them to their vault
   const [swapGrade, setSwapGrade] = useState('')
   // Sasha 336 · "Book all" with nothing bookable: a short list with taps (book anyway / invite)
-  const [taps, setTaps] = useState<{ label: string; act?: { action: 'book'; who: string[]; over_ok: boolean }; invite?: string[] }[]>([])
+  const [taps, setTaps] = useState<{ label: string; act?: { action: 'book' | 'swap'; who: string[]; to?: string; over_ok: boolean }; invite?: string[] }[]>([])
 
   useEffect(() => {
     let off = false
@@ -58,17 +58,33 @@ export default function GroupPage() {
     setLinks(j.forward || [])
     setSaid(r?.ok ? `Emailed ${j.emailed?.length ?? 0}.${j.forward?.length ? ` ${j.forward.length} to forward below.` : ''}` : (j.why || 'Not sent — try again.'))
   }
-  const act = async (action: 'book' | 'swap' | 'cancel', who: string[] | null, to?: string, more: Record<string, unknown> = {}) => {
-    setBusy(true); setCard(null); setTaps([])
-    const r = await bookingReq('/api/booking/group/act', { action, who, to, ...more }, 120000).catch(() => null)
-    setBusy(false)
-    const j = (r?.json || {}) as Record<string, unknown>
-    if (r?.ok && j.status === 'awaiting_yes' && Array.isArray(j.choices)) setCard(j as unknown as NonNullable<typeof card>)
-    else {
-      setSaid(String(j.say || j.message || 'Nothing to do.'))
-      if (Array.isArray(j.taps)) setTaps(j.taps as typeof taps)
-      if (Array.isArray(j.links)) setLinks(j.links as { name: string; link: string }[])
+  // Sasha 339 · what an act answered: ONE card (its Yes / No), or what held each worker (taps), said as it is
+  const show = (j: Record<string, unknown>) => {
+    if (j.status === 'awaiting_yes' && Array.isArray(j.choices)) setCard(j as unknown as NonNullable<typeof card>)
+    setSaid(j.status === 'awaiting_yes' ? (Array.isArray(j.taps) && j.taps.length ? 'Some are held — see below the card.' : null) : String(j.say || j.message || ''))
+    if (Array.isArray(j.taps)) setTaps(j.taps as typeof taps)
+    if (Array.isArray(j.links)) setLinks(j.links as { name: string; link: string }[])
+  }
+  // Sasha 339 · BOOK is ONE background job on the server: follow it ("Preparing 18… 12 ready"), then its ONE card. A lost request is
+  // said as one — never "Nothing to do."
+  const follow = async () => {
+    for (let i = 0; i < 300; i++) {
+      const r = await bookingReq('/api/booking/group/job').catch(() => null)
+      const j = (r?.json || {}) as { state?: string; say?: string; result?: Record<string, unknown> }
+      if (r?.ok && j.state === 'ready' && j.result) { setBusy(false); show(j.result); return }
+      if (r?.ok && j.state === 'failed') { setBusy(false); setSaid(j.say || 'The read-backs couldn’t be prepared — nothing was booked. Try again.'); return }
+      if (r?.ok && j.say) setSaid(j.say)
+      await new Promise(res => setTimeout(res, 2000))
     }
+    setBusy(false); setSaid('Still preparing — this page stopped waiting. Nothing is booked; reload to see the card.')
+  }
+  const act = async (action: 'book' | 'swap' | 'cancel', who: string[] | null, to?: string, more: Record<string, unknown> = {}) => {
+    setBusy(true); setCard(null); setTaps([]); setSaid(action === 'book' ? 'Preparing…' : null)
+    const r = await bookingReq('/api/booking/group/act', { action, who, to, ...more }, 120000).catch(() => null)
+    const j = (r?.json || {}) as Record<string, unknown>
+    if (!r?.ok) { setBusy(false); setSaid('Sasha didn’t answer in time — nothing was booked or changed. Try again.'); return }
+    if (j.status === 'preparing') { if (j.say) setSaid(String(j.say)); return follow() }
+    setBusy(false); show(j)
   }
   const swap = () => act('swap', [swapOut], swapIn, swapCity.trim() ? { to_city: swapCity.trim(), to_grade: swapGrade.trim() || 'worker' } : {})
   const answer = async (choice: string) => {   // once per card: the server holds the claim; a second tap finds nothing
@@ -107,7 +123,7 @@ export default function GroupPage() {
         {said && <p data-upload-said style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{said}</p>}
         {taps.length > 0 && <div data-taps style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
           {taps.map(t => t.act ? <button key={t.label} type="button" disabled={busy} style={off(btn, busy)}
-              onClick={() => act('book', t.act!.who, undefined, { over_ok: true })}>{t.label}</button>
+              onClick={() => act(t.act!.action, t.act!.who, t.act!.to, { over_ok: true })}>{t.label}</button>
             : t.invite ? <button key={t.label} type="button" disabled={busy} style={off(btn2, busy)} onClick={() => invite(t.invite!)}>{t.label}</button>
             : <span key={t.label} style={{ color: T.muted, alignSelf: 'center' }}>{t.label}</span>)}
         </div>}

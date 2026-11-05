@@ -230,6 +230,8 @@ async def sms(request: Request):
     p = await _verified(request, "sms")
     if p is None:
         return Response("not a verified request from Twilio", status_code=403)
+    from products import tools as _TL
+    p = _TL.normalized(p)   # Sasha 344 · a list row's tap as its exact title + id (never Twilio's joined title + description)
     channel, sender = _channel_and_number(p.get("From", ""))
     body, sid = p.get("Body", ""), p.get("MessageSid") or p.get("SmsSid")
     if not sid:
@@ -242,7 +244,10 @@ async def sms(request: Request):
         # verdict is kept (agapi-took:<sid>) — a retry of a message AgAPI took stops here; any other retry goes on as before.
         from . import guest_whatsapp as GW
         from agapi import venue_submit as VS
-        if await GW.first_time(f"agapi-in:{sid}"):
+        from products import tools as TL
+        if TL.switch_tap(p) is not None:   # Sasha 344 · the ONE switch BEFORE any tool's door: "← Everything I can do" / a tool's row
+            pass                           # is Sasha's own (the guest flow below answers it) — never AgAPI's door, never AD as text
+        elif await GW.first_time(f"agapi-in:{sid}"):
             if (await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p)).get("matched"):
                 await GW.first_time(f"agapi-took:{sid}")
                 return _twiml()

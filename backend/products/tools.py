@@ -78,9 +78,49 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^\w ←]", " ", (s or "").lower())).strip()
 
 
+#: Sasha 344 · the back row's title on AD's menu is AgAPI's (ad_menu.BACK) and still reads "← All tools" — the SAME id, kanoe:tools. A tap
+#: is matched by its id first; this title only when Twilio sent no id. PATCH (said): dropped when CR retitles ad_menu.BACK (Sasha 343's ask).
+BACK_TITLES_SEEN = ("← All tools",)
+
+
+def tap_fields(p: Dict[str, Any]) -> Tuple[str, str]:
+    """Sasha 344 · a tap → (its EXACT words, its id), from whatever field Twilio put it in. A list-picker row (every tool's Menu, Sasha's
+    and AD's): ListId and ListTitle — Twilio's Body there is the row's title AND its description joined ("Show my cases\nYour cases, and
+    the status of the one you pick"), so a list row is NEVER read from Body. A quick-reply button: ButtonPayload (its words in Body). A typed message: Body. The ONE reader every path uses."""
+    if p.get("ListId") or p.get("ListTitle"):
+        title = str(p.get("ListTitle") or "").strip() or str(p.get("Body") or "").split("\n", 1)[0].strip()
+        return title, str(p.get("ListId") or "").strip()
+    return str(p.get("Body") or ""), str(p.get("ButtonPayload") or "").strip()   # a button's words are its Body, as before
+
+
+OWN = "kanoe:"   # Sasha's own ids (the back row, a tool's row, a sentence row); any other id is its tool's (AD's "ad_…")
+
+
+def own_id(p: Dict[str, Any]) -> str:
+    """The tap's id when it is SASHA's (kanoe:…) — her switch and her rows; another tool's row reaches it as its exact title (and its id
+    stays in Twilio's own field, ListId, for that tool)."""
+    pid = tap_fields(p)[1]
+    return pid if pid.startswith(OWN) or not (p.get("ListId") or p.get("ListTitle")) else ""
+
+
+def normalized(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Sasha 344 · the message as what was TAPPED, once, where it enters (the webhook and the turn): Body = the row's EXACT title (never
+    Twilio's joined title + description). Twilio's ListId / ListTitle stay as they came, for the tool whose row it is."""
+    if not (p.get("ListId") or p.get("ListTitle")):
+        return p
+    return {**p, "Body": tap_fields(p)[0]}
+
+
+def switch_tap(p: Dict[str, Any]) -> Optional[Tuple[str, Any]]:
+    """Sasha 344 · THE ONE SWITCH, before any tool's door (AgAPI's inbound included): the back row or a tool's row → ("tools", None) /
+    ("tool", <tool>); anything else → None (the message goes on as before)."""
+    tap = tapped(*tap_fields(p))
+    return tap if tap and tap[0] in ("tools", "tool") else None
+
+
 def tapped(body: str, payload: str) -> Optional[Tuple[str, Any]]:
     """("tools", None) for "← Everything I can do" · ("tool", <tool>) for a tool's row · ("say", <words>) for a menu row that is a sentence · None."""
-    if payload == BACK["id"] or _norm(body) == _norm(BACK["title"]):
+    if payload == BACK["id"] or (not payload and _norm(body) in {_norm(x) for x in (BACK["title"],) + BACK_TITLES_SEEN}):
         return ("tools", None)
     if payload.startswith(TOOL_ID) and payload[len(TOOL_ID):] in BY_ID:
         return ("tool", BY_ID[payload[len(TOOL_ID):]])

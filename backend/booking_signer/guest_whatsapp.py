@@ -649,6 +649,16 @@ async def seen(sid: str) -> bool:
     return sid in _SEEN_SIDS
 
 
+def _tap_words(p: Dict[str, str]) -> str:
+    from products import tools as TL
+    return TL.tap_fields(p)[0]
+
+
+def _tap_id(p: Dict[str, str]) -> str:
+    from products import tools as TL
+    return TL.own_id(p)   # a quick reply's ButtonPayload, or a list row's ListId when it is Sasha's own
+
+
 async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     """None: not ours — the venue path runs exactly as before. A string: the TwiML inside <Response> (often empty: the
     guest's turn runs in the background and answers through the API, a message every three seconds)."""
@@ -722,7 +732,7 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     tries = [t for t in st.get("link_tries") or [] if _dt(t) > now - timedelta(hours=1)]
     onboarded = [t for t in tries if t.startswith("onboard:")]
     from products import tools as TL   # CR 165 · a tool tapped before linking: that tool needs their account — linked once, on the page
-    tap = TL.tapped(p.get("Body") or "", (p.get("ButtonPayload") or "").strip())
+    tap = TL.tapped(*TL.tap_fields(p))   # Sasha 344 · whatever field Twilio used
     if tap and tap[0] == "tool":
         return _twiml_message(f"To use {TL.title(tap[1])} here, link this number to your Kanoe account once at {web_url()} — it takes a minute.")
     if onboarded and _dt(onboarded[-1]) > now - timedelta(minutes=10):
@@ -746,7 +756,7 @@ async def confirmed_by_code(ch: dict, sender: str, p: Dict[str, str]) -> Optiona
     Found live (Tyler, 10:47–10:51): the bare code was refused ("send the whole message"); "confirmed" was said outside her conversation, so
     his next "yes" got the code request again. Now: the bare code works; "confirmed" only when AgAPI's record READ BACK says verified; the
     exchange is in her conversation; and the held read-back is marked so his very next yes sends it (sasha.turn runs book_venue by code)."""
-    body = (p.get("Body") or "").strip()
+    body = _tap_words(p).strip()   # Sasha 344 · Body, else a list row's ListTitle
     m = _LINK.match(body) or (_CODE_ANY.search(body) if len(body) <= 60 else None)
     if not m:
         return None
@@ -853,22 +863,24 @@ async def voice_text(p: Dict[str, str]) -> Optional[str]:
 
 
 async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
+    from products import tools as _TL
+    p = _TL.normalized(p)   # Sasha 344 · the tapped row, exactly (the same rule as the webhook's — one function)
     key, account = ch["wa_id_sha256"], ch["account_id"]
     from agapi import person_access as PA
     await PA.warm(account)   # Sasha 254 · the one record, fresh for this turn's sync checks (rehearsal, calls, real venues …)
-    body = (p.get("Body") or "").strip()
+    body = _tap_words(p).strip()   # Sasha 344 · Body, else a list row's ListTitle
     heard = None
     st = await STORE.get_state(key)
     _pend = st.get("pending") or {}
     in_ad = _pend.get("kind") == "product" and _pend.get("product") == "diligence"   # CR 136 · AD's space: the AUDIO is the evidence
-    if not body and not (p.get("ButtonPayload") or "").strip() and not in_ad:
+    if not body and not _tap_id(p) and not in_ad:
         heard = await voice_text(p)   # Sasha 165 (5) · a voice note: its words, as if typed
         if heard:
             body = heard
             # Sasha 173 · the WORDS go on, never the audio: a voice note's file was handed to the products as if it were a photo,
             # and EspañaMe's DNI reader took "a massage at a spa in Hanoi …" (live)
             p = {**{k: v for k, v in p.items() if not k.startswith("Media")}, "Body": heard, "NumMedia": "0"}
-    payload = (p.get("ButtonPayload") or "").strip()
+    payload = _tap_id(p)   # Sasha 344 · a quick reply's ButtonPayload or a list row's ListId
     now = NOW()
     loaded = copy.deepcopy(st.get("pending"))   # Sasha 252 · the open question as this turn found it
     st["last_inbound_at"] = now

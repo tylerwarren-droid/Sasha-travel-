@@ -257,7 +257,8 @@ class PgStore:
 
     async def set_rules(self, owner: str, movement_id: str, rules: dict) -> None:
         async def go(c):
-            await c.execute("update group_movements m set rules = $3::jsonb from groups g where g.id = m.group_id and g.owner_id = $1 and m.id = $2",
+            await c.execute("update group_movements m set rules = $3::text::jsonb from groups g where g.id = m.group_id and g.owner_id = $1 "
+                            "and m.id = $2",   # Sasha 345 · an OBJECT (the pool's codec already JSON-encodes: ::jsonb stored a string)
                             uuid.UUID(owner), uuid.UUID(movement_id), json.dumps(rules))
         await self._run(go)
 
@@ -591,6 +592,13 @@ def summary(v: Dict[str, Any], top: int = 25) -> str:
 # ── the organiser's steps (the agent's tools and the S2 page call these) ──────────────────────────────────────────────────────
 
 async def start(account: str, company: str, destination: str, starts_on: Optional[str], ends_on: Optional[str], hotel_area: Optional[str]) -> dict:
+    """Sasha 345 · ONE movement per trip: the same company, destination and dates as their latest movement → THAT one (found live, 5 Nov:
+    six "Jean Incorporated → London" movements in four minutes — the limits were set on one, the list read from another)."""
+    last = await store().movement(account)
+    same = lambda a, b: str(a or "").strip().lower()[:10] == str(b or "").strip().lower()[:10]
+    if last and str(last.get("company") or "").strip().lower() == company.strip().lower() and same(last.get("destination"), destination) \
+            and same(last.get("starts_on"), starts_on) and same(last.get("ends_on"), ends_on):
+        return {"movement_id": last["id"], "reused": True}
     mid = await store().new_movement(account, company.strip()[:200], destination.strip()[:120], starts_on, ends_on, (hotel_area or "").strip()[:200] or None)
     return {"movement_id": mid}
 
@@ -617,5 +625,51 @@ async def set_limits(account: str, by_grade: Optional[dict] = None, by_member: O
     return {"limits": rules["limits"]}
 
 
+def _eur(v: Any) -> str:
+    v = float(v)
+    return f"€{v:,.0f}" if v.is_integer() else f"€{v:,.2f}"
+
+
+def _limit_words(l: Dict[str, Any]) -> str:
+    parts = ([f"{_eur(l['hotel_night_eur'])} a night"] if l.get("hotel_night_eur") is not None else []) + \
+            ([f"{_eur(l['flight_return_eur'])} for the return flight"] if l.get("flight_return_eur") is not None else [])
+    return " and ".join(parts) or "no limit"
+
+
+async def limits_said(account: str, movement_id: Optional[str] = None) -> Optional[str]:
+    """Sasha 345 · the limits AS STORED, read back from group_movements.rules (the ONE place) — in euros, per grade and per person by name.
+    Never the figures the request carried: what was saved is what she says."""
+    st = store()
+    mv = await st.movement(account, movement_id)
+    if not mv:
+        return None
+    lim = (mv.get("rules") or {}).get("limits") or {}
+    names = {m["id"]: m["name"] for m in await st.members(mv["id"])}
+    said = [f"{g}: {_limit_words(v)}" for g, v in (lim.get("by_grade") or {}).items()]
+    said += [f"{names.get(i, 'someone no longer on the list')}: {_limit_words(v)}" for i, v in (lim.get("by_member") or {}).items()]
+    return "; ".join(said) if said else None
+
+
+async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any]:
+    """Sasha 345 · THE MASTER LIST as a card (S2 and the chat): each row from the record (Sasha 340: AgAPI's for the booked), the link to
+    /group, and — when nobody is planned yet — that, said plainly. Never "here's the list" without the list."""
+    v = await view(account, movement_id)
+    mv = v.get("movement") or {}
+    rows = [{"name": r["name"], "grade": r.get("grade"), "status": r["status"], "price_eur": r.get("price_eur")} for r in v.get("rows") or []]
+    planned = [r for r in rows if r["status"] not in ("not planned",)]
+    if not mv:
+        empty = "There's no group movement yet."
+    elif not rows:
+        empty = "Nobody is on the list yet — send me the list of people."
+    elif not planned:
+        empty = f"Nobody is planned yet — {len(rows)} on the list, not planned."
+    else:
+        empty = None
+    title = f"{mv.get('company')} → {mv.get('destination')}" if mv else "Group movement"
+    counts = ", ".join(f"{n} {s}" for s, n in (v.get("counts") or {}).items())
+    return {"title": title, "rows": rows, "counts": counts, "link": "/group", "empty": empty,
+            "say": empty or f"The master list: {counts}. It's on the card, and the full list is on the Group page."}
+
+
 __all__ = ["read_text", "read_csv", "read_xlsx", "read_photo", "members_from", "batch_question", "limit_for", "with_limits", "plan", "view",
-           "summary", "start", "upload", "set_limits", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]
+           "summary", "start", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]

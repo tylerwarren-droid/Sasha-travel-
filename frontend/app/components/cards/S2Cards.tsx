@@ -304,7 +304,25 @@ export function PreparedCard({ ev }: { ev: Ev }) {
 }
 
 /** Sasha 241 · the render kinds these cards draw (sasha.py's former KINDS_S2_ONLY): one render event → its card, for /next. */
-export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities', 'subscriptions', 'prepared']   // Sasha 243 · + CR 84's list
+export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities', 'subscriptions', 'prepared', 'group_list']   // Sasha 243 · + CR 84's list · Sasha 345 · the master list
+
+/** Sasha 345 · THE MASTER LIST's card (/s2 and /next): its rows from the record, the Group page — or, with nobody planned, that, plainly. */
+export function GroupListCard({ c }: { c: Ev }) {
+  const rows: Ev[] = Array.isArray(c.rows) ? c.rows : []
+  return (
+    <Box k="The group's list" h={String(c.title || 'Group movement')}>
+      {c.counts && <div style={{ fontSize: 13, color: C.dim, marginTop: 2 }}>{String(c.counts)}</div>}
+      {c.empty ? <div style={{ marginTop: 8 }}>{String(c.empty)}</div> : (
+        <div style={{ marginTop: 8 }}>{rows.slice(0, 25).map((r, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', fontSize: 14 }}>
+            <span>{String(r.name)}{r.grade ? <span style={{ color: C.dim }}> · {String(r.grade)}</span> : null}</span>
+            <span style={{ color: C.dim }}>{String(r.status)}{typeof r.price_eur === 'number' ? ` · €${Math.round(r.price_eur).toLocaleString('en')}` : ''}</span>
+          </div>))}
+          {rows.length > 25 && <div style={{ fontSize: 13, color: C.dim }}>…and {rows.length - 25} more on the Group page.</div>}
+        </div>)}
+      <a href={String(c.link || '/group')} style={{ display: 'inline-block', marginTop: 10, color: C.gold, fontWeight: 600 }}>Open the master list</a>
+    </Box>)
+}
 
 export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) {
   if (ev.kind === 'keep_capture') return <KeepCapture what={ev.what === 'loyalty' ? 'loyalty' : 'passport'} />
@@ -321,6 +339,7 @@ export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) 
     {(ev.unread || []).length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {ev.unread.map(untag).join(', ')}</div> : null}</>)
   if (ev.kind === 'prepared' && typeof ev.url === 'string' && /^https:\/\//.test(ev.url)) return <PreparedCard ev={ev} />   // Sasha 248
   if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) return <SubscriptionsCard items={ev.items} total={ev.total} source={ev.source} send={send} />
+  if (ev.kind === 'group_list' && ev.title) return <GroupListCard c={ev} />   // Sasha 345
   if (ev.kind === 'notice' && ev.title) return (
     <Box k={ev.status ? untag(ev.status) : 'Update'} h={untag(ev.title)}>
       {(ev.lines || []).map((l: string, i: number) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}

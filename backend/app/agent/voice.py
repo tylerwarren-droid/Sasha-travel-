@@ -300,6 +300,7 @@ SHOWS = {
     "choose_offer": "Changing the flight", "hold_booking": "Getting the booking ready", "book": "Setting up the payment",
     "get_total": "Adding it up", "get_trip": "Looking up your trip", "get_status": "Looking up your trip",
     "hold_venue": "Getting the booking ready", "book_venue": "The booking", "cancel_venue": "The cancellation",
+    "group_list": "The group's list",   # Sasha 345 · it SHOWS: the master list's card
     "group_book": "Getting the group's booking ready", "group_swap": "Getting the swap ready", "group_cancel": "Getting the cancellation ready",
     "my_plans": "Looking up your plans", "running_late": "Getting that message ready", "change_booking": "Getting the change ready",
     "cancel_booking": "Getting the cancellation ready", "send_email": "Sending that", "send_whatsapp": "Sending that",
@@ -322,7 +323,7 @@ SAYS = ("prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_
         "call_again",   # Sasha 269 · the act's own `say`
         "booking_outcomes", "start_count",   # Sasha 324 · the founder's count, said (its `say`), no card
         "remove_saved_card",   # Sasha 327
-        "group_start", "group_upload", "group_limits", "group_plan", "group_list", "group_invite_vault",
+        "group_start", "group_upload", "group_limits", "group_plan", "group_invite_vault",
         "group_invoice")   # Sasha 334   # Sasha 332
 
 FAILED = "{what} didn't work{why}. Say the word and I'll try again."
@@ -337,6 +338,18 @@ _SHOWN_CLAIM = re.compile(
 # a sentence that says it didn't work is never a claim, whatever else it mentions
 _SAYS_FAILED = re.compile(r"\b(?:didn'?t|did not|couldn'?t|could not|can'?t|cannot|wasn'?t able|not able|unable|won'?t|isn'?t "
                           r"working|went wrong|no luck|nothing came back|failed)\b", re.I)
+
+
+#: Sasha 345 · a sentence that hands over a list or card ("here's the list", "the list is below", "it's on your screen") — said only when
+#: one reached their screen this turn (found live, 5 Nov: "here's the list" over nothing; group_list had no card)
+_CARD_PROMISE = re.compile(r"(?i)\b(?:here(?:'s| is| are| it is)|below|on (?:your|the) (?:screen|card)|i(?:'ve| have) (?:put|pulled) (?:up|together)|"
+                           r"take a look|have a look)\b[^.!?\n]*\b(?:list|card|table|line-?up|roster)\b|"
+                           r"\b(?:list|card|table)\b[^.!?\n]*\b(?:below|on (?:your|the) screen|is up)\b")
+
+
+def promises_card(text: str) -> List[str]:
+    """Sasha 345 · the sentences that say a list or card is being shown (and don't say it failed)."""
+    return [s for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip() and _CARD_PROMISE.search(s) and not _SAYS_FAILED.search(s)]
 
 
 def claims_shown(text: str) -> List[str]:

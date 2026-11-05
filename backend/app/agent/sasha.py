@@ -63,6 +63,27 @@ _CHANGES_TRIP = {"propose_trip", "swap_stay", "choose_offer", "search_flights", 
 _CLAIM = re.compile(r"(?i)\b(?:(?:is|are|been|all|now|it's|you're|you are|i've|i have|has been|have been|successfully|now)\s+(?:booked|paid|confirmed)"
                     r"|booking (?:is )?confirmed|payment (?:has )?(?:gone through|been received|received)|✅\s*booked|confirmation (?:email|number))")
 _EUR = re.compile(r"€\s?(\d[\d,]*(?:\.\d+)?)")
+#: Sasha 345 · a figure in ANOTHER currency ("$729", "£300", "729 USD"): said only when a tool gave that number in that currency (found
+#: live, 5 Nov: the group's limits — stored in euros — were answered with "$729"; the guard read € figures only, so it went out)
+_OTHER = re.compile(r"(?:(?P<sym>[$£])\s?(?P<a>\d[\d,]*(?:\.\d+)?))|(?:(?P<b>\d[\d,]*(?:\.\d+)?)\s?(?P<code>USD|GBP|dollars?|pounds?)\b)", re.I)
+_CUR = {"$": "USD", "£": "GBP", "usd": "USD", "gbp": "GBP", "dollar": "USD", "dollars": "USD", "pound": "GBP", "pounds": "GBP"}
+
+
+def _currencies(obj: Any, out: set) -> None:
+    """Every (currency, amount) a tool result carries outside euros — a figure the model may then say in that currency."""
+    if isinstance(obj, dict):
+        cur = str(obj.get("currency") or "").upper()
+        for k, v in obj.items():
+            if cur and cur != "EUR" and isinstance(v, (int, float)) and not isinstance(v, bool):
+                out.add((cur, round(float(v) / (100 if k.endswith("_minor") else 1), 2)))
+            _currencies(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _currencies(v, out)
+    elif isinstance(obj, str):
+        for m in _OTHER.finditer(obj):
+            cur = _CUR[(m["sym"] or m["code"]).lower()]
+            out.add((cur, round(float((m["a"] or m["b"]).replace(",", "")), 2)))
 
 
 def system_prompt(now: datetime) -> str:
@@ -164,10 +185,15 @@ def total_matches(v: float, figures: dict) -> bool:
     return False
 
 
-def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optional[dict] = None) -> List[str]:
+def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optional[dict] = None, other: Optional[set] = None) -> List[str]:
     """What's wrong with a reply, if anything: unproven claims, prices no tool gave. Sasha 249 · `figures` (get_total's
-    trip_figures): a stated trip total must be exactly its total_eur."""
+    trip_figures): a stated trip total must be exactly its total_eur. Sasha 345 · a figure in any other currency must be a tool's, in
+    THAT currency (`other`: the (currency, amount) pairs this turn's tools gave)."""
     bad = []
+    for m in _OTHER.finditer(text or ""):
+        cur, v = _CUR[(m["sym"] or m["code"]).lower()], float((m["a"] or m["b"]).replace(",", ""))
+        if not any(c == cur and abs(v - a) <= max(1.0, a * 0.005) for c, a in (other or set())):
+            bad.append(f"price: {m.group(0).strip()} did not come from a tool in that currency — the record is in euros")
     if _claims(text) and not anything_booked:
         bad.append("claim: it says booked/paid/confirmed but Pacioli has nothing booked")
     exact = bool(figures and figures.get("total_eur"))
@@ -187,7 +213,7 @@ def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optiona
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venues",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
-          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_start": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "inline", "group_invite_vault": "inline", "group_invoice": "inline", "group_book": "read_back", "group_swap": "read_back", "group_cancel": "read_back", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
+          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_start": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "group_list", "group_invite_vault": "inline", "group_invoice": "inline", "group_book": "read_back", "group_swap": "read_back", "group_cancel": "read_back", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})
@@ -207,6 +233,7 @@ KINDS_S2_ONLY |= {"counter_card", "my_cards", "accident", "claim_status"}
 KINDS_S2_ONLY |= {"prepared"}   # Sasha 248 · their own booking page + the details to copy (components/cards, /s2 and /next)
 KINDS_S2_ONLY |= {"subscriptions"}   # CR 84 · the subscriptions list card (service · price · renews; tap one → cancel)
 KINDS_S2_ONLY |= {"activities"}   # CR 81 · the ActivityCard (things to do, verified on each place's own site)
+KINDS_S2_ONLY |= {"group_list"}   # Sasha 345 · the master list's card: its rows, the Group page — never "here's the list" without it
 KINDS_S2_ONLY |= {"wa_open"}   # Sasha 230 · the message, pre-filled in the person's own WhatsApp (they press send)   # CR 75 · fine print's cards, rendered by /s2 only
 KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
 KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport): on the read-back's event
@@ -255,6 +282,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]],
                 # Sasha 265 · item 4: the call's card IS the ONE question — its words and its buttons (the tap is the approval)
                 **yes_buttons(tool, res)}   # Sasha 330 · from THE ONE PLACE
+    if tool == "group_list" and isinstance(res.get("card"), dict):   # Sasha 345 · the master list goes out WITH the list
+        return {"type": "render", "kind": "group_list", **res["card"]}
     if tool in ("group_book", "group_swap", "group_cancel") and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 334
         return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group", **yes_buttons(tool, res)}
     if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 330 · "give me a button": the
@@ -796,9 +825,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                         if m.get("role") in ("user", "assistant") and str(m.get("content") or "").strip()][-40:]
     msgs.append({"role": "user", "content": message})
     allowed: set = set()
+    other: set = set()   # Sasha 345 · (currency, amount) outside euros that a tool gave — the only such figures she may say
     for m in history or []:   # amounts she already said (from earlier tool results) stay sayable
         if m.get("role") == "assistant":
             _amounts(str(m.get("content") or ""), allowed)
+            _currencies(str(m.get("content") or ""), other)
     used_openers = _OPENERS.setdefault(session or "-", set())
     used_openers |= _history_openers(history)
     said: List[str] = []      # what she says (cleaned) — the reply
@@ -932,7 +963,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if _claims(x) and booked_now is None:
                 booked_now = await _anything_booked(ctx)
             figs = await _trip_figures_now(ctx) if trip_total_figure(x) else None   # Sasha 249 · a trip total: checked exactly
-            if guard_check(x, allowed, bool(booked_now), figs):
+            if guard_check(x, allowed, bool(booked_now), figs, other):
                 held = True
                 break
             if honest and _V.is_ack(x):   # Sasha 273 · item 8: the turn's first line is said by code — never again by the model
@@ -1076,6 +1107,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             r = agapi_outage(r, met, u.name) if honest else r   # Sasha 261 · off on /next with parity off (byte-identical)
             if r.get("ok"):
                 _amounts(r["result"], allowed)
+                _currencies(r["result"], other)
                 if honest and isinstance(r["result"], dict):   # Sasha 264 · item 5: what this card says, she never says again
                     tstate["seen"] += [str(l) for l in (r["result"].get("read_back") or []) if isinstance(l, str)]
                 if honest and _V.route_told(r["result"]):   # Sasha 331 · how she'll book and why: said once, in front, by code
@@ -1165,7 +1197,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     text = " ".join(said).strip()
     figures: Dict[str, Any] = {}   # Sasha 249 · get_total's trip_figures (read only — the guard never re-prices the trip)
     allowed |= await _basket_amounts(ctx, figures)
-    bad = guard_check("".join(raw), allowed, await _anything_booked(ctx), figures or None)
+    bad = guard_check("".join(raw), allowed, await _anything_booked(ctx), figures or None, other)
     guard_log = list(bad) + [f"internal dropped: {x}" for x in internal_log]
     if bad:   # once: back to the model to rewrite — honestly (Sasha 205: no length rewrite; a safety trim below)
         spoken = " ".join(said).strip()
@@ -1176,7 +1208,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         r = await client.messages.create(model=FAST_MODEL, max_tokens=400, system=system_now(), messages=msgs)
         _MS.usage(FAST_MODEL, getattr(r, "usage", None))   # Sasha 275
         new = drop_internal("".join(b.text for b in r.content if b.type == "text").strip())
-        bad2 = guard_check(new, allowed, await _anything_booked(ctx), figures or None)
+        bad2 = guard_check(new, allowed, await _anything_booked(ctx), figures or None, other)
         new = new if not bad2 else guard_strip(new, bad2)
         if said and opener_of(new):
             new = strip_openers(new)
@@ -1186,6 +1218,13 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         text = f"{spoken} {rest}".strip() if spoken else new
         guard_log += [f"rewritten{' then stripped: ' + '; '.join(bad2) if bad2 else ''}"]
         yield {"type": "replace", "text": text, "speak": bool(held and rest), "say": SP.speakable(rest)}
+    promised = _V.promises_card(text) if not tstate["drawn"] else []
+    if promised:   # Sasha 345 · "here's the list" over nothing: the promise goes; what's missing is said (the record decides, not her words)
+        kept = [x for x in re.split(r"(?<=[.!?])\s+", text) if x.strip() and x not in promised]
+        line = "I haven't got a list to show you yet — ask me for the group's list and I'll put it on screen."
+        text = " ".join(kept + [line]).strip()
+        guard_log.append(f"card promised, none shown — dropped: {promised}")
+        yield {"type": "replace", "text": text, "speak": True, "say": SP.speakable(line)}
     failed = _V.unshown(tstate["showing"], tstate["drawn"]) if honest else []
     if failed:   # Sasha 251 · HONEST RESULTS: a showing tool failed and nothing was drawn — she says so, never what isn't there
         claims = _V.claims_shown(text)

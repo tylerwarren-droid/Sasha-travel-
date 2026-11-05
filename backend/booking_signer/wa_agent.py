@@ -191,6 +191,10 @@ def _card(ev: dict, out, title: str) -> None:
     k = ev.get("kind")
     if k == "notice":
         lines = [ev.get("title") or ""] + list(ev.get("lines") or [])[:4]
+    elif k == "group_list":   # Sasha 345 · the master list, in lines — or that nobody is planned yet; the Group page for the rest
+        lines = [ev.get("title") or ""] + ([ev["empty"]] if ev.get("empty") else
+                                           [" · ".join(x for x in (r.get("name"), r.get("status"), f"€{round(r['price_eur']):,}" if isinstance(r.get("price_eur"), (int, float)) else None) if x)
+                                            for r in (ev.get("rows") or [])[:12]])
     elif k == "plans":
         for it in (ev.get("items") or [])[:8]:
             lines.append(" · ".join(x for x in (str(it.get("when") or "")[:16].replace("T", " "), it.get("title"), it.get("status")) if x))
@@ -281,6 +285,7 @@ KIND_MAP = {
     "venues": _venues, "flights": _options, "stays": _options, "flight_chosen": _line, "total": _line, "read_back": _read_back,
     "pay": _pay, "pay_here": _pay, "handover": _handover, "calendar": _calendar, "capabilities": _capabilities, "wa_open": _wa_open,
     "plans": lambda ev, out: _card(ev, out, "Your plans"), "notice": lambda ev, out: _card(ev, out, "Update"),
+    "group_list": lambda ev, out: _card(ev, out, "The group's list"),   # Sasha 345
     "claim_status": lambda ev, out: _card(ev, out, "Your claim"), "accident": "accident",   # Sasha 238 · keeps the shots it asks for
     "counter_card": lambda ev, out: _card(ev, out, "At the counter"), "my_cards": lambda ev, out: _card(ev, out, "Your cards"),
     "activities": lambda ev, out: _places(ev, out),   # Sasha 252 · things to do are places: the one place text + link
@@ -315,7 +320,7 @@ def render(ev: dict, out, st: dict, now) -> None:
         f(ev, out)
 
 
-CARD_KINDS = {"accident", "claim_status", "notice", "counter_card", "my_cards", "activities", "plans", "capabilities", "calendar", "subscriptions"}
+CARD_KINDS = {"accident", "claim_status", "notice", "group_list", "counter_card", "my_cards", "activities", "plans", "capabilities", "calendar", "subscriptions"}
 
 
 def last_of_each_card(renders: List[dict]) -> List[dict]:

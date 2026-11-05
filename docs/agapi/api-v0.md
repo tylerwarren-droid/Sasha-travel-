@@ -567,7 +567,7 @@ The organiser's list of people, pasted or typed (one person per line: name, home
 
 ### `group_limits`
 
-The group's price limits, per grade ({"worker": {"flight_return_eur": 600, "hotel_night_eur": 110}}) or per person by name. Only the numbers they said.
+The group's price limits, per grade ({"worker": {"flight_return_eur": 600, "hotel_night_eur": 110}}) or per person by name. Only the numbers they said, in EUR. Say its `say` word for word: it is what was SAVED, read back, and the planning it started.
 
 **Errors:** `no_movement`, `unknown_person`, `missing_input`, `internal`
 
@@ -656,7 +656,7 @@ Invite group members (by name, or everyone) to add their passport and loyalty nu
 
 ### `group_list`
 
-The group's master list: each person's status (planned / needs vault / over limit / booked / cancelled). Say its `say`; the full list is on the master list page.
+The group's master list as a CARD: each person's status (planned / needs vault / over limit / booked / cancelled). Say its `say` word for word — the card carries the list.
 
 **Errors:** `no_movement`, `missing_input`, `internal`
 

@@ -19,7 +19,7 @@ import S2Hello, { type HelloCtl } from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
 import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
-import { C, Box, shrink, KeepCapture, WaOpen, Plans, type CalUpdate, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
+import { C, Box, shrink, KeepCapture, GroupListCard, WaOpen, Plans, type CalUpdate, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
 import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
@@ -49,6 +49,7 @@ type Card =
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
   | { k: 'plans'; items: Plan[]; on?: string; updates?: CalUpdate[] }
   | { k: 'notice'; title: string; lines: string[]; status?: string }
+  | { k: 'group_list'; title: string; rows: { name: string; grade?: string | null; status: string; price_eur?: number | null }[]; counts?: string; link: string; empty?: string | null }   // Sasha 345 · the master list's card
   | { k: 'counter_card'; card: Ev }   // CR 75 · fine print: the counter card (each line quoted)
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
@@ -529,6 +530,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
       </div>}
     </Box>)
   if (c.k === 'plans') return <Plans items={c.items} on={c.on} updates={c.updates} />
+  if (c.k === 'group_list') return <GroupListCard c={c} />   // Sasha 345 · the master list goes out WITH the list (S2Cards: the one card)
   if (c.k === 'notice') return (
     <Box k={c.status ? untag(c.status) : 'Update'} h={untag(c.title)}>
       {c.lines.map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
@@ -899,6 +901,7 @@ export default function S2App() {
             else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })
             else if (ev.kind === 'kind_ask' && Array.isArray(ev.choices) && ev.choices.length) add({ k: 'kind_ask', ask: String(ev.ask || ''), choices: ev.choices.map(String) })   // Sasha 297
             else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on, updates: ev.calendar_updates })   // Sasha 312
+            else if (ev.kind === 'group_list' && ev.title) add({ k: 'group_list', title: String(ev.title), rows: Array.isArray(ev.rows) ? ev.rows : [], counts: ev.counts, link: String(ev.link || '/group'), empty: ev.empty ?? null })   // Sasha 345
             else if (ev.kind === 'notice' && ev.title) add({ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status })
             else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
             else if (ev.kind === 'counter_card' && ev.card) add({ k: 'counter_card', card: ev.card })   // CR 75 · fine print

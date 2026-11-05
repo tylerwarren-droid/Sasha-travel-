@@ -1508,7 +1508,28 @@ async def group_limits(ctx: Ctx, a: dict) -> dict:
             raise ToolError("unknown_person", "not on the list: " + ", ".join(missing))
         by_member = {names[n.lower()]: v for n, v in a["by_person"].items()}
     r = _group_err(await G.set_limits(ctx.account, a.get("by_grade"), by_member))
-    return {**r, "say": "Limits set — I'll plan everyone within them, and flag anyone over."}
+    # Sasha 345 · what was SAVED is what she says — read back from the ONE place, in euros, per grade and per person (found live, 5 Nov:
+    # "400 a night, and 250 for the workers" was answered with "$729") — then the next step: planning, started now when the list is in
+    saved = await G.limits_said(ctx.account)
+    started = await _start_plan(ctx.account)
+    say = (f"Saved: {saved}." if saved else "No limits are saved.") + (
+        f" I'm planning all {started} now, one by one, within those limits — the master list fills in as I go. Nothing is booked yet."
+        if started else " Send me the list of people next, and I'll plan them within these limits.")
+    return {**r, "saved": saved, "planning": bool(started), "say": say}
+
+
+async def _start_plan(account: str) -> int:
+    """Sasha 345 · planning starts after the limits (the organiser's next step, never waiting to be asked): → how many are being planned
+    (0: no one on the list, or a plan already running)."""
+    from booking_signer import groups as G
+    run = _GROUP_PLANS.get(account)
+    if run is not None and not run.done():
+        return 0
+    mv = await G.store().movement(account)
+    n = len(await G.store().members(mv["id"])) if mv else 0
+    if n:
+        _GROUP_PLANS[account] = asyncio.ensure_future(G.plan(account, mv["id"]))
+    return n
 
 
 _GROUP_PLANS: Dict[str, Any] = {}
@@ -1586,11 +1607,12 @@ async def group_invoice(ctx: Ctx, a: dict) -> dict:
 
 async def group_list(ctx: Ctx, a: dict) -> dict:
     from booking_signer import groups as G
-    v = await G.view(ctx.account)
-    if v.get("why"):
-        raise ToolError("no_movement", v["why"])
-    return {"counts": v["counts"], "people": len(v["rows"]), "say": G.summary(v, top=8 if ctx.via != "wa" else 25),
-            "page": "/group"}
+    c = await G.card(ctx.account)
+    if c.get("empty") == "There's no group movement yet.":
+        raise ToolError("no_movement", c["empty"])
+    # Sasha 345 · the list goes out WITH the list: the card (S2) — on WhatsApp, its lines — and the Group page; nobody planned → said
+    say = c["say"] if ctx.via != "wa" else (c["empty"] or G.summary(await G.view(ctx.account), top=25))
+    return {"card": c, "people": len(c["rows"]), "say": say, "page": "/group"}
 
 
 async def remove_saved_card(ctx: Ctx, a: dict) -> dict:
@@ -1840,7 +1862,8 @@ TOOLS: List[dict] = [
        "date, back date, grade). Pass their text EXACTLY. Say its `say` as it is — it asks ONE question for every unclear row.",
        {"text": {"type": "string"}}, ["text"], {"type": "object", "properties": {"added": {"type": "integer"}, "say": {"type": "string"}}}, ["no_movement"]),
     _t("group_limits", "Magellan", group_limits, "The group's price limits, per grade ({\"worker\": {\"flight_return_eur\": 600, "
-       "\"hotel_night_eur\": 110}}) or per person by name. Only the numbers they said.",
+       "\"hotel_night_eur\": 110}}) or per person by name. Only the numbers they said, in EUR. Say its `say` word for word: it is what was "
+       "SAVED, read back, and the planning it started.",
        {"by_grade": {"type": "object"}, "by_person": {"type": "object"}}, [], {"type": "object"}, ["no_movement", "unknown_person"]),
     _t("group_plan", "Magellan", group_plan, "Plan everyone on the group's list, one by one, within their limits (planning only — nothing is "
        "booked). Say its `say`.", {}, [], {"type": "object"}, ["no_movement"]),
@@ -1859,8 +1882,8 @@ TOOLS: List[dict] = [
        {"who": {"type": "array", "items": {"type": "string"}}}, ["who"], {"type": "object"}, ["nothing_to_do"], austen=True),
     _t("group_invoice", "Pacioli", group_invoice, "The movement's ONE invoice (to the company): its total and its link. Say its `say`.",
        {}, [], {"type": "object"}, ["no_movement"]),
-    _t("group_list", "Magellan", group_list, "The group's master list: each person's status (planned / needs vault / over limit / booked / "
-       "cancelled). Say its `say`; the full list is on the master list page.", {}, [], {"type": "object"}, ["no_movement"]),
+    _t("group_list", "Magellan", group_list, "The group's master list as a CARD: each person's status (planned / needs vault / over limit / "
+       "booked / cancelled). Say its `say` word for word — the card carries the list.", {}, [], {"type": "object"}, ["no_movement"]),
     _t("remove_saved_card", "Pacioli", remove_saved_card, "Remove the card Stripe saved for them (\"remove my saved card\", \"forget my card\"). "
        "Their next booking shows the payment page again. Say its `say` as it is.", {}, [],
        {"type": "object", "properties": {"removed": {"type": "integer"}, "say": {"type": "string"}}}, ["payments_unreachable"]),

@@ -195,7 +195,8 @@ class TheTools(unittest.TestCase):
             self.assertTrue(r["say"].startswith("I've added 20 people to the list. 2 rows I couldn't read for sure"), r["say"])
             run(G.plan(OWNER))
             s = run(API.group_list(ctx, {}))
-        self.assertIn("20 people — 19 needs vault, 1 over limit", s["say"])   # Rania's flight (no personal limit set here)
+        self.assertIn("19 needs vault, 1 over limit", s["say"])   # Rania's flight (no personal limit set here)
+        self.assertEqual(len(s["card"]["rows"]), 20)   # Sasha 345 · the list goes out WITH the list
 
 
 if __name__ == "__main__":

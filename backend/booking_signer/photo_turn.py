@@ -49,7 +49,7 @@ async def web(user_id: Optional[str], message: str, media: List[dict], product_m
         print(f"[photo_turn] the photo turn failed: {type(e).__name__}: {e}")
         return _answer("Something went wrong reading that photo on my side — nothing was kept. Try again?")
     if t is None:
-        return _answer("Got it. What's the photo for — your DNI or passport (EspañaMe, RelocateMe), or something for a booking? "
+        return _answer("Got it. What's the photo for — your DNI or passport (España, Relocation), or something for a booking? "
                        "Nothing was kept.")
     return _answer(t.get("response") or "", t)
 

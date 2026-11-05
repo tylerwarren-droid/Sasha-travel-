@@ -31,7 +31,7 @@ class ListSender(FakeSender):
 
 class TheRegistry(unittest.TestCase):
     def test_one_entry_per_tool_and_the_switch_knows_each_word(self):
-        self.assertEqual([TL.title(t) for t in TL.TOOLS], ["✈️ Travel", "🔍 Diligence", "🇪🇸 España", "🏠 Relocate", "🎓 Campus"])
+        self.assertEqual([TL.title(t) for t in TL.TOOLS], ["✈️ Travel", "🔍 Due diligence", "🇪🇸 España", "🏠 Relocation", "🎓 Campus visits"])
         for t in TL.TOOLS:
             if t["product"]:
                 self.assertTrue(PW._KEYWORD[t["product"]].match(t["word"]), t["word"])   # the ONE keyword switch opens it
@@ -41,12 +41,12 @@ class TheRegistry(unittest.TestCase):
 
     def test_only_switched_on_tools_are_listed(self):
         with mock.patch.dict("os.environ", {"KANOE_TOOLS_OFF": "campus,espana"}):
-            self.assertEqual([r[0] for r in TL.tools_rows()], ["✈️ Travel", "🔍 Diligence", "🏠 Relocate"])
+            self.assertEqual([r[0] for r in TL.tools_rows()], ["✈️ Travel", "🔍 Due diligence", "🏠 Relocation"])
 
     def test_taps(self):
-        self.assertEqual(TL.tapped("← All tools", "kanoe:tools"), ("tools", None))
+        self.assertEqual(TL.tapped("← Everything I can do", "kanoe:tools"), ("tools", None))
         self.assertEqual(TL.tapped("", "kanoe:tool:diligence")[1]["word"], "diligence")
-        self.assertEqual(TL.tapped("🎓 Campus", "")[1]["id"], "campus")
+        self.assertEqual(TL.tapped("🎓 Campus visits", "")[1]["id"], "campus")
         self.assertEqual(TL.tapped("x", "kanoe:say:Book dinner"), ("say", "Book dinner"))
         self.assertIsNone(TL.tapped("dinner for two", ""))
 
@@ -62,11 +62,11 @@ class TheMenuOnEveryReply(unittest.TestCase):
     def test_top_level_lists_the_tools(self):
         it = self.out(None, ("text", "Hello"))
         self.assertEqual((it[0], it[1], it[2]), ("list", "Hello", "Menu"))
-        self.assertEqual([r[0] for r in it[3]][:5], ["✈️ Travel", "🔍 Diligence", "🇪🇸 España", "🏠 Relocate", "🎓 Campus"])
+        self.assertEqual([r[0] for r in it[3]][:5], ["✈️ Travel", "🔍 Due diligence", "🇪🇸 España", "🏠 Relocation", "🎓 Campus visits"])
 
     def test_inside_a_tool_its_menu_with_all_tools_first(self):
         it = self.out("campus", ("text", "Which universities?"))
-        self.assertEqual(it[3][0], ("← All tools", TL.BACK["description"], "kanoe:tools"))
+        self.assertEqual(it[3][0], ("← Everything I can do", TL.BACK["description"], "kanoe:tools"))
         self.assertIn("start over campus", it[3][1][2])
 
     def test_a_turn_ending_on_its_own_buttons_keeps_them(self):
@@ -81,8 +81,8 @@ class OnWhatsApp(Base):
 
     def test_all_tools_tap_shows_the_tools(self):
         self.link()
-        self.say("← All tools", payload="kanoe:tools")
-        self.assertEqual(GW.SENDER.lists[-1]["body"].splitlines()[0], TL.TOOLS_LINE)
+        self.say("← Everything I can do", payload="kanoe:tools")
+        self.assertTrue(GW.SENDER.lists[-1]["body"].startswith(TL.CAN))
         self.assertEqual([r[2] for r in GW.SENDER.lists[-1]["rows"]], [TL.TOOL_ID + t["id"] for t in TL.TOOLS])
 
     def test_a_tool_tap_enters_it_through_the_one_switch(self):
@@ -107,7 +107,7 @@ class OnWhatsApp(Base):
         self.assertEqual(len(GW.SENDER.lists[-1]["rows"]), len(TL.TOOLS))
         r = run(GW.dispatch({"From": f"whatsapp:{GUEST}", "To": f"whatsapp:{SANDBOX}", "Body": "🔍 Diligence",
                              "ButtonPayload": "kanoe:tool:diligence", "MessageSid": "SMnew2"}, not_a_venue))
-        self.assertIn("To use 🔍 Diligence here, link this number to your Kanoe account once at", r)
+        self.assertIn("To use 🔍 Due diligence here, link this number to your Kanoe account once at", r)
 
 
 class NoSecondWay(unittest.TestCase):

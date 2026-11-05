@@ -272,7 +272,7 @@ async def sessions(s: dict, day: str, attendees: int = 2, reader: Optional[Reade
             raise ReadRefused(f"{s['name']}'s calendar answered HTTP {r.status}")
         return parse_widget_list(s, day, r.body, r.receipt())
     if s["variant"] != "register":
-        raise ReadRefused(f"{s['name']} isn't read by CampusMe yet")
+        raise ReadRefused(f"{s['name']} isn't one I read yet")
     r = await rd.read(f"{_base(s)}{s['service']}?cmd=getEvents&date={day}&query=")
     if r.status != 200:
         raise ReadRefused(f"{s['name']}'s calendar answered HTTP {r.status}")

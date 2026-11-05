@@ -222,7 +222,7 @@ def ask(out, k: str, f: Dict[str, dict]) -> None:
     if k == "motive":
         out.ask("What is the card for?\n" + "\n".join(f"• {v}" for v in MOTIVES.values()) + "\n(or type \"changed details\")", MOTIVE_BUTTONS)
     elif k == "address_ok":
-        whose = "Your RelocateMe address is" if f["address_line"].get("source") == RX_SOURCE else "Your DNI says"   # CR 44
+        whose = "The address in your relocation file is" if f["address_line"].get("source") in (RX_SOURCE, RX_SOURCE_BEFORE_343) else "Your DNI says"   # CR 44
         out.ask(f"{whose}: *{f['address_line']['value']}*{', ' + f['municipality']['value'] if f.get('municipality') else ''}. "
                 "Is that still where you're registered (your padrón)?", [("Yes, still there", "hx:ts:addr:yes"), ("No, it's changed", "hx:ts:addr:no")])
     elif k == "street":
@@ -393,7 +393,8 @@ def web() -> str:
     return w()
 
 
-RX_SOURCE = "your RelocateMe file (the Keep)"
+RX_SOURCE = "your relocation file (the Keep)"
+RX_SOURCE_BEFORE_343 = "your RelocateMe file (the Keep)"   # PATCH (said, Sasha 343): facts stored before the rename carry the old source
 
 
 async def from_relocation(account: str) -> Dict[str, dict]:
@@ -434,7 +435,7 @@ async def start(ctx: dict) -> None:
     out.text("Your health card — I'll fill the Comunidad de Madrid's own form (1449F1) for you. I read your ID once to fill "
              "it; I don't ask for your Social Security number or anything about your health, and I keep the details 24 hours.")
     if await from_relocation(ctx["account"]):                      # CR 44 · asked once, ever
-        out.ask("You've already given me your details for RelocateMe — fill the form from them (name, birth, NIE, address, phone, "
+        out.ask("You've already given me your details for your relocation — fill the form from them (name, birth, NIE, address, phone, "
                 "email)? I read them back first.", [("Yes, use them", "hx:ts:rx:yes"), ("No, read my ID", "hx:ts:rx:no")])
         return
     out.text("Send a photo of the FRONT of your DNI (then the back), or your passport's photo page. "

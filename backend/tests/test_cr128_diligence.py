@@ -79,7 +79,7 @@ class Leaving(Base):
         TG.stand_in_brain(self)
         self.say("diligence")
         self.say("sasha")
-        self.assertEqual(self.bodies()[-1].split("\n")[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")
+        self.assertEqual(self.bodies()[-1].split("\n")[-1], "Sasha · ✈️ Travel — where would you like to go?")
         self.say("book a table for two tonight")
         self.assertEqual(self.sent_to_ad(), [])   # Sasha 315 MOVED: after "sasha", travel is Sasha's; an AD question goes by meaning
         self.assertEqual(self.brain_saw, ["book a table for two tonight"])
@@ -123,5 +123,5 @@ class RootTest(TG.unittest.TestCase):
 
     def test_b_a_space_like_the_others(self):
         self.assertIn("diligence", SPC.SPACES)
-        self.assertEqual((SPC.normalize("diligence"), SPC.NAME["diligence"]), ("diligence", "Applied Diligence"))
+        self.assertEqual((SPC.normalize("diligence"), SPC.NAME["diligence"]), ("diligence", "🔍 Due diligence"))
         self.assertEqual(PW.typo_keyword("diligense"), "diligence")

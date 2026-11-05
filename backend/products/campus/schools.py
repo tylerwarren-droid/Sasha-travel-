@@ -69,9 +69,9 @@ NOT_READABLE = {
     "harvard": "Harvard's visit page answered 503 when it was scouted, and its terms prohibit automated access — I'll prepare, you register",
     "princeton": "Princeton's admission site refuses AI agents, and its visit page blocked our read: I'll prepare, you register",
     "amherst": "Amherst's robots file couldn't be read, so its pages stay unread",
-    "berkeley": "Berkeley's tours run on its own system, not one CampusMe reads yet",
-    "ohio state": "Ohio State's visit system isn't one CampusMe reads yet",
-    "michigan": "Michigan isn't read by CampusMe yet",
+    "berkeley": "Berkeley's tours run on its own system, not one I read yet",
+    "ohio state": "Ohio State's visit system isn't one I read yet",
+    "michigan": "Michigan isn't one I read yet",
     "ut austin": "UT Austin's visit page answered 503 when it was scouted",
 }
 

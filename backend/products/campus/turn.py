@@ -34,10 +34,10 @@ APPROVAL_WINDOW = timedelta(minutes=15)
 CARDS_PER_SCHOOL = (3, 2, 1)      # by how many schools were asked for
 DAYS_READ_MAX = 4                 # days read per school per ask (each a request or three)
 
-INTRO = ("CampusMe here 🎓 I read each university's own visit calendar, show you real sessions, prepare the school's "
+INTRO = ("🎓 I read each university's own visit calendar, show you real sessions, prepare the school's "
          "registration form with your student's details, and you press Register. Tell me the schools and the month, e.g. "
          "\"Yale and Penn in November for my son\". Anything else — a booking, a flight — just ask; we'll come back to this.")
-NO_SUBMIT = "I prepare the form; you press Register on the school's own page — CampusMe never submits it."
+NO_SUBMIT = "I prepare the form; you press Register on the school's own page — I never submit it."
 
 
 def web() -> str:
@@ -77,7 +77,7 @@ async def find(ask: RQ.Ask, today: date, reader: Optional[SL.Reader] = None) -> 
     async def one(s: dict) -> dict:
         res = {"school": s["key"], "sessions": [], "published_until": None, "opened": False, "why": None}
         if not s.get("proven"):
-            res["why"] = f"{s['name']} is on CampusMe's list but its calendar hasn't been read and checked yet"
+            res["why"] = f"{s['name']} is on my list but its calendar hasn't been read and checked yet"
             return res
         try:
             # one read from today to the end of the asked span: the month's days AND how far ahead the school publishes
@@ -188,7 +188,7 @@ async def _new_ask(ctx: dict, body: str) -> None:
         links = [f"{PATTERNS[k]['name']}'s own visit page: {PATTERNS[k]['link']}" for k in PATTERNS
                  if any(k in (w or "").lower() for w in a.unreadable)]
         read = ", ".join(x["name"] for x in SC.SCHOOLS.values() if x.get("proven"))
-        out.text(("\n".join(links) + "\n" if links else "") + f"CampusMe reads {read} live today — name one of those for its "
+        out.text(("\n".join(links) + "\n" if links else "") + f"I read {read} live today — name one of those for its "
                  "real sessions.")
         return
     names = " and ".join(s["name"] for s in a.schools)
@@ -682,5 +682,5 @@ def context(pend: dict) -> dict:
     cities = [SC.SCHOOLS[x["school"]]["city"]] if x.get("school") else [s["city"] for s in (a.schools if a else [])]
     dates = [x["day"]] if x.get("day") else ([a.when_words()] if a and (a.month or a.day) else [])
     return {"product": "campus", "city": ", ".join(dict.fromkeys(cities)) or None, "country": "United States",
-            "dates": dates, "name": None, "line": f"[CampusMe: campus visits — {' and '.join(schools) or 'universities'}"
+            "dates": dates, "name": None, "line": f"[Campus visits — {' and '.join(schools) or 'universities'}"
             + (f" ({'; '.join(dict.fromkeys(cities))})" if cities else "") + (f", {dates[0]}" if dates else "") + "]"}

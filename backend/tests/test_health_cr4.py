@@ -234,4 +234,4 @@ class NewInMadrid(Base):
         self.assertEqual(self.bodies()[-1], "agent: hello")
         self.say("salud")
         self.say("exit")
-        self.assertEqual(self.bodies()[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")
+        self.assertEqual(self.bodies()[-1], "Sasha · ✈️ Travel — where would you like to go?")

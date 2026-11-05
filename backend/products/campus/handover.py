@@ -56,7 +56,7 @@ def plan(questions: List[Question], profile: Dict[str, str], session: Session, a
         if e.startswith("contact_") or e in ("counselorschoolorg", "org_address", "persontype", "otherdetail") or "educator" in lab.lower():
             row.update(action=NOT_YOU, note="for educators and counsellors only — leave it")
         elif q.type in ("checkbox", "radio", "select") and _STATEMENT.search(lab + " " + e):
-            row.update(action=YOU, note="a statement or a consent: read it and tick it yourself — CampusMe never ticks one for you")
+            row.update(action=YOU, note="a statement or a consent: read it and tick it yourself — I never tick one for you")
         elif e == "sys:first":
             fill(profile.get("first"))
         elif e == "sys:last":
@@ -95,7 +95,7 @@ def plan(questions: List[Question], profile: Dict[str, str], session: Session, a
             else:
                 row.update(action=SKIP, note="optional — another session type")
         elif q.required:
-            row.update(action=YOU, note="CampusMe can't place this one: answer it yourself")
+            row.update(action=YOU, note="I can't place this one: answer it yourself")
         else:
             row.update(action=SKIP, note="optional")
         rows.append(row)

@@ -2,7 +2,7 @@
 student's details (the Keep, or what the parent said), the session chosen IN the form — and stopped before the last press.
 
 Two taps are left for the parent, on their phone (the same guest page as every hand-over):
-  ① the school's statement box ("By submitting this form, you understand…") — a statement is theirs; CampusMe never ticks one;
+  ① the school's statement box ("By submitting this form, you understand…") — a statement is theirs; Sasha never ticks one;
   ② the school's own SUBMIT. Pressing it registers the student with the school; not pressing sends nothing.
 Rules (each a refusal, never a guess):
   · only a real guest under the founder override (or the signed DPA) — HO.dpa_ok; rehearsals are READ-ONLY with a fictional student;
@@ -201,7 +201,7 @@ async def open_campus_handover(*, session: Session, profile: Dict[str, str], att
                                       "takes one-page forms; the question-by-question page is the way there")
     gone = missing(profile)
     if gone:
-        raise HO.Refused("missing_info", "CampusMe needs these first: " + ", ".join(gone).replace("_", " "))
+        raise HO.Refused("missing_info", "I need these first: " + ", ".join(gone).replace("_", " "))
     if HO.V.platform_of(session.form_url):
         raise HO.Refused("platform", "that registration page is a platform's, not the school's")
     vals = values(profile, session, attendees)

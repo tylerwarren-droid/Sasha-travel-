@@ -55,7 +55,7 @@ async def save(account: str, f: dict) -> bool:
 
 def lines() -> List[str]:
     from booking_signer.vault import crypto as VC
-    return [VC.access_line(PROVIDER, LABEL, "identifier"), "It fills your RelocateMe forms; you check each one before signing."]
+    return [VC.access_line(PROVIDER, LABEL, "identifier"), "It fills your relocation forms; you check each one before signing."]
 
 
 def approval(now, how: str, said: str) -> dict:

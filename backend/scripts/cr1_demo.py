@@ -382,7 +382,7 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
             await wb("X24 web: the same consent, its buttons", mode="espana", expect="[button: Yes, continue]")
             await wb("X25 web: yes", payload="hx:consent:yes", expect="A private clinic")
             await beat("X26 WA: new in Madrid (the next step, on the phone)", payload="hx:new", expect="Padrón (town hall)")
-            await beat("X27 WA sasha", "sasha", expect="Back to Sasha")
+            await beat("X27 WA sasha", "sasha", expect="Sasha · ✈️ Travel")
             if os.getenv("KANOE_LIVE_ONE", "1") == "0":
                 res = ["skipped: KANOE_LIVE_ONE=0"]
             else:
@@ -394,9 +394,9 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
         elif only == "modes":   # CR 15 · the mode words exactly as the founder types them; then ONE live message
             for label, msg, expect in (
                     ("M1 relocate", "relocate", "I never file anything"),
-                    ("M2 sasha → back", "sasha", "Back to Sasha"),
-                    ("M3 campus", "campus", "CampusMe here"),
-                    ("M4 sasha → back", "sasha", "Back to Sasha"),
+                    ("M2 sasha → back", "sasha", "Sasha · ✈️ Travel"),
+                    ("M3 campus", "campus", "I read each university"),
+                    ("M4 sasha → back", "sasha", "Sasha · ✈️ Travel"),
                     ("M5 españa → the menu", "españa", "EspañaMe"),
                     ("M6 2 → padrón (CONCEPT)", "2", "*What you need* (from the official page)"),
                     ("M7 5 → DGT (CONCEPT)", "5", "DGT — exchanging a foreign driving licence"),
@@ -404,14 +404,14 @@ async def rehearse(n: int, account_name: str = "demo", only: Optional[str] = Non
                     ("M7c 4 → social security and tax (CONCEPT)", "4", "Modelo 030"),
                     ("M7d 6 → education (CONCEPT)", "6", "Secretaría Virtual"),
                     ("M8 1 → Salud (LIVE) → consent", "1", "never why you need a doctor"),
-                    ("M9 sasha → back", "sasha", "Back to Sasha"),
+                    ("M9 sasha → back", "sasha", "Sasha · ✈️ Travel"),
                     ("M10 espana (no ñ)", "espana", "EspañaMe"),
-                    ("M11 sasha → back", "sasha", "Back to Sasha"),
+                    ("M11 sasha → back", "sasha", "Sasha · ✈️ Travel"),
                     ("M12 diligence", "diligence", "Applied Diligence — PREVIEW"),
                     ("M13 check TotalEnergies in France", "check TotalEnergies in France", "Applied Diligence"),
                     ("M14 the Netherlands → refused", "check Shell in the Netherlands", "terms don't allow passing on its records"),
                     ("M15 ad + a person → refused", "ad check Mr Patrick Pouyanné in France", "companies only"),
-                    ("M16 sasha → back", "sasha", "Back to Sasha")):
+                    ("M16 sasha → back", "sasha", "Sasha · ✈️ Travel")):
                 await beat(label, msg, expect=expect)
             if os.getenv("KANOE_LIVE_ONE", "1") == "0":   # a re-run: the one live message was already sent
                 res = ["skipped: KANOE_LIVE_ONE=0 (already sent once)"]

@@ -366,7 +366,7 @@ async def answer(account: str, text: str, now: datetime) -> List[str]:
         if not t:   # never another journey in its place (it showed the campus tour)
             what = m[1].lower()
             return [f"There's no {'move' if what.startswith('move') else 'campus'} journey on your account yet — "
-                    + (f"RelocateMe starts it: {TL.go('relocate')}." if what.startswith("move") else f"CampusMe starts it: {TL.go('campus')}.")]
+                    + (f"I start that in Relocation: {TL.go('relocate')}." if what.startswith("move") else f"I start that in Campus visits: {TL.go('campus')}.")]
     if TRIP.search(text or ""):   # Sasha 165 · the plan + the bookings, day by day — when there is a plan
         from . import plan_store as PS
         p = await PS.latest(account, text)

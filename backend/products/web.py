@@ -66,8 +66,9 @@ async def _save(key: str, account: str, st: dict) -> None:
         await ST.STORE.drop_conversation(key, "webstate")
 
 
-SIGN_IN = {"relocation": "RelocateMe", "relocate": "RelocateMe", "campus": "CampusMe", "campusme": "CampusMe",
-           "espana": "EspañaMe", "españa": "EspañaMe", "espaname": "EspañaMe"}
+from . import tools as _TL   # noqa: E402 · Sasha 343: the name from the ONE registry (each a thing Sasha does)
+SIGN_IN = {k: _TL.name_of(p) for k, p in {"relocation": "relocation", "relocate": "relocation", "campus": "campus", "campusme": "campus",
+                                          "espana": "health", "españa": "health", "espaname": "health"}.items()}
 
 
 #: CR 30 · a photo uploaded in the web chat (laptop or phone): the same reader as WhatsApp's, its bytes passed in, never kept

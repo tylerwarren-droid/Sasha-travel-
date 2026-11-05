@@ -16,18 +16,19 @@ BARE = re.compile(rf"^\s*{_NAME}\s*[?.!]?\s*$", re.I)
 #: the product → its mode on the web (products.web.OPEN) and its keyword on WhatsApp (products.whatsapp)
 MODE = {"relocateme": "relocation", "campusme": "campus", "españame": "espana"}
 KEYWORD = {"relocation": "relocate", "campus": "campus", "espana": "españa"}
-NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "espana": "EspañaMe"}
+from products import tools as _TL   # noqa: E402 · Sasha 343: names from the ONE registry
+NAME = {k: _TL.name_of(p) for k, p in {"relocation": "relocation", "campus": "campus", "espana": "health"}.items()}
 
 INTRO = {
-    "relocation": "RelocateMe gets your first Spanish residence application ready: I read your passport, prepare Spain's "
+    "relocation": "I get your first Spanish residence application ready: I read your passport, prepare Spain's "
                   "official EX-01 from your own words and check it field by field — you sign and lodge it, I never do. "
                   "Then I plan the move itself: flights, your first nights and one itinerary with every deadline (test "
                   "bookings for now).",
-    "campus": "CampusMe plans university visits: I read each university's own visit calendar live and prepare its "
+    "campus": "I plan university visits: I read each university's own visit calendar live and prepare its "
               "registration from your details — you press Register, I never do. Then I plan the trip around the visits: "
               "flights, a hotel near each campus and the drive between them (test bookings for now).",
     # Sasha 159 · EU 160 §4 row 13: the citizen wording (newcomer steps are RelocateMe's)
-    "espana": "EspañaMe helps you get Spain's public services done — renewals, help, appointments, taxes — each step from its "
+    "espana": "I help you get Spain's public services done — renewals, help, appointments, taxes — each step from its "
               "official page; I prepare, you sign in and press. It's a concept today: the doctor's appointment works in our "
               "test setup.",
 }

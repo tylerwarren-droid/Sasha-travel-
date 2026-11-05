@@ -89,7 +89,7 @@ class NeverAskTwice(TR.Flow):
         self.start()
         self.say("later")
         self.assertIn("Kept", self.bodies()[-1])
-        self.assertIn("“relocation”", self.bodies()[-1])
+        self.assertIn("tap Menu → 🏠 Relocation", self.bodies()[-1])
         self.say("relocation")
         self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
 
@@ -108,11 +108,11 @@ class CampusNaturalAnswers(TC.Fixtures):
 
     def test_campus_tours_to_a_session_in_natural_words(self):
         self.link()
-        steps = [("campus", "CampusMe here"), ("campus tours", "Which universities?"), ("yale", "Which month"),
+        steps = [("campus", "I read each university's own visit calendar"), ("campus tours", "Which universities?"), ("yale", "Which month"),
                  ("in october", "Campus Tour"), ("the 14th", "Wed 14 Oct"), ("for my son, 2 people", "Noted — for your son"),
                  ("1", "Yale, Wed 14 Oct at 9:00 AM")]
         for said, expect in steps:
             n = len(self.bodies())
             self.say(said)
             self.assertIn(expect, "\n".join(self.bodies()[n:]), said)
-        self.assertEqual(sum("CampusMe here" in b for b in self.bodies()), 1)     # the intro, once
+        self.assertEqual(sum("I read each university's own visit calendar" in b for b in self.bodies()), 1)     # the intro, once

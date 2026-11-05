@@ -26,17 +26,17 @@ def P(prefix: str) -> Tuple[str, str]:
 
 # (name, steps, expected-in-the-last-reply (any of), forbidden-anywhere)
 CAMPUS = [
-    ("bare keyword", ["campus"], ["CampusMe here"], []),
+    ("bare keyword", ["campus"], ["I read each university's own visit calendar"], []),
     ("all in one", ["campus visits at Yale on October 14 for my son"], ["Wed 14 Oct"], []),
     ("step by step", ["campus", "yale", "in october", "the 14th"], ["Wed 14 Oct"], []),
     ("lower case, no date words", ["campus", "yale october 14"], ["Wed 14 Oct"], []),
     ("Spanish", ["campus", "visitas a Yale el 14 de octubre para mi hijo"], ["Wed 14 Oct", "Yale"], []),
     ("a question mid-flow", ["campus", "what can you do?"], ["I read each university's own visit calendar"], []),
     ("change of mind", ["campus", "yale october 14", "actually penn on october 14"], ["Penn"], []),
-    ("start over → yes", ["campus", "yale", "start over", P("so:yes:")], ["CampusMe here"], []),
+    ("start over → yes", ["campus", "yale", "start over", P("so:yes:")], ["I read each university's own visit calendar"], []),
     ("start over → no", ["campus", "yale", "start over", P("so:no:")], ["Back to your campus visits"], []),
     ("switch and back", ["campus", "yale", "relocation", "campus"], ["Back to your campus visits"], []),
-    ("back to sasha", ["campus", "sasha"], ["Back to Sasha"], []),
+    ("back to sasha", ["campus", "sasha"], ["Sasha · ✈️ Travel — where would you like to go?"], []),
     ("unread school", ["campus", "harvard in october"], ["Harvard"], []),
     ("later keeps it", ["campus", "yale", "later"], ["Kept"], []),
     ("help with a school named", ["campus", "can you help me visit yale on october 14"], ["Wed 14 Oct"], []),
@@ -60,8 +60,8 @@ RELOCATION = [
     ("later keeps it", ["relocation", "first", "later"], ["Kept"], []),
 ]
 ESPANA = [
-    ("bare keyword", ["españa"], ["EspañaMe"], []),
-    ("typo keyword", ["espña"], ["EspañaMe"], []),
+    ("bare keyword", ["españa"], ["🇪🇸 España — Spain's public processes"], []),
+    ("typo keyword", ["espña"], ["🇪🇸 España — Spain's public processes"], []),
     ("salud direct", ["salud"], ["Health details are sensitive", "Is that OK"], []),
     ("health card path", ["españa", "1", "yes", "3"], ["DNI", "passport"], []),
     ("health card in Spanish", ["españa", "1", "sí", "quiero mi tarjeta sanitaria"], ["DNI", "passport"], []),
@@ -70,9 +70,9 @@ ESPANA = [
     ("consent no", ["españa", "1", "no"], ["nothing kept", "Nothing"], []),
     ("public route", ["españa", "1", "yes", "2"], ["SERMAS"], []),
     ("find my centre with no form", ["españa", "find my centre"], ["no address to look up"], []),
-    ("start over → yes", ["españa", "1", "start over", P("so:yes:")], ["EspañaMe"], []),
+    ("start over → yes", ["españa", "1", "start over", P("so:yes:")], ["🇪🇸 España — Spain's public processes"], []),
     ("switch and back", ["españa", "1", "relocation", "españa"], ["Back to your health", "EspañaMe", "Health details"], []),
-    ("back to sasha", ["españa", "sasha"], ["Back to Sasha"], []),
+    ("back to sasha", ["españa", "sasha"], ["Sasha · ✈️ Travel — where would you like to go?"], []),
     ("demo card to the form", ["españa", "1", "yes", "3", "DEMO", P("hx:ts:ok:")], ["What is the card for"], []),
     ("later at the photo", ["españa", "1", "yes", "3", "later"], ["Kept"], []),
 ]

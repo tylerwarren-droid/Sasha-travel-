@@ -58,7 +58,7 @@ async def tick(now: Optional[datetime] = None, reader: Optional[SL.Reader] = Non
         w = case["state"]["watch"]
         y, m = w["month"]
         month = date(y, m, 1).strftime("%B %Y")
-        text = (f"🎓 CampusMe: {' and '.join(opened)} just published {month} visit dates. Say \"campus "
+        text = (f"🎓 {' and '.join(opened)} just published {month} visit dates. Say \"campus "
                 f"{' and '.join(opened)} {date(y, m, 1).strftime('%B')}\" and I'll show you the sessions.")
         from .. import whatsapp as PW
         ch, wkey, frm = await PW.reach(w["wa"], w["number_from"], case.get("account_id"))   # CR 20

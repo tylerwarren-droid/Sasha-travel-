@@ -207,7 +207,7 @@ def forms_table(f: dict) -> List[dict]:
         {"form": "790-012", "filled": False, "why_not": "the police's web form has a CAPTCHA — every value prepared to copy"},
         {"form": "Padrón", "filled": False, "why_not": "the official hoja padronal PDF not located — values prepared; in person, signed by hand"},
         {"form": "TA.1", "filled": True, "why_not": "the NSS, consent to communications, place/date, signature are yours"},
-        {"form": "Tarjeta sanitaria 1449F1", "filled": True, "why_not": "EspañaMe fills it (CR 30); §5, §6, date, NSS are yours"},
+        {"form": "Tarjeta sanitaria 1449F1", "filled": True, "why_not": "I fill it in España (CR 30); §5, §6, date, NSS are yours"},
     ]
 
 
@@ -251,7 +251,7 @@ async def step(ctx: dict, which: str, web: str) -> bool:
         out.ask("Your Social Security form (TA.1) is filled — sign it and take it to a TGSS office.",
                 [("Next: your health card →", "rx:go:health")])
     elif which == "health":
-        out.text(f"Last: your health card. {TL.go('espana').capitalize()} and EspañaMe fills its form from this file.")
+        out.text(f"Last: your health card. {TL.go('espana').capitalize()} and I fill its form from this file.")
     return True
 
 

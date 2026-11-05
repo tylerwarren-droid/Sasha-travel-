@@ -20,7 +20,7 @@ class Restart(TR.Flow):
         self.start()                                          # RelocateMe under way: asking the passport number
         cases = len(ST.STORE.rows)
         self.say("start over")
-        self.assertIn("Start RelocateMe from the beginning? Your old file is kept, not deleted.", "\n".join(
+        self.assertIn("Start 🏠 Relocation from the beginning? Your old file is kept, not deleted.", "\n".join(
             [b for b, _ in TG.GW.SENDER.contents] + self.bodies()))
         self.say("", payload="so:no:relocation")
         self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
@@ -31,7 +31,7 @@ class Restart(TR.Flow):
 
     def test_nothing_open_enters_directly(self):
         self.say("start over campus")
-        self.assertIn("CampusMe here", "\n".join(self.bodies()))
+        self.assertIn("I read each university's own visit calendar", "\n".join(self.bodies()))
 
     def test_reset_modes_closes_all_three(self):
         self.start()

@@ -17,8 +17,14 @@ from datetime import timedelta
 from typing import List, Optional, Tuple
 
 PRODUCT_IDLE = timedelta(minutes=30)
-PRODUCT_LABEL = {"relocation": "🏠 Move to Madrid", "campus": "🎓 CampusMe", "health": "🇪🇸 EspañaMe", "trip": "✈️ Trip planning"}
-_LABEL = re.compile(r"^_(?:Now: (?P<l>[^_\n]+)|You're in [^_\n]+)_\n?")
+class _Names(dict):   # Sasha 343 · a product's name, from the ONE registry (products/tools.py) — never a second list
+    def __missing__(self, product):
+        from products import tools as TL
+        return TL.name_of(product)
+
+
+PRODUCT_LABEL = _Names()
+_LABEL = re.compile(r"^_(?:Now: (?P<l>[^_\n]+)|Sasha · [^_\n]+)_\n?")
 _TO = re.compile(r"\b(?:flights?|fly(?:ing)?|hotels?|vuelos?)\b[^.?!]*?\bto\s+(?P<d>[A-ZÁÉÍÓÚ][\wáéíóúñ'-]*(?:\s+[A-Z][\wáéíóúñ'-]*)?)")
 _IN = re.compile(r"\b(?:in|en)\s+(?P<d>[A-ZÁÉÍÓÚ][\wáéíóúñ'-]*(?:\s+[A-Z][\wáéíóúñ'-]*)?)")
 _MY = re.compile(r"\bmy (?P<t>[\w ,]+?) (?:trip|journey|itinerary|plan)\b", re.I)
@@ -32,24 +38,21 @@ def on(account: Optional[str]) -> bool:
     return bool(account) and (os.getenv("SASHA_SWITCHING", "") == "all" or is_founder_test(account))
 
 
-SPACE_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "EspañaMe", "trip": "your trip planner", "diligence": "Applied Diligence"}
-
-
-def space_label(product: Optional[str]) -> str:
-    """Sasha 194 · the space, always said: "You're in 🎓 Campus" / "You're in ✈️ Travel". CR 165 · never "say “sasha” for travel" — the
-    Menu on every reply goes back to all the tools (products/tools.py)."""
+def space_label(product: Optional[str], entering: bool = False) -> str:
+    """Sasha 194 · the space, always said. Sasha 343 (Tyler): SASHA is the one speaking, the space is what she's doing — "Sasha · 🎓 Campus
+    visits"; on the switch into it, its one question: "Sasha · 🔍 Due diligence — who should I investigate?" (products/tools.py, the ONE
+    registry). CR 165 · never "say “sasha”" — the Menu on every reply goes back to everything she can do."""
     from products import tools as TL
-    t = TL.BY_PRODUCT.get(product)
-    return f"You're in {TL.title(t)}" if t else f"You're in {SPACE_NAME.get(product, product)}"
+    return TL.space_line(product, entering)
 
 
-def label_space(out_items: list, product: Optional[str]) -> None:
+def label_space(out_items: list, product: Optional[str], entering: bool = False) -> None:
     import os
     if os.getenv("SASHA_SPACE_LABEL", "1") == "0":
         return
     for i, it in enumerate(out_items):
         if it[0] in ("text", "ask") and not it[1].startswith("🎙"):
-            out_items[i] = (it[0], f"_{space_label(product)}_\n{strip_label(it[1])}", *it[2:])
+            out_items[i] = (it[0], f"_{space_label(product, entering)}_\n{strip_label(it[1])}", *it[2:])
             return
 
 
@@ -66,7 +69,7 @@ def before(st: dict, now) -> Optional[dict]:
     """The mode this turn starts in: an open product (unless idle 30 min), else the label on Sasha's last reply."""
     pend = st.get("pending") or {}
     if pend.get("kind") == "product" and pend.get("product"):
-        return {"k": "p", "p": pend["product"], "label": PRODUCT_LABEL.get(pend["product"], pend["product"])}
+        return {"k": "p", "p": pend["product"], "label": PRODUCT_LABEL[pend["product"]]}
     for h in reversed(st.get("history") or []):
         if h.get("role") == "assistant":
             lb = label_of(str(h.get("content") or ""))
@@ -98,7 +101,7 @@ async def after(account: str, body: str, st: dict) -> Optional[dict]:
     """The mode the turn ended in, or None (nothing named: the mode stays)."""
     pend = st.get("pending") or {}
     if pend.get("kind") == "product" and pend.get("product"):
-        return {"k": "p", "p": pend["product"], "label": PRODUCT_LABEL.get(pend["product"], pend["product"])}
+        return {"k": "p", "p": pend["product"], "label": PRODUCT_LABEL[pend["product"]]}
     from . import plan_store as PS, journeys as JN
     m = _MY.search(body or "")
     if m and not re.match(r"(?i)move|campus", m["t"]):

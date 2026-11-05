@@ -299,9 +299,9 @@ class OneSpace(M15.Base):
         self.assertEqual(self.space(), "relocation")
         sp, context = self.brain("what's next?")
         self.assertEqual(sp, "relocation")                            # inside sasha.turn: its Ctx …
-        self.assertIn("Their space now: RelocateMe", context)         # … and its context
+        self.assertIn("Their space now: 🏠 Relocation", context)         # … and its context
         self.say("sasha")
-        self.assertEqual(self.bodies()[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")
+        self.assertEqual(self.bodies()[-1], "Sasha · ✈️ Travel — where would you like to go?")
         self.assertEqual(self.space(), "sasha")
         sp, context = self.brain("hello")
         self.assertEqual(sp, "sasha")

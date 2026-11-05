@@ -153,7 +153,7 @@ class InFront(Base):
 
     def test_a_space_by_its_keyword(self):
         self.say("campus")
-        self.assertIn("CampusMe", "\n".join(self.bodies() + [b for b, _ in GW.SENDER.contents]))
+        self.assertIn("I read each university's own visit calendar", "\n".join(self.bodies() + [b for b, _ in GW.SENDER.contents]))
         self.assertEqual(self.brain_saw, [])
 
     def test_an_invitation_request_goes_to_its_own_handler(self):

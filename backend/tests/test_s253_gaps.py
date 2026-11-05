@@ -430,7 +430,7 @@ class G15OpsConsole(TG.Base):
             self.assertEqual(self.c.post("/api/booking/ops/demo/captcha-test", json={}).json()["say"], "Sent — tap it on your phone.")
         from products import space as SPC
         with mock.patch.object(SPC, "current", mock.AsyncMock(return_value={"space": "campus"})):
-            self.assertEqual(self.c.get("/api/booking/ops/demo/space").json()["say"], "You're in 🎓 Campus")   # CR 165 · the tool, never "say “sasha”"
+            self.assertEqual(self.c.get("/api/booking/ops/demo/space").json()["say"], "Sasha · 🎓 Campus visits")   # CR 165 · the tool, never "say “sasha”"
         run(GW.STORE.put_state(GW.wa_key(GUEST), {"history": [], "pending": None, "last_inbound_at": NOW, "link_tries": []}))
         with mock.patch.object(TD, "link", mock.AsyncMock(return_value={"id": "plink_1", "url": "https://buy.stripe.test/x"})):
             r = self.c.post("/api/booking/ops/demo/test-deposit", json={}).json()

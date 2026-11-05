@@ -6,7 +6,7 @@
      number, the birth date and the expiry are recomputed from the MRZ the model read. A value whose check digit
      fails, or that disagrees with the MRZ, is shown as such — never silently kept.
   4. Every value is read back to the person; it becomes a fact only on THEIR "yes" (source: "passport photo page,
-     read by Kanoe's AI and confirmed by you"). A value they had already typed differently is kept as a second
+     read by Sasha and confirmed by you"). A value they had already typed differently is kept as a second
      source, and the reviewer shows the disagreement.
 The person is told before anything is sent that the photo goes to Anthropic's model to be read and is not kept.
 """
@@ -219,7 +219,7 @@ async def on_confirm(ctx: dict, facts: dict, body: str, payload: str) -> None:
     checks = pend.pop("doc_checks", {}) or {}
     pend["step"] = pend.pop("step_before_doc", None) or "facts"
     if payload == "rx:doc:yes" or (not payload and YS.is_yes(body)):
-        src, on = "passport photo page, read by Kanoe's AI and confirmed by you", ctx["now"].strftime("%-d %b %Y")
+        src, on = "passport photo page, read by Sasha and confirmed by you", ctx["now"].strftime("%-d %b %Y")
         a, docs = facts.setdefault("applicant", {}), facts.setdefault("documents", {})
         for k, v in vals.items():
             if checks.get(k) not in (None, "ok"):

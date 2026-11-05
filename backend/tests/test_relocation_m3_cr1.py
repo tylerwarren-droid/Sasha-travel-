@@ -95,7 +95,7 @@ class Flow(TG.Base):
         self.say("", payload="rx:doc:yes")
         a = self.pend()["facts"]["applicant"]
         self.assertEqual(a["passport_number"]["value"], "AB1234567")
-        self.assertEqual(a["passport_number"]["source"], "passport photo page, read by Kanoe's AI and confirmed by you")
+        self.assertEqual(a["passport_number"]["source"], "passport photo page, read by Sasha and confirmed by you")
         self.assertIn("Your second surname?", self.bodies()[-1])         # the next question nobody has answered yet
 
     def test_an_expired_passport_is_said_at_once(self):

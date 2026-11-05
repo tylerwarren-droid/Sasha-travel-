@@ -51,7 +51,8 @@ _START_OVER = re.compile(r"^\s*(?:please\s+)?(?:start(?:\s+(?:it|again|over))?\s
 _START_NAME = [("relocation", re.compile(r"(?i)\b(relocat\w*|relocation|ex-?01)\b")), ("campus", re.compile(r"(?i)\bcampus(?:\s*me)?\b")),
                ("health", re.compile(r"(?i)\b(espa[nñ]a(?:\s*me)?|health|salud)\b")), ("sasha", re.compile(r"(?i)\b(sasha|bookings?|chat)\b"))]
 START_WORD = {"relocation": "relocation", "campus": "campus", "health": "españa"}
-PRODUCT_NAME = {"relocation": "RelocateMe", "campus": "CampusMe", "health": "EspañaMe"}
+from . import tools as _TL   # noqa: E402 · Sasha 343: names from the ONE registry
+PRODUCT_NAME = {p: _TL.name_of(p) for p in ("relocation", "campus", "health")}
 
 
 def _names(product: str, body: str, payload: str) -> bool:
@@ -323,7 +324,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             await _set_aside(st, ch)
             st["pending"] = None
             if asked_last in PRODUCT_NAME:
-                out.text(f"Your {PRODUCT_NAME[asked_last]} question is saved for later — say “{_RESUME_WORD[asked_last]}” to carry on.")
+                out.text(f"Your {PRODUCT_NAME[asked_last]} question is saved for later — {_TL.go(_TL.BY_PRODUCT[asked_last]['id'])} to carry on.")
             log.info("[products] %s's question parked: not the current space", asked_last)
             asked_last, pend = None, {}
     if payload.startswith("so:"):                              # CR 39 · the answer to "Start <product> from the beginning?"
@@ -447,14 +448,15 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     if asked_last and _LATER.match(body) and not payload:
         await _store_put(ch, asked_last, {**st["pending"], "touched": now.isoformat()})
         await _set_aside(st, ch)
-        out.text(f"Kept — everything you've given me stays. Say “{_RESUME_WORD.get(asked_last, asked_last)}” when you want to "
-                 "carry on. Back to Sasha meanwhile.")
+        _t = _TL.BY_PRODUCT.get(asked_last)   # Sasha 343 · never a word to type — the Menu, in the registry's own words
+        out.text("Kept — everything you've given me stays" + (f"; {_TL.go(_t['id'])} when you want to carry on." if _t else ".")
+                 + f"\n{_TL.space_line(None, entering=True)}")
         return True
     if asked_last and _EXIT.match(body) and not payload:
         st["pending"] = {**st["pending"], "touched": now.isoformat(), "parked": True}
         await _set_aside(st, ch)                                # CR 40 · kept, parked: only its word brings it back
         st["pending"] = None
-        out.text("Back to Sasha — ask me anything: a booking, a flight, your plans.")   # CR 15 · "sasha" returns
+        out.text(_TL.space_line(None, entering=True))   # Sasha 343 · "Sasha · ✈️ Travel — where would you like to go?"   # CR 15 · "sasha" returns
         return True
     plan_for = None
     if payload.startswith("tp:go:") and payload[6:] in ("relocation", "campus"):   # CR 50 · "Getting there": the product's

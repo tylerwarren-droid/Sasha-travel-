@@ -41,7 +41,7 @@ class OnTheWebAndTheVoice(unittest.TestCase):
             out = asyncio.new_event_loop().run_until_complete(
                 CD.conduct("tell me about RelocateMe", [], user_id="g-1", signed_in=True))
         self.assertEqual(seen, {"mode": "relocation", "signed_in": True, "message": ""})
-        self.assertTrue(out["response"].startswith("RelocateMe gets your first Spanish residence application ready"))
+        self.assertTrue(out["response"].startswith("I get your first Spanish residence application ready"))
         self.assertIn("first application, or a renewal?", out["response"])
         self.assertEqual(out["product_mode"], "relocation")
 

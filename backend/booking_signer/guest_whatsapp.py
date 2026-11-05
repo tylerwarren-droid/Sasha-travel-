@@ -994,7 +994,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     if _in_product:
         _pp = st.get("pending") or {}
         if sw:   # Sasha 194 · the space, always said (the founder's account; guests next, with their tests)
-            SW.label_space(out.items, _pp.get("product") if _pp.get("kind") == "product" else None)
+            SW.label_space(out.items, _pp.get("product") if _pp.get("kind") == "product" else None,
+                           entering=_SPC.from_pending(st.get("pending")) != _space_before)   # Sasha 343 · the switch: its one question
         await STORE.put_state(key, st)   # never into Sasha's history: a product's answers (passport facts) aren't hers
         await deliver(ch, frm, out, now)
         return out

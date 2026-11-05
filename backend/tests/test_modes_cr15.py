@@ -67,16 +67,16 @@ class Words(Base):
         self.say("relocate")
         self.assertIn("I never file anything", self.said())
         self.say("sasha")
-        self.assertEqual(self.bodies()[-1], "Back to Sasha — ask me anything: a booking, a flight, your plans.")
+        self.assertEqual(self.bodies()[-1], "Sasha · ✈️ Travel — where would you like to go?")
         self.say("campus")
-        self.assertIn("CampusMe here", self.said())
+        self.assertIn("I read each university's own visit calendar", self.said())
 
     def test_espana_menu_six_areas_salud_live(self):
         for word in ("espana", "españa"):
             GW.SENDER.contents.clear()
             self.say(word)
             menu, buttons = GW.SENDER.contents[-1]
-            self.assertIn("EspañaMe 🇪🇸 — Spain's public processes", menu)
+            self.assertIn("🇪🇸 España — Spain's public processes", menu)
             for area in ("1. *Salud*", "2. *Padrón*", "3. *Identity and access*", "4. *Social security and tax*", "5. *DGT*", "6. *Education*"):
                 self.assertIn(area, menu)
             self.assertNotRegex(menu, r"(?i)movistar")
@@ -101,7 +101,7 @@ class Words(Base):
         self.say("", payload="hx:more:area")
         self.assertIn("Secretaría Virtual", self.said())
         self.say("", payload="hx:es:movistar")                                   # an old button: it moved (CR 17)
-        self.assertIn("part of RelocateMe now", self.said())
+        self.assertIn("part of Relocation now", self.said())
         self.say("1")
         said = self.said()
         self.assertIn("🟢 *Salud* — your health card and family doctor.", said)            # CR 52 · with its consent, one step

@@ -70,7 +70,7 @@ class Web(TG.Base):
         self.say("relocation")                                                   # the WhatsApp line, its own state
         self.assertIn("I never file anything", "\n".join(self.bodies() + [c for c, _ in TG.GW.SENDER.contents]))
         r = self.turn("sasha")
-        self.assertIn("Back to Sasha", r["response"])
+        self.assertIn("Sasha · ✈️ Travel", r["response"])
 
     def test_a_product_under_way_says_where_it_was(self):
         self.turn(mode="relocation")
@@ -90,7 +90,7 @@ class SignedOut(Web):
         self.turn(mode="relocation")                                             # the founder's own file, under way
         self.turn("first")
         r = run(PWEB.web_turn(U, "", mode="relocation", now=self.now))          # the same account, but no signed_in
-        self.assertEqual(r["response"], "Sign in to use RelocateMe — it works on your own account: your own file, "
+        self.assertEqual(r["response"], "Sign in to use 🏠 Relocation — it works on your own account: your own file, "
                                         "your own visits, your own itinerary.")
         self.assertIsNone(run(PWEB.web_turn(U, "me", now=self.now)))             # never an answer to his file's question
         self.assertIsNone(run(PWEB.web_turn(U, "book my flights", now=self.now)))   # never his itinerary

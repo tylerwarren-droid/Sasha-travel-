@@ -25,7 +25,9 @@ from typing import Dict, Optional
 log = logging.getLogger("products.space")
 
 SPACES = ("sasha", "campus", "relocation", "espana", "diligence")   # CR 128 · AD has its word
-NAME = {"sasha": "Sasha (travel)", "campus": "CampusMe", "relocation": "RelocateMe", "espana": "EspañaMe", "diligence": "Applied Diligence"}
+from . import tools as _TL   # noqa: E402 · Sasha 343: each space's name from the ONE registry (Sasha does them all)
+NAME = {k: _TL.name_of(p) for k, p in {"sasha": None, "campus": "campus", "relocation": "relocation", "espana": "health",
+                                       "diligence": "diligence"}.items()}
 #: every name a space has had anywhere (the products' keys, me3's modes, the WhatsApp words, the web tab's modes) → the one name
 ALIASES = {"sasha": "sasha", "travel": "sasha", "trip": "sasha", "": "sasha",
            "diligence": "diligence", "applieddiligence": "diligence", "ad": "diligence",

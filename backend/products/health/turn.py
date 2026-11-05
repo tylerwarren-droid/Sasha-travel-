@@ -40,7 +40,7 @@ FICTIONAL = {"card": "EJEMPLO-0000-0000", "birth": "1985-03-14", "dni_nie": "X00
 
 # CR 15 · "españa" — EspañaMe: Spain's public services. Health is the working demo; the rest are CONCEPTS, labelled so.
 # CR 17 · EspañaMe = access to Spain's PUBLIC processes: six areas, only Salud live (health/espana.py holds each card)
-ES_MENU = ("EspañaMe 🇪🇸 — Spain's public processes, done with you.\n"      # CR 52 · three lines; numbers as before
+ES_MENU = ("🇪🇸 España — Spain's public processes, done with you.\n"      # CR 52 · three lines; numbers as before
            "1. *Salud* — your health card and family doctor (live)\n"
            "Concepts: 2. *Padrón* · 3. *Identity and access* · 4. *Social security and tax* · 5. *DGT* · 6. *Education*")
 ES_BUTTONS = [("1. Salud (live)", "hx:es:salud"), ("2. Padrón", "hx:es:padron"), ("3. Identity & access", "hx:es:identity")]
@@ -49,7 +49,7 @@ _ES_WORDS = [("salud", r"salud|health|doctor|m[eé]dico|sermas|tarjeta"), ("padr
              ("identity", r"cl@?ve|certificad|digital certificate|identity|identidad"),
              ("social", r"social security|seguridad social|tax|hacienda|agencia tributaria|nie|nif"),
              ("dgt", r"dgt|driving|licen[cs]e|carn[eé]t|permiso de conduc"), ("education", r"school|colegio|educaci|escuela")]
-MOVED = ("Phone, internet, electricity and a bank account are part of RelocateMe now — “setting up your home” (a concept "
+MOVED = ("Phone, internet, electricity and a bank account are part of Relocation now — “setting up your home” (a concept "
          f"there). {TL.go('relocate').capitalize()}.")
 
 

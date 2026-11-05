@@ -506,7 +506,7 @@ async def _prepare(ctx: dict, approval: dict) -> None:
             v["status"] = "yours to register — link sent" if not v["read"] else "yours to register on its own page — link sent"
             status.append(f"🎓 {name}: register here — {v['link']}" + (" (I couldn't open the filled page: the cloud browser isn't set up)"
                                                                          if fillable and owner else ""))   # CR 43 · never silent
-            notes.append(f"{name}: " + (f"not read by Kanoe ({v['why']}); its published pattern: {v['title']} — check on its page."
+            notes.append(f"{name}: " + (f"not one I read ({v['why']}); its published pattern: {v['title']} — check on its page."
                                          if not v["read"] else f"{v['title']}, {date.fromisoformat(v['date']).strftime('%a %-d %b')} "
                                                                f"{_t12(v['start'])}."))
     STP.stash(pend, "details", ["Your details, each ready to copy:"] + copy_messages(fam) + notes)

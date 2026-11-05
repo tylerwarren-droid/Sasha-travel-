@@ -75,7 +75,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         from .. import steps as STP                   # CR 52 · one short opening, the rest behind "More"
         STP.stash(pend, "intro", [INTRO])
         if not body:
-            out.ask("RelocateMe 🇪🇸 — I fill Spain's residence forms with you; you sign and lodge them — I never file anything.\n"
+            out.ask("🏠 Relocation — I fill Spain's residence forms with you; you sign and lodge them — I never file anything.\n"
                     "Is this your *first* application, or a renewal?", [("First application", "rx:route:first"), ("Renewal", "rx:route:renewal"),
                                                     STP.more("rx:", "intro")])
             return
@@ -252,7 +252,7 @@ async def _keep_then_prepare(ctx: dict) -> None:
     if own and not any(x.get("source") == FICTIONAL for x in a.values()) and not pend.get("keep_offered") \
             and not await KP.item(ctx["account"]):
         pend.update(step="keep_offer", keep_offered=True)
-        out.ask("Keep these details in your vault (encrypted, deletable any time)? Every RelocateMe form — the visa form, EX-01, "
+        out.ask("Keep these details in your vault (encrypted, deletable any time)? Every relocation form — the visa form, EX-01, "
                 "EX-17, padrón, Social Security — fills from them, and I never ask again.",
                 [("Yes, keep them", "rx:keep:yes"), ("Just this file", "rx:keep:no")])
         return

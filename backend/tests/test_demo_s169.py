@@ -223,10 +223,10 @@ class StartOver(unittest.TestCase):
         try:
             out = GW.Out()
             asyncio.run(PW.product_turn({"account_id": "a", "wa_id_sha256": "k"}, "f", {"Body": "reset"}, st, out, NOW))
-            # CR 39 · asked once first: "Start RelocateMe from the beginning? Your old file is kept, not deleted."
+            # CR 39 · asked once first: "Start 🏠 Relocation from the beginning? Your old file is kept, not deleted."
             self.assertEqual(dropped, [])
             q = next(i for i in out.items if i[0] == "ask")
-            self.assertIn("Start RelocateMe from the beginning? Your old file is kept, not deleted.", q[1])
+            self.assertIn("Start 🏠 Relocation from the beginning? Your old file is kept, not deleted.", q[1])
             out = GW.Out()
             asyncio.run(PW.product_turn({"account_id": "a", "wa_id_sha256": "k"}, "f", {"Body": "", "ButtonPayload": "so:yes:relocation"},
                                         st, out, NOW))

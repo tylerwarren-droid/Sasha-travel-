@@ -23,8 +23,11 @@ async def master_list(request: Request):
 @router.post("/upload")
 async def upload(request: Request):
     """The organiser's list: {text} pasted / typed, or {name, media_type, content_base64} — a csv, an xlsx or a photo of one."""
+    from . import group_outcome as GO
     account = account_for(request)
     body = await request.json()
+    if not body.get("text") and not body.get("content_base64"):   # Sasha 346 · nothing given → said, by the field's name
+        return await GO.run(account, "add", {"rows": None})
     if body.get("text"):
         rows = G.read_text(str(body["text"])[:200_000])
     else:
@@ -43,7 +46,7 @@ async def upload(request: Request):
             rows = await G.read_photo(data, mt)
         else:
             raise HTTPException(400, {"ok": False, "rule": "file_type", "message": "send a .csv or .xlsx file, a photo of the list, or paste it"})
-    return await G.upload(account, rows, body.get("movement") or None)
+    return await GO.run(account, "add", {"rows": rows, "movement": body.get("movement") or None})
 
 
 # ── Sasha 333 · the traveller vault ──────────────────────────────────────────────────────────────────────────────────────
@@ -52,10 +55,10 @@ async def upload(request: Request):
 async def invite_vault(request: Request):
     """The organiser's "Invite to vault": one member, several, or all ({who: null}). Emailed where the list has their email; the rest
     come back as links to forward. The links carry no number."""
-    from . import traveller_vault as TV
+    from . import group_outcome as GO   # Sasha 346 · the ONE outcome: who was invited, or exactly why nobody
     body = await request.json()
     who = body.get("who")
-    return await TV.invite(account_for(request), [str(x) for x in who] if isinstance(who, list) else None, body.get("movement") or None)
+    return await GO.run(account_for(request), "invite", {"who": [str(x) for x in who] if isinstance(who, list) else None})
 
 
 # the member's own page: NO account — the signed, single-person, 7-day token IS the key (gate.py lets /api/booking/vault/ through)
@@ -103,13 +106,14 @@ async def vault_delete(token: str, request: Request):
 async def group_act(request: Request):
     """{action: book|swap|cancel, who: [names] | null, to: name (swap), over_ok} → AgAPI's read-backs as ONE card (its Yes / No).
     Sasha 339 · BOOK runs as ONE background job (group_book.start): this answers at once with its progress; GET /group/job follows it."""
-    from . import group_book as GB
+    from . import group_outcome as GO
     body = await request.json()
     account, action = account_for(request), str(body.get("action") or "")
-    if action == "book":
-        return {"status": "preparing", **await GB.start(account, body.get("who") or None, bool(body.get("over_ok")))}
-    nc = {"city": body.get("to_city"), "grade": body.get("to_grade")} if body.get("to_city") else None   # Sasha 336 · a newcomer to the swap
-    out = await GB.prepare(account, action, body.get("who") or None, body.get("to"), bool(body.get("over_ok")), newcomer=nc)
+    # Sasha 346 · EVERY action answers from the record (group_outcome — the ONE place): what was done, or exactly why not and what's
+    # missing. book → its background job (Sasha 339) only when someone can be booked; swap/cancel → AgAPI's card, or the list's own swap
+    out = await GO.run(account, action if action in ("book", "swap", "cancel") else "?" + action,
+                       {"who": body.get("who") or None, "to": body.get("to"), "to_city": body.get("to_city"), "to_grade": body.get("to_grade"),
+                        "over_ok": bool(body.get("over_ok"))})
     return _with_buttons(out)
 
 
@@ -159,14 +163,8 @@ async def group_confirm(request: Request):
 
 @router.get("/invoice")
 async def group_invoice(request: Request):
-    from . import group_book as GB
-    account = account_for(request)
-    inv = await GB.invoice(account)
-    if not inv.get("why"):
-        from . import groups as G
-        mv = await G.store().movement(account)
-        inv["link"] = GB.invoice_link(account, mv["id"])
-    return inv
+    from . import group_outcome as GO   # Sasha 346 · nothing booked → said; else the link (the page shows it — never a blocked pop-up)
+    return await GO.run(account_for(request), "invoice", {})
 
 
 invoice_public = APIRouter(prefix="/group-invoice", tags=["group"])

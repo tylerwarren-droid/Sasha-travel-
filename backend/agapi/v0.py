@@ -1491,9 +1491,7 @@ async def group_start(ctx: Ctx, a: dict) -> dict:
 async def group_upload(ctx: Ctx, a: dict) -> dict:
     """The list as pasted / typed text (a file or a photo comes through the master list page's upload)."""
     from booking_signer import groups as G
-    r = _group_err(await G.upload(ctx.account, G.read_text(a["text"])))
-    say = f"I've added {r['added']} {'person' if r['added'] == 1 else 'people'} to the list."
-    return {**r, "say": f"{say} {r['ask']}" if r.get("ask") else say}
+    return _outcome(await _GO().run(ctx.account, "add", {"rows": G.read_text(a.get("text") or "") or None}))   # Sasha 346 · the ONE outcome
 
 
 async def group_limits(ctx: Ctx, a: dict) -> dict:
@@ -1552,15 +1550,21 @@ async def group_plan(ctx: Ctx, a: dict) -> dict:
 
 async def group_invite_vault(ctx: Ctx, a: dict) -> dict:
     """Sasha 333 · each member's own secure page for their passport and loyalty numbers — NEVER collected in chat."""
-    from booking_signer import traveller_vault as TV
-    r = _group_err(await TV.invite(ctx.account, a.get("who") or None))
-    e, f = r["emailed"], r["forward"]
-    say = (f"I've emailed {len(e)} {'person' if len(e) == 1 else 'people'} their own secure link." if e else "")
-    if f:
-        say += (" " if say else "") + (f"{len(f)} {'has' if len(f) == 1 else 'have'} no email on the list — their links are on the master "
-                                       "list page to forward.")
-    return {"emailed": len(e), "to_forward": len(f), "say": say + " They add their passport there; you'll see a ✓, never the numbers.",
-            "page": "/group", "links": f}
+    r = _outcome(await _GO().run(ctx.account, "invite", {"who": a.get("who") or None}))   # Sasha 346 · the ONE outcome (the page's too)
+    return {"emailed": len(r.get("emailed") or []), "to_forward": len(r.get("forward") or []), "say": r["say"], "page": "/group",
+            "links": r.get("forward") or []}
+
+
+def _GO():
+    from booking_signer import group_outcome as GO
+    return GO
+
+
+def _outcome(out: dict) -> dict:
+    """Sasha 346 · an action that wasn't done is said as exactly why (group_outcome's words, the page's too) — the agent relays it."""
+    if not out.get("done"):
+        raise ToolError("missing" if out.get("missing") else "not_done", out["say"])
+    return out
 
 
 async def _group_card(ctx: Ctx, out: dict) -> dict:
@@ -1574,7 +1578,7 @@ async def group_book(ctx: Ctx, a: dict) -> dict:
     """Sasha 334 · book everyone planned (or the names given) through AgAPI — its read-backs on ONE card, nothing booked until the yes."""
     from booking_signer import group_book as GB
     # Sasha 339 · the SAME background job as /group: the card here if it is ready within the turn, else its progress (the card on /group)
-    await GB.start(ctx.account, a.get("who") or None, bool(a.get("over_limit_ok")))
+    _outcome(await _GO().run(ctx.account, "book", {"who": a.get("who") or None, "over_ok": bool(a.get("over_limit_ok"))}))   # Sasha 346
     v = await GB.wait(ctx.account, GB.CHAT_WAIT_S)
     if v.get("state") == "ready":
         return await _group_card(ctx, v["result"])
@@ -1583,26 +1587,19 @@ async def group_book(ctx: Ctx, a: dict) -> dict:
 
 
 async def group_swap(ctx: Ctx, a: dict) -> dict:
-    from booking_signer import group_book as GB
-    nc = {"city": a.get("in_city"), "grade": a.get("in_grade")} if a.get("in_city") else None   # Sasha 336 · a newcomer: added + invited
-    return await _group_card(ctx, await GB.prepare(ctx.account, "swap", [a["out"]], a["in"], newcomer=nc))
+    # Sasha 346 · the ONE outcome (the page's Swap too): a missing field named; a booking → AgAPI's card; nothing booked → the list's swap
+    return await _group_card(ctx, _outcome(await _GO().run(ctx.account, "swap", {"who": [a.get("out") or ""], "to": a.get("in"),
+                                                                                 "to_city": a.get("in_city"), "to_grade": a.get("in_grade")})))
 
 
 async def group_cancel(ctx: Ctx, a: dict) -> dict:
-    from booking_signer import group_book as GB
-    return await _group_card(ctx, await GB.prepare(ctx.account, "cancel", a["who"]))
+    return await _group_card(ctx, _outcome(await _GO().run(ctx.account, "cancel", {"who": a.get("who")})))   # Sasha 346
 
 
 async def group_invoice(ctx: Ctx, a: dict) -> dict:
-    from booking_signer import group_book as GB, groups as G
-    inv = await GB.invoice(ctx.account)
-    if inv.get("why"):
-        raise ToolError("no_movement", inv["why"])
-    mv = await G.store().movement(ctx.account)
-    link = GB.invoice_link(ctx.account, mv["id"])
-    return {"total": inv["total"], "lines": len(inv["lines"]), "adjustments": len(inv["adjustments"]), "link": link,
-            "say": f"The invoice for {inv['to']}: {len(inv['lines'])} {'person' if len(inv['lines']) == 1 else 'people'} booked, total "
-                   f"{inv['total']}{' (TEST)' if inv['test'] else ''}. It's here: {link}"}
+    inv = _outcome(await _GO().run(ctx.account, "invoice", {}))   # Sasha 346 · nothing booked → said (the page's words)
+    return {"total": inv["total"], "lines": len(inv["lines"]), "adjustments": len(inv["adjustments"]), "link": inv["link"],
+            "say": f"{inv['say']} It's here: {inv['link']}"}
 
 
 async def group_list(ctx: Ctx, a: dict) -> dict:

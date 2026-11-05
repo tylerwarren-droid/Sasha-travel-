@@ -276,6 +276,12 @@ class PgStore:
             return n
         return await self._run(go)
 
+    async def remove_member(self, movement_id: str, member_id: str) -> None:
+        """Sasha 346 · a swap before anything is booked: who leaves comes off the list (their draft trip stays the organiser's)."""
+        async def go(c):
+            await c.execute("delete from group_members where movement_id = $1 and id = $2", uuid.UUID(movement_id), uuid.UUID(member_id))
+        await self._run(go)
+
     async def members(self, movement_id: str) -> List[dict]:
         async def go(c):
             return [_row(r) for r in await c.fetch("select * from group_members where movement_id = $1 order by created_at, name",
@@ -329,6 +335,9 @@ class MemStore:
             else:
                 self.rows[movement_id].append({"id": str(uuid.uuid4()), "trip_id": None, **m})
         return len(members)
+
+    async def remove_member(self, movement_id, member_id):
+        self.rows[movement_id] = [x for x in self.rows[movement_id] if x["id"] != member_id]
 
     async def members(self, movement_id):
         return [dict(x) for x in self.rows[movement_id]]

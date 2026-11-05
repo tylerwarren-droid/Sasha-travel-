@@ -314,20 +314,21 @@ def summary_taps(skipped: List[dict]) -> List[Dict[str, Any]]:
     for x in skipped:
         by.setdefault(x.get("kind") or "other", []).append(x)
     out: List[Dict[str, Any]] = []
-    if by.get("over_limit"):
+    if by.get("over_limit"):   # Sasha 346 · each tap: `say` (why they're held, from the record) + `label` (the button)
         n = len(by["over_limit"])
-        out.append({"label": f"{n} over limit — book anyway?", "act": {"action": "book", "who": [x["name"] for x in by["over_limit"]], "over_ok": True}})
+        out.append({"label": "Book anyway", "say": f"{n} over the limit",
+                    "act": {"action": "book", "who": [x["name"] for x in by["over_limit"]], "over_ok": True}})
     if by.get("over_at_booking"):   # Sasha 339 · over the limit at AgAPI's price now: held, flagged, never booked silently
         ob = by["over_at_booking"]
-        label = (f"{ob[0]['name']} — {ob[0]['why']} — book anyway?" if len(ob) == 1 else
-                 f"{len(ob)} over the limit at booking ({ob[0]['why']}…) — book anyway?")
-        out.append({"label": label, "act": {"action": "book", "who": [x["name"] for x in ob], "over_ok": True}, "held": [f"{x['name']}: {x['why']}" for x in ob]})
+        label = (f"{ob[0]['name']} — {ob[0]['why']}" if len(ob) == 1 else f"{len(ob)} over the limit at booking ({ob[0]['why']}…)")
+        out.append({"label": "Book anyway", "say": label, "act": {"action": "book", "who": [x["name"] for x in ob], "over_ok": True}, "held": [f"{x['name']}: {x['why']}" for x in ob]})
     if by.get("needs_vault"):
         n = len(by["needs_vault"])
-        out.append({"label": f"{n} need{'s' if n == 1 else ''} their vault — invite", "invite": [x["member_id"] for x in by["needs_vault"]]})
+        out.append({"label": "Invite", "say": f"{n} {'is' if n == 1 else 'are'} waiting for their passport",
+                    "invite": [x["member_id"] for x in by["needs_vault"]]})
     rest = [x for k, v in by.items() if k not in ("over_limit", "needs_vault", "over_at_booking") for x in v]
     if rest:
-        out.append({"label": f"{len(rest)} not bookable now — " + "; ".join(f"{x['name']}: {x['why']}" for x in rest[:3]) + ("…" if len(rest) > 3 else "")})
+        out.append({"say": f"{len(rest)} not bookable now — " + "; ".join(f"{x['name']}: {x['why']}" for x in rest[:3]) + ("…" if len(rest) > 3 else "")})
     return out
 
 
@@ -406,7 +407,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         over = over_at_booking(own, G.limit_for(mv.get("rules") or {}, b), kinds=("flight",))
         if over and not over_ok:
             return {"status": "nothing", "say": f"{b['name']}'s own flights are over the limit: {over}.",
-                    "taps": [{"label": f"{b['name']} — {over} — swap anyway?", "act": {"action": "swap", "who": [a["name"]], "to": b["name"], "over_ok": True}}]}
+                    "taps": [{"label": "Swap anyway", "say": f"{b['name']} — {over}", "act": {"action": "swap", "who": [a["name"]], "to": b["name"], "over_ok": True}}]}
         items.append({"op": "group.swap", "member": b["id"], "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
                       "over": bool(over), "over_words": over,
                       "body": {"end_user": org, "booking_id": rec["booking_id"], "worker": w, "flights": _wire(own)}})   # CR 164 · HIS own flights
@@ -434,8 +435,10 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         lines += it["lines"] + ([f"⚠ {it['name']} is OVER the group's limit — included only because you asked."] if it.get("over") else []) + [""]
     items = [i for i in items if not i.get("skip")]
     taps = summary_taps(skipped)
-    if not items:
-        return {"status": "nothing", "say": (" · ".join(t["label"] for t in taps) if taps else "Nothing to do."), "taps": taps, "skipped": skipped}
+    if not items:   # Sasha 346 · "0 can be booked: 5 are waiting for their passport" — the count and each reason, from the record
+        zero = {"book": "0 can be booked", "cancel": "0 can be cancelled", "swap": "Nothing swapped"}.get(action, "Nothing done")
+        return {"status": "nothing", "say": f"{zero}: " + ("; ".join(t["say"] for t in taps) if taps else "nobody on the list is waiting to be "
+                + {"book": "booked", "cancel": "cancelled"}.get(action, "changed")) + ".", "taps": taps, "skipped": skipped}
     cid = "grp_" + secrets.token_hex(10)
     _CARDS[cid] = {"account": account, "action": action, "items": items, "at": time.time()}
     n = len(items)

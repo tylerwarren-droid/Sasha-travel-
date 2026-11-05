@@ -192,7 +192,7 @@ class TheTools(unittest.TestCase):
             ctx = API.Ctx(account=OWNER, mode="test")
             w.limits()
             r = run(API.group_upload(ctx, {"text": FIX.read_text()}))
-            self.assertTrue(r["say"].startswith("I've added 20 people to the list. 2 rows I couldn't read for sure"), r["say"])
+            self.assertTrue(r["say"].startswith("Added 20 people to the list. 2 rows I couldn't read for sure"), r["say"])   # Sasha 346 · the ONE outcome's words
             run(G.plan(OWNER))
             s = run(API.group_list(ctx, {}))
         self.assertIn("19 needs vault, 1 over limit", s["say"])   # Rania's flight (no personal limit set here)

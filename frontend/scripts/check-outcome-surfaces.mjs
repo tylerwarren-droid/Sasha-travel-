@@ -20,7 +20,7 @@
 // ⚠ The checks run on FIXTURES first, every time: each defect must be caught and the clean form must pass.
 // A guard that has only ever been seen passing has not been shown to check anything.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
@@ -32,6 +32,15 @@ export const OUTCOME_SURFACES = ["app/booking-helper/page.tsx", "app/booking-hel
 OUTCOME_SURFACES.push("app/campus-handover/[id]/page.tsx", "app/campus-handover/[id]/CopyAnswer.tsx", "app/relocation-file/[id]/page.tsx", "app/health-handover/[id]/page.tsx", "app/officer/[id]/page.tsx", "app/officer/[id]/ReturnButton.tsx");
 // CR 63 · the Keep (its own line, so the Sasha tab's list above never conflicts)
 OUTCOME_SURFACES.push("app/keep/page.tsx");
+// Sasha 346 · the group pages (/group: Tyler's Swap and Book all were greyed and said nothing, 5 Nov) — and EVERY page that acts through
+// bookingReq is an outcome surface whether or not someone remembered to list it (actingPages() below finds them; an unlisted one fails)
+OUTCOME_SURFACES.push("app/group/page.tsx", "app/vault/page.tsx");
+/** Pages that act (bookingReq) and are not clean yet — each named, PATCH (said): they are checked the day they leave this list. */
+export const NOT_YET_CLEAN = {
+  "app/s2/S2App.tsx": "the S2 chat: 4 raw disabled + 14 unobserved promises — its own ticket",
+  "app/components/ChatBookingDo.tsx": "1 raw disabled", "app/components/TripBookTest.tsx": "1 .then without .catch",
+  "app/booking-helper/CalendarConnect.tsx": "1 .then without .catch", "app/booking-helper/OutlookConnect.tsx": "1 .then without .catch",
+};
 /** The one component allowed to set `disabled=` — because it derives it from rendered needs. */
 export const GATED_BUTTON = "app/booking-helper/GatedButton.tsx";
 
@@ -86,6 +95,17 @@ const FIXTURES = [
   { name: "the clean forms pass", src: `<GatedButton label="Pair" needs={[!connected && 'Connect, first']} onClick={pair} />\nrelayReport(m).catch((e) => note(String(e), 'stop'))\ncall('/x').then((r) => set(r)).catch(() => set({ unreachable: true }))\n{!started ? <p>Nothing attempted yet.</p> : null}\ntype F = (m: Msg) => void`, want: [] },
 ];
 
+/** Every .tsx under app/ that calls bookingReq — a page where a person acts and must learn what happened. */
+export function actingPages(dir = "app") {
+  const out = [];
+  for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+    const rel = `${dir}/${e.name}`;
+    if (e.isDirectory()) out.push(...actingPages(rel));
+    else if (e.name.endsWith(".tsx") && /\bbookingReq\(/.test(strip(readFileSync(join(ROOT, rel), "utf8")))) out.push(rel);
+  }
+  return out.sort();
+}
+
 function main() {
   let failed = 0;
   for (const f of FIXTURES) {
@@ -98,7 +118,13 @@ function main() {
     process.exit(1);
   }
   const problems = [];
-  for (const rel of OUTCOME_SURFACES) {
+  // Sasha 346 · a page that ACTS (calls bookingReq) is an outcome surface: every one is checked unless it is named NOT_YET_CLEAN
+  const surfaces = [...new Set([...OUTCOME_SURFACES, ...actingPages().filter((f) => !(f in NOT_YET_CLEAN))])];
+  for (const f of Object.keys(NOT_YET_CLEAN)) {
+    if (!actingPages().includes(f)) problems.push(`${f}  NOT_YET_CLEAN names a page that no longer acts — take it off the list`);
+    else if (!findSilences(readFileSync(join(ROOT, f), "utf8")).length) problems.push(`${f}  is clean now — take it off NOT_YET_CLEAN so it stays checked`);
+  }
+  for (const rel of surfaces) {
     for (const p of findSilences(readFileSync(join(ROOT, rel), "utf8"))) problems.push(`${rel}:${p.line}  ${p.rule}  ${p.why}`);
   }
   for (const p of gatedButtonProblems(readFileSync(join(ROOT, GATED_BUTTON), "utf8"))) problems.push(`${GATED_BUTTON}  S1  ${p}`);
@@ -146,7 +172,7 @@ function main() {
     console.error("check-outcome-surfaces: onboarding Go Live can show success for a refused save — run python3 frontend/scripts/stage_b_onboarding_honesty.py (CLAUDE.md, Stage B).");
     process.exit(1);
   }
-  console.log(`check-outcome-surfaces: ${FIXTURES.length} fixtures caught as expected; ${OUTCOME_SURFACES.length} outcome surface(s) clean; onboarding save is signed-in only and Go Live is honest.`);
+  console.log(`check-outcome-surfaces: ${FIXTURES.length} fixtures caught as expected; ${surfaces.length} outcome surface(s) clean (every page that acts, but the ${Object.keys(NOT_YET_CLEAN).length} named NOT_YET_CLEAN); onboarding save is signed-in only and Go Live is honest.`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

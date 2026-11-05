@@ -90,7 +90,7 @@ class OneJobOneCard(unittest.TestCase):
         self.assertEqual((done["state"], done["result"]["status"]), ("ready", "awaiting_yes"))
         page = (ROOT / "frontend/app/group/page.tsx").read_text()
         self.assertIn("bookingReq('/api/booking/group/job')", page)
-        self.assertIn("Sasha didn’t answer in time — nothing was booked or changed.", page)
+        self.assertIn("Sasha’s server didn’t answer — nothing was changed. Try again.", page)    # Sasha 346 · heard(), the ONE reader
         self.assertNotIn("'Nothing to do.'", page)                                           # a lost request never reads as nothing to do
 
     def test_agapi_busy_is_waited_out_once(self):
@@ -234,7 +234,8 @@ class LimitsAtBooking(unittest.TestCase):
             out = run(GB.prepare(OWNER, "book", ["Amara Sample"]))
             self.assertEqual(out["status"], "nothing")
             self.assertEqual(out["skipped"][0]["kind"], "over_at_booking")
-            self.assertEqual(out["taps"][0]["label"], "Amara Sample — Hotel Alba (test): hotel €190/night > €150 limit — book anyway?")
+            self.assertEqual((out["taps"][0]["say"], out["taps"][0]["label"]),                    # Sasha 346 · why + its button
+                             ("Amara Sample — Hotel Alba (test): hotel €190/night > €150 limit", "Book anyway"))
             self.assertEqual(w.agapi.supplier, [])                                            # never booked (Sasha 340: the read-back's
             self.assertEqual(w.agapi.records, [])                                             # own price is read first, then held)
             tap = out["taps"][0]["act"]

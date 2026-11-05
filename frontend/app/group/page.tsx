@@ -4,10 +4,14 @@
  * worker's ONE trip (GET /api/booking/group/list — computed on the server, never stored), every 6 s. The organiser's list goes in
  * here too: a .csv / .xlsx file, a photo of the list, or pasted text (POST /api/booking/group/upload); unclear rows come back as ONE
  * question.
+ *
+ * Sasha 346 · EVERY button answers (docs/sasha/S-346-every-button-answers.md): no button is ever greyed out (a grey button says nothing —
+ * Tyler's Swap and Book all, 5 Nov) and none opens a pop-up after a wait (blocked: nothing). A press goes to the server, whose ONE outcome
+ * (booking_signer/group_outcome.py) says what was done or exactly what's missing; heard() shows every answer — a lost request too.
  */
 import { useEffect, useState } from 'react'
 import { bookingReq } from '@/lib/booking-client'
-import { T, TONE, page, card as cardS, field, btn, btn2, small, off } from '@/lib/group-theme'   // Sasha 336 · readable on the dark theme
+import { T, TONE, page, card as cardS, field, btn, btn2, small } from '@/lib/group-theme'   // Sasha 336 · readable on the dark theme
 
 type Row = { member_id: string; name: string; grade?: string | null; home_city?: string | null; out?: string | null; back?: string | null
   transport?: string | null; hotel?: string | null; price_eur?: number | null; flight_eur?: number | null; hotel_eur_per_night?: number | null
@@ -21,7 +25,10 @@ export default function GroupPage() {
   const [v, setV] = useState<View | null>(null)
   const [text, setText] = useState('')
   const [said, setSaid] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusyName] = useState<string | null>(null)   // Sasha 346 · WHAT is running — a press meanwhile is told so, never ignored
+  const setBusy = (b: boolean | string) => setBusyName(b === true ? 'That' : b || null)
+  const [missing, setMissing] = useState<string[]>([])   // Sasha 346 · the fields the server named as missing (their inputs are marked)
+  const [invoiceLink, setInvoiceLink] = useState<string | null>(null)
   const [links, setLinks] = useState<{ name: string; link: string }[]>([])
   // Sasha 334 · a master-list action's card: AgAPI's read-backs + the Yes / No the server gives (sasha.yes_buttons — 330's one place)
   const [card, setCard] = useState<{ read_back_id: string; read_back: string[]; ask: string; choices: { title: string; route: string }[] } | null>(null)
@@ -31,7 +38,7 @@ export default function GroupPage() {
   const [swapCity, setSwapCity] = useState('')   // Sasha 336 · a newcomer: the swap adds them and invites them to their vault
   const [swapGrade, setSwapGrade] = useState('')
   // Sasha 336 · "Book all" with nothing bookable: a short list with taps (book anyway / invite)
-  const [taps, setTaps] = useState<{ label: string; act?: { action: 'book' | 'swap'; who: string[]; to?: string; over_ok: boolean }; invite?: string[] }[]>([])
+  const [taps, setTaps] = useState<{ label?: string; say?: string; act?: { action: 'book' | 'swap'; who: string[]; to?: string; over_ok: boolean }; invite?: string[] }[]>([])
 
   useEffect(() => {
     let off = false
@@ -48,27 +55,41 @@ export default function GroupPage() {
     return () => { off = true; clearInterval(t) }
   }, [])
 
+  // Sasha 346 · THE ONE READER of every answer: the server's words (say / why / message), else what happened to the request — never empty
+  const heard = (name: string, r: { ok: boolean; status: number; json: Record<string, unknown> } | null): Record<string, unknown> => {
+    const j = (r?.json || {}) as Record<string, unknown>
+    const words = String(j.say || j.why || j.message || '').trim()
+    setMissing(Array.isArray(j.missing) ? (j.missing as string[]) : [])
+    setSaid(words || (!r ? `${name}: Sasha’s server didn’t answer — nothing was changed. Try again.`
+      : `${name}: the server answered ${r.status} without words — nothing was changed. Try again.`))
+    return j
+  }
+  // a press while another action runs is TOLD so — the button is never greyed out
+  const press = (name: string, fn: () => Promise<unknown>) => () => {
+    if (busy) { setSaid(`${busy} is still running — its answer comes here first. Then ${name}.`); return }
+    setInvoiceLink(null)
+    fn().catch(e => { setBusy(false); setSaid(`${name}: ${(e as Error).message || 'it didn’t go through'} — nothing was changed. Try again.`) })
+  }
   const send = async (body: Record<string, unknown>) => {
-    setBusy(true)
+    setBusy('Add these'); setSaid('Adding…')
     const r = await bookingReq('/api/booking/group/upload', body, 60000).catch(() => null)
     setBusy(false)
-    const j = (r?.json || {}) as { added?: number; ask?: string | null; why?: string; message?: string }
-    setSaid(r?.ok ? `Added ${j.added ?? 0}.${j.ask ? ' ' + j.ask : ''}` : (j.why || j.message || 'That list couldn’t be read — try again.'))
+    heard('Add these', r)
   }
   const invite = async (who: string[] | null) => {   // Sasha 333 · each member's own secure page — never collected in chat
-    setBusy(true)
+    setBusy('Invite'); setSaid('Inviting…')
     const r = await bookingReq('/api/booking/group/invite', { who }, 60000).catch(() => null)
     setBusy(false)
-    const j = (r?.json || {}) as { emailed?: string[]; forward?: { name: string; link: string }[]; why?: string }
+    const j = heard('Invite', r) as { forward?: { name: string; link: string }[] }
     setLinks(j.forward || [])
-    setSaid(r?.ok ? `Emailed ${j.emailed?.length ?? 0}.${j.forward?.length ? ` ${j.forward.length} to forward below.` : ''}` : (j.why || 'Not sent — try again.'))
   }
   // Sasha 339 · what an act answered: ONE card (its Yes / No), or what held each worker (taps), said as it is
   const show = (j: Record<string, unknown>) => {
     if (j.status === 'awaiting_yes' && Array.isArray(j.choices)) setCard(j as unknown as NonNullable<typeof card>)
     const re = (Array.isArray(j.reasked) ? j.reasked : []) as NonNullable<typeof card>[]
     if (re.length) { setCard(re[0]); setQueue(re.slice(1)) }   // Sasha 340 · a moved fare: THAT worker's card, its own Yes
-    setSaid(j.status === 'awaiting_yes' ? (Array.isArray(j.taps) && j.taps.length ? 'Some are held — see below the card.' : null) : String(j.say || j.message || ''))
+    if (j.status === 'awaiting_yes') setSaid(Array.isArray(j.taps) && j.taps.length ? 'Some are held — see below the card.' : 'Read the card, then Yes or No.')
+    else heard('That', { ok: true, status: 200, json: j })   // Sasha 346 · the ONE reader
     if (Array.isArray(j.taps)) setTaps(j.taps as typeof taps)
     if (Array.isArray(j.links)) setLinks(j.links as { name: string; link: string }[])
   }
@@ -86,32 +107,36 @@ export default function GroupPage() {
     setBusy(false); setSaid('Still preparing — this page stopped waiting. Nothing is booked; reload to see the card.')
   }
   const act = async (action: 'book' | 'swap' | 'cancel', who: string[] | null, to?: string, more: Record<string, unknown> = {}) => {
-    setBusy(true); setCard(null); setTaps([]); setSaid(action === 'book' ? 'Preparing…' : null)
+    const name = { book: 'Book', swap: 'Swap', cancel: 'Cancel' }[action]
+    setBusy(name); setCard(null); setTaps([]); setSaid(action === 'swap' ? 'Swapping…' : action === 'book' ? 'Checking who can be booked…' : 'Checking…')
     const r = await bookingReq('/api/booking/group/act', { action, who, to, ...more }, 120000).catch(() => null)
     const j = (r?.json || {}) as Record<string, unknown>
-    if (!r?.ok) { setBusy(false); setSaid('Sasha didn’t answer in time — nothing was booked or changed. Try again.'); return }
-    if (j.status === 'preparing') { if (j.say) setSaid(String(j.say)); return follow() }
+    if (!r?.ok) { setBusy(false); heard(name, r); return }
+    if (j.status === 'preparing') { if (j.say) setSaid(String(j.say)); if (Array.isArray(j.taps)) setTaps(j.taps as typeof taps); return follow() }
     setBusy(false); show(j)
   }
-  const swap = () => act('swap', [swapOut], swapIn, swapCity.trim() ? { to_city: swapCity.trim(), to_grade: swapGrade.trim() || 'worker' } : {})
+  // Sasha 346 · every field goes to the server as typed — IT names what's missing (who leaves · who comes · their home city)
+  const swap = () => act('swap', [swapOut.trim()], swapIn.trim(), { to_city: swapCity.trim(), to_grade: swapGrade.trim() })
   const answer = async (choice: string) => {   // once per card: the server holds the claim; a second tap finds nothing
-    if (!card) return
+    if (!card) { setSaid('That card was already answered — the master list shows what was done.'); return }
     const id = card.read_back_id
-    setCard(null); setBusy(true)
+    setCard(null); setBusy('Your answer on the card'); setSaid(choice === 'group_yes' ? 'Booking…' : 'Saying no…')
     const r = await bookingReq('/api/booking/group/confirm', { card: id, choice }, 120000).catch(() => null)
     const j = (r?.json || {}) as Record<string, unknown>
-    if (!r?.ok) { setBusy(false); setSaid('Sasha didn’t answer in time — the master list shows what was done.'); return }
+    if (!r?.ok) { setBusy(false); heard('Your answer', r); return }
     if (j.status === 'booking') { if (j.say) setSaid(String(j.say)); return follow() }   // Sasha 339 · several acts: ONE job, followed
     setBusy(false)
     if (Array.isArray(j.reasked) && j.reasked.length) return show(j)
-    setSaid(String(j.say || 'Done.'))
+    heard('Your answer', r)
     if (queue.length) { setCard(queue[0]); setQueue(queue.slice(1)) }   // the next moved fare's own card
   }
+  // Sasha 346 · the invoice's answer is SAID, and its link shown to tap — a pop-up opened after a wait is blocked (it said nothing)
   const invoice = async () => {
+    setBusy('The invoice'); setSaid('Reading the invoice…')
     const r = await bookingReq('/api/booking/group/invoice').catch(() => null)
-    const link = ((r?.json || {}) as { link?: string }).link
-    if (link) window.open(link, '_blank', 'noopener')
-    else setSaid(String(((r?.json || {}) as { why?: string }).why || 'The invoice isn’t ready.'))
+    setBusy(false)
+    const link = (heard('The invoice', r) as { link?: string }).link
+    setInvoiceLink(link || null)
   }
   const onFile = (f: File | undefined) => {
     if (!f) return
@@ -120,6 +145,7 @@ export default function GroupPage() {
     rd.readAsDataURL(f)
   }
 
+  const mark = (f: string) => (missing.includes(f) ? { ...field, borderColor: T.vault, boxShadow: `0 0 0 1px ${T.vault}` } : field)   // named as missing
   const mv = v?.movement
   return (
     <main style={{ ...page, maxWidth: 1100, margin: '0 auto', padding: '24px 16px' }}>
@@ -128,33 +154,34 @@ export default function GroupPage() {
       {v?.counts && <p data-counts style={{ margin: '0 0 16px' }}>{Object.entries(v.counts).map(([s, n]) => `${n} ${s}`).join(' · ')}</p>}
       <section style={{ ...cardS, marginBottom: 16 }}>
         <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Add the list — a spreadsheet, a photo of it, or paste it</label>
-        <input type="file" accept=".csv,.xlsx,image/*" disabled={busy} onChange={e => onFile(e.target.files?.[0])} style={{ color: T.text }} />
+        <input type="file" accept=".csv,.xlsx,image/*" onChange={e => press('Add these', async () => onFile(e.target.files?.[0]))()} style={{ color: T.text }} />
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Name, home city, out, back, grade — one person per line"
           rows={3} style={{ ...field, display: 'block', width: '100%', marginTop: 8 }} />
-        <button type="button" disabled={busy || !text.trim()} onClick={() => send({ text })} style={{ ...off(btn2, busy || !text.trim()), marginTop: 8 }}>Add these</button>
-        {said && <p data-upload-said style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{said}</p>}
+        <button type="button" onClick={press('Add these', () => send({ text }))} style={{ ...btn2, marginTop: 8 }}>Add these</button>
+        {said && <p data-upload-said data-said role="status" aria-live="polite" style={{ whiteSpace: 'pre-line', marginTop: 8 }}>{said}</p>}
+        {invoiceLink && <p data-invoice-link><a href={invoiceLink} target="_blank" rel="noopener" style={{ color: T.link, textDecoration: 'underline' }}>Open the invoice</a></p>}
         {taps.length > 0 && <div data-taps style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-          {taps.map(t => t.act ? <button key={t.label} type="button" disabled={busy} style={off(btn, busy)}
-              onClick={() => act(t.act!.action, t.act!.who, t.act!.to, { over_ok: true })}>{t.label}</button>
-            : t.invite ? <button key={t.label} type="button" disabled={busy} style={off(btn2, busy)} onClick={() => invite(t.invite!)}>{t.label}</button>
-            : <span key={t.label} style={{ color: T.muted, alignSelf: 'center' }}>{t.label}</span>)}
+          {taps.map((t, i) => <span key={i} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            {t.say && <span style={{ color: T.muted }}>{t.say}</span>}
+            {t.act ? <button type="button" style={btn} onClick={press(t.label || 'Book anyway', () => act(t.act!.action, t.act!.who, t.act!.to, { over_ok: true }))}>{t.label}</button>
+              : t.invite ? <button type="button" style={btn2} onClick={press('Invite', () => invite(t.invite!))}>{t.label}</button> : null}</span>)}
         </div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-          <button type="button" disabled={busy || !v?.rows?.length} onClick={() => invite(null)} style={off(btn2, busy || !v?.rows?.length)}>Invite everyone to the vault</button>
-          <button type="button" disabled={busy} onClick={() => act('book', null)} style={off(btn, busy)}>Book all planned</button>
-          <button type="button" onClick={invoice} style={btn2}>The invoice</button>
+          <button type="button" onClick={press('Invite everyone', () => invite(null))} style={btn2}>Invite everyone to the vault</button>
+          <button type="button" onClick={press('Book all', () => act('book', null))} style={btn}>Book all planned</button>
+          <button type="button" onClick={press('The invoice', invoice)} style={btn2}>The invoice</button>
         </div>
         <div data-swap style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
-          <input value={swapOut} onChange={e => setSwapOut(e.target.value)} placeholder="Swap… (who leaves)" style={field} />
-          <input value={swapIn} onChange={e => setSwapIn(e.target.value)} placeholder="for… (who comes)" style={field} />
-          <input value={swapCity} onChange={e => setSwapCity(e.target.value)} placeholder="their home city (if new)" style={field} />
-          <input value={swapGrade} onChange={e => setSwapGrade(e.target.value)} placeholder="grade (if new)" style={{ ...field, width: 130 }} />
-          <button type="button" disabled={busy || !swapOut || !swapIn} onClick={swap} style={off(btn2, busy || !swapOut || !swapIn)}>Swap</button>
+          <input value={swapOut} onChange={e => setSwapOut(e.target.value)} placeholder="Swap… (who leaves)" aria-label="who leaves" style={mark('who leaves')} />
+          <input value={swapIn} onChange={e => setSwapIn(e.target.value)} placeholder="for… (who comes)" aria-label="who comes" style={mark('who comes')} />
+          <input value={swapCity} onChange={e => setSwapCity(e.target.value)} placeholder="their home city (if new)" aria-label="their home city" style={mark('their home city')} />
+          <input value={swapGrade} onChange={e => setSwapGrade(e.target.value)} placeholder="grade (if new)" aria-label="grade" style={{ ...field, width: 130 }} />
+          <button type="button" onClick={press('Swap', swap)} style={btn2}>Swap</button>
         </div>
         {card && <div data-group-card style={{ ...cardS, background: T.bg, marginTop: 10 }}>
           {card.read_back.map((l, i) => <div key={i} style={{ fontSize: 14 }}>{l || '\u00a0'}</div>)}
           <p style={{ fontWeight: 600 }}>{card.ask}</p>
-          {card.choices.map((c, i) => <button key={c.route} type="button" disabled={busy} onClick={() => answer(c.route)} style={{ ...off(i === 0 ? btn : btn2, busy), marginRight: 8 }}>{c.title}</button>)}
+          {card.choices.map((c, i) => <button key={c.route} type="button" onClick={press(c.title, () => answer(c.route))} style={{ ...(i === 0 ? btn : btn2), marginRight: 8 }}>{c.title}</button>)}
         </div>}
         {links.length > 0 && <ul data-forward>{links.map(l => <li key={l.link}>{l.name}: <a href={l.link} style={{ color: T.link, textDecoration: 'underline' }}>their secure link</a></li>)}</ul>}
       </section>
@@ -174,9 +201,9 @@ export default function GroupPage() {
                 <td style={{ padding: '6px 8px' }}>{[r.limit.flight_return_eur && `flight ≤ ${eur(r.limit.flight_return_eur)}`,
                   r.limit.hotel_night_eur && `hotel ≤ ${eur(r.limit.hotel_night_eur)}/night`].filter(Boolean).join(' · ') || '—'}</td>
                 <td style={{ padding: '6px 8px' }} data-vault>{r.vault?.passport ? 'Passport ✓' : 'Passport missing'}{r.vault?.loyalty?.length ? ` · ${r.vault.loyalty.map(x => `${x} ✓`).join(' · ')}` : ''}
-                  {!r.vault?.passport && <button type="button" disabled={busy} onClick={() => invite([r.member_id])} style={{ ...off(small, busy), marginLeft: 6 }}>Invite</button>}
-                  {r.vault?.passport && r.status !== 'booked' && r.status !== 'cancelled' && <button type="button" disabled={busy} onClick={() => act('book', [r.name])} style={{ ...off(small, busy), marginLeft: 6 }}>Book</button>}
-                  {r.status === 'booked' && <button type="button" disabled={busy} onClick={() => act('cancel', [r.name])} style={{ ...off(small, busy), marginLeft: 6 }}>Cancel</button>}</td>
+                  {!r.vault?.passport && <button type="button" onClick={press('Invite', () => invite([r.member_id]))} style={{ ...small, marginLeft: 6 }}>Invite</button>}
+                  {r.vault?.passport && r.status !== 'booked' && r.status !== 'cancelled' && <button type="button" onClick={press('Book', () => act('book', [r.name]))} style={{ ...small, marginLeft: 6 }}>Book</button>}
+                  {r.status === 'booked' && <button type="button" onClick={press('Cancel', () => act('cancel', [r.name]))} style={{ ...small, marginLeft: 6 }}>Cancel</button>}</td>
                 <td style={{ padding: '6px 8px', color: TONE[r.status] || T.text, fontWeight: 600 }}>{r.status}</td>
               </tr>))}</tbody>
           </table>

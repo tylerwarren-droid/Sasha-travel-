@@ -60,9 +60,10 @@ class BookAllSaysAShortList(unittest.TestCase):
         sk = [{"name": f"W{i}", "member_id": f"m{i}", "kind": "over_limit", "why": "over"} for i in range(18)] + \
              [{"name": "V1", "member_id": "v1", "kind": "needs_vault", "why": "no passport"}, {"name": "V2", "member_id": "v2", "kind": "needs_vault", "why": "x"}]
         taps = GB.summary_taps(sk)
-        self.assertEqual([t["label"] for t in taps], ["18 over limit — book anyway?", "2 need their vault — invite"])
+        # Sasha 346 · each tap: why (say, from the record) + its button (label)
+        self.assertEqual([(t["say"], t["label"]) for t in taps], [("18 over the limit", "Book anyway"), ("2 are waiting for their passport", "Invite")])
         self.assertEqual((taps[0]["act"]["over_ok"], len(taps[0]["act"]["who"]), taps[1]["invite"]), (True, 18, ["v1", "v2"]))
-        self.assertEqual(GB.summary_taps(sk[-1:])[0]["label"], "1 needs their vault — invite")
+        self.assertEqual(GB.summary_taps(sk[-1:])[0]["say"], "1 is waiting for their passport")
 
     def test_on_the_list(self):
         with W334.World() as w:
@@ -70,7 +71,7 @@ class BookAllSaysAShortList(unittest.TestCase):
             run(KEEP.delete(hanna["id"]))                                                      # her vault empty again
             out = run(GB.prepare(OWNER, "book", ["Rania Mithal", "Hanna Dummy"]))
             self.assertEqual(out["status"], "nothing")
-            self.assertEqual(out["say"], "1 over limit — book anyway? · 1 needs their vault — invite")
+            self.assertEqual(out["say"], "0 can be booked: 1 over the limit; 1 is waiting for their passport.")   # Sasha 346
             self.assertLess(len(out["say"]), 80)                                               # a line, not a paragraph
             anyway = out["taps"][0]["act"]                                                     # the tap: the SAME card and Yes, over_ok
             card = run(GB.prepare(OWNER, anyway["action"], anyway["who"], over_ok=anyway["over_ok"]))

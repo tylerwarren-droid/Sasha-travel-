@@ -105,24 +105,25 @@ def reason(r: dict) -> Optional[str]:
     return None
 
 
-def held(rows: List[dict]) -> tuple:
-    """Why each worker who can't be booked now can't: (words, taps) — counted from the master list's rows."""
+def held(rows: List[dict]) -> List[Dict[str, Any]]:
+    """THE reasons the record gives for each worker who can't be booked now — as taps: `say` (counted) and, where there is one, the
+    button (`label`). The job's card carries these SAME taps (group_book.start(held=…)) — never a second classification."""
     by: Dict[str, List[dict]] = {}
     for r in rows:
         by.setdefault(reason(r) or "", []).append(r)
-    words, taps = [], []
+    taps: List[Dict[str, Any]] = []
     if by.get("passport"):
         n = len(by["passport"])
-        words.append(f"{n} {'is' if n == 1 else 'are'} waiting for their passport")
-        taps.append({"label": "Invite", "say": words[-1], "invite": [r["member_id"] for r in by["passport"]]})
+        taps.append({"label": "Invite", "say": f"{n} {'is' if n == 1 else 'are'} waiting for their passport",
+                     "invite": [r["member_id"] for r in by["passport"]]})
     if by.get("not planned"):
         n = len(by["not planned"])
-        words.append(f"{n} {'isn’t' if n == 1 else 'aren’t'} planned yet (no flight or hotel on their trip) — ask Sasha to plan them")
+        taps.append({"say": f"{n} {'isn’t' if n == 1 else 'aren’t'} planned yet (no flight or hotel on their trip) — ask Sasha to plan them"})
     if by.get("booked"):
-        words.append(f"{len(by['booked'])} already booked")
+        taps.append({"say": f"{len(by['booked'])} already booked"})
     if by.get("cancelled"):
-        words.append(f"{len(by['cancelled'])} cancelled")
-    return words, taps
+        taps.append({"say": f"{len(by['cancelled'])} cancelled"})
+    return taps
 
 
 async def _book(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
@@ -136,10 +137,12 @@ async def _book(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     if unknown:
         return _no(f"{_and(unknown)} {'isn’t' if len(unknown) == 1 else 'aren’t'} on the list — check the name.", missing=["who"])
     ready = [r for r in rows if reason(r) is None]
-    words, taps = held([r for r in rows if reason(r) is not None])
+    taps = held([r for r in rows if reason(r) is not None])
+    words = [t["say"] for t in taps]
     if not ready:
         return _no("0 can be booked: " + "; ".join(words) + ".", taps=taps)
-    job = await GB.start(account, a.get("who") or None, bool(a.get("over_ok")))
+    # the job prepares exactly the workers the record says can be tried; the held ones' reasons ride on its card (ONE classification)
+    job = await GB.start(account, [r["name"] for r in ready], bool(a.get("over_ok")), held=taps)
     return {"done": True, "status": "preparing", **job,
             "say": f"Preparing {len(ready)} to book — AgAPI's read-backs come on ONE card; nothing is booked until you tap Yes."
                    + (f" Not in this booking: {'; '.join(words)}." if words else ""), "taps": taps}

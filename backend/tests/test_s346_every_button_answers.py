@@ -58,6 +58,9 @@ class BookAll(unittest.TestCase):
             self.assertIn("Preparing 19 to book", out["say"])
             self.assertIn("Not in this booking: 1 is waiting for their passport.", out["say"])
             self.assertEqual(v["result"]["status"], "awaiting_yes")                            # the ONE card, as before (Sasha 339)
+            # ONE classification: the card's held lines are the record's reasons (Hanna) + AgAPI's (Rania), each counted once
+            self.assertEqual([t["say"] for t in v["result"]["taps"]], ["1 is waiting for their passport", "1 over the limit"])
+            self.assertEqual(GB._JOBS[OWNER]["result"]["skipped"][0]["name"], "Rania Mithal")       # Hanna never reached the job
 
     def test_everyone_booked_says_so(self):
         with World() as w:

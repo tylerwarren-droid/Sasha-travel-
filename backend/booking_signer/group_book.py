@@ -334,7 +334,7 @@ def summary_taps(skipped: List[dict]) -> List[Dict[str, Any]]:
 
 async def prepare(account: str, action: str, who: Optional[List[str]] = None, swap_to: Optional[str] = None,
                   over_ok: bool = False, newcomer: Optional[Dict[str, Any]] = None,
-                  progress: Optional[Callable[[int, int], None]] = None) -> Dict[str, Any]:
+                  progress: Optional[Callable[[int, int], None]] = None, held: Optional[List[dict]] = None) -> Dict[str, Any]:
     """→ {status: awaiting_yes, read_back, read_back_id (the card), ask, skipped} or {status: nothing, say}."""
     from . import groups as G
     st = G.store()
@@ -434,7 +434,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         it.update(read_back_id=d["read_back_id"], sha=d.get("read_back_sha256") or "", lines=list((d.get("read_back") or {}).get("lines") or []))
         lines += it["lines"] + ([f"⚠ {it['name']} is OVER the group's limit — included only because you asked."] if it.get("over") else []) + [""]
     items = [i for i in items if not i.get("skip")]
-    taps = summary_taps(skipped)
+    taps = list(held or []) + summary_taps(skipped)   # Sasha 346 · the record's reasons (group_outcome.held) + AgAPI's, on ONE card
     if not items:   # Sasha 346 · "0 can be booked: 5 are waiting for their passport" — the count and each reason, from the record
         zero = {"book": "0 can be booked", "cancel": "0 can be cancelled", "swap": "Nothing swapped"}.get(action, "Nothing done")
         return {"status": "nothing", "say": f"{zero}: " + ("; ".join(t["say"] for t in taps) if taps else "nobody on the list is waiting to be "
@@ -472,7 +472,7 @@ def job_view(account: str) -> Dict[str, Any]:
     return out
 
 
-async def start(account: str, who: Optional[List[str]] = None, over_ok: bool = False) -> Dict[str, Any]:
+async def start(account: str, who: Optional[List[str]] = None, over_ok: bool = False, held: Optional[List[dict]] = None) -> Dict[str, Any]:
     """Start (or rejoin) this organiser's book job → its view at once. Never waits for the read-backs."""
     j = _JOBS.get(account)
     if j and j["state"] == "preparing" and time.time() - j["at"] < JOB_S:
@@ -485,7 +485,7 @@ async def start(account: str, who: Optional[List[str]] = None, over_ok: bool = F
 
     async def run() -> None:
         try:
-            j["result"] = await prepare(account, "book", who, over_ok=over_ok, progress=prog)
+            j["result"] = await prepare(account, "book", who, over_ok=over_ok, progress=prog, held=held)
             j["state"] = "ready"
         except Exception as e:
             log.error("[group_book] the book job failed: %s", type(e).__name__)

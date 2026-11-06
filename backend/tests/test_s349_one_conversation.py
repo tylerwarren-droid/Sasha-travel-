@@ -166,3 +166,48 @@ class SilentMode(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ── the WhatsApp proof, end to end: the real turn (guest_whatsapp.turn), AgAPI's op and Twilio stood in ──────────────────────
+from booking_signer import guest_whatsapp as GW   # noqa: E402
+from tests import test_cr128_diligence as T128     # noqa: E402
+from tests import test_guest_whatsapp_s75 as TG    # noqa: E402
+
+
+class CarryOnIsAnsweredByTheToolThatSpoke(T128.Base):
+    """Tyler, 6 Nov 07:06: in Due diligence, Travel's "Picking up: Flight Madrid → London…" arrived; his "Carry on" went to AD."""
+
+    def setUp(self):
+        super().setUp()
+        p = [mock.patch.object(MEM, "RUN", None), mock.patch.dict(MEM._MEM, {}, clear=True)]
+        for x in p:
+            x.start()
+            self.addCleanup(x.stop)
+
+    def test_travel_spoke_last_so_travel_answers(self):
+        self.say("diligence")
+        self.say("investigate Lehman Brothers")                                   # AD answers it (AgAPI, from Kanoe's number)
+        self.assertEqual(self.space(), "diligence")
+        ch = TG.run(GW.STORE.channel_for(GW.wa_key(TG.GUEST)))
+        TG.run(GW._tell(ch, "Picking up: Flight Madrid → London — your flight is chosen, not booked yet. Reply to carry on."))   # Travel
+        to_ad, said = len(self.sent_to_ad()), len(self.bodies())
+        from booking_signer import wa_agent as WA
+
+        async def travel(ch, body, payload, st, out, now, **k):   # Travel's brain (the model stood in): it answers what it was handed
+            out.text(f"Travel here — carrying on with your flight ({body})")
+            return out.said()
+        with mock.patch.object(WA, "agent_turn", travel):
+            self.say("Carry on")
+        self.assertEqual(len(self.sent_to_ad()), to_ad)                            # never AD's
+        self.assertEqual(self.space(), "sasha")                                    # the space moved to the tool that spoke
+        self.assertGreater(len(self.bodies()), said)
+        self.assertTrue(self.bodies()[-1].startswith("Travel here — carrying on with your flight (Carry on)"), self.bodies()[-1])   # Travel
+        tools = [(x["dir"], x.get("tool")) for x in MEM.messages_of(MEM._MEM[TG.ACCOUNT])]
+        self.assertIn(("out", "diligence"), tools)                                # AD's answer is on the record
+        self.assertEqual(tools[-1], ("out", "sasha"))                              # and Travel's reply is the last word
+
+    def test_ad_spoke_last_so_ad_answers(self):
+        self.say("diligence")
+        self.say("investigate Lehman Brothers")
+        self.say("what did you find?")
+        self.assertEqual(self.sent_to_ad()[-1], ("what did you find?", "diligence", True))

@@ -156,6 +156,24 @@ class AChangeIsWhatEveryTripReads(unittest.TestCase):
             self.assertEqual(seen[0], "SVQ")
             self.assertEqual(seen[1], "Lisbon")
 
+    def test_planning_and_booking_fly_from_the_same_place(self):
+        """Found live (6 Nov): a person with only a home AIRPORT was planned from it, then booking searched "None → Lisbon"."""
+        from booking_signer import group_book as GB
+        with V.World() as w:
+            gid = next(iter(w.store.groups))
+            pid = run(w.store.add_person(gid, {"name": "Irene Vidal", "home_airport": "VLC", "grade": "worker"}))
+            run(G.choose(OWNER, [pid]))
+            m = next(x for x in w.members() if x["person_id"] == pid)
+            self.assertEqual(G.origin(m), "VLC")
+            asked = []
+
+            async def call(account, op, q):
+                asked.append((q["origin"]["query"], q["destination"]["query"]))
+                return {"ok": False, "error": {"code": "invalid_input"}}
+            with mock.patch.object(GB, "_call", call), mock.patch.object(GB, "_planned", mock.AsyncMock(return_value={})):
+                run(GB._items(OWNER, m, {"destination": "Madrid"}))
+            self.assertEqual(asked[0], ("VLC", "Madrid"))                               # booking: the same origin planning used
+
     def test_people_added_by_name_and_city_are_checked_as_given(self):
         with V.World() as w:
             r = run(G.add_people(OWNER, [{"name": "Ana García", "home_city": "Madrid", "grade": "worker"},

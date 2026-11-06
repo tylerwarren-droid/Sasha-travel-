@@ -101,7 +101,9 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
     AgAPI has it, else its cheapest on that route and day. PATCH (said): Sasha planned with its own Duffel search (332); AgAPI finds again."""
     items = []
     planned = await _planned(account, m)   # Sasha 337 · from the worker's ONE trip, at this moment
-    for frm, to, day in ((m["home_city"], mv["destination"], m["out_date"]), (mv["destination"], m["home_city"], m["back_date"])):
+    from . import groups as G
+    home = G.origin(m)   # Sasha 351 · the ONE answer to where they fly from (the roster's airport, else their city)
+    for frm, to, day in ((home, mv["destination"], m["out_date"]), (mv["destination"], home, m["back_date"])):
         q = {"origin": {"query": frm}, "destination": {"query": to}, "date": str(day)[:10], "passengers": 1}
         r = await _call(account, "travel.find_flights", q)
         if not r.get("ok") and (r.get("error") or {}).get("code") in ("upstream_failed", "upstream_rate_limited"):   # Sasha 339 · once more
@@ -408,7 +410,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         its, why = await _items(account, b, mv)
         own = [i for i in (its or []) if i.get("kind") == "flight"]
         if not own:
-            return {"status": "nothing", "say": f"No flight found for {b['name']} from {b.get('home_city') or 'their home city'} — nothing changed. ({why or 'no offer'})"}
+            return {"status": "nothing", "say": f"No flight found for {b['name']} from {G.origin(b) or 'their home airport'} — nothing changed. ({why or 'no offer'})"}
         over = over_at_booking(own, G.limit_for(mv.get("rules") or {}, b), kinds=("flight",))
         if over and not over_ok:
             return {"status": "nothing", "say": f"{b['name']}'s own flights are over the limit: {over}.",
@@ -744,7 +746,7 @@ async def invoice(account: str) -> Dict[str, Any]:
         m = members.get((b.get("worker") or {}).get("key")) or {}
         price = sum(((p.get("price") or {}).get("amount_minor") or 0) for p in b.get("parts") or [])
         nights = max(1, (date.fromisoformat(str(m["back_date"])[:10]) - date.fromisoformat(str(m["out_date"])[:10])).days) if m.get("out_date") and m.get("back_date") else None
-        row = {"who": b["worker"]["name"], "route": f"{m.get('home_city') or '?'} ⇄ {mv['destination']}", "dates": f"{m.get('out_date')} – {m.get('back_date')}",
+        row = {"who": b["worker"]["name"], "route": f"{G.origin(m) or '?'} ⇄ {mv['destination']}", "dates": f"{m.get('out_date')} – {m.get('back_date')}",
                "hotel_nights": nights, "price": _eur(price), "references": [p.get("reference") for p in b.get("parts") or []], "state": b["state"]}
         if b["state"] == "booked":
             total += price

@@ -536,10 +536,16 @@ def with_limits(rules: dict, by_grade: Optional[dict] = None, by_member: Optiona
 
 # ── 4 · planning, one by one (booking is CR 163) ──────────────────────────────────────────────────────────────────────────────
 
+def origin(member: dict) -> Optional[str]:
+    """Sasha 351 · where a person flies FROM — the ONE answer, for planning, booking and the invoice alike: their home AIRPORT when the
+    roster has it, else their home city (found live, 6 Nov: planning read the airport, booking read the city — "no flight None → Lisbon")."""
+    return member.get("home_airport") or member.get("home_city") or None
+
+
 async def _quote(member: dict, movement: dict) -> Dict[str, Any]:
     """The worker's cheapest flight out and back (Duffel TEST) and the cheapest hotel near the area (an ESTIMATE per night)."""
     from . import travel as T
-    home = member.get("home_airport") or member["home_city"]   # Sasha 351 · their home AIRPORT when the roster has it, else their city
+    home = origin(member)
     out = await T.search(home, movement["destination"], member["out_date"], limit=1)
     back = await T.search(movement["destination"], home, member["back_date"], limit=1)
     hotel = None

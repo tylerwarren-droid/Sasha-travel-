@@ -86,11 +86,34 @@ On each call, in order:
 
 **Live S2 / WhatsApp turns:** ≈ −67 % on average across these four, below the 70 % target (the restaurant turn, −60 %, offers finding AND planning: "near the hotel"). The system prompt (≈ 4,100 tokens after) is now the largest part.
 
-## Not proven yet (said)
+## Proven live (6 Nov, Tyler's "record", credit restored)
 
-The org's Anthropic credit is exhausted (−$0.28), so nothing live can run.
-1. **The recordings** need ONE gate run with `SASHA_GATE_RECORD=1` once credit is back. Until then the gate fails at its preflight (credit), and after that at the first missing recording, by name.
-2. **The voice loops on recorded replies,** and **a live S2 turn's measured $ through the gateway's meter,** wait for that run.
+**Recording runs, live.**
+- The first runs found three things, each fixed at its source:
+  1. sasha_measures refused both new kinds (057, SQL FOR CHAT, applied).
+  2. Recordings made inside suites that fake the app's store had nowhere to go: the gateway has its own connection now.
+  3. A replay key on tool OUTPUT, plus loops starting alike, missed requests. The key is now the words, the calls and their ok/error, and recording FILLS what's missing, sharing one live call among alike requests.
+- They also corrected the selection twice: reserving a place brings finding it; a go-ahead goes to what is waiting for the yes; "nine at night" is not a trip's nights.
+- **The last recording run (df3a0b8d):**
+  - PASS: core 68/68, voice loops 15/15, loop-5 probe 0 failures in 6.
+  - 182 live calls ($1.44); every recording kept.
+  - One earlier probe run failed once (the model asked a question instead of preparing, and then "Book it." found nothing proposed). That is variance, not this class: Sasha 354.
+
+**Replay (deploys a645ac4f and 131f0e6b, after SASHA_GATE_RECORD was removed):**
+- PASS: core 68/68 and voice loops 15/15 on recorded replies; 0 missing.
+- The gate's model use: 1 call, Haiku, 8 tokens in + 1 out, $0.00. Before: ≈ 400 live calls, ≈ 6–8 M tokens, ≈ $2–3.
+- The voice proof (a live sandbox booking after the verdict) runs only when the gate records.
+
+**A real S2 turn through the meter** (the test organiser, "find us a nice restaurant for dinner tonight in Lisbon"):
+- 1 Sonnet call: 150 in, 6,359 cache write (a new prefix), 157 out.
+- Plus small Haiku calls: 56 in, 7 out.
+- About 6,700 tokens in all, against about 50,000 for an S2 turn on 6 Nov before (2 calls, 44k cache read + 6k write + 1k in): −87 %.
+
+**The caps refuse loudly** (production's code and the real API, a fictional account, the budget set to 10 tokens):
+- The first call went (14 tokens).
+- The second: "REFUSED: this account's daily model budget is reached (14 of 10 tokens today) — nothing was sent".
+
+**Found reading the meter, and fixed:** the service and the gate each saved the whole day, the last writer erasing the other. Each process now keeps its own row, and the caps count them all.
 
 ## Tests
 

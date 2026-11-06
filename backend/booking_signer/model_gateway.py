@@ -82,18 +82,31 @@ def _acct_key(account: Optional[str]) -> str:
     return MS.h(account) or "-"
 
 
+async def _db(fn):
+    """The gateway's OWN connection (DATABASE_URL) — never the app's store, which suites replace with fakes (found by the recording run:
+    199 of 319 recordings made inside such suites had nowhere to go). One connection per use: the gate's suites run in several event
+    loops, and these are few (a recording run's ~300, a usage save at most every 5 s)."""
+    import asyncpg
+    url = os.getenv("DATABASE_URL", "").strip().replace("postgresql+asyncpg://", "postgresql://", 1)
+    if not url:
+        raise RuntimeError("DATABASE_URL is not set")
+    c = await asyncpg.connect(url, statement_cache_size=0, timeout=10)
+    try:
+        return await fn(c)
+    finally:
+        await c.close()
+
+
 class _PgStore:
     async def load(self, day: str) -> Optional[dict]:
-        from agapi import s2_memory as M
-        run = M._run()
-        if run is None:
-            return None
-        r = await run(lambda c: c.fetchval("select data from sasha_measures where id = $1", f"model_day:{day}"))
+        r = await _db(lambda c: c.fetchval("select data from sasha_measures where id = $1", f"model_day:{day}"))
         return json.loads(r) if isinstance(r, str) else r
 
     async def save(self, day: str, data: dict) -> None:
-        from agapi import measure as MS
-        MS._put("model_day", f"model_day:{day}", data)
+        await _db(lambda c: c.execute(
+            "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'model_day', now(), $2::date, "
+            "$3::jsonb, 0, $4, null, now() + interval '400 days') on conflict (id) do update set data = excluded.data, at = excluded.at",
+            f"model_day:{day}", day, json.dumps(data), os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
 
 
 def _store():
@@ -263,19 +276,11 @@ class _PgReplays:
     year. Keyed by replay_key; the message as Anthropic returned it."""
 
     async def get(self, key: str) -> Optional[dict]:
-        from agapi import s2_memory as M
-        run = M._run()
-        if run is None:
-            return None
-        r = await run(lambda c: c.fetchval("select data from sasha_measures where id = $1", f"replay:{key}"))
+        r = await _db(lambda c: c.fetchval("select data from sasha_measures where id = $1", f"replay:{key}"))
         return json.loads(r) if isinstance(r, str) else r
 
     async def put(self, key: str, data: dict) -> None:
-        from agapi import s2_memory as M
-        run = M._run()
-        if run is None:
-            raise RuntimeError("no store to record into")
-        await run(lambda c: c.execute(
+        await _db(lambda c: c.execute(
             "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'model_replay', now(), "
             "(now() at time zone 'Europe/Madrid')::date, $2::jsonb, 0, $3, null, now() + interval '365 days') "
             "on conflict (id) do update set data = excluded.data, at = excluded.at", f"replay:{key}", json.dumps(data),

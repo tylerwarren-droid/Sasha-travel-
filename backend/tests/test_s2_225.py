@@ -98,6 +98,16 @@ class NextIsUnchanged(unittest.TestCase):
         self.assertEqual(s1, [t["name"] for t in API.TOOLS])
         self.assertTrue({"what_i_can_do", "note_not_yet"} <= set(s2))
 
+# Sasha 353 · these tests compare SURFACES (what each can offer): the per-turn need selection is set aside (tests/whole_surface.py)
+def setUpModule():
+    from tests import whole_surface as _WS
+    _WS.start()
+
+
+def tearDownModule():
+    from tests import whole_surface as _WS
+    _WS.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

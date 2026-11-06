@@ -195,6 +195,16 @@ class BookingNeverFailsForTheKeep(unittest.TestCase):
         self.assertEqual(got, [{}])                          # ordered, with no documents
         booked.assert_awaited_once()
 
+# Sasha 353 · these tests compare SURFACES (what each can offer): the per-turn need selection is set aside (tests/whole_surface.py)
+def setUpModule():
+    from tests import whole_surface as _WS
+    _WS.start()
+
+
+def tearDownModule():
+    from tests import whole_surface as _WS
+    _WS.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

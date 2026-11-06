@@ -18,3 +18,11 @@ machine. The full contract is docs/sasha-contract/README.md.
 ⚠ This package lives in backend/, OUTSIDE backend/app/, because a CTO drop rsyncs backend/app/ with
 --delete: anything inside it that is not in the CTO's zip is deleted.
 """
+
+# Sasha 353 · THE MODEL GATEWAY: every model call this service makes, through ONE place (caps, cache, only what it needs, the meter)
+try:
+    from . import model_gateway as _MG
+    _MG.install()
+except Exception as _e:   # never silent: the service says it runs without its caps
+    import logging as _l
+    _l.getLogger("booking_signer").error("[model_gateway] NOT installed: %s — model calls are uncapped", type(_e).__name__)

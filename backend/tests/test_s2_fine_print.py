@@ -255,6 +255,16 @@ class OnlyOnS2(unittest.TestCase):
                 mock.patch("app.services.chat_account.signed_in", lambda a: False):
             self.assertEqual(c.post("/api/agent/s2/card-image", json=body, headers={"x-sasha-surface": "s2"}).status_code, 403)
 
+# Sasha 353 · these tests compare SURFACES (what each can offer): the per-turn need selection is set aside (tests/whole_surface.py)
+def setUpModule():
+    from tests import whole_surface as _WS
+    _WS.start()
+
+
+def tearDownModule():
+    from tests import whole_surface as _WS
+    _WS.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

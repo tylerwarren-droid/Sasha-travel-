@@ -11,6 +11,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts import gate_cost as COST  # noqa: E402   # Sasha 232 · the gate's own Anthropic key — BEFORE any client is built
 COST.use_gate_key()
 COST.install()
+# Sasha 353 · THE GATE REPLAYS RECORDED REPLIES: the model calls of its suites are answered from the record (booking_signer.model_gateway),
+# never the API — one tiny live check only (the preflight's 1-token Haiku call). SASHA_GATE_RECORD=1 → ONE live run that records them
+# (set it once, after a prompt or a tool changes what the suites ask; a request with no recording fails the gate by name).
+from booking_signer import model_gateway as _MG  # noqa: E402
+_MG.install()
+
+
+def _replay_mode() -> None:
+    """Set when the gate RUNS (main) — never at import: a test importing this module must not change how its process calls the model."""
+    os.environ["SASHA_MODEL_REPLAY"] = "record" if os.getenv("SASHA_GATE_RECORD", "").strip() == "1" else "replay"
+    print(f"gate: model calls {'RECORDED live (SASHA_GATE_RECORD=1)' if os.environ['SASHA_MODEL_REPLAY'] == 'record' else 'replayed from the record — one live Haiku check only'}")
 from scripts import flight_suite as F, core_suites as C, basket_suite as BS, agent_suite as AS, whatsapp_suite as WS, postgres_suite as PG, \
     voice_loop_suite as VS, venue_suite as VN  # noqa: E402
 
@@ -28,6 +39,7 @@ async def _clean_orphans(since) -> None:
 
 
 async def main() -> int:
+    _replay_mode()   # Sasha 353
     # Sasha 257 · FIRST: can the model answer at all? An exhausted Anthropic credit stops the gate here, by name (and the founder is
     # told) — before, it failed 40 unrelated-looking checks and production went silent with nobody told
     from app.services import model_health as MH
@@ -81,7 +93,8 @@ async def main() -> int:
     # Sasha 249 · ONE VERDICT: the line printed and the exit code are the same expression (the safety suite was printed, never failed)
     bad = bool(a or b or c or d or v or w or e or f or s or t or h or o)
     print(f"\nDEPLOY GATE: {'PASS' if not bad else 'FAIL'}")
-    if not bad and os.getenv("SASHA_GATE_LOOP5_PROBE", "on") != "off":   # Sasha 323 · after the verdict, never part of it: VOICE LOOP 5
+    if not bad and os.getenv("SASHA_GATE_LOOP5_PROBE", "on") != "off" and os.environ.get("SASHA_MODEL_REPLAY") != "replay":   # 353: replies
+        # replayed are the same every run — the probe measures a live model's variance, so it runs only when recording   # Sasha 323 · after the verdict, never part of it: VOICE LOOP 5
         try:                                                                 # run until it fails once — its whole conversation printed
             await VS.probe("5 ·", int(os.getenv("SASHA_GATE_LOOP5_RUNS", "6")))
         except Exception as e:

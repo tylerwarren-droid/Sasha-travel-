@@ -444,6 +444,16 @@ class G15OpsConsole(TG.Base):
             self.assertEqual(self.c.post(path, json={"n": 1, "answer": "filled"}).status_code, 403, path)
         self.assertEqual(self.c.get("/api/booking/ops/demo/space").status_code, 403)
 
+# Sasha 353 · these tests compare SURFACES (what each can offer): the per-turn need selection is set aside (tests/whole_surface.py)
+def setUpModule():
+    from tests import whole_surface as _WS
+    _WS.start()
+
+
+def tearDownModule():
+    from tests import whole_surface as _WS
+    _WS.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

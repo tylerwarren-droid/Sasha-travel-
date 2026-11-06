@@ -1,0 +1,467 @@
+"""Sasha 353 · THE MODEL GATEWAY — every model call Sasha makes, through ONE place (Tyler, 6 Nov 19:01: "drastic measures to cut this").
+
+Found (STEP 1, measured with Anthropic's count_tokens on the requests the code builds, docs/sasha/S-353-model-gateway.md): 1.98 billion input
+tokens in 30 days on Sasha's keys. Every step of a turn re-sent ~26,000 tokens (78 tool definitions ≈ 19,800 + the system prompt ≈ 6,400),
+and the deploy gate ran ~400 live calls (≈ 8 M tokens) on the service's own key, 20 times on 6 Nov alone.
+
+install() wraps the Anthropic SDK's own methods (Messages.create / .stream, sync and async, beta too) — so EVERY call, from any module, the
+CTO's included, passes here; there is no client that bypasses it (tests/test_s353_gateway.py scans for any other way to reach the API).
+On each call, in order:
+  1 THE CAPS — a global daily cap and a per-account daily budget (tokens: input + cache write + cache read + output), kept on the record
+    (sasha_measures, kind model_day — a restart never resets them); a call over either is REFUSED, loudly (ModelBudgetExceeded, logged
+    as an error) — never sent.
+  2 THE MODEL — Opus only where it's allowed (SASHA_MODEL_ALLOW_OPUS); every other call that asked for it runs on Sonnet.
+  3 ONLY WHAT IT NEEDS — the history is the recent turns (HISTORY_TURNS), never the whole record (the running summary is the caller's,
+    in its system prompt); the fixed parts (the system prompt's first block, the tool list) carry the cache mark.
+  4 THE GATE'S REPLAY — SASHA_MODEL_REPLAY=replay answers from RECORDED replies (on the record: sasha_measures, kind model_replay),
+    never the API — but for the gate's one tiny live check (model_health's 1-token Haiku call); =record makes them (one live run); a
+    request with no recording is refused loudly.
+  5 THE METER — every call's usage, by model, caller (module) and account, added to the day's record and logged.
+"""
+from __future__ import annotations
+
+import asyncio
+import contextvars
+import hashlib
+import inspect
+import json
+import logging
+import os
+import re
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
+
+log = logging.getLogger("booking_signer.model_gateway")
+
+ACCOUNT: contextvars.ContextVar = contextvars.ContextVar("sasha_model_account", default=None)   # set by the turn (whose call)
+HISTORY_TURNS = int(os.getenv("SASHA_MODEL_HISTORY_TURNS", "8"))    # the recent turns a call carries (a turn = their message onwards)
+SONNET = os.getenv("SASHA_MODEL_SONNET", "claude-sonnet-5-5")
+
+
+class ModelBudgetExceeded(RuntimeError):
+    """A cap was hit: the call was NOT sent. Its message says which cap, and how to raise it."""
+
+
+class ReplayMissing(RuntimeError):
+    """The gate replays recorded replies; this request has none (record once with SASHA_MODEL_REPLAY=record)."""
+
+
+def _cap(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def global_cap() -> int:
+    return _cap("SASHA_MODEL_DAILY_TOKENS", 25_000_000)
+
+
+def account_cap() -> int:
+    return _cap("SASHA_MODEL_ACCOUNT_DAILY_TOKENS", 2_000_000)
+
+
+# ── the day's record ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+_DAY: Dict[str, Any] = {"day": None, "total": 0, "accounts": {}, "models": {}, "callers": {}, "loaded": False}
+_DIRTY = {"since": None}
+STORE: Any = None   # tests replace it: an object with async load(day) -> dict|None and save(day, data)
+
+
+def _today() -> str:
+    return datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+
+
+def _acct_key(account: Optional[str]) -> str:
+    if not account:
+        return "-"
+    from agapi import measure as MS
+    return MS.h(account) or "-"
+
+
+class _PgStore:
+    async def load(self, day: str) -> Optional[dict]:
+        from agapi import s2_memory as M
+        run = M._run()
+        if run is None:
+            return None
+        r = await run(lambda c: c.fetchval("select data from sasha_measures where id = $1", f"model_day:{day}"))
+        return json.loads(r) if isinstance(r, str) else r
+
+    async def save(self, day: str, data: dict) -> None:
+        from agapi import measure as MS
+        MS._put("model_day", f"model_day:{day}", data)
+
+
+def _store():
+    return STORE if STORE is not None else _PgStore()
+
+
+async def _ensure_day() -> None:
+    d = _today()
+    if _DAY["day"] != d:
+        _DAY.update(day=d, total=0, accounts={}, models={}, callers={}, loaded=False)
+    if not _DAY["loaded"]:
+        _DAY["loaded"] = True
+        try:
+            kept = await _store().load(d)
+        except Exception as e:
+            log.warning("[model_gateway] the day's record wasn't read (%s) — counting from zero", type(e).__name__)
+            kept = None
+        if kept:   # a restart never resets the caps: the day goes on from what was used
+            _DAY["total"] += int(kept.get("total") or 0)
+            for k, v in (kept.get("accounts") or {}).items():
+                _DAY["accounts"][k] = _DAY["accounts"].get(k, 0) + int(v)
+            for part in ("models", "callers"):
+                for k, v in (kept.get(part) or {}).items():
+                    cur = _DAY[part].setdefault(k, {})
+                    for kk, vv in (v or {}).items():
+                        cur[kk] = cur.get(kk, 0) + int(vv)
+
+
+def _check(account_k: str) -> None:
+    g, a = global_cap(), account_cap()
+    if _DAY["total"] >= g:
+        msg = f"the global daily model cap is reached ({_DAY['total']:,} of {g:,} tokens today) — nothing was sent (SASHA_MODEL_DAILY_TOKENS)"
+        log.error("[model_gateway] REFUSED: %s", msg)
+        raise ModelBudgetExceeded(msg)
+    used = _DAY["accounts"].get(account_k, 0)
+    if account_k != "-" and used >= a:
+        msg = (f"this account's daily model budget is reached ({used:,} of {a:,} tokens today) — nothing was sent "
+               "(SASHA_MODEL_ACCOUNT_DAILY_TOKENS)")
+        log.error("[model_gateway] REFUSED: %s", msg)
+        raise ModelBudgetExceeded(msg)
+
+
+def _meter(model: str, usage: Any, caller: str, account_k: str) -> None:
+    if usage is None:
+        return
+    g = lambda k: int(getattr(usage, k, 0) or (usage.get(k, 0) if isinstance(usage, dict) else 0) or 0)
+    parts = {"in": g("input_tokens"), "cw": g("cache_creation_input_tokens"), "cr": g("cache_read_input_tokens"), "out": g("output_tokens")}
+    n = sum(parts.values())
+    _DAY["total"] += n
+    _DAY["accounts"][account_k] = _DAY["accounts"].get(account_k, 0) + n
+    for part, key in (("models", model), ("callers", caller)):
+        cur = _DAY[part].setdefault(key, {})
+        cur["calls"] = cur.get("calls", 0) + 1
+        for k, v in parts.items():
+            cur[k] = cur.get(k, 0) + v
+    log.info("[model_gateway] %s · %s · in %d · cache write %d · cache read %d · out %d · today %s", caller, model, parts["in"], parts["cw"],
+             parts["cr"], parts["out"], f"{_DAY['total']:,}")
+    _flush_soon()
+
+
+def _flush_soon() -> None:
+    if _DIRTY["since"] is not None:
+        return
+    _DIRTY["since"] = time.monotonic()
+    try:
+        asyncio.get_running_loop().call_later(5.0, lambda: asyncio.ensure_future(_flush()))
+    except RuntimeError:
+        _DIRTY["since"] = None
+
+
+async def _flush() -> None:
+    _DIRTY["since"] = None
+    try:
+        await _store().save(_DAY["day"], {k: _DAY[k] for k in ("total", "accounts", "models", "callers")})
+    except Exception as e:
+        log.warning("[model_gateway] the day's record wasn't saved (%s)", type(e).__name__)
+
+
+def today() -> Dict[str, Any]:
+    return {k: _DAY[k] for k in ("day", "total", "accounts", "models", "callers")} | {"global_cap": global_cap(), "account_cap": account_cap()}
+
+
+# ── what a call carries ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+def _is_turn_start(m: dict) -> bool:
+    """A user message that is their words (not a tool result) — where a turn begins, and where history may be cut."""
+    if m.get("role") != "user":
+        return False
+    c = m.get("content")
+    if isinstance(c, str):
+        return True
+    return isinstance(c, list) and not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c)
+
+
+def trim_history(messages: List[dict], turns: Optional[int] = None) -> List[dict]:
+    """The recent turns only — never the whole record. Cut only where a turn begins (a tool_use always keeps its tool_result)."""
+    turns = HISTORY_TURNS if turns is None else turns
+    starts = [i for i, m in enumerate(messages or []) if isinstance(m, dict) and _is_turn_start(m)]
+    if len(starts) <= turns:
+        return messages
+    return messages[starts[-turns]:]
+
+
+def _marks(x: Any) -> int:
+    return json.dumps(x, default=str).count('"cache_control"')
+
+
+def with_cache(kw: dict) -> dict:
+    """The fixed parts carry the cache mark: the tool list's last tool, and the system prompt's first block (its fixed part) — when
+    the caller hasn't marked them. Never more than Anthropic's four marks."""
+    kw = dict(kw)
+    total = _marks(kw.get("tools")) + _marks(kw.get("system")) + _marks(kw.get("messages"))
+    tools = kw.get("tools")
+    if isinstance(tools, list) and tools and not _marks(tools) and total < 4:
+        kw["tools"] = list(tools[:-1]) + [{**tools[-1], "cache_control": {"type": "ephemeral"}}]
+        total += 1
+    sysm = kw.get("system")
+    if isinstance(sysm, str) and len(sysm) > 4000 and total < 4:
+        kw["system"] = [{"type": "text", "text": sysm, "cache_control": {"type": "ephemeral"}}]
+    elif isinstance(sysm, list) and sysm and not _marks(sysm) and isinstance(sysm[0], dict) and total < 4:
+        kw["system"] = [{**sysm[0], "cache_control": {"type": "ephemeral"}}] + list(sysm[1:])
+    return kw
+
+
+def choose_model(model: Optional[str]) -> Optional[str]:
+    """Opus only where allowed; never "measured necessary" yet — Sonnet does those steps."""
+    if model and "opus" in str(model) and os.getenv("SASHA_MODEL_ALLOW_OPUS", "").strip() != "1":
+        return SONNET
+    return model
+
+
+def prepare(kw: dict) -> dict:
+    kw = dict(kw)
+    kw["model"] = choose_model(kw.get("model"))
+    if isinstance(kw.get("messages"), list):
+        kw["messages"] = trim_history(kw["messages"])
+    return with_cache(kw)
+
+
+# ── the gate's replay ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+_MONTHS = r"January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+_VOLATILE = re.compile(rf"\b(?:{_MONTHS}|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\b|[0-9a-f]{{8}}-[0-9a-f-]{{27}}|\b[A-Za-z0-9_]{{16,}}\b|\d+")
+
+
+def replay_key(kw: dict) -> str:
+    """What the request ASKS, without what changes from run to run (dates, times, ids, numbers): the model's tools by name, and the
+    messages' text — never the system prompt (it carries the day's date)."""
+    def text(c: Any) -> str:
+        if isinstance(c, str):
+            return c
+        if isinstance(c, list):
+            return " ".join(text(b.get("text") or b.get("content") or b.get("name") or "") if isinstance(b, dict) else str(b) for b in c)
+        return str(c or "")
+    body = json.dumps({"tools": sorted(t.get("name", "") for t in kw.get("tools") or [] if isinstance(t, dict)),
+                       "messages": [[m.get("role"), _VOLATILE.sub("#", text(m.get("content")))] for m in kw.get("messages") or []]},
+                      sort_keys=True)
+    return hashlib.sha256(body.encode()).hexdigest()[:24]
+
+
+def replay_mode() -> str:
+    return os.getenv("SASHA_MODEL_REPLAY", "").strip().lower()
+
+
+class _PgReplays:
+    """The gate's recorded replies, on the record (Railway's containers forget their files): sasha_measures, kind model_replay, kept a
+    year. Keyed by replay_key; the message as Anthropic returned it."""
+
+    async def get(self, key: str) -> Optional[dict]:
+        from agapi import s2_memory as M
+        run = M._run()
+        if run is None:
+            return None
+        r = await run(lambda c: c.fetchval("select data from sasha_measures where id = $1", f"replay:{key}"))
+        return json.loads(r) if isinstance(r, str) else r
+
+    async def put(self, key: str, data: dict) -> None:
+        from agapi import s2_memory as M
+        run = M._run()
+        if run is None:
+            raise RuntimeError("no store to record into")
+        await run(lambda c: c.execute(
+            "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'model_replay', now(), "
+            "(now() at time zone 'Europe/Madrid')::date, $2::jsonb, 0, $3, null, now() + interval '365 days') "
+            "on conflict (id) do update set data = excluded.data, at = excluded.at", f"replay:{key}", json.dumps(data),
+            os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
+
+
+REPLAYS: Any = None   # tests replace it: async get(key) / put(key, data)
+
+
+def _replays():
+    return REPLAYS if REPLAYS is not None else _PgReplays()
+
+
+async def _record(key: str, msg: Any) -> None:
+    data = msg.model_dump(mode="json") if hasattr(msg, "model_dump") else msg
+    try:
+        await _replays().put(key, data)
+    except Exception as e:
+        log.error("[model_gateway] RECORD: %s not kept (%s)", key, type(e).__name__)
+
+
+async def _replayed(kw: dict):
+    key = replay_key(kw)
+    got = await _replays().get(key)
+    if got is None:
+        msg = f"no recorded reply for this request ({key}) — record once with SASHA_MODEL_REPLAY=record; nothing was sent"
+        log.error("[model_gateway] REPLAY: %s", msg)
+        raise ReplayMissing(msg)
+    from anthropic.types import Message
+    return Message.model_validate(got)
+
+
+LIVE_IN_REPLAY = ("app.services.model_health",)   # the gate's ONE tiny live check (a 1-token Haiku call), never replayed
+
+
+class _ReplayStream:
+    """The shape of an SDK message stream, from a recorded message: its text as events, then the final message."""
+
+    def __init__(self, msg):
+        self._msg = msg
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    def __aiter__(self):
+        async def gen():
+            import types
+            for b in self._msg.content:
+                if b.type == "text":
+                    yield types.SimpleNamespace(type="text", text=b.text)
+                elif b.type == "tool_use":
+                    yield types.SimpleNamespace(type="content_block_start", content_block=b)
+        return gen()
+
+    @property
+    def text_stream(self):
+        async def gen():
+            for b in self._msg.content:
+                if b.type == "text":
+                    yield b.text
+        return gen()
+
+    async def get_final_message(self):
+        return self._msg
+
+    async def until_done(self):
+        return None
+
+
+# ── the one entry: the SDK's own methods, wrapped ───────────────────────────────────────────────────────────────────────
+
+def _caller() -> str:
+    for fr in inspect.stack()[2:12]:
+        mod = fr.frame.f_globals.get("__name__", "")
+        if mod and not mod.startswith(("anthropic", "booking_signer.model_gateway", "asyncio", "contextlib", "scripts.gate_cost")):
+            return mod
+    return "?"
+
+
+_INSTALLED = {"on": False}
+
+
+def install() -> bool:
+    """Every model call through here — idempotent. Called where the service starts (booking_signer, imported by app.main's mount) and
+    by the gate (scripts/gate.py) before any client is built."""
+    if _INSTALLED["on"]:
+        return False
+    from anthropic.resources.messages import AsyncMessages, Messages
+    orig = {"acreate": AsyncMessages.create, "astream": AsyncMessages.stream, "screate": Messages.create}
+
+    async def acreate(self, *a, **kw):
+        caller, acct = _caller(), _acct_key(ACCOUNT.get())
+        await _ensure_day()
+        _check(acct)
+        kw = prepare(kw)
+        if replay_mode() == "replay" and not kw.get("stream") and caller not in LIVE_IN_REPLAY:
+            return await _replayed(kw)
+        r = await orig["acreate"](self, *a, **kw)
+        if not kw.get("stream"):
+            _meter(getattr(r, "model", kw.get("model")), getattr(r, "usage", None), caller, acct)
+            if replay_mode() == "record":
+                await _record(replay_key(kw), r)
+        return r
+
+    def astream(self, *a, **kw):
+        caller, acct = _caller(), _acct_key(ACCOUNT.get())
+        kw = prepare(kw)
+        if replay_mode() == "replay":
+            return _GatedReplay(kw, acct)
+        mgr = orig["astream"](self, *a, **kw)
+        return _GatedStream(mgr, kw, caller, acct)
+
+    def screate(self, *a, **kw):
+        caller, acct = _caller(), _acct_key(ACCOUNT.get())
+        if _DAY["day"] != _today():
+            _DAY.update(day=_today(), total=0, accounts={}, models={}, callers={}, loaded=True)
+        _check(acct)
+        kw = prepare(kw)
+        r = orig["screate"](self, *a, **kw)
+        if not kw.get("stream"):
+            _meter(getattr(r, "model", kw.get("model")), getattr(r, "usage", None), caller, acct)
+        return r
+
+    AsyncMessages.create, AsyncMessages.stream, Messages.create = acreate, astream, screate
+    try:   # the beta namespace (docread, tarjeta): the same gate
+        from anthropic.resources.beta.messages import AsyncMessages as BAsync
+        borig = BAsync.create
+
+        async def bcreate(self, *a, **kw):
+            caller, acct = _caller(), _acct_key(ACCOUNT.get())
+            await _ensure_day()
+            _check(acct)
+            kw = prepare(kw)
+            r = await borig(self, *a, **kw)
+            _meter(getattr(r, "model", kw.get("model")), getattr(r, "usage", None), caller, acct)
+            return r
+        BAsync.create = bcreate
+    except Exception as e:
+        log.warning("[model_gateway] the beta namespace wasn't wrapped: %s", type(e).__name__)
+    _INSTALLED["on"] = True
+    log.info("[model_gateway] installed: caps %s / day, %s / account / day; history %d turns; replay %s", f"{global_cap():,}",
+             f"{account_cap():,}", HISTORY_TURNS, replay_mode() or "off")
+    return True
+
+
+class _GatedStream:
+    """The SDK's stream manager with the caps checked on entry and the usage metered from its final message."""
+
+    def __init__(self, mgr, kw, caller, acct):
+        self._mgr, self._kw, self._caller, self._acct, self._s = mgr, kw, caller, acct, None
+
+    async def __aenter__(self):
+        await _ensure_day()
+        _check(self._acct)
+        self._s = await self._mgr.__aenter__()
+        orig_final = self._s.get_final_message
+
+        async def final():
+            m = await orig_final()
+            if not getattr(self._s, "_sasha_metered", False):
+                self._s._sasha_metered = True
+                _meter(getattr(m, "model", self._kw.get("model")), getattr(m, "usage", None), self._caller, self._acct)
+                if replay_mode() == "record":
+                    await _record(replay_key(self._kw), m)
+            return m
+        self._s.get_final_message = final
+        return self._s
+
+    async def __aexit__(self, *a):
+        return await self._mgr.__aexit__(*a)
+
+
+class _GatedReplay:
+    def __init__(self, kw, acct):
+        self._kw, self._acct = kw, acct
+
+    async def __aenter__(self):
+        await _ensure_day()
+        _check(self._acct)
+        return _ReplayStream(await _replayed(self._kw))
+
+    async def __aexit__(self, *a):
+        return False
+
+
+__all__ = ["install", "ACCOUNT", "ModelBudgetExceeded", "ReplayMissing", "trim_history", "with_cache", "choose_model", "replay_key", "today"]

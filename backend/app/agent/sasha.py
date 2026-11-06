@@ -794,6 +794,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     as ONE utterance (no gaps between her phrases); `voice` is shared with turn_with_quiver: the acknowledgement she said
     while this turn worked ({"filler"}), and its request to speak what's ready ({"flush_now"})."""
     from app.services.llm import client
+    from booking_signer import model_gateway as _MG   # Sasha 353 · whose call: the gateway's per-account budget
+    _MG.ACCOUNT.set(account or None)
     # Sasha 212 · an "Overloaded" (529) from the model is waited out — Sasha 215: twice, a minute at most each (CR 56 #6/#8: the
     # default was ~10 minutes × 5 tries, longer than the connection)
     client = client.with_options(max_retries=2, timeout=MODEL_TIMEOUT_S) if hasattr(client, "with_options") else client
@@ -897,6 +899,14 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         tools = [_VN.with_act(t) if t["name"] == "cancel_venue" else t for t in tools]   # Sasha 256 · cancel exactly the booking they mean
         hv = next((t for t in tools if t["name"] == "hold_venue"), None)   # Sasha 263 · "Handle it" names the booking it answers
         tools = [_VN.with_booking(t, hv) if t["name"] == "book_venue" and hv else t for t in tools]
+    # Sasha 353 · ONLY WHAT THE TURN NEEDS: the tool families its words and its conversation ask for (tool_need — 78 tools were 75 % of
+    # every call); a tapped place keeps the places' tools (the tap's own calls run by code below)
+    from app.agent import tool_need as _TN
+    all_tools = tools   # Sasha 353 · the calls code makes this turn (next_uses, the tap's) are offered even when the words don't name them
+    _trip = (await API.trip_next(account))["state"] in ("prepared", "chosen", "held", "pending_payment", "booked") if account else None
+    tools = _TN.select(tools, message, history, keep=(*_TN.FAMILIES["find"], *_TN.FAMILIES["reserve"]) if (surface == "s2" and API.TAP_PICK.get()) else (),
+                       trip=_trip, places=bool((_SCREEN.get(session or "-") or {}).get("cards")))
+    offered = {t["name"] for t in tools}
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []
     pending = ""          # this step's text, not yet spoken
@@ -956,6 +966,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         if voice.get("filler"):
             extra += (f"\n\nWhile you worked you already said aloud: “{voice['filler']}”. Carry straight on from it — no greeting, "
                       "no reaction word, never its opening words again.")
+        base = _TN.system_for(base, offered)   # Sasha 353 · the rules about tools this turn doesn't offer, left out
         return [{"type": "text", "text": base, "cache_control": {"type": "ephemeral"}}, {"type": "text", "text": extra}]
 
     async def speakable(chunk: str) -> str:
@@ -1065,13 +1076,19 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from booking_signer import next_actions as _NA
         _act = _NA.heard(message)
         if _act and _act != "yes":
-            _uses = [(n, a) for n, a in await API.next_uses(account, _act, message) if any(t["name"] == n for t in tools)]
+            _uses = [(n, a) for n, a in await API.next_uses(account, _act, message) if any(t["name"] == n for t in all_tools)]
             tap_uses = [_TapUse(f"toolu_next_{turn_key}_{i}", n, a) for i, (n, a) in enumerate(_uses)]
+            tools = tools + [t for t in all_tools if t["name"] in {n for n, _ in _uses} - {x["name"] for x in tools}]   # Sasha 353
     must = _V.manage_tool(message) if honest and surface == "s2" and not tap_uses else None
+    if must and not any(t["name"] == must for t in tools):   # Sasha 353 · the quote tool its words call by code: offered
+        tools = tools + [t for t in all_tools if t["name"] == must]
     if must and any(t["name"] == must for t in tools):
         got = await quote_args(client, next(t for t in tools if t["name"] == must), msgs)
         if got is not None:
             tap_uses = [_TapUse(f"toolu_must_{turn_key}", must, got)]
+    _by_code = {u.name for u in tap_uses} - {x["name"] for x in tools}   # Sasha 353 · every call code makes this turn is offered with it
+    if _by_code:
+        tools = tools + [t for t in all_tools if t["name"] in _by_code]
     for step in range(MAX_STEPS):
         # Sasha 205 · the fast model talks and summarises (incl. a proposal, a total, a booking); the big one only weighs
         # search results (flights, stays, venues) to choose among them · Sasha 299 · (4) after a tap's calls: only the words — the fast one

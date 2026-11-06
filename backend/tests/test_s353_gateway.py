@@ -242,6 +242,28 @@ class TheGateReplays(unittest.TestCase):
         self.assertEqual(r.content[0].text, "Hello.")
         self.assertEqual(len(sent), 1)                                                  # only the recording went to the API
 
+    def test_recording_fills_only_whats_missing_and_alike_requests_share_one_call(self):
+        sent = []
+        c = client(sent)
+        ask = {"model": "claude-haiku-4-5", "max_tokens": 5, "messages": [{"role": "user", "content": "Two of us, Vietnam"}]}
+
+        async def go():
+            with mock.patch.dict(os.environ, {"SASHA_MODEL_REPLAY": "record"}):
+                await asyncio.gather(*[c.messages.create(**ask) for _ in range(3)])   # the loops start alike, at once
+                await c.messages.create(**ask)                                       # recorded: answered from it
+        run(go())
+        self.assertEqual(len(sent), 1)
+
+    def test_a_tools_output_never_changes_the_key_its_call_and_outcome_do(self):
+        def msgs(out, err=False, arg="LIS"):
+            return {"model": "m", "messages": [{"role": "user", "content": "flights to Lisbon"},
+                    {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_1", "name": "search_flights", "input": {"to": arg}}]},
+                    {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": out, "is_error": err}]}]}
+        k = MG.replay_key
+        self.assertEqual(k(msgs("checked under two minutes ago, offer A")), k(msgs("searched just now, offer B")))
+        self.assertNotEqual(k(msgs("x")), k(msgs("x", err=True)))
+        self.assertNotEqual(k(msgs("x")), k(msgs("x", arg="OPO")))
+
     def test_the_gate_replays_and_its_one_live_check_is_the_haiku_preflight(self):
         gate = (ROOT / "scripts" / "gate.py").read_text()
         self.assertIn('os.environ["SASHA_MODEL_REPLAY"] = "record" if os.getenv("SASHA_GATE_RECORD", "").strip() == "1" else "replay"', gate)

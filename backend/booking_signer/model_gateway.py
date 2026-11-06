@@ -252,19 +252,29 @@ _MONTHS = r"January|February|March|April|May|June|July|August|September|October|
 _VOLATILE = re.compile(rf"\b(?:{_MONTHS}|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\b|[0-9a-f]{{8}}-[0-9a-f-]{{27}}|\b[A-Za-z0-9_]{{16,}}\b|\d+")
 
 
-def replay_key(kw: dict) -> str:
-    """What the request ASKS, without what changes from run to run (dates, times, ids, numbers): the model's tools by name, and the
-    messages' text — never the system prompt (it carries the day's date)."""
+def _asked(kw: dict) -> dict:
+    """What the request ASKS, without what changes from run to run: the tools offered (names); each message's words, and of a tool's
+    call its name and inputs, of its result only ok / error — a tool's output (ids, timings, "checked two minutes ago") runs for real
+    in a replay, and the model's reply follows the conversation, not those bytes (found by the first replay: 23 of the gate's requests
+    differed only in tool output). Dates, times, numbers and ids masked; never the system prompt (it carries the day's date)."""
+    def block(b: Any) -> str:
+        if not isinstance(b, dict):
+            return str(b)
+        t = b.get("type")
+        if t == "tool_result":
+            return "result:" + ("error" if b.get("is_error") else "ok")
+        if t == "tool_use":
+            return "call:" + str(b.get("name")) + ":" + json.dumps(b.get("input") or {}, sort_keys=True)
+        return str(b.get("text") or "")
+
     def text(c: Any) -> str:
-        if isinstance(c, str):
-            return c
-        if isinstance(c, list):
-            return " ".join(text(b.get("text") or b.get("content") or b.get("name") or "") if isinstance(b, dict) else str(b) for b in c)
-        return str(c or "")
-    body = json.dumps({"tools": sorted(t.get("name", "") for t in kw.get("tools") or [] if isinstance(t, dict)),
-                       "messages": [[m.get("role"), _VOLATILE.sub("#", text(m.get("content")))] for m in kw.get("messages") or []]},
-                      sort_keys=True)
-    return hashlib.sha256(body.encode()).hexdigest()[:24]
+        return c if isinstance(c, str) else " ".join(block(b) for b in c) if isinstance(c, list) else str(c or "")
+    return {"tools": sorted(t.get("name", "") for t in kw.get("tools") or [] if isinstance(t, dict)),
+            "messages": [[m.get("role"), _VOLATILE.sub("#", text(m.get("content")))] for m in kw.get("messages") or []]}
+
+
+def replay_key(kw: dict) -> str:
+    return hashlib.sha256(json.dumps(_asked(kw), sort_keys=True).encode()).hexdigest()[:24]
 
 
 def replay_mode() -> str:
@@ -294,10 +304,10 @@ def _replays():
     return REPLAYS if REPLAYS is not None else _PgReplays()
 
 
-async def _record(key: str, msg: Any) -> None:
+async def _record(key: str, msg: Any, kw: Optional[dict] = None) -> None:
     data = msg.model_dump(mode="json") if hasattr(msg, "model_dump") else msg
-    try:
-        await _replays().put(key, data)
+    try:   # the reply, and what was asked (masked) — a later miss can be told apart from its nearest recording
+        await _replays().put(key, {"reply": data, "asked": _asked(kw) if kw else None})
     except Exception as e:
         log.error("[model_gateway] RECORD: %s not kept (%s)", key, type(e).__name__)
 
@@ -310,7 +320,37 @@ async def _replayed(kw: dict):
         log.error("[model_gateway] REPLAY: %s", msg)
         raise ReplayMissing(msg)
     from anthropic.types import Message
-    return Message.model_validate(got)
+    return Message.model_validate(got.get("reply", got) if isinstance(got, dict) and "reply" in got else got)
+
+
+_INFLIGHT: Dict[str, Any] = {}   # key → the live call recording it now (identical requests at once share it: the gate's loops start alike)
+
+
+async def _recording(kw: dict, live):
+    """RECORD = fill what's missing: a request already recorded is answered from its recording (so the recording run follows exactly the
+    path a replay will — found by the first replay: loops starting alike got different live replies, one kept, the others' next requests
+    never recorded); a new one goes live once, recorded; the same request at the same moment waits for that one call."""
+    from anthropic.types import Message
+    key = replay_key(kw)
+    got = await _replays().get(key)
+    if got is not None:
+        return Message.model_validate(got.get("reply", got) if isinstance(got, dict) and "reply" in got else got), False
+    fut = _INFLIGHT.get(key)
+    if fut is not None and fut.get_loop() is asyncio.get_running_loop():
+        return await asyncio.shield(fut), False
+    fut = asyncio.get_running_loop().create_future()
+    _INFLIGHT[key] = fut
+    try:
+        msg = await live()
+        await _record(key, msg, kw)
+        fut.set_result(msg)
+        return msg, True
+    except BaseException as e:
+        fut.set_exception(e)
+        fut.exception()   # retrieved: a waiter re-raises it, nothing is left unobserved
+        raise
+    finally:
+        _INFLIGHT.pop(key, None)
 
 
 LIVE_IN_REPLAY = ("app.services.model_health",)   # the gate's ONE tiny live check (a 1-token Haiku call), never replayed
@@ -381,11 +421,14 @@ def install() -> bool:
         kw = prepare(kw)
         if replay_mode() == "replay" and not kw.get("stream") and caller not in LIVE_IN_REPLAY:
             return await _replayed(kw)
+        if replay_mode() == "record" and not kw.get("stream") and caller not in LIVE_IN_REPLAY:
+            r, went = await _recording(kw, lambda: orig["acreate"](self, *a, **kw))
+            if went:
+                _meter(getattr(r, "model", kw.get("model")), getattr(r, "usage", None), caller, acct)
+            return r
         r = await orig["acreate"](self, *a, **kw)
         if not kw.get("stream"):
             _meter(getattr(r, "model", kw.get("model")), getattr(r, "usage", None), caller, acct)
-            if replay_mode() == "record":
-                await _record(replay_key(kw), r)
         return r
 
     def astream(self, *a, **kw):
@@ -393,6 +436,13 @@ def install() -> bool:
         kw = prepare(kw)
         if replay_mode() == "replay":
             return _GatedReplay(kw, acct)
+        if replay_mode() == "record":
+            async def live(this=self):
+                async with orig["astream"](this, *a, **kw) as st:
+                    m = await st.get_final_message()
+                _meter(getattr(m, "model", kw.get("model")), getattr(m, "usage", None), caller, acct)
+                return m
+            return _GatedRecord(kw, acct, live)
         mgr = orig["astream"](self, *a, **kw)
         return _GatedStream(mgr, kw, caller, acct)
 
@@ -446,14 +496,28 @@ class _GatedStream:
             if not getattr(self._s, "_sasha_metered", False):
                 self._s._sasha_metered = True
                 _meter(getattr(m, "model", self._kw.get("model")), getattr(m, "usage", None), self._caller, self._acct)
-                if replay_mode() == "record":
-                    await _record(replay_key(self._kw), m)
             return m
         self._s.get_final_message = final
         return self._s
 
     async def __aexit__(self, *a):
         return await self._mgr.__aexit__(*a)
+
+
+class _GatedRecord:
+    """Record mode's stream: the recording (or the one live call that makes it), as a stream."""
+
+    def __init__(self, kw, acct, live):
+        self._kw, self._acct, self._live = kw, acct, live
+
+    async def __aenter__(self):
+        await _ensure_day()
+        _check(self._acct)
+        msg, _ = await _recording(self._kw, self._live)
+        return _ReplayStream(msg)
+
+    async def __aexit__(self, *a):
+        return False
 
 
 class _GatedReplay:

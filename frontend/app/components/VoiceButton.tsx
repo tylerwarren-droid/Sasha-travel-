@@ -109,6 +109,10 @@ function prefetchKey(): Promise<string> {
   return KEY_INFLIGHT
 }
 function dropKey() { KEY = null }
+/** Sasha 348 · the mic's line when it can't connect: the connection named when it is the connection (lib/outcome failed(), its one wording) */
+const micUnavailable = (): string => (typeof navigator !== 'undefined' && navigator.onLine === false
+  ? failed('The microphone', new Error('Failed to fetch')).replace('Try again when it’s back.', 'It connects again by itself when it’s back.')
+  : 'Voice service unavailable')
 const BUFFER_MS = 5000   // Sasha 322 · words said while it gets ready: kept (up to this much) and sent first when the socket opens
 
 // Barge-in tuning. The mic is fully muted while the avatar speaks — that is what
@@ -758,14 +762,14 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       recomputeRef.current()   // Sasha 322 · item 4: Connecting at once — never a stale Listening
       const attempt = (dgReconnectAttemptsRef.current = Math.min(dgReconnectAttemptsRef.current + 1, 6))
       // Sasha 215 · reconnecting again and again without ever opening is a dead mic: shown and said, not retried in silence
-      if (attempt >= RECONNECTS_BEFORE_SAYING) reportMicError('Voice service unavailable')
+      if (attempt >= RECONNECTS_BEFORE_SAYING) reportMicError(micUnavailable())
       const backoff = Math.min(250 * 2 ** (attempt - 1), 8000)  // 0.25s → 8s cap
       console.log(`[DG] unexpected close — reconnecting in ${backoff}ms (attempt ${attempt})`)
       clearTimeout(dgReconnectTimerRef.current)
       dgReconnectTimerRef.current = setTimeout(() => {
         if (manualStopRef.current || !readyToListenRef.current) return
         if (pipelineLive()) {   // Sasha 322 · the socket alone: the audio is still running (no new tap needed)
-          observe(prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; reportMicError('Voice service unavailable'); recomputeRef.current() } }), 'Asking for the microphone’s key', toConsole)
+          observe(prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; reportMicError(micUnavailable()); recomputeRef.current() } }), 'Asking for the microphone’s key', toConsole)
         } else { connectingRef.current = false; connectRef.current() }   // the pipeline died too (a dead track): rebuilt whole
       }, backoff)
     }
@@ -790,7 +794,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     if (pipelineLive()) {   // Sasha 322 · the pipeline is up (a socket dropped): the socket alone
       if (audioCtxRef.current && audioCtxRef.current.state !== 'running') audioCtxRef.current.resume().catch(noted('Waking the audio'))
       recompute()
-      observe(prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); recompute() } }), 'Asking for the microphone’s key', toConsole)
+      observe(prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; setIsConnecting(false); reportMicError(micUnavailable()); recompute() } }), 'Asking for the microphone’s key', toConsole)
       return
     }
     teardownAudio()   // the pieces of a pipeline that died
@@ -896,7 +900,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         teardownAudio(); recompute()
         return
       }
-      if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); teardownAudio(); recompute(); return }
+      if (!dgKey) { connectingRef.current = false; setIsConnecting(false); reportMicError(micUnavailable()); teardownAudio(); recompute(); return }
 
       await Promise.race([resumed, new Promise(r => setTimeout(r, RESUME_WAIT_MS))])   // Sasha 265 · item 1: looked at, never waited for
       micLog('audiocontext', { state: ctx.state, sampleRate: ctx.sampleRate })
@@ -1010,9 +1014,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     if (connectedRef.current) { stopAll(); return }
     // Sasha 348 · a press while it is still connecting is ANSWERED (connect() would return quietly): where the mic stands, in its own line
     if (connectingRef.current) {
-      reportMicError(typeof navigator !== 'undefined' && navigator.onLine === false
-        ? failed('The microphone', new Error('Failed to fetch')).replace('Try again when it’s back.', 'It connects again by itself when it’s back.')
-        : stillGoing('Connecting the microphone', 'it'))
+      reportMicError(typeof navigator !== 'undefined' && navigator.onLine === false ? micUnavailable() : stillGoing('Connecting the microphone', 'it'))
       return
     }
     // Sasha 171 · a CLICK on the mic is the guest asking to talk: the gate opens now. It started closed "until the avatar

@@ -74,6 +74,8 @@ class S2Tells(unittest.TestCase):
         self.assertIn("observe(connect(), 'The microphone', (t: string) => reportMicError(t))", mic)
         self.assertIn("if (connectingRef.current) {", mic)                                     # a press while connecting is answered
         self.assertIn("stillGoing('Connecting the microphone', 'it')", mic)
+        self.assertNotIn("reportMicError('Voice service unavailable')", mic)                # offline, the mic's line names the connection
+        self.assertIn("reportMicError(micUnavailable())", mic)
         self.assertIn("socket(", mic)
         self.assertNotIn("new WebSocket(", mic)
 

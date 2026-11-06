@@ -946,7 +946,8 @@ export default function S2App() {
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
           // Sasha 249 · ONE STATUS: the "Booked" card was made here by a regex on her reply (/^✅ Booked/) — deleted. It comes only
           // from the `booked` event, its line from the server's one status (agapi/s2_status.py — get_status's own)
-          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(noted('Closing the reply stream')) }
+          else if (ev.type === 'done') { window.dispatchEvent(new Event('sasha-plan-refresh')); reply = ev.text || reply; if (ev.dormant) setDormant(true);   // Sasha 352 · the trip card's buttons: its state at the turn's END (a read-back in the same turn → Yes)
+             patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(noted('Closing the reply stream')) }
           else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line, actions: Array.isArray(ev.actions) ? ev.actions : undefined }] })) }
           else if (ev.type === 'render') {
             const add0 = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k || (c.k === 'options' && x.k === 'options' && x.title !== c.title)), c] }))

@@ -702,6 +702,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           else if (ev.type === 'replace') { reply = ev.text; show(reply); if (ev.speak) onSashaResponse?.(ev.say || ev.text) }   // Sasha 210 · only what she hasn't said
           else if (ev.type === 'hold') { if (ev.first && said1) continue; if (!reply) { show(ev.text); onWorking?.(ev.text) } onSashaResponse?.(ev.say || ev.text) }   // Sasha 257 · the holding line: her words replace it
           else if (ev.type === 'done') {
+            window.dispatchEvent(new Event('sasha-plan-refresh'))   // Sasha 352 · the trip card's buttons: its state at the turn's END
             reply = ev.text || reply; show(reply); window.dispatchEvent(new Event('sasha-plan-refresh'))
             const body = { session: chatSessionIdRef.current, first_sound_ms: firstSound === null ? null : Math.round(firstSound),
               full_answer_ms: Math.round(performance.now() - t0), first_sound_kind: firstKind || null, engine_first_text_ms: ev.ms?.first_text ?? null, tools }

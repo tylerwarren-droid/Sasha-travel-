@@ -29,3 +29,8 @@ test('352 · the Booked card carries Change / Cancel from the server', () => {
   assert.ok(s2.includes("{ k: 'booked'; line: string; actions?: NextAction[] }"))
   assert.ok(s2.includes('<NextButtons actions={c.actions} send={send} />'))
 })
+
+test('352 · the trip card reads its state again when the turn ends (found live: a read-back in the pick turn left [Book it] showing)', () => {
+  const chat = read('../app/components/SashaChat.tsx')
+  for (const src of [s2, chat]) assert.match(src, /ev\.type === 'done'\) \{[\s\S]{0,40}window\.dispatchEvent\(new Event\('sasha-plan-refresh'\)\)/)
+})

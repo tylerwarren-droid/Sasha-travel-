@@ -49,6 +49,46 @@ async def upload(request: Request):
     return await GO.run(account, "add", {"rows": rows, "movement": body.get("movement") or None})
 
 
+# ── Sasha 351 · THE ROSTER: the company's people (each once — their profile and their own vault); a trip chooses from it ─────────
+
+@router.get("/people")
+async def people(request: Request):
+    """The company's roster: each person once, with ✓ / missing for their passport (never a number)."""
+    return await G.roster(account_for(request))
+
+
+@router.post("/people")
+async def people_add(request: Request):
+    """{rows: [{name, grade, home_airport, home_city, email, phone}]} or {text} (a pasted list) → onto the roster (the ONE outcome)."""
+    from . import group_outcome as GO
+    body = await request.json()
+    rows = body.get("rows") if isinstance(body.get("rows"), list) else (G.read_text(str(body.get("text"))[:200_000]) if body.get("text") else None)
+    return await GO.run(account_for(request), "person_add", {"rows": rows or None, "company": body.get("company")})
+
+
+@router.post("/people/{person_id}")
+async def people_edit(person_id: str, request: Request):
+    from . import group_outcome as GO
+    body = await request.json()
+    return await GO.run(account_for(request), "person_edit", {"person_id": person_id, "fields": body if isinstance(body, dict) else {}})
+
+
+@router.post("/people/{person_id}/documents")
+async def people_documents(person_id: str, request: Request):
+    """Their own vault page (passport and loyalty numbers, saved once for every trip) — opened here or forwarded to them."""
+    from . import group_outcome as GO
+    return await GO.run(account_for(request), "documents", {"person_id": person_id})
+
+
+@router.post("/choose")
+async def choose(request: Request):
+    """{who: [person ids or names]} → those roster people on this trip (a link each), then each planned from their home airport."""
+    from . import group_outcome as GO
+    body = await request.json()
+    who = body.get("who") if isinstance(body.get("who"), list) else None
+    return await GO.run(account_for(request), "choose", {"who": who or None, "movement": body.get("movement")})
+
+
 # ── Sasha 333 · the traveller vault ──────────────────────────────────────────────────────────────────────────────────────
 
 @router.post("/invite")

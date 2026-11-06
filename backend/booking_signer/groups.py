@@ -41,6 +41,7 @@ COLUMNS = {
     "grade": ("grade", "role", "level", "category", "categoria", "categoría", "puesto", "rank"),
     "email": ("email", "e-mail", "mail", "correo", "email address"),   # Sasha 333 · where their vault invite goes
     "phone": ("phone", "mobile", "whatsapp", "teléfono", "telefono", "móvil", "movil"),
+    "home_airport": ("home airport", "airport", "aeropuerto", "iata"),   # Sasha 351 · where they fly from (a city's word stays home_city)
 }
 ORDER = ("name", "home_city", "out_date", "back_date", "grade")   # a list with no header: in this order
 _MONTHS = {m: i + 1 for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))}
@@ -193,7 +194,11 @@ def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: O
         if not name or len(name) < 3 or re.search(r"\d", name):
             why.append("the name")
         city = _norm(r.get("home_city"))
-        if not city or re.fullmatch(r"[\d\W]+", city):
+        airport = _norm(r.get("home_airport")).upper() or None
+        if airport and not re.fullmatch(r"[A-Z]{3}", airport):
+            why.append(f"the home airport (“{r.get('home_airport')}” — three letters, like MAD)")
+            airport = None
+        if (not city or re.fullmatch(r"[\d\W]+", city)) and not airport:
             why.append("the home city")
         out = _date(r.get("out_date") or "", year) if r.get("out_date") else movement.get("starts_on")
         back = _date(r.get("back_date") or "", year) if r.get("back_date") else movement.get("ends_on")
@@ -216,7 +221,8 @@ def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: O
         seen.add(name.lower())
         email = _norm(r.get("email")).lower() or None
         phone = re.sub(r"[^\d+]", "", _norm(r.get("phone"))) or None
-        good.append({"name": name, "home_city": city, "out_date": out, "back_date": back, "grade": grade,
+        good.append({"name": name, "home_city": city or None, "out_date": out, "back_date": back, "grade": grade,
+                     **({"home_airport": airport} if airport else {}),
                      **({"email": email} if email and re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", email) else {}),
                      **({"phone": phone} if phone and re.fullmatch(r"\+\d{8,15}", phone) else {})})
     return good, unclear
@@ -234,7 +240,17 @@ def batch_question(unclear: List[dict]) -> Optional[str]:
 
 # ── 2 · the store (Postgres; tests use MemStore) ──────────────────────────────────────────────────────────────────────────────
 
+#: Sasha 351 · THE ROSTER (053): a person's own details, kept ONCE under the company — every trip reads them from here
+PERSON = ("name", "grade", "home_airport", "home_city", "email", "phone")
+_MEMBER_Q = ("select gm.id, gm.movement_id, gm.person_id, gm.out_date, gm.back_date, gm.trip_id, gm.created_at, "
+             "p.name, p.grade, p.home_airport, p.home_city, p.email, p.phone "
+             "from group_members gm join group_people p on p.id = gm.person_id ")
+
+
 class PgStore:
+    """Sasha 351 · a company (groups) has ONE roster (group_people: each worker once, owning their vault); a trip (group_movements) is a
+    SELECTION from it — group_members is the link (person, movement, dates, the worker's trip) and copies nothing about the person."""
+
     def __init__(self, run):
         self._run = run
 
@@ -262,39 +278,78 @@ class PgStore:
                             uuid.UUID(owner), uuid.UUID(movement_id), json.dumps(rules))
         await self._run(go)
 
-    async def add_members(self, movement_id: str, members: List[dict]) -> int:
+    # ── the company and its roster ──
+    async def company(self, owner: str, name: Optional[str] = None, create: bool = False) -> Optional[dict]:
+        """The organiser's company by its name (made when `create`), else the one of their latest trip, else their latest company."""
+        async def go(c):
+            if name:
+                r = await c.fetchrow("select * from groups where owner_id = $1 and lower(name) = lower($2) order by created_at desc limit 1",
+                                     uuid.UUID(owner), name)
+                if r is None and create:
+                    r = await c.fetchrow("insert into groups (owner_id, name) values ($1,$2) returning *", uuid.UUID(owner), name[:200])
+                return _row(r) if r else None
+            r = await c.fetchrow("select g.* from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
+                                 "order by m.created_at desc limit 1", uuid.UUID(owner))
+            r = r or await c.fetchrow("select * from groups where owner_id = $1 order by created_at desc limit 1", uuid.UUID(owner))
+            return _row(r) if r else None
+        return await self._run(go)
+
+    async def people(self, group_id: str) -> List[dict]:
+        async def go(c):
+            return [_row(r) for r in await c.fetch("select * from group_people where group_id = $1 order by name", uuid.UUID(group_id))]
+        return await self._run(go)
+
+    async def add_person(self, group_id: str, person: dict) -> str:
+        async def go(c):
+            return str(await c.fetchval(
+                "insert into group_people (group_id, name, grade, home_airport, home_city, email, phone) values ($1,$2,$3,$4,$5,$6,$7) returning id",
+                uuid.UUID(group_id), person["name"], person.get("grade"), person.get("home_airport"), person.get("home_city"),
+                person.get("email"), person.get("phone")))
+        return await self._run(go)
+
+    async def update_person(self, group_id: str, person_id: str, fields: dict) -> Optional[dict]:
+        sets = {k: v for k, v in fields.items() if k in PERSON}
+        if not sets:
+            return None
+
+        async def go(c):
+            cols = ", ".join(f"{k} = ${i + 3}" for i, k in enumerate(sets))
+            r = await c.fetchrow(f"update group_people set {cols}, updated_at = now() where group_id = $1 and id = $2 returning *",
+                                 uuid.UUID(group_id), uuid.UUID(person_id), *sets.values())
+            return _row(r) if r else None
+        return await self._run(go)
+
+    # ── a trip: the people selected from the roster ──
+    async def select(self, movement_id: str, person_ids: List[str], out_date=None, back_date=None) -> int:
         async def go(c):
             n = 0
-            for m in members:
+            for pid in person_ids:
                 n += 1 if await c.fetchval(
-                    "insert into group_members (movement_id, name, home_city, out_date, back_date, grade, email, phone) values "
-                    "($1,$2,$3,$4,$5,$6,$7,$8) on conflict (movement_id, name) do update set home_city = excluded.home_city, "
-                    "out_date = excluded.out_date, back_date = excluded.back_date, grade = excluded.grade, "
-                    "email = coalesce(excluded.email, group_members.email), phone = coalesce(excluded.phone, group_members.phone) returning id",
-                    uuid.UUID(movement_id), m["name"], m["home_city"], _d(m["out_date"]), _d(m["back_date"]), m.get("grade"),
-                    m.get("email"), m.get("phone")) else 0
+                    "insert into group_members (movement_id, person_id, out_date, back_date) select $1, $2, coalesce($3, m.starts_on), "
+                    "coalesce($4, m.ends_on) from group_movements m join group_people p on p.group_id = m.group_id and p.id = $2 "
+                    "where m.id = $1 on conflict (movement_id, person_id) where person_id is not null do nothing returning id",
+                    uuid.UUID(movement_id), uuid.UUID(pid), _d(out_date), _d(back_date)) else 0
             return n
         return await self._run(go)
 
     async def remove_member(self, movement_id: str, member_id: str) -> None:
-        """Sasha 346 · a swap before anything is booked: who leaves comes off the list (their draft trip stays the organiser's)."""
+        """Sasha 346 · a swap before anything is booked: who leaves comes off THIS trip (the person stays on the roster)."""
         async def go(c):
             await c.execute("delete from group_members where movement_id = $1 and id = $2", uuid.UUID(movement_id), uuid.UUID(member_id))
         await self._run(go)
 
     async def members(self, movement_id: str) -> List[dict]:
         async def go(c):
-            return [_row(r) for r in await c.fetch("select * from group_members where movement_id = $1 order by created_at, name",
-                                                   uuid.UUID(movement_id))]
+            return [_row(r) for r in await c.fetch(_MEMBER_Q + "where gm.movement_id = $1 order by gm.created_at, p.name", uuid.UUID(movement_id))]
         return await self._run(go)
 
     async def members_by_phone(self, number: str) -> List[dict]:
         async def go(c):
-            return [_row(r) for r in await c.fetch("select * from group_members where phone = $1", number)]
+            return [_row(r) for r in await c.fetch(_MEMBER_Q + "where p.phone = $1", number)]
         return await self._run(go)
 
     async def trip_of(self, owner: str, member: dict, title: str) -> str:
-        """The worker's ONE trip (made once, kept on their row)."""
+        """The worker's ONE trip for this movement (made once, kept on their link)."""
         if member.get("trip_id"):
             return member["trip_id"]
 
@@ -311,12 +366,22 @@ class MemStore:
 
     def __init__(self):
         self.movements: Dict[str, dict] = {}
-        self.rows: Dict[str, List[dict]] = {}
+        self.rows: Dict[str, List[dict]] = {}       # movement → its links {id, person_id, out_date, back_date, trip_id}
+        self.groups: Dict[str, dict] = {}           # group → {id, owner_id, name}
+        self.persons: Dict[str, dict] = {}          # person → {id, group_id, name, grade, home_airport, home_city, email, phone}
+
+    def _group(self, owner, name, create=True):
+        g = next((x for x in self.groups.values() if x["owner_id"] == owner and x["name"].lower() == str(name).lower()), None)
+        if not g and create:
+            g = {"id": str(uuid.uuid4()), "owner_id": owner, "name": name}
+            self.groups[g["id"]] = g
+        return g
 
     async def new_movement(self, owner, company, destination, starts_on, ends_on, hotel_area):
+        g = self._group(owner, company)
         mid = str(uuid.uuid4())
-        self.movements[mid] = {"id": mid, "owner_id": owner, "company": company, "destination": destination, "starts_on": starts_on,
-                               "ends_on": ends_on, "hotel_area": hotel_area, "rules": {}}
+        self.movements[mid] = {"id": mid, "owner_id": owner, "company": company, "group_id": g["id"], "destination": destination,
+                               "starts_on": starts_on, "ends_on": ends_on, "hotel_area": hotel_area, "rules": {}}
         self.rows[mid] = []
         return mid
 
@@ -327,23 +392,54 @@ class MemStore:
     async def set_rules(self, owner, movement_id, rules):
         self.movements[movement_id]["rules"] = json.loads(json.dumps(rules))
 
-    async def add_members(self, movement_id, members):
-        for m in members:
-            had = next((x for x in self.rows[movement_id] if x["name"] == m["name"]), None)
-            if had:
-                had.update(m)
-            else:
-                self.rows[movement_id].append({"id": str(uuid.uuid4()), "trip_id": None, **m})
-        return len(members)
+    async def company(self, owner, name=None, create=False):
+        if name:
+            g = self._group(owner, name, create)
+            return dict(g) if g else None
+        ms = [m for m in self.movements.values() if m["owner_id"] == owner]
+        if ms:
+            return dict(self.groups[ms[-1]["group_id"]])
+        gs = [g for g in self.groups.values() if g["owner_id"] == owner]
+        return dict(gs[-1]) if gs else None
+
+    async def people(self, group_id):
+        return sorted((dict(p) for p in self.persons.values() if p["group_id"] == group_id), key=lambda p: p["name"])
+
+    async def add_person(self, group_id, person):
+        pid = str(uuid.uuid4())
+        self.persons[pid] = {"id": pid, "group_id": group_id, **{k: person.get(k) for k in PERSON}}
+        return pid
+
+    async def update_person(self, group_id, person_id, fields):
+        p = self.persons.get(person_id)
+        if not p or p["group_id"] != group_id:
+            return None
+        p.update({k: v for k, v in fields.items() if k in PERSON})
+        return dict(p)
+
+    async def select(self, movement_id, person_ids, out_date=None, back_date=None):
+        mv, n = self.movements[movement_id], 0
+        for pid in person_ids:
+            p = self.persons.get(pid)
+            if not p or p["group_id"] != mv["group_id"] or any(x["person_id"] == pid for x in self.rows[movement_id]):
+                continue
+            self.rows[movement_id].append({"id": str(uuid.uuid4()), "movement_id": movement_id, "person_id": pid, "trip_id": None,
+                                           "out_date": out_date or mv["starts_on"], "back_date": back_date or mv["ends_on"]})
+            n += 1
+        return n
 
     async def remove_member(self, movement_id, member_id):
         self.rows[movement_id] = [x for x in self.rows[movement_id] if x["id"] != member_id]
 
+    def _joined(self, link):
+        p = self.persons[link["person_id"]]
+        return {**link, **{k: p.get(k) for k in PERSON}}
+
     async def members(self, movement_id):
-        return [dict(x) for x in self.rows[movement_id]]
+        return [self._joined(x) for x in self.rows[movement_id]]
 
     async def members_by_phone(self, number):
-        return [dict(x) for rows in self.rows.values() for x in rows if x.get("phone") == number]
+        return [self._joined(x) for rows in self.rows.values() for x in rows if self.persons[x["person_id"]].get("phone") == number]
 
     async def trip_of(self, owner, member, title):
         row = next(x for rows in self.rows.values() for x in rows if x["id"] == member["id"])
@@ -414,8 +510,9 @@ def with_limits(rules: dict, by_grade: Optional[dict] = None, by_member: Optiona
 async def _quote(member: dict, movement: dict) -> Dict[str, Any]:
     """The worker's cheapest flight out and back (Duffel TEST) and the cheapest hotel near the area (an ESTIMATE per night)."""
     from . import travel as T
-    out = await T.search(member["home_city"], movement["destination"], member["out_date"], limit=1)
-    back = await T.search(movement["destination"], member["home_city"], member["back_date"], limit=1)
+    home = member.get("home_airport") or member["home_city"]   # Sasha 351 · their home AIRPORT when the roster has it, else their city
+    out = await T.search(home, movement["destination"], member["out_date"], limit=1)
+    back = await T.search(movement["destination"], home, member["back_date"], limit=1)
     hotel = None
     try:
         from app.services.world_itinerary import hotels_in
@@ -573,7 +670,8 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
         f_eur = round(sum(float(r.get("price_amount") or 0) for r in fl), 2) if fl else None
         h_eur = (stay.get("snapshot") or {}).get("eur_per_night") if stay else None
         price = round((f_eur or 0) + float((stay or {}).get("price_amount") or 0), 2) if (fl or stay) else None
-        out.append({"member_id": m["id"], "name": m["name"], "grade": m.get("grade"), "home_city": m.get("home_city"),
+        out.append({"member_id": m["id"], "person_id": m.get("person_id"), "name": m["name"], "grade": m.get("grade"),
+                    "home_city": m.get("home_city"), "home_airport": m.get("home_airport"),
                     "out": m.get("out_date"), "back": m.get("back_date"), "trip_id": m.get("trip_id"),
                     "transport": _transport(rows), "hotel": (stay.get("snapshot") or {}).get("name") if stay else None,
                     "flight_eur": f_eur, "hotel_eur_per_night": h_eur, "price_eur": price, "limit": lim,
@@ -620,8 +718,132 @@ async def upload(account: str, rows: List[Dict[str, str]], movement_id: Optional
         return {"why": "there's no group movement yet — tell me the company, where, when and the hotel area first"}
     grades = list(((mv.get("rules") or {}).get("limits") or {}).get("by_grade") or {})
     good, unclear = members_from(rows, mv, grades)
-    n = await st.add_members(mv["id"], good)
-    return {"added": n, "unclear": unclear, "ask": batch_question(unclear), "movement_id": mv["id"]}
+    # Sasha 351 · the list's people are the company's ROSTER (each once, their vault theirs); this trip SELECTS them — nothing copied
+    found, new, unclear2 = await _on_roster(st, mv["group_id"], good)
+    n = 0
+    for row, pid in found:
+        n += await st.select(mv["id"], [pid], row.get("out_date"), row.get("back_date"))
+    unclear += unclear2
+    return {"added": n, "new_people": new, "unclear": unclear, "ask": batch_question(unclear), "movement_id": mv["id"]}
+
+
+async def _on_roster(st, group_id: str, rows: List[dict]) -> Tuple[List[tuple], int, List[dict]]:
+    """Sasha 351 · each row → the roster's person the organiser NAMES (their own name for them on their own list), its details updated
+    with what this row gives; or a new person. Two people with that name → asked, never guessed. → ([(row, person_id)], new, unclear)."""
+    roster = await st.people(group_id)
+    found, unclear, new = [], [], 0
+    for r in rows:
+        same = [p for p in roster if p["name"].strip().lower() == r["name"].strip().lower()]
+        fields = {k: r[k] for k in PERSON if r.get(k)}
+        if len(same) > 1:
+            unclear.append({"line": None, "row": {"name": r["name"]}, "why": [f"which {r['name']} — {len(same)} people on your roster have that name "
+                                                                             "(tick the one on the People list)"]})
+            continue
+        if same:
+            await st.update_person(group_id, same[0]["id"], {k: v for k, v in fields.items() if k != "name"})
+            found.append((r, same[0]["id"]))
+        else:
+            pid = await st.add_person(group_id, fields)
+            roster.append({"id": pid, **fields})
+            found.append((r, pid))
+            new += 1
+    return found, new, unclear
+
+
+# ── Sasha 351 · THE ROSTER: the company's people, each once — profiles, documents (their own vault), home airport ──────────────
+
+async def roster(account: str) -> Dict[str, Any]:
+    """The company's people (the organiser's latest company), each with their vault marks (✓ / missing, never a number)."""
+    st = store()
+    grp = await st.company(account)
+    if not grp:
+        return {"company": None, "people": [], "why": "no company yet — tell me its name, or start a trip for it"}
+    people = []
+    for p in await st.people(grp["id"]):
+        people.append({**p, **(await _vault_marks({**p, "person_id": p["id"]}))})
+    return {"company": {"id": grp["id"], "name": grp["name"]}, "people": people}
+
+
+def _person_fields(f: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    """What a profile may hold, read as given — a field that can't be read is said (never stored half-right)."""
+    out, bad = {}, []
+    for k in PERSON:
+        if k not in f:
+            continue
+        v = _norm(f.get(k)) or None
+        if k == "home_airport" and v:
+            v = v.upper()
+            if not re.fullmatch(r"[A-Z]{3}", v):
+                bad.append("the home airport (three letters, like MAD)"); continue
+        if k == "email" and v:
+            v = v.lower()
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", v):
+                bad.append("the email"); continue
+        if k == "phone" and v:
+            v = re.sub(r"[^\d+]", "", v)
+            if not re.fullmatch(r"\+\d{8,15}", v):
+                bad.append("the phone (with its country code, like +34…)"); continue
+        if k == "grade" and v:
+            v = v.lower()
+        out[k] = v
+    if "name" in out and (not out["name"] or len(out["name"]) < 2):
+        bad.append("the name"); out.pop("name")
+    return out, bad
+
+
+async def add_people(account: str, rows: List[Dict[str, Any]], company: Optional[str] = None) -> Dict[str, Any]:
+    """People onto the company's roster (from the People page, a pasted list, or the chat). Each row: name and at least a home city or
+    airport; the same name as a roster person is THAT person (their profile updated) — two with that name: asked."""
+    st = store()
+    grp = await st.company(account, company, create=bool(company))
+    if not grp:
+        return {"why": "tell me the company's name first (\"my company is …\"), and I'll keep its people there"}
+    good, unclear = [], []
+    for i, r in enumerate(rows, 1):
+        f, bad = _person_fields(r)
+        if not f.get("name") or not (f.get("home_city") or f.get("home_airport")):
+            bad = bad or ["a name, and a home city or airport"]
+        if bad:
+            unclear.append({"line": str(i), "row": {"name": r.get("name")}, "why": bad}); continue
+        good.append(f)
+    found, new, more = await _on_roster(st, grp["id"], good)
+    unclear += more
+    return {"company": grp["name"], "added": new, "updated": len(found) - new, "people": [pid for _, pid in found], "unclear": unclear,
+            "ask": batch_question(unclear)}
+
+
+async def edit_person(account: str, person_id: str, fields: Dict[str, Any]) -> Dict[str, Any]:
+    st = store()
+    grp = await st.company(account)
+    if not grp:
+        return {"why": "no company yet"}
+    f, bad = _person_fields(fields)
+    if bad:
+        return {"why": "these couldn't be read: " + ", ".join(bad), "missing": bad}
+    p = await st.update_person(grp["id"], person_id, f)
+    return {"person": p} if p else {"why": "that person isn't on your roster"}
+
+
+async def choose(account: str, who: List[str], movement_id: Optional[str] = None) -> Dict[str, Any]:
+    """Sasha 351 · THE TICK: roster people (by id, or the name the organiser calls them) onto a trip — a link each, nothing copied."""
+    st = store()
+    mv = await st.movement(account, movement_id)
+    if not mv:
+        return {"why": "there's no trip yet — tell me where, when and the hotel area first"}
+    roster_ = await st.people(mv["group_id"])
+    ids, unknown, twice = [], [], []
+    for w in who or []:
+        w = str(w).strip()
+        p = [x for x in roster_ if x["id"] == w] or [x for x in roster_ if x["name"].strip().lower() == w.lower()]
+        if len(p) == 1:
+            ids.append(p[0]["id"])
+        elif p:
+            twice.append(w)
+        else:
+            unknown.append(w)
+    n = await st.select(mv["id"], ids)
+    links = [m["id"] for m in await st.members(mv["id"]) if m["person_id"] in ids]
+    return {"selected": n, "on_trip": len(links), "links": links, "unknown": unknown, "twice": twice, "movement_id": mv["id"]}
 
 
 async def set_limits(account: str, by_grade: Optional[dict] = None, by_member: Optional[dict] = None, movement_id: Optional[str] = None) -> dict:

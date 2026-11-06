@@ -54,6 +54,11 @@ async def _organiser(account: str) -> Optional[str]:
 
 # ── a worker as AgAPI takes them: names + Keep REFERENCES only ───────────────────────────────────────────────────────────────
 
+def owner_of(m: Dict[str, Any]) -> str:
+    """Sasha 351 · whose vault: the PERSON on the roster (a trip's member is a link to them) — their passport is saved once, for every trip."""
+    return str(m.get("person_id") or m["id"])
+
+
 async def worker_of(m: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     from . import traveller_vault as TV
     v = await TV.vault_view(m)
@@ -227,7 +232,7 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
             over = over_priced(d["priced"], lim, its) if d.get("priced") else over_at_booking(its, lim)
             if over and not asked:
                 return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
-            return "item", {"op": "group.book", "member": m["id"], "name": m["name"], "worker": w, "body": body,
+            return "item", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body,
                             "over": st_ == "over limit" or bool(over), "over_words": over, "replanned": replanned,
                             "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
                             "lines": list((d.get("read_back") or {}).get("lines") or [])}
@@ -408,7 +413,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         if over and not over_ok:
             return {"status": "nothing", "say": f"{b['name']}'s own flights are over the limit: {over}.",
                     "taps": [{"label": "Swap anyway", "say": f"{b['name']} — {over}", "act": {"action": "swap", "who": [a["name"]], "to": b["name"], "over_ok": True}}]}
-        items.append({"op": "group.swap", "member": b["id"], "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
+        items.append({"op": "group.swap", "member": b["id"], "owner": owner_of(b), "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
                       "over": bool(over), "over_words": over,
                       "body": {"end_user": org, "booking_id": rec["booking_id"], "worker": w, "flights": _wire(own)}})   # CR 164 · HIS own flights
     elif action == "cancel":
@@ -627,7 +632,7 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
         failed.append({"name": it["name"], "why": "the yes wasn't accepted for this one"})
         return
     refs = [r for r in _refs(it.get("worker") or {}) if r]
-    KR.grant(it.get("member"), refs)   # THIS worker's references, for THIS act only
+    KR.grant(it.get("owner") or it.get("member"), refs)   # THIS worker's references (their vault: the PERSON's, Sasha 351), for THIS act only
     try:
         r = await _call(account, it["op"], it["body"], approval=apv)
     finally:

@@ -79,13 +79,18 @@ async def _items(member_id: str) -> List[dict]:
         return []
 
 
+def _owner(member: Dict[str, Any]) -> str:
+    """Sasha 351 · the vault is the PERSON's (the roster): a trip's member is a link to them — one passport, every trip."""
+    return str(member.get("person_id") or member["id"])
+
+
 async def has_passport(member: Dict[str, Any]) -> bool:
-    return any(i["type"] == "passport" for i in await _items(str(member["id"])))
+    return any(i["type"] == "passport" for i in await _items(_owner(member)))
 
 
 async def vault_view(member: Dict[str, Any]) -> Dict[str, Any]:
     """The organiser's view: ✓ / missing — never a number, never a mask with digits. References for the booking call (CR 163)."""
-    items = await _items(str(member["id"]))
+    items = await _items(_owner(member))
     loy = [i for i in items if i["type"] == "loyalty"]
     pp = next((i for i in items if i["type"] == "passport"), None)
     return {"passport": bool(pp), "loyalty": [i["masked"].split("•")[0].strip() for i in loy],   # "Iberia Plus" — its name, no digits
@@ -109,11 +114,19 @@ def _who(token: str) -> Dict[str, Any]:
 
 async def _member(t: Dict[str, Any]) -> Dict[str, Any]:
     from . import groups as G
-    mv = await G.store().movement(t["owner"], t["movement"])
-    m = next((x for x in (await G.store().members(mv["id"]) if mv else []) if x["id"] == t["member"]), None)
+    st = G.store()
+    mv = await st.movement(t["owner"], t["movement"]) if t.get("movement") else None
+    # Sasha 351 · the link names the PERSON (their vault is theirs, every trip); a link made before 351 named the trip's row
+    m = next((x for x in (await st.members(mv["id"]) if mv else []) if t["member"] in (x.get("person_id"), x["id"])), None)
+    company = (mv or {}).get("company")
+    if not m:   # on the company's roster (a profile with no trip yet, or no longer on this one): their own vault, all the same
+        grp = (mv or {}).get("group_id") or ((await st.company(t["owner"])) or {}).get("id")
+        p = next((x for x in (await st.people(grp) if grp else []) if x["id"] == t["member"]), None)
+        m = {**p, "person_id": p["id"]} if p else None
+        company = company or ((await st.company(t["owner"])) or {}).get("name")
     if not m:
-        raise VaultRefused("not_on_list", "You're no longer on this group's list — nothing to fill in.")
-    return {**m, "company": mv.get("company"), "destination": mv.get("destination")}
+        raise VaultRefused("not_on_list", "You're no longer on this company's list — nothing to fill in.")
+    return {**m, "company": company, "destination": (mv or {}).get("destination")}
 
 
 async def page(token: str) -> Dict[str, Any]:
@@ -121,7 +134,7 @@ async def page(token: str) -> Dict[str, Any]:
     t = _who(token)
     m = await _member(t)
     return {"name": m["name"], "company": m.get("company"), "destination": m.get("destination"),
-            "saved": [{"type": i["type"], "masked": i["masked"], "item_id": i["item_id"]} for i in await _items(m["id"])]}
+            "saved": [{"type": i["type"], "masked": i["masked"], "item_id": i["item_id"]} for i in await _items(_owner(m))]}
 
 
 REQUIRED_PASSPORT = ("number", "country", "expires_on", "name", "born_on")   # what an airline needs (the Keep keeps the last two optional)
@@ -139,10 +152,10 @@ async def save(token: str, passport: Optional[dict] = None, loyalty: Optional[Li
             if missing:
                 raise VaultRefused("required", "The airline needs: " + ", ".join(f.replace("_", " ").replace("born on", "date of birth")
                                                                                   .replace("name", "name as on the passport") for f in missing) + ".")
-            saved.append(await KEEP.put(m["id"], "passport", {k: str(passport[k]) for k in REQUIRED_PASSPORT}))
+            saved.append(await KEEP.put(_owner(m), "passport", {k: str(passport[k]) for k in REQUIRED_PASSPORT}))
         for l in loyalty or []:
             if str(l.get("number") or "").strip():
-                saved.append(await KEEP.put(m["id"], "loyalty", {"program": str(l.get("program") or ""), "number": str(l["number"])}))
+                saved.append(await KEEP.put(_owner(m), "loyalty", {"program": str(l.get("program") or ""), "number": str(l["number"])}))
     except KEEP.KeepError as e:
         raise VaultRefused(e.rule if hasattr(e, "rule") else "refused", getattr(e, "message", str(e))) from None
     passport = loyalty = None   # the values are not kept past this line
@@ -154,12 +167,21 @@ async def erase(token: str, item_id: Optional[str] = None) -> Dict[str, Any]:
     """Delete one item, or the member's whole vault (their key destroyed: every value shredded)."""
     from agapi import s2_keep as KEEP
     m = await _member(_who(token))
-    return await KEEP.delete(m["id"], item_id)
+    return await KEEP.delete(_owner(m), item_id)
 
 
 # ── the organiser's invite ────────────────────────────────────────────────────────────────────────────────────────────────
 
 SEND = None   # tests replace it: (msg) → {"sent": bool}
+
+
+async def person_link(owner: str, person_id: str) -> Optional[str]:
+    """Sasha 351 · a roster person's own vault page (People → their documents) — their link, with no trip needed."""
+    from . import groups as G
+    grp = await G.store().company(owner)
+    if not grp or not any(p["id"] == person_id for p in await G.store().people(grp["id"])):
+        return None
+    return link(make_token(person_id, owner, ""))
 
 
 async def invite(owner: str, who: Optional[List[str]] = None, movement_id: Optional[str] = None) -> Dict[str, Any]:
@@ -172,10 +194,10 @@ async def invite(owner: str, who: Optional[List[str]] = None, movement_id: Optio
     members = await G.store().members(mv["id"])
     if who:
         want = {w.strip().lower() for w in who}
-        members = [m for m in members if m["id"] in who or m["name"].lower() in want]
+        members = [m for m in members if m["id"] in who or m.get("person_id") in who or m["name"].lower() in want]
     emailed, forward = [], []
     for m in members:
-        url = link(make_token(m["id"], owner, mv["id"]))
+        url = link(make_token(_owner(m), owner, mv["id"]))   # Sasha 351 · the PERSON's page (one vault, every trip)
         if m.get("email"):
             msg = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": m["email"],
                    "subject": f"{mv.get('company')}: add your passport for the trip to {mv.get('destination')}",
@@ -212,7 +234,7 @@ async def delete_by_phone(number_e164: str, text: str) -> Optional[str]:
         return None
     n = 0
     for m in ms:
-        n += (await KEEP.delete(m["id"])).get("deleted", 0)
+        n += (await KEEP.delete(_owner(m))).get("deleted", 0)
     return "Done — your passport and travel numbers are deleted. Nothing of them is kept." if n else \
         "There's nothing saved for you — nothing to delete."
 

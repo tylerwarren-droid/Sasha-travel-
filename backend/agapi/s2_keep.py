@@ -108,12 +108,13 @@ class PostgresKeepStore:
         return await self._q(lambda c: c.fetchrow("select wrapped_dek, kek_version from keep_keys where account_id = $1::uuid", account))
 
     async def ensure_owner(self, account):
-        """Sasha 336 · 050's ONE owner row for this vault: the id resolved against auth.users AND group_members in one statement. Neither
-        (or both) → keep_owners' check refuses it, and the Keep says so as itself."""
+        """Sasha 336 · 050's ONE owner row for this vault · Sasha 351 (053): the id resolved against auth.users AND the company roster
+        (group_people) in one statement — a vault is a signed-in person's or a roster person's, never a trip's row (a worker's passport is
+        saved once, for every trip). Neither (or both) → keep_owners' check refuses it, and the Keep says so as itself."""
         try:
             await self._q(lambda c: c.execute(
-                "insert into keep_owners (id, user_id, member_id) select $1::uuid, (select id from auth.users where id = $1::uuid), "
-                "(select id from public.group_members where id = $1::uuid) on conflict (id) do nothing", account))
+                "insert into keep_owners (id, user_id, person_id) select $1::uuid, (select id from auth.users where id = $1::uuid), "
+                "(select id from public.group_people where id = $1::uuid) on conflict (id) do nothing", account))
         except Exception as e:
             if type(e).__name__ != "UndefinedTableError":   # before 050 is applied: 042's FK (accounts only) is still the rule
                 raise

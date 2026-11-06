@@ -68,7 +68,7 @@ class BookAllSaysAShortList(unittest.TestCase):
     def test_on_the_list(self):
         with W334.World() as w:
             hanna = next(m for m in w.members() if m["name"] == "Hanna Dummy")
-            run(KEEP.delete(hanna["id"]))                                                      # her vault empty again
+            run(KEEP.delete(hanna["person_id"]))   # Sasha 351 · the vault is the PERSON's                                                      # her vault empty again
             out = run(GB.prepare(OWNER, "book", ["Rania Mithal", "Hanna Dummy"]))
             self.assertEqual(out["status"], "nothing")
             self.assertEqual(out["say"], "0 can be booked: 1 over the limit; 1 is waiting for their passport.")   # Sasha 346

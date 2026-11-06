@@ -1564,6 +1564,22 @@ async def group_upload(ctx: Ctx, a: dict) -> dict:
     return _outcome(await _GO().run(ctx.account, "add", {"rows": G.read_text(a.get("text") or "") or None}))   # Sasha 346 · the ONE outcome
 
 
+async def group_person_add(ctx: Ctx, a: dict) -> dict:
+    """Sasha 351 · a worker onto the company's ROSTER — once: their name, grade, home airport (or city), contact. Every trip reads it."""
+    rows = [{k: v for k, v in p.items() if v} for p in (a.get("people") or []) if isinstance(p, dict)]
+    return _outcome(await _GO().run(ctx.account, "person_add", {"rows": rows or None, "company": a.get("company")}))
+
+
+async def group_choose(ctx: Ctx, a: dict) -> dict:
+    """Sasha 351 · who travels on this trip: roster people by the names the organiser uses (or "everyone") — a link each, then planned."""
+    from booking_signer import groups as G
+    who = [str(x) for x in a.get("who") or []]
+    if a.get("everyone"):
+        grp = await G.store().company(ctx.account)
+        who = [p["id"] for p in (await G.store().people(grp["id"]) if grp else [])]
+    return _outcome(await _GO().run(ctx.account, "choose", {"who": who or None}))
+
+
 async def group_limits(ctx: Ctx, a: dict) -> dict:
     """Price limits per grade ({grade: {flight_return_eur, hotel_night_eur}}) or per person (by name) — on the movement's ONE rules."""
     from booking_signer import groups as G
@@ -1928,6 +1944,16 @@ TOOLS: List[dict] = [
     _t("group_upload", "Magellan", group_upload, "The organiser's list of people, pasted or typed (one person per line: name, home city, out "
        "date, back date, grade). Pass their text EXACTLY. Say its `say` as it is — it asks ONE question for every unclear row.",
        {"text": {"type": "string"}}, ["text"], {"type": "object", "properties": {"added": {"type": "integer"}, "say": {"type": "string"}}}, ["no_movement"]),
+    _t("group_person_add", "Magellan", group_person_add, "Add workers to the company's ROSTER (each ONCE — their profile and their own vault "
+       "serve every trip): name, grade, home airport (3 letters, e.g. MAD) or home city, email, phone. Company: the one they named, else "
+       "their current one. NEVER ask for a passport here. Say its `say`.",
+       {"people": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "grade": {"type": "string"},
+                   "home_airport": {"type": "string"}, "home_city": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}}}},
+        "company": {"type": "string"}}, ["people"], {"type": "object", "properties": {"say": {"type": "string"}}}, ["missing", "not_done"]),
+    _t("group_choose", "Magellan", group_choose, "Choose who travels on the current trip FROM THE ROSTER, by the names the organiser uses (or "
+       "everyone=true). Each is linked to the trip (their profile and passport are the roster's — never re-entered) and planned from their "
+       "home airport. A name not on the roster: say so (add it first with group_person_add). Say its `say`.",
+       {"who": {"type": "array", "items": {"type": "string"}}, "everyone": {"type": "boolean"}}, [], {"type": "object"}, ["missing", "not_done"]),
     _t("group_limits", "Magellan", group_limits, "The group's price limits, per grade ({\"worker\": {\"flight_return_eur\": 600, "
        "\"hotel_night_eur\": 110}}) or per person by name. Only the numbers they said, in EUR. Say its `say` word for word: it is what was "
        "SAVED, read back, and the planning it started.",

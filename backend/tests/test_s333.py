@@ -181,7 +181,7 @@ class TheOneRecord(unittest.TestCase):
     def test_the_keep_is_the_vault(self):
         import inspect
         src = inspect.getsource(TV)
-        self.assertIn("KEEP.put(m[\"id\"], \"passport\"", src)                        # into the Keep, under the member's own id
+        self.assertIn("KEEP.put(_owner(m), \"passport\"", src)                        # into the Keep, under the member's own id
         self.assertNotIn("create table", (W.FIX.parent.parent.parent / "booking_signer/sql/049_traveller_vault.sql").read_text().lower())
         self.assertNotIn("passport", G.__dict__.get("COLUMNS", {}))                   # the group list never carries a number column
 

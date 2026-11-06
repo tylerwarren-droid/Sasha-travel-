@@ -13,8 +13,9 @@ import { useEffect, useState } from 'react'
 import { bookingReq } from '@/lib/booking-client'
 import { heard as heardWords, failed, observe, stillGoing, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path
 import { T, TONE, page, card as cardS, field, btn, btn2, small } from '@/lib/group-theme'   // Sasha 336 · readable on the dark theme
+import People from './People'   // Sasha 351 · the company's one roster
 
-type Row = { member_id: string; name: string; grade?: string | null; home_city?: string | null; out?: string | null; back?: string | null
+type Row = { member_id: string; person_id?: string; name: string; grade?: string | null; home_city?: string | null; home_airport?: string | null; out?: string | null; back?: string | null
   transport?: string | null; hotel?: string | null; price_eur?: number | null; flight_eur?: number | null; hotel_eur_per_night?: number | null
   limit: { flight_return_eur?: number; hotel_night_eur?: number }; status: string; vault?: { passport: boolean; loyalty: string[] } }
 type View = { movement?: { company?: string; destination?: string; starts_on?: string; ends_on?: string; hotel_area?: string }
@@ -184,6 +185,8 @@ export default function GroupPage() {
         </div>}
         {links.length > 0 && <ul data-forward>{links.map(l => <li key={l.link}>{l.name}: <a href={l.link} style={{ color: T.link, textDecoration: 'underline' }}>their secure link</a></li>)}</ul>}
       </section>
+      {/* Sasha 351 · THE ROSTER: each person once; this trip is the people ticked from it */}
+      <People onTrip={(v?.rows || []).map(r => r.person_id || '').filter(Boolean)} trip={v?.movement?.destination ? `the ${v.movement.destination} trip` : null} />
       {!v ? <p>Loading…</p> : v.why ? <p>{v.why}</p> : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
@@ -193,7 +196,7 @@ export default function GroupPage() {
               <tr key={r.member_id} data-status={r.status} style={{ borderBottom: `1px solid ${T.second}` }}>
                 <td style={{ padding: '6px 8px' }}>{r.name}</td>
                 <td style={{ padding: '6px 8px' }}>{r.grade || '—'}</td>
-                <td style={{ padding: '6px 8px' }}>{r.home_city || '—'}</td>
+                <td style={{ padding: '6px 8px' }}>{r.home_airport || r.home_city || '—'}</td>{/* Sasha 351 · the roster's own */}
                 <td style={{ padding: '6px 8px' }}>{r.transport || '—'}</td>
                 <td style={{ padding: '6px 8px' }}>{r.hotel ? `${r.hotel}${r.hotel_eur_per_night ? ` (${eur(r.hotel_eur_per_night)}/night, est.)` : ''}` : '—'}</td>
                 <td style={{ padding: '6px 8px' }}>{eur(r.price_eur)}</td>

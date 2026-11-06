@@ -108,6 +108,11 @@ class KeepOwnersOnPostgres(unittest.TestCase):
             # ── 050 ──
             go(c.execute(_block("050_keep_owners.sql")))
             go(c.execute(_block("050_keep_owners.sql")))                                  # twice: idempotent
+            # Sasha 351 · 053: the roster — the vault belongs to the PERSON (the worker once), never a trip's row
+            go(c.execute(_block("049_traveller_vault.sql")))
+            go(c.execute(_block("053_group_roster.sql")))
+            go(c.execute(_block("053_group_roster.sql")))                                 # twice: idempotent
+            link, member = member, go(c.fetchval("select person_id from public.group_members where id = $1", member))
             after = go(c.fetchrow("select (select count(*) from keep_keys) k, (select count(*) from keep_items) i, (select count(*) from keep_fills) f"))
             self.assertEqual(tuple(before), tuple(after))                                 # existing rows preserved
             self.assertEqual(go(c.fetchval("select count(*) from keep_owners where user_id = $1", uuid.UUID(ACCT))), 1)
@@ -126,7 +131,12 @@ class KeepOwnersOnPostgres(unittest.TestCase):
             self.assertEqual(len(masks), 1)
             self.assertIn("••••", masks[0])
             self.assertNotIn("PZZ336001", masks[0])
-            self.assertEqual(go(c.fetchval("select member_id from keep_owners where id = $1", member)), member)
+            self.assertEqual(go(c.fetchval("select person_id from keep_owners where id = $1", member)), member)   # the PERSON owns it
+            mv2 = go(c.fetchval("insert into public.group_movements (group_id, destination) values ($1, 'Lisbon') returning id", gid))
+            link2 = go(c.fetchval("insert into public.group_members (movement_id, person_id) values ($1, $2) returning id", mv2, member))
+            with self.assertRaises(KEEP.KeepError) as e:                                  # a trip's link (the same person, another trip)
+                go(KEEP.put(str(link2), "passport", PASSPORT))                            # is never a vault owner: one vault, the person's
+            self.assertEqual(e.exception.rule, "keep_owner_unknown")
             blob = go(c.fetchval("select string_agg(row_to_json(t)::text, ' ') from (select * from keep_items) t"))
             self.assertNotIn("PZZ336001", blob)                                           # ciphertext only
             self.assertEqual(go(KEEP.delete(str(member))), {"deleted": 1, "key_destroyed": True})
@@ -147,11 +157,11 @@ class KeepOwnersOnPostgres(unittest.TestCase):
             with self.assertRaises(asyncpg.ForeignKeyViolationError):                     # a row without its owner
                 go(c.execute("insert into keep_keys (account_id, wrapped_dek, kek_version) values ($1, $2, 'v')", nobody, b"\0" * 40))
             with self.assertRaises(asyncpg.UniqueViolationError):                         # one owner row per source
-                go(c.execute("insert into keep_owners (id, member_id) values ($1, $1)", member))
+                go(c.execute("insert into keep_owners (id, person_id) values ($1, $1)", member))
 
             # ── cascades from BOTH sources ──
             go(KEEP.put(str(member), "passport", PASSPORT))
-            go(c.execute("delete from public.group_members where id = $1", member))       # the member leaves the list
+            go(c.execute("delete from public.group_people where id = $1", member))        # the person leaves the roster
             self.assertEqual(go(c.fetchval("select count(*) from keep_items where account_id = $1", member)), 0)
             self.assertEqual(go(c.fetchval("select count(*) from keep_owners where id = $1", member)), 0)
             go(c.execute("delete from auth.users where id = $1", uuid.UUID(ACCT)))         # the account is deleted
@@ -163,7 +173,7 @@ class KeepOwnersOnPostgres(unittest.TestCase):
             self.assertEqual(sum("keep_owners(id)" in d for d in fks.values()), 3)        # … each table references the one owner
             print(f"\n[s336 proof · real Postgres] counts before/after 050: {tuple(before)} → {tuple(after)} · member vault saved, "
                   f"masked {masks[0]!r}, deleted (key shredded) · refused: nobody / both / neither / not its source / no owner / twice · "
-                  f"cascades from group_members and auth.users")
+                  f"cascades from group_people (053) and auth.users")
         finally:
             for p in ps:
                 p.stop()

@@ -202,7 +202,7 @@ class TheResolver(unittest.TestCase):
             with self.assertRaises(KR.Refused) as e:   # no grant: not a worker Sasha is booking right now
                 run(KR.resolve(body, KR.sign(body)))
             self.assertEqual(e.exception.rule, "not_in_this_booking")
-            KR.grant(m["id"], [ref])
+            KR.grant(m["person_id"], [ref])   # Sasha 351 · the vault is the person's
             old = json.dumps({"ref": ref, "at": int(time.time()) - 600}).encode()
             with self.assertRaises(KR.Refused) as e:
                 run(KR.resolve(old, KR.sign(old)))

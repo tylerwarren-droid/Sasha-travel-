@@ -39,7 +39,7 @@ class BookAll(unittest.TestCase):
     def test_nobody_bookable_says_why_with_the_invite(self):
         with World() as w:
             for m in w.members():
-                run(KEEP.delete(m["id"]))                                                     # nobody's passport in
+                run(KEEP.delete(m["person_id"]))                                                     # nobody's passport in
             out = go("book")
             self.assertEqual((out["done"], out["say"]), (False, "0 can be booked: 20 are waiting for their passport."))
             self.assertEqual([(t["label"], len(t["invite"])) for t in out["taps"]], [("Invite", 20)])
@@ -48,7 +48,7 @@ class BookAll(unittest.TestCase):
     def test_some_bookable_starts_the_one_job_and_says_who_is_held(self):
         with World() as w:
             hanna = next(m for m in w.members() if m["name"] == "Hanna Dummy")
-            run(KEEP.delete(hanna["id"]))
+            run(KEEP.delete(hanna["person_id"]))
 
             async def both():
                 out = await GO.run(OWNER, "book", {})
@@ -116,7 +116,7 @@ class CancelInviteInvoiceAdd(unittest.TestCase):
         with World() as w:
             self.assertEqual(go("invite")["say"], "Nobody to invite: all 20 people have their passport in the vault.")
             hanna = next(m for m in w.members() if m["name"] == "Hanna Dummy")
-            run(KEEP.delete(hanna["id"]))
+            run(KEEP.delete(hanna["person_id"]))
             out = go("invite")
             self.assertTrue(out["done"])
             self.assertTrue(out["say"].startswith("Invited 1 person:"), out["say"])
@@ -146,8 +146,11 @@ class NeverSilent(unittest.TestCase):
         with World():
             args = {"swap": {"who": ["A"], "to": "B"}, "cancel": {"who": ["A"]}, "add": {"rows": [{"name": "A"}]}}
             for a in GO.ACTIONS:
-                out = run(GO.run(NOBODY, a, args.get(a, {})))
-                self.assertEqual((out["done"], out["say"]), (False, GO.NO_MOVEMENT), a)
+                if a in ("person_add", "person_edit", "documents"):   # Sasha 351 · the roster's actions need a company, not a trip
+                    continue
+                out = run(GO.run(NOBODY, a, {**args, "choose": {"who": ["A"]}}.get(a, {})))
+                want = "There's no trip yet — tell me where, when and the hotel area first." if a == "choose" else GO.NO_MOVEMENT
+                self.assertEqual((out["done"], out["say"]), (False, want), a)
 
     def test_the_one_exit_never_answers_empty(self):
         with self.assertLogs("booking_signer.group_outcome", "ERROR"):

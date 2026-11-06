@@ -185,9 +185,10 @@ class OnlyWhatItNeeds(unittest.TestCase):
         self.assertIn("plan", fam("Two of us, flying from Madrid for 5 nights"))
         self.assertNotIn("group", fam("Two of us, flying from Madrid for 5 nights"))
         self.assertEqual(fam("Book it.", [], trip=True, places=False), {"core", "book"})       # the trip waiting on it
-        self.assertEqual(fam("Yes.", [], trip=False, places=True), {"core", "reserve"})        # the place on their screen
+        self.assertEqual(fam("Yes.", [], trip=False, places=True), {"core", "reserve", "find"})   # the place on their screen (found first)
         self.assertTrue({"book", "reserve"} <= fam("Book it."))                                # unknown: either booking
         self.assertIn("group", fam("Book all", []))
+        self.assertTrue({"reserve", "find"} <= fam("Uh, a table for two at the Sasha Test Venue in Madrid, Saturday at nine at night, please."))
         self.assertIn("plan", fam("Yes", [{"role": "assistant", "content": "Do you need flights as well?"}]))   # her last line
         tools = [{"name": n} for ns in TN.FAMILIES.values() for n in ns] + [{"name": "a_new_tool"}]
         got = {t["name"] for t in TN.select(tools, "Hi Sasha!")}

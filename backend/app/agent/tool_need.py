@@ -84,6 +84,8 @@ def families(message: str, history: Optional[List[dict]] = None, trip: Optional[
             got.add("book")
         if places or (places is None and not trip):
             got.add("reserve")
+    if "reserve" in got:   # a place is booked once found: reserving brings finding (found by the gate: "a table for two at the Sasha
+        got.add("find")    # Test Venue…" offered no search_venues, and she asked for travellers' details instead)
     return ({"core"} | got) if got else {"core", "find"}   # nothing named: a place, if it's a business (she tries first)
 
 

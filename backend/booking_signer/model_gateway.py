@@ -106,7 +106,7 @@ class _PgStore:
         await _db(lambda c: c.execute(
             "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'model_day', now(), $2::date, "
             "$3::jsonb, 0, $4, null, now() + interval '400 days') on conflict (id) do update set data = excluded.data, at = excluded.at",
-            f"model_day:{day}", day, json.dumps(data), os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
+            f"model_day:{day}", __import__("datetime").date.fromisoformat(day), json.dumps(data), os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
 
 
 def _store():

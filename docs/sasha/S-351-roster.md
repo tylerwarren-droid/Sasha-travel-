@@ -60,7 +60,7 @@ All of them go through the one outcome path (`group_outcome.run`: `person_add`, 
 4. **Refuses rather than guesses:** it rolls back if any row is left without a person.
 5. **Idempotent.**
 
-****ONE vault per person (Tyler, 6 Nov 11:40).** After 053, 38 vaults were still owned by old trip rows (`member_id`). These are SECOND COPIES of a person's vault: 50 items for 20 people, all on the test organiser's company. They are resolved in three steps:
+**ONE vault per person (Tyler, 6 Nov 11:40).** After 053, 38 vaults were still owned by old trip rows (`member_id`). These are SECOND COPIES of a person's vault: 50 items for 20 people, all on the test organiser's company. They are resolved in three steps:
 
 1. `054_vault_copies_archive.sql` (SQL FOR CHAT) archives first. It copies each copy's owner row, key and items, and each of their persons' too, so an archived item can still be opened by the key service.
 2. **The product** folds each copy into its person: `python -m booking_signer.vault_fold`, run once in the Sasha service, calls `s2_keep.fold_into`.

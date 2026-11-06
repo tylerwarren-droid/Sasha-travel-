@@ -24,8 +24,9 @@ import ChatBooking from './ChatBooking'  // S-66 chat booking, Stage B re-applie
 import ChatCancel from './ChatCancel'  // Sasha 96 chat cancel, Stage B re-applies
 import { takeChatText } from '@/lib/chat-booking-bus'
 import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S-62 step 7
-import axios from 'axios'
+import { axios, events, reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 import KeepHandoff from './KeepHandoff'   // Sasha 228 · "Add from your phone"
+import { again, announce, failed, needs, noted, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 // `description` is the photographer's free-text Unsplash caption ("Colors", "4:51pm") — never
 // use it as a place name. `location` is the actual destination, stamped on by the foto agent.
@@ -233,7 +234,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   const [readBack, setReadBack] = useState<{ lines: string[]; total?: number | null; what?: string; live?: boolean; status?: string
     ask?: string; choices?: { title: string; route: string }[]; read_back_id?: string; tapped?: string } | null>(null)   // Sasha 265 · item 4: the call's card
   const tapRef = useRef<{ read_back_id: string; choice: string } | null>(null)   // Sasha 265 · item 4: the card's tap, sent with its turn
-  useEffect(() => { if (agent) void loadFirstLine() }, [agent])   // Sasha 265 · item 5: voice.first_line's words and rule, read once
+  useEffect(() => { if (agent) observe(loadFirstLine(), 'SashaChat · loadFirstLine()', toConsole) }, [agent])   // Sasha 265 · item 5: voice.first_line's words and rule, read once
   // Sasha 241 · S1 PARITY: the shared cards (components/cards/) — this turn's, drawn in the chat as on /s2
   const [shared, setShared] = useState<{ turn?: string; evs: Record<string, unknown>[] }>({ evs: [] })
   const [handoff, setHandoff] = useState<{ code: string; what: string; expires_at?: string; added?: string | null } | null>(null)   // Sasha 228 · "Add from your phone"
@@ -260,10 +261,10 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
 
   useEffect(() => {
     let cancelled = false
-    fetch(apiUrl(agent ? '/api/photos/destinations?scope=world' : '/api/photos/destinations'), { headers: apiHeaders() })   // Sasha 213 · /next: anywhere
+    reach(apiUrl(agent ? '/api/photos/destinations?scope=world' : '/api/photos/destinations'), { headers: apiHeaders() })   // Sasha 213 · /next: anywhere
       .then(r => r.json())
       .then(d => { if (!cancelled && d?.destinations?.length) setOpeners(d.destinations) })
-      .catch(() => {})   // silent: the opener is decoration, never block the chat on it
+      .catch(noted('SashaChat · reach(apiUrl(agent ? ’/api/photos/destinations?scope=world’ '))   // silent: the opener is decoration, never block the chat on it
     return () => { cancelled = true }
   }, [])
   // Single-flight guard: one conductor request at a time. Prevents duplicate STT
@@ -321,10 +322,10 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     if (!agent || welcomedRef.current || messages.length) return
     welcomedRef.current = true
     if (!chatSessionIdRef.current) chatSessionIdRef.current = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `sess-${Date.now()}`
-    fetch(`/api/sasha-agent/memory?session=${encodeURIComponent(chatSessionIdRef.current)}`, { cache: 'no-store' })
+    reach(`/api/sasha-agent/memory?session=${encodeURIComponent(chatSessionIdRef.current)}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then((j: { line?: string | null } | null) => { if (j?.line) setMessages(prev => (prev.length ? prev : [{ role: 'assistant', content: untagDeep(j.line) as string }])) })
-      .catch(() => { /* no memory: the chat opens as before */ })
+      .catch(noted('SashaChat · reach(`/api/sasha-agent/memory?session=${encodeURIComponent('))
   }, [agent])   // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
@@ -435,7 +436,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
       // Ask the backend what this turn will actually do, in PARALLEL with the real call so it
       // costs the turn nothing. ~8ms: pure keyword matching, no LLM, no agents. Doubles as the
       // source for the context-driven interim line.
-      fetch(accountUrl('/api/agents/classify'), {
+      reach(accountUrl('/api/agents/classify'), {
         method: 'POST',
         headers: apiHeaders(guestAuth()),  // S-62 step 7
         body: JSON.stringify({
@@ -456,7 +457,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           // that is genuinely slow.
           if (classifiedIntents.includes('itinerary')) { showBuilding(); fireInterim() }
         })
-        .catch(() => {})   // best-effort: never break a turn over a progress banner
+        .catch(((e: unknown) => announce(failed('Showing what Sasha is working on', e))))   // best-effort: never break a turn over a progress banner
       // Give a fast turn ~0.7s to simply answer; only frame a genuinely slow search with a
       // spoken line, so a quick reply isn't padded behind "let me check…".
       interimTimer = setTimeout(fireInterim, 700)
@@ -574,7 +575,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
       // bitten by before, so it is released in finally and nowhere else.
       setBuilding(false)
       // Sasha 202 · the pacing line is said; the proposal is asked for straight away (no one waits to type). Never shown.
-      if (continueWith) { const h = continueWith; setTimeout(() => { sendRef.current(CONTINUE_TURN, { opening: true, history: h }) }, 30) }
+      if (continueWith) { const h = continueWith; setTimeout(() => { observe(sendRef.current(CONTINUE_TURN, { opening: true, history: h }), 'Your message', announce) }, 30) }
     }
   }
 
@@ -584,8 +585,8 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     if (!agent || typeof window === 'undefined' || typeof EventSource === 'undefined') return
     const seenKey = 'sasha.next.events.last'
     let last = 0
-    try { last = Number(sessionStorage.getItem(seenKey) || 0) } catch { /* private window: start from now */ }
-    const es = new EventSource(`/api/sasha-agent/events?since=${last}`)
+    try { last = Number(sessionStorage.getItem(seenKey) || 0) } catch (e) { noted('SashaChat · private window: start from now')(e) }
+    const es = events(`/api/sasha-agent/events?since=${last}`)
     es.onmessage = (m) => {
       let ev: any
       try { ev = JSON.parse(m.data) } catch { return }
@@ -593,18 +594,18 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
       ev = untagDeep(ev)   // Sasha 218
       if (ev.type === 'keep_added') {   // Sasha 228 · added on their phone (or /s2): said once — the mask only — and, if a booking was waiting on it, she carries on
         last = ev.id
-        try { sessionStorage.setItem(seenKey, String(ev.id)) } catch { /* fine */ }
+        try { sessionStorage.setItem(seenKey, String(ev.id)) } catch (e) { noted('SashaChat · fine')(e) }
         const waiting = handoffRef.current && !handoffRef.current.added
         if (!waiting) return
         setHandoff(h => h ? { ...h, added: String(ev.masked || '') } : h)
         const line = String(ev.text || '')
         if (line) { setMessages(prev => [...prev, { role: 'assistant', content: line }]); onSashaResponse?.(line) }
-        setTimeout(() => { sendRef.current(`(Added from my phone just now: ${String(ev.masked || 'my passport')} is in my Keep. Please carry on with the booking.)`, { opening: true, force: true }) }, 400)
+        setTimeout(() => { observe(sendRef.current(`(Added from my phone just now: ${String(ev.masked || 'my passport')} is in my Keep. Please carry on with the booking.)`, { opening: true, force: true }), 'SashaChat · sendRef.current(`(Added from my phone just now: ${String(ev.', toConsole) }, 400)
         return
       }
       if (ev.type === 'booked') setPayHere(p => p ? { ...p, already_paid: true, n: p.n + 1 } : p)   // Sasha 220 · the card says it's paid
       last = ev.id
-      try { sessionStorage.setItem(seenKey, String(ev.id)) } catch { /* fine */ }
+      try { sessionStorage.setItem(seenKey, String(ev.id)) } catch (e) { noted('SashaChat · fine')(e) }
       const link = ev.card?.url ? `\n\n[Open your full itinerary →](${ev.card.url})` : ''
       setMessages(prev => [...prev, { role: 'assistant', content: `${ev.text}${link}` }])
       onSashaResponse?.(ev.spoken || ev.text)
@@ -640,7 +641,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     if (said1) { show(said1); onWorking?.(said1); onSashaResponse?.(said1) }
     const heard = (kind: string) => { if (firstSound === null) { firstSound = performance.now() - t0; firstKind = kind } }
     try {
-      const r = await fetch('/api/sasha-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
+      const r = await reach('/api/sasha-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
         // Sasha 241 · the 📎 photos go WITH the turn (they were dropped on the agent path): the same handlers as /s2 and WhatsApp
         body: JSON.stringify({ message: content, history: plain, session_id: chatSessionIdRef.current,
           ...(tapRef.current ? { tap: tapRef.current } : {}),   // Sasha 265 · item 4: the tap IS the approval (the server's, not the model's)
@@ -705,7 +706,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             const body = { session: chatSessionIdRef.current, first_sound_ms: firstSound === null ? null : Math.round(firstSound),
               full_answer_ms: Math.round(performance.now() - t0), first_sound_kind: firstKind || null, engine_first_text_ms: ev.ms?.first_text ?? null, tools }
             console.log('[NEXT timing]', body)
-            fetch('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {})
+            reach('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(noted('SashaChat · reach(’/api/sasha-agent/timing’, { method: ’POST’, headers: '))
           }
           else if (ev.type === 'error') { reply = ev.message; show(reply); onSashaResponse?.(ev.message) }
         }
@@ -723,7 +724,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   useEffect(() => { registerSend?.((t: string) => sendRef.current(t)) }, [])
   // Sasha 195 · a product tab in the Trip panel opens that product's space: its word, sent as the guest would say it
   useEffect(() => {
-    const open = (e: Event) => { const w = (e as CustomEvent).detail; if (typeof w === 'string' && w) sendRef.current(w) }
+    const open = (e: Event) => { const w = (e as CustomEvent).detail; if (typeof w === 'string' && w) observe(sendRef.current(w), 'SashaChat · sendRef.current(w)', toConsole) }
     window.addEventListener('sasha-open-space', open)
     return () => window.removeEventListener('sasha-open-space', open)
   }, [])
@@ -839,7 +840,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   useEffect(() => {
     if (productMode && !openedRef.current && messages.length === 0) {
       openedRef.current = true
-      sendMessage('', { opening: true })
+      observe(sendMessage('', { opening: true }), 'SashaChat · sendMessage(’’, { opening: true })', toConsole)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productMode])
@@ -877,7 +878,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
                 onLoaded={onIdeasCache}
                 // Tapping an idea IS an itinerary request — say so explicitly rather than letting
                 // keyword classification guess (it mis-routed these to the activity agent).
-                onBuild={(prompt) => sendMessage(prompt, { force: true, intent: 'itinerary' })}
+                onBuild={(prompt) => observe(sendMessage(prompt, { force: true, intent: 'itinerary' }), 'Your message', announce)}
               />
             )}
 
@@ -898,7 +899,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
                 onBook={onBook}
                 travellerCount={travellerCount}
                 onBrowseIdeas={() => onTabChange?.('ideas')}
-                onAsk={(text: string) => { onTabChange?.('chat'); sendMessage(text) }}   /* CR 50 · "Getting there" → Sasha */
+                onAsk={(text: string) => { onTabChange?.('chat'); observe(sendMessage(text), 'Your message', announce) }}   /* CR 50 · "Getting there" → Sasha */
                 bookingRef={bookingRef}
                 paidWith={paidWith}
               />
@@ -932,7 +933,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
                     className="lw-opener"
                     // Tapping a place just talks to Sasha — same path as typing it, so the
                     // normal intent routing (and her photo/card surfacing) applies.
-                    onClick={() => sendMessage(`Tell me about ${o.location}`)}
+                    onClick={() => observe(sendMessage(`Tell me about ${o.location}`), 'Your message', announce)}
                     style={{ animationDelay: `${i * 60}ms` }}
                   >
                     <img src={o.url} alt={o.location} loading="lazy" />
@@ -1022,7 +1023,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
         {quickReplies.length > 0 && (   /* CR 16 · a product's buttons: the title is shown as the guest's line, the payload is sent */
           <div className="flex flex-wrap gap-2">
             {quickReplies.map((q, i) => (
-              <button key={i} className="lw-chip" onClick={() => { sendMessage(q.title, { payload: q.payload, force: true }) }}>{q.title}</button>
+              <button key={i} className="lw-chip" onClick={() => { observe(sendMessage(q.title, { payload: q.payload, force: true }), 'Your message', announce) }}>{q.title}</button>
             ))}
           </div>
         )}
@@ -1035,7 +1036,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
           <PayHere key={payHere.n} clientSecret={payHere.client_secret} url={payHere.url} totalEur={payHere.total_eur} alreadyPaid={payHere.already_paid} />
         )}
         {shared.evs.length > 0 && onScreen('shared') && shared.evs.map((ev, i) => (   /* Sasha 241 · the /s2 cards, on /next */
-          <SharedCard key={`${shared.turn}-${i}`} ev={ev} send={(t: string) => { void sendMessage(t) }} />
+          <SharedCard key={`${shared.turn}-${i}`} ev={ev} send={(t: string) => { observe(sendMessage(t), 'SashaChat · sendMessage(t)', toConsole) }} />
         ))}
         {calendar && onScreen('calendar') && (
           <div className="lw-card">{/* Sasha 217 · the confirmed booking in their calendar: one tap each (nothing leaves their account) */}
@@ -1066,10 +1067,10 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             {readBack.choices && readBack.read_back_id ? (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 14px 14px' }}>
                 {readBack.choices.map(o => (
-                  <button key={o.route} type="button" disabled={!!readBack.tapped} data-card-choice={o.route}
+                  <button key={o.route} type="button" data-card-choice={o.route}
                     style={{ padding: '9px 16px', borderRadius: 999, fontWeight: 700, cursor: 'pointer', border: o.route === 'call' ? 0 : '1px solid #e8b931',
                       background: o.route === 'call' ? '#e8b931' : 'transparent', color: o.route === 'call' ? '#111' : '#e8b931', opacity: readBack.tapped && readBack.tapped !== o.route ? 0.4 : 1 }}
-                    onClick={() => { setReadBack(rb => (rb ? { ...rb, tapped: o.route } : rb)); tapRef.current = { read_back_id: readBack.read_back_id as string, choice: o.route }; sendMessage(o.title, { force: true }) }}>
+                    onClick={(e: React.MouseEvent) => { if (!!readBack.tapped) { announce(again(String(readBack.tapped))); return } (() => { setReadBack(rb => (rb ? { ...rb, tapped: o.route } : rb)); tapRef.current = { read_back_id: readBack.read_back_id as string, choice: o.route }; observe(sendMessage(o.title, { force: true }), 'Your message', announce) })() }}>
                     {o.title}</button>))}
               </div>) : null}
           </div>
@@ -1127,7 +1128,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
                           /* Sasha 196 · in the guided trip: CHOOSE adds this flight to the itinerary (not booked, not paid) */
                           o.chosen
                             ? <span className="price" aria-label="In your trip">✓ In your trip</span>
-                            : <button type="button" className="price" onClick={() => { sendMessage(o.pick || `the ${o.name} one`) }}>Choose</button>
+                            : <button type="button" className="price" onClick={() => { observe(sendMessage(o.pick || `the ${o.name} one`), 'Your message', announce) }}>Choose</button>
                         ) : o.provider === 'duffel' && o.provider_offer_id && o.live_mode === false ? (
                           /* Sasha 132 · a Duffel TEST offer: booked as a TEST booking, end to end */
                           <FlightBookTest offerId={o.provider_offer_id} />
@@ -1222,7 +1223,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
       {/* ── Composer ── */}
       <div className="lw-composer"
         onDragOver={e => { if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault() }}
-        onDrop={e => { const f = imagesOf(e.dataTransfer.files); if (f.length) { e.preventDefault(); addPhotos(f) } }}>
+        onDrop={e => { const f = imagesOf(e.dataTransfer.files); if (f.length) { e.preventDefault(); observe(addPhotos(f), 'Adding the photos', announce) } }}>
         {/* Sasha 159 (1) · the photos going with the next message */}
         {(attachments.length > 0 || attachNote) && (
           <div className="lw-attachrow">
@@ -1238,7 +1239,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
         )}
         <div className="field">
           <input ref={fileRef} type="file" accept="image/*" multiple hidden
-            onChange={e => { addPhotos(imagesOf(e.target.files)); e.target.value = '' }} />
+            onChange={e => { observe(addPhotos(imagesOf(e.target.files)), 'Adding the photos', announce); e.target.value = '' }} />
           <button type="button" className="lw-clip" aria-label="Add a photo" title="Add a photo (or paste / drop one)" onClick={() => fileRef.current?.click()}>📎</button>
           <VoiceButton
             // HARD mute while the plan builds AND for the whole in-flight turn: barge-in can't
@@ -1265,7 +1266,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
                 return
               }
               if (tab !== 'chat') onMarkUnseen?.('chat')
-              sendMessage(text)
+              observe(sendMessage(text), 'Your message', announce)
             }}
             autoStart={true}
             readyToListen={readyToListen}
@@ -1285,13 +1286,13 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             value={input}
             onChange={e => { if (asleep) onWake?.('typed'); setInput(e.target.value) }}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage(input, { force: true }))}
-            onPaste={e => { const f = imagesOf(e.clipboardData?.files); if (f.length) { e.preventDefault(); addPhotos(f) } }}
+            onPaste={e => { const f = imagesOf(e.clipboardData?.files); if (f.length) { e.preventDefault(); observe(addPhotos(f), 'Adding the photos', announce) } }}
             placeholder="Ask Sasha anything…  (or just talk)"
           />
           {presetPrompts?.slice(0, 2).map(prompt => (
-            <button key={prompt} className="lw-chip" onClick={() => sendMessage(prompt, { force: true })}>{prompt}</button>
+            <button key={prompt} className="lw-chip" onClick={() => observe(sendMessage(prompt, { force: true }), 'Your message', announce)}>{prompt}</button>
           ))}
-          <button className="lw-send" onClick={() => sendMessage(input, { force: true })} disabled={(!input.trim() && !attachments.length) || isLoading}>➤</button>
+          <button className="lw-send" onClick={(e: React.MouseEvent) => { if ((!input.trim() && !attachments.length) || isLoading) { announce((!input.trim() && !attachments.length) ? needs('Send', ['a message — type one first']) : stillGoing('Sasha’s reply', 'send')); return } (() => observe(sendMessage(input, { force: true }), 'Your message', announce))() }}>➤</button>
         </div>
       </div>
 

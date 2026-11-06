@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { CONTEXT_ID, OPENING_TEXT, PROMPT } from '@/lib/avatar-context.mjs'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 // Sasha 200 · the LiveAvatar context, read and set with the key that lives only here (HEYGEN_API_KEY is a sensitive Vercel
 // variable). Ops only: the x-sasha-booking-key header must equal SASHA_BOOKING_KEY. Never returns a key.
@@ -14,7 +15,7 @@ function allowed(req: Request): boolean {
 }
 
 async function read() {
-  const r = await fetch(API, { headers: { 'X-API-KEY': process.env.HEYGEN_API_KEY as string }, cache: 'no-store' })
+  const r = await reach(API, { headers: { 'X-API-KEY': process.env.HEYGEN_API_KEY as string }, cache: 'no-store' })
   const j = await r.json().catch(() => ({}))
   return { ok: r.ok, status: r.status, data: j?.data ?? null }
 }
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
   const before = await read()
   if (!before.ok || !before.data) return NextResponse.json({ ok: false, rule: 'liveavatar_unreadable', status: before.status }, { status: 502 })
   const links = (before.data.links || []).map((l: any) => ({ url: l.url, faq: l.faq, ...(l.id ? { id: l.id } : {}) }))
-  const r = await fetch(API, {
+  const r = await reach(API, {
     method: 'PATCH',
     headers: { 'X-API-KEY': process.env.HEYGEN_API_KEY as string, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: before.data.name, prompt: PROMPT, opening_text: OPENING_TEXT, links }),

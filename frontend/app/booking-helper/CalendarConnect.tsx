@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type View = { configured: boolean; connected: boolean; expired: boolean; last_ok_at: string | null
   consent: { version: string; text: string; sha256: string } }
@@ -56,9 +57,9 @@ export function CalendarConnect() {
   async function disconnect() {
     setBusy(true)
     try {
-      const r = await fetch(bookingUrl('/api/booking/google'), { method: 'DELETE', headers: bookingHeaders() })
+      const r = await reach(bookingUrl('/api/booking/google'), { method: 'DELETE', headers: bookingHeaders() })
       let j: Record<string, unknown> = {}
-      try { j = await r.json() } catch { /* reported by its status */ }
+      try { j = await r.json() } catch { j = {} }   // not JSON: the status, said below, tells what happened
       setWords(r.ok ? String(j.say ?? 'Disconnected.') : `Not disconnected — ${refusal(j, r.status)}.`)
       const g = await bookingReq('/api/booking/google')
       if (g.ok) setView(g.json as unknown as View)

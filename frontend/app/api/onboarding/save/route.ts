@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { founderSignedIn } from '@/lib/signed-in'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /** S-69 · the project comes from the environment (NEXT_PUBLIC_SUPABASE_URL) — never a ref written here, so moving
  *  Sasha to a new Supabase project is an env change, not a code change. Missing → nothing is saved, and it says so. */
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const res = await fetch(`${base}/rest/v1/clients`, {
+    const res = await reach(`${base}/rest/v1/clients`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

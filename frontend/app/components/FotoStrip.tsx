@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { apiUrl } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { observe, toConsole } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 interface Photo {
   url: string
@@ -26,7 +28,7 @@ export default function FotoStrip({ query, type = 'general', visible }: FotoStri
     const fetchPhotos = async () => {
       setLoading(true)
       try {
-        const res = await fetch(apiUrl('/api/photos/search'), {
+        const res = await reach(apiUrl('/api/photos/search'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query, type, count: 3 })
@@ -40,7 +42,7 @@ export default function FotoStrip({ query, type = 'general', visible }: FotoStri
         setLoading(false)
       }
     }
-    fetchPhotos()
+    observe(fetchPhotos(), 'FotoStrip · fetchPhotos()', toConsole)
   }, [query, type, visible])
 
   if (!visible) return null

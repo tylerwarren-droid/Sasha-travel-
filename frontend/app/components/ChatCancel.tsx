@@ -15,6 +15,7 @@ import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import type { Receipt } from './ReceiptCard'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Row = { id: string; channel: string; status: string; date: string | null; time: string | null; venue: string; party: number | null; receipt: string | null }
 type Found = { rc: Pick<Receipt, 'venue' | 'date' | 'time' | 'count' | 'for_whom'> & { call_id?: string; trip_item_id: string } }
@@ -75,7 +76,7 @@ export default function ChatCancel({ venue }: { venue: string }) {
         && (!x.date || x.date >= today))
       const rcs = await Promise.all(rows.map(async (x): Promise<Found['rc'] | null> => {
         if (!x.receipt) return { venue: { name: x.venue, source: '' }, date: x.date, time: x.time, count: x.party, for_whom: null, trip_item_id: x.id }
-        const g = await fetch(bookingUrl(x.receipt), { headers: bookingHeaders() })
+        const g = await reach(bookingUrl(x.receipt), { headers: bookingHeaders() })
         return g.ok ? ({ ...((await g.json()) as Found['rc']), trip_item_id: x.id }) : null
       }))
       if (off) return

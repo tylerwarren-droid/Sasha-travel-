@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
 import { mintSession } from '@/lib/avatar-mint'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * Sasha 225 · /s2's live face: a LiveAvatar session in LITE mode — her face only, speaking exactly the audio /s2 sends.
@@ -18,7 +19,7 @@ export async function POST(request: Request): Promise<Response> {
   const who = await agentHeaders()
   if (!who) return json({ ok: false, rule: 'sign_in_required' }, 401)
   const { why } = await request.json().catch(() => ({ why: '' }))
-  const post = (path: string, body: unknown) => fetch(`${API_URL}${path}`, {
+  const post = (path: string, body: unknown) => reach(`${API_URL}${path}`, {
     method: 'POST', headers: { ...who, 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' })
   try {
     const g = await post('/api/avatar/open', { surface: 's2', why: String(why || '') })

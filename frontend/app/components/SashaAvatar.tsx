@@ -1,5 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, failed, noted, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 /**
  * Session-start warmup.
@@ -23,10 +25,10 @@ let _tokenPrefetch: { href: string; at: number; promise: Promise<Response> } | n
 export function prefetchAvatarSession(href: string): void {
   try {
     // Warm the SDK chunk (idempotent — the bundler caches the module).
-    void import('@heygen/liveavatar-web-sdk')
+    observe(import('@heygen/liveavatar-web-sdk'), 'SashaAvatar · import(’@heygen/liveavatar-web-sdk’)', toConsole)
     if (_tokenPrefetch?.href === href && Date.now() - _tokenPrefetch.at < PREFETCH_REFRESH_MS) return
-    _tokenPrefetch = { href, at: Date.now(), promise: fetch(href).catch(() => null as any) }
-  } catch { /* warmup is best-effort — never let it break the page */ }
+    _tokenPrefetch = { href, at: Date.now(), promise: reach(href).catch(() => null as any) }
+  } catch (e) { noted('SashaAvatar · warmup is best-effort — never let it break the page')(e) }
 }
 
 /** Take a still-fresh prefetched token, once. Stale or already-used ones are ignored so a
@@ -156,11 +158,11 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       const t0 = performance.now()
       const warm = takePrefetchedToken(tokenHref)
       const [tokenRes, sdk] = await Promise.all([
-        warm || fetch(tokenHref),
+        warm || reach(tokenHref),
         import('@heygen/liveavatar-web-sdk'),
       ])
       // A prefetch that failed resolves to null — fall back to a live fetch rather than dying.
-      const res = (tokenRes as Response | null) || (await fetch(tokenHref))
+      const res = (tokenRes as Response | null) || (await reach(tokenHref))
       const { token, rule } = await res.json().catch(() => ({}))
       // Sasha 303 · the ONE gate opens her live face on /s2 only (a real signed-in person's tap): here, her still — never an error
       if (rule === 'avatar_closed') { setStatus('still'); return }
@@ -202,7 +204,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
             const srcObj = videoRef.current.srcObject
             if (srcObj instanceof MediaStream && srcObj.getAudioTracks().length) {
               clearInterval(audioWatchRef.current)
-              audioCtxRef.current?.close().catch(() => {})
+              audioCtxRef.current?.close().catch(noted('SashaAvatar · audioCtxRef.current?.close()'))
               const actx = new (window.AudioContext || (window as any).webkitAudioContext)()
               audioCtxRef.current = actx
               const srcNode = actx.createMediaStreamSource(new MediaStream([srcObj.getAudioTracks()[0]]))
@@ -232,7 +234,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         // be orphaned and keep pinging keepAlive forever alongside its replacement.
         if (keepAliveTimerRef.current) clearInterval(keepAliveTimerRef.current)
         keepAliveTimerRef.current = setInterval(() => {
-          void Promise.resolve(avatar.keepAlive?.()).catch(() => {})
+          observe(Promise.resolve(avatar.keepAlive?.()).catch(noted('SashaAvatar · Promise.resolve(avatar.keepAlive?.())')), 'SashaAvatar · Promise.resolve(avatar.keepAlive?.()).catch(() => {})', toConsole)
         }, 150000)
 
         if (!speakHandlersRegistered) {
@@ -315,7 +317,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       avatar.on(SessionEvent.SESSION_CONNECTION_QUALITY_CHANGED, (quality: any) => {
         const q = quality?.quality || quality
         setConnectionQuality(q === 'BAD' ? 'bad' : 'good')
-        if (q === 'BAD') { try { avatar.updateVideoSettings?.({ quality: 'low' }) } catch(e) {} }
+        if (q === 'BAD') { try { avatar.updateVideoSettings?.({ quality: 'low' }) } catch (e) { noted('SashaAvatar · avatar.updateVideoSettings?.({ quality: ’low’ })')(e) } }
       })
 
       avatar.on(SessionEvent.SESSION_DISCONNECTED, (reason: any) => {
@@ -354,7 +356,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           reconnectAttemptsRef.current += 1
           const backoff = Math.min(2000 * reconnectAttemptsRef.current, 8000)
           console.log(`[HG] reconnecting (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECTS}) in ${backoff}ms`)
-          reconnectTimerRef.current = setTimeout(() => { Promise.resolve(avatarRef.current?.stop?.()).catch(() => {}); initAvatar() }, backoff)
+          reconnectTimerRef.current = setTimeout(() => { Promise.resolve(avatarRef.current?.stop?.()).catch(noted('SashaAvatar · Promise.resolve(avatarRef.current?.stop?.())')); observe(initAvatar(), 'SashaAvatar · initAvatar()', toConsole) }, backoff)
         }
       })
 
@@ -370,7 +372,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
         if (!isReconnecting.current) {
           isReconnecting.current = true
           reconnectAttemptsRef.current += 1
-          reconnectTimerRef.current = setTimeout(() => { Promise.resolve(avatarRef.current?.stop?.()).catch(() => {}); initAvatar() }, 3000)
+          reconnectTimerRef.current = setTimeout(() => { Promise.resolve(avatarRef.current?.stop?.()).catch(noted('SashaAvatar · Promise.resolve(avatarRef.current?.stop?.())')); observe(initAvatar(), 'SashaAvatar · initAvatar()', toConsole) }, 3000)
         }
       })
 
@@ -381,12 +383,12 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       // fully-started session here and go no further — no handlers, no onAvatarReady.
       if (!isMountedRef.current) {
         console.log('[HG] unmounted during start — stopping orphaned session')
-        void Promise.resolve(avatar.stop?.()).catch(() => {})
+        observe(Promise.resolve(avatar.stop?.()).catch(noted('SashaAvatar · Promise.resolve(avatar.stop?.())')), 'SashaAvatar · Promise.resolve(avatar.stop?.()).catch(() => {})', toConsole)
         return
       }
       console.log('[HG] sessionId:', avatar.sessionId, 'maxDuration:', avatar.maxSessionDuration)
       // Remember this session so the NEXT one can carry memory forward.
-      try { if (avatar.sessionId && typeof window !== 'undefined') localStorage.setItem('sasha_last_session', avatar.sessionId) } catch {}
+      try { if (avatar.sessionId && typeof window !== 'undefined') localStorage.setItem('sasha_last_session', avatar.sessionId) } catch (e) { noted('SashaAvatar · if (avatar.sessionId && typeof window !== ’undefined’) local')(e) }
 
       onAvatarSpeechBuffer?.(() => {
         const cutoff = Date.now() - 15000
@@ -414,13 +416,13 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       }
       const interruptFn = () => {
         try {
-          void Promise.resolve(avatar.interrupt?.()).catch(() => {})
+          observe(Promise.resolve(avatar.interrupt?.()).catch(noted('SashaAvatar · Promise.resolve(avatar.interrupt?.())')), 'SashaAvatar · Promise.resolve(avatar.interrupt?.()).catch(() => {})', toConsole)
           speakingRef.current = false
           clearAllTimers()
           onGate?.(false)
           onAvatarSpeakingChange?.(false)
           onSashaFinished?.()
-        } catch(e) {}
+        } catch (e) { noted('SashaAvatar · void Promise.resolve(avatar.interrupt?.()).catch(() => {}) s')(e) }
       }
       onAvatarReady(speakFn, interruptFn)
 
@@ -432,8 +434,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && status === 'idle') { initAvatar() }
-      if (document.visibilityState === 'visible' && videoRef.current) { videoRef.current.play().catch(() => {}) }
+      if (document.visibilityState === 'visible' && status === 'idle') { observe(initAvatar(), 'SashaAvatar · initAvatar()', toConsole) }
+      if (document.visibilityState === 'visible' && videoRef.current) { videoRef.current.play().catch(noted('SashaAvatar · videoRef.current.play()')) }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -470,7 +472,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
           }
           ctx.putImageData(frame, 0, 0)
         }
-      } catch { /* frame not ready / transient — keep looping */ }
+      } catch (e) { noted('SashaAvatar · frame not ready / transient — keep looping')(e) }
     }
     // LIP-SYNC: drive the canvas off requestVideoFrameCallback, not requestAnimationFrame.
     // rVFC fires once per DECODED video frame, on the video's own playback clock — the exact
@@ -493,7 +495,7 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
 
   useEffect(() => {
     isMountedRef.current = true
-    initAvatar()
+    observe(initAvatar(), 'SashaAvatar · initAvatar()', toConsole)
     return () => {
       isMountedRef.current = false
       clearTimeout(reconnectTimerRef.current)
@@ -501,8 +503,8 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
       clearTimeout(trailingTimerRef.current)
       clearInterval(keepAliveTimerRef.current)
       clearInterval(audioWatchRef.current)
-      audioCtxRef.current?.close().catch(() => {})
-      void Promise.resolve(avatarRef.current?.stop?.()).catch(() => {})
+      audioCtxRef.current?.close().catch(noted('SashaAvatar · audioCtxRef.current?.close()'))
+      observe(Promise.resolve(avatarRef.current?.stop?.()).catch(noted('SashaAvatar · Promise.resolve(avatarRef.current?.stop?.())')), 'SashaAvatar · Promise.resolve(avatarRef.current?.stop?.()).catch(() => {})', toConsole)
     }
   }, [])
 
@@ -557,9 +559,9 @@ export default function SashaAvatar({ onAvatarReady, isListening, tokenUrl = '/a
               // Stop the previous session before starting another. Both AUTOMATIC retry paths
               // already do this; the manual button didn't, so a guest tapping "Try again"
               // could leave the old session running server-side while a new one spun up.
-              void Promise.resolve(avatarRef.current?.stop?.()).catch(() => {})
+              observe(Promise.resolve(avatarRef.current?.stop?.()).catch(((e: unknown) => announce(failed('Stopping her face', e)))), 'Stopping her face', announce)
               avatarRef.current = null
-              initAvatar()
+              observe(initAvatar(), 'Starting her face', announce)
             }}
             className="text-xs text-white/30 hover:text-white/60 underline"
           >Try again</button>

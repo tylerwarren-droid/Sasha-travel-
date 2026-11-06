@@ -6,6 +6,7 @@
 import { founderSignedIn } from '@/lib/signed-in'
 import { agentHeaders } from '@/lib/agent-auth'
 import { API_URL } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 export const dynamic = 'force-dynamic'
 
@@ -23,10 +24,10 @@ export default async function MeasuresPage({ searchParams }: { searchParams: Pro
   if (!(await founderSignedIn())) return <main style={{ ...box, background: '#0b0b10', minHeight: '100dvh' }}><h1>Founder only</h1></main>
   const days = Math.max(1, Math.min(31, Number((await searchParams).days) || 7))
   const headers = await agentHeaders()
-  const r = headers ? await fetch(`${API_URL}/api/agent/measures?days=${days}`, { headers, cache: 'no-store' }).catch(() => null) : null
+  const r = headers ? await reach(`${API_URL}/api/agent/measures?days=${days}`, { headers, cache: 'no-store' }).catch(() => null) : null
   const j = r && r.ok ? await r.json().catch(() => null) : null
   // Sasha 303 · her live face today, from the ONE gate's own day ledger (app/avatar_gate.py): minutes, sessions open, the two caps
-  const ar = headers ? await fetch(`${API_URL}/api/avatar/today`, { headers, cache: 'no-store' }).catch(() => null) : null
+  const ar = headers ? await reach(`${API_URL}/api/avatar/today`, { headers, cache: 'no-store' }).catch(() => null) : null
   const av = ar && ar.ok ? await ar.json().catch(() => null) : null
   if (!j?.ok) return <main style={{ ...box, background: '#0b0b10', minHeight: '100dvh' }}><h1>Sasha · measures</h1><p>The store couldn’t be read{j?.rule ? ` (${j.rule})` : ''}.</p></main>
   const w: S = j.week

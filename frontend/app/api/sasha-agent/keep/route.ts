@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * CR 63 · THE KEEP's pass-through (backend /api/agent/keep): list (masks only), save (the value goes from the person's own
@@ -15,7 +16,7 @@ async function pass(method: 'GET' | 'POST' | 'DELETE', request: Request): Promis
   const q = new URL(request.url).searchParams.get('confirm')
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/keep${q ? `?confirm=${encodeURIComponent(q)}` : ''}`, {
+    r = await reach(`${API_URL}/api/agent/keep${q ? `?confirm=${encodeURIComponent(q)}` : ''}`, {
       method, cache: 'no-store',
       headers: { ...who, ...(method === 'POST' ? { 'content-type': 'application/json' } : {}) },
       ...(method === 'POST' ? { body: await request.text() } : {}),

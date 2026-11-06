@@ -1,4 +1,6 @@
 'use client'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { observe, toConsole } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 /**
  * Sasha 153 · NO SIGN-IN WALL: make sure this browser has an account — the founder's, a guest's, or a NEW automatic private
@@ -8,7 +10,7 @@ let pending: Promise<boolean> | null = null
 
 export function ensureGuest(): Promise<boolean> {
   if (!pending) {
-    pending = fetch('/api/guest/start', { method: 'POST', cache: 'no-store' })
+    pending = reach('/api/guest/start', { method: 'POST', cache: 'no-store' })
       .then(async (r) => r.ok && (await r.json().catch(() => ({})))?.ok === true)
       .catch(() => false)
       .then((ok) => { if (!ok) pending = null; return ok })   // a failure can be retried on the next action

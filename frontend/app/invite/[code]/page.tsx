@@ -7,6 +7,8 @@
  * a time shares only that choice; the booking stays the inviter's. Sasha messages them on WhatsApp only if they ask.
  */
 import { use, useEffect, useState } from 'react'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Slot = { words: string; start: string; end: string }
 type View = { inviter: string; invitee: string | null; activity: string; slots: Slot[]; chosen: number | null; status: string
@@ -22,7 +24,7 @@ export default function InvitePage({ params }: { params: Promise<{ code: string 
 
   useEffect(() => {
     let off = false
-    fetch(`/api/invite/${encodeURIComponent(code)}`).then(async (r) => {
+    reach(`/api/invite/${encodeURIComponent(code)}`).then(async (r) => {
       const j = await r.json().catch(() => ({}))
       if (off) return
       if (r.ok) { setView(j as View); setName((j as View).invitee ?? '') } else setWords(String((j as { message?: string }).message ?? 'This invitation could not be opened.'))
@@ -32,7 +34,7 @@ export default function InvitePage({ params }: { params: Promise<{ code: string 
 
   async function send(body: Record<string, unknown>) {
     if (!view) return
-    const r = await fetch(`/api/invite/${encodeURIComponent(code)}/choose`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    const r = await reach(`/api/invite/${encodeURIComponent(code)}/choose`, { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ...body, consent_sha256: view.consent_sha256 }) })
     const j = await r.json().catch(() => ({})) as { say?: string; message?: string; status?: string }
     setWords(r.ok ? (j.say ?? 'Sent.') : (j.message ?? 'That didn’t go through.'))
@@ -60,9 +62,9 @@ export default function InvitePage({ params }: { params: Promise<{ code: string 
               <input className="w-full rounded border px-2 py-1" placeholder="Your first name" value={name} onChange={(e) => setName(e.target.value)} />
               <label className="flex items-start gap-2"><input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} /><span>{view.consent}</span></label>
               <div className="flex gap-2">
-                <button type="button" className="rounded border px-3 py-1" onClick={() => { if (pick !== null && ticked) send({ slot: pick, first_name: name }) }}>
+                <button type="button" className="rounded border px-3 py-1" onClick={() => { if (pick !== null && ticked) observe(send({ slot: pick, first_name: name }), 'Sending your answer', announce) }}>
                   {pick === null ? 'Pick a time first' : !ticked ? 'Tick the sentence first' : 'Send my choice'}</button>
-                <button type="button" className="rounded border px-3 py-1" onClick={() => { if (ticked) send({ none: true }) }}>
+                <button type="button" className="rounded border px-3 py-1" onClick={() => { if (ticked) observe(send({ none: true }), 'Sending your answer', announce) }}>
                   {ticked ? 'None of these work' : 'Tick the sentence to say none work'}</button>
               </div>
             </div>

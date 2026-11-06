@@ -10,6 +10,8 @@ import { useEffect, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
 import { cantRead, placeFacts, photoOf, sourceWord } from '@/lib/place-view.mjs'
 import { report } from '@/lib/mic-state'   // Sasha 274 · a card that arrived without its content says so (its keys only, never a value)
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { noted } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 const GOLD = '#E8B923'
@@ -38,8 +40,8 @@ export function PlaceCard({ card: shown, onBook, tone = 'dark', badge, extra, ac
   useEffect(() => {
     if (noDetails || !shown?.place_id || placeFacts(shown).type?.source === 'site') return   // 276: a marketplace is never read
     let live = true
-    fetch(`/api/place/${encodeURIComponent(shown.place_id)}`, { cache: 'no-store' }).then(r => r.json())
-      .then(j => { if (live && j?.ok && j.place?.read === 'site') setFresh(j.place) }).catch(() => { /* the listing stays, labelled */ })
+    reach(`/api/place/${encodeURIComponent(shown.place_id)}`, { cache: 'no-store' }).then(r => r.json())
+      .then(j => { if (live && j?.ok && j.place?.read === 'site') setFresh(j.place) }).catch(noted('PlaceCard · reach(`/api/place/${encodeURIComponent(shown.place_id)}`, { '))
     return () => { live = false }
   }, [shown?.place_id])   // eslint-disable-line react-hooks/exhaustive-deps
   const card: Ev = fresh ? { ...shown, place: fresh, type: fresh.type?.value ?? shown.type, type_source: fresh.type?.source ?? shown.type_source } : shown
@@ -97,9 +99,9 @@ export function PlaceSheet({ card, onClose, onBook, sourcesUrl }: { card: Ev; on
   const [reading, setReading] = useState(true)
   useEffect(() => {
     let live = true
-    fetch(`/api/place/${encodeURIComponent(card.place_id)}`, { cache: 'no-store' }).then(r => r.json()).then(j => {
+    reach(`/api/place/${encodeURIComponent(card.place_id)}`, { cache: 'no-store' }).then(r => r.json()).then(j => {
       if (live && j?.ok && j.place) setPlace(j.place)
-    }).catch(() => { /* the card's own facts stay */ }).finally(() => { if (live) setReading(false) })
+    }).catch(noted('PlaceCard · reach(`/api/place/${encodeURIComponent(card.place_id)}`, { c')).finally(() => { if (live) setReading(false) })
     return () => { live = false }
   }, [card.place_id])
   useEffect(() => {   // Sasha 252 · Escape closes it, as any dialog (found by EU 251's run: the sheet stayed over the chat)

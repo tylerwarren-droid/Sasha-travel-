@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * Sasha 226 · /s2's paperclip → "A card": the photo or Wallet screenshot (shrunk on the phone) goes straight through to the
@@ -15,7 +16,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!who) return NextResponse.json({ ok: false, rule: 'sign_in_required' }, { status: 401 })
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/s2/card-image`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sasha-surface': 's2', ...who }, body: await request.text(), cache: 'no-store' })
+    r = await reach(`${API_URL}/api/agent/s2/card-image`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-sasha-surface': 's2', ...who }, body: await request.text(), cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }

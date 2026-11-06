@@ -19,6 +19,8 @@ import SleepButton from '../components/SleepButton'   // Sasha 246 item 2 · pau
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
 import { User, Itinerary } from '@/types'
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, failed, noted, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 // Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
 // Sasha 249 · ONE CAPABILITY LIST: the chips are /s2's, generated from backend/agapi/s2_home.py CAPABILITIES (S1 = S2)
@@ -107,9 +109,9 @@ export default function NextPage() {
   const [helloName, setHelloName] = useState<string | null>(null)
   useEffect(() => {
     let live = true
-    fetch('/api/s2-me', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then((j: { name?: string | null } | null) => {
+    reach('/api/s2-me', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then((j: { name?: string | null } | null) => {
       if (live && j?.name) setHelloName(String(j.name))
-    }).catch(() => { /* not signed in: the generic line */ })
+    }).catch(noted('page · reach(’/api/s2-me’, { cache: ’no-store’ }).then(r => (r.ok ?'))
     return () => { live = false }
   }, [])   // Sasha 246 · standby has no chat yet: "I'm here" is shown on her stage
   const asleepRef = useRef(false)
@@ -200,7 +202,7 @@ export default function NextPage() {
   }, [])
   // Sasha 212 · ?tab=trip (the confirmation email's and the "booked" card's itinerary link) opens the Trip view
   useEffect(() => {
-    try { if (new URLSearchParams(window.location.search).get('tab') === 'trip') handleTabChange('trip') } catch { /* no URL: nothing */ }
+    try { if (new URLSearchParams(window.location.search).get('tab') === 'trip') handleTabChange('trip') } catch (e) { noted('page · no URL: nothing')(e) }
   }, [handleTabChange])
   // Sasha 214 · THE PHONE: portrait, her face on top, one mic button, the cards as a bottom sheet — the same page, agent and
   // turn state as the desktop (no second logic path); only the layout and the human step's device change
@@ -216,8 +218,8 @@ export default function NextPage() {
   const [handover, setHandover] = useState<string | null>(null)
   const unlockAudio = useCallback(() => {
     // iOS: audio and the mic only start inside a tap — unlocked here, in the tap that starts the call
-    try { const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }); const C = AC.AudioContext || AC.webkitAudioContext; if (C) { const c = new C(); void c.resume().then(() => c.close()).catch(() => {}) } } catch { /* fine */ }
-    try { void navigator.mediaDevices?.getUserMedia({ audio: true }).then(st => st.getTracks().forEach(t => t.stop())).catch(() => {}) } catch { /* fine */ }
+    try { const AC = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }); const C = AC.AudioContext || AC.webkitAudioContext; if (C) { const c = new C(); observe(c.resume().then(() => c.close()).catch(noted('page · c.resume().then(() => c.close())')), 'page · c.resume().then(() => c.close()).catch(() => {})', toConsole) } } catch (e) { noted('page · fine')(e) }
+    try { observe(navigator.mediaDevices?.getUserMedia({ audio: true }).then(st => st.getTracks().forEach(t => t.stop())).catch(noted('page · navigator.mediaDevices?.getUserMedia({ audio: true }).then(s')), 'page · navigator.mediaDevices?.getUserMedia({ audio: true }).then(s', toConsole) } catch (e) { noted('page · fine')(e) }
   }, [])
   const onPay = useCallback((url: string) => {
     // a phone pays on the SAME device (Apple Pay on Stripe's page); the desktop keeps the hand-off to the phone
@@ -295,7 +297,7 @@ export default function NextPage() {
   // during the splash screen, overlapping the avatar cold-start — best-effort, ignored
   // on failure.
   useEffect(() => {
-    fetch(apiUrl('/api/agents/warmup')).catch(() => {})
+    reach(apiUrl('/api/agents/warmup')).catch(noted('page · reach(apiUrl(’/api/agents/warmup’))'))
   }, [])
 
   // Warm the avatar session start while the guest is still reading the splash screen. The
@@ -317,14 +319,14 @@ export default function NextPage() {
 
   // Initial background photos — updated per-turn by conductor via onPhotos
   useEffect(() => {
-    fetch(apiUrl('/api/photos/search'), {
+    reach(apiUrl('/api/photos/search'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: 'travel landscape', count: 4 })
     })
       .then(r => r.json())
       .then(data => { if (data.photos?.length > 0) { setPhotos(data.photos); setActivePhoto(0) } })
-      .catch(() => {})
+      .catch(noted('page · reach(apiUrl(’/api/photos/search’), { method: ’POST’, header'))
   }, [])
 
   useEffect(() => {
@@ -406,7 +408,7 @@ export default function NextPage() {
     // Explicitly stop the camera here too — don't rely solely on the effect cleanup, so the
     // camera light goes off the moment the session ends (this is what "is the session over?"
     // checks visually).
-    try { camStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
+    try { camStreamRef.current?.getTracks().forEach(t => t.stop()) } catch (e) { noted('page · camStreamRef.current?.getTracks().forEach(t => t.stop())')(e) }
     camStreamRef.current = null
     if (userVideoRef.current) userVideoRef.current.srcObject = null
     setCamOn(false)
@@ -426,7 +428,7 @@ export default function NextPage() {
     const p = new URLSearchParams(window.location.search)
     const sessionId = p.get('session_id')
     const clearUrl = () => window.history.replaceState({}, '', '/next')
-    try { sessionStorage.removeItem('sasha_pending_trip') } catch {}
+    try { sessionStorage.removeItem('sasha_pending_trip') } catch (e) { noted('page · sessionStorage.removeItem(’sasha_pending_trip’)')(e) }
 
     if (p.get('canceled')) { setPayResult('canceled'); clearUrl(); return }
     if (!p.get('paid')) return
@@ -439,7 +441,7 @@ export default function NextPage() {
     }
 
     setVerifying(true)
-    refreshGuestAuth().then(() => fetch(accountUrl(`/api/payments/verify?session_id=${encodeURIComponent(sessionId)}`), { headers: apiHeaders(guestAuth()) }))  // Sasha 142
+    refreshGuestAuth().then(() => reach(accountUrl(`/api/payments/verify?session_id=${encodeURIComponent(sessionId)}`), { headers: apiHeaders(guestAuth()) }))  // Sasha 142
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
       .then(data => {
         if (data?.paid && data?.booking_ref) {
@@ -475,7 +477,7 @@ export default function NextPage() {
     setReserveError(null)
     try {
       await refreshGuestAuth()   // Sasha 142 · paid for on the account that holds the offer
-      const res = await fetch(accountUrl('/api/payments/reserve'), {
+      const res = await reach(accountUrl('/api/payments/reserve'), {
         method: 'POST',
         headers: apiHeaders(guestAuth()),
         body: JSON.stringify({
@@ -506,7 +508,7 @@ export default function NextPage() {
     let navigated = false
     try {
       await refreshGuestAuth()   // Sasha 142
-      const res = await fetch(accountUrl('/api/payments/create-checkout'), {
+      const res = await reach(accountUrl('/api/payments/create-checkout'), {
         method: 'POST',
         headers: apiHeaders(guestAuth()),
         body: JSON.stringify({
@@ -558,8 +560,8 @@ export default function NextPage() {
     try {
       navigator.mediaDevices?.getUserMedia({ audio: true })
         .then(s => s.getTracks().forEach(t => t.stop()))
-        .catch(() => {})
-    } catch {}
+        .catch(noted('page · navigator.mediaDevices?.getUserMedia({ audio: true }) .then('))
+    } catch (e) { noted('page · navigator.mediaDevices?.getUserMedia({ audio: true }) .then(')(e) }
     setChatMessages([])
     setEngaged(false)
     setVoiceReady(false)
@@ -683,7 +685,7 @@ export default function NextPage() {
     // Turn the camera off immediately on booking — the call is effectively over, and this is
     // what the user looks at to confirm "the session ended". The avatar finishes its spoken
     // confirmation, then the live session is fully torn down (below).
-    try { camStreamRef.current?.getTracks().forEach(t => t.stop()) } catch {}
+    try { camStreamRef.current?.getTracks().forEach(t => t.stop()) } catch (e) { noted('page · camStreamRef.current?.getTracks().forEach(t => t.stop())')(e) }
     camStreamRef.current = null
     if (userVideoRef.current) userVideoRef.current.srcObject = null
     setCamOn(false)
@@ -710,7 +712,7 @@ export default function NextPage() {
     }
     try {
       await refreshGuestAuth()   // Sasha 142 · paid for on the account that holds the offer
-      const res = await fetch(accountUrl('/api/payments/reserve'), {
+      const res = await reach(accountUrl('/api/payments/reserve'), {
         method: 'POST',
         headers: apiHeaders(guestAuth()),
         body: JSON.stringify({
@@ -741,7 +743,7 @@ export default function NextPage() {
   // (verbal "book the trip" completes hands-free). Payments on → legacy behavior: show the
   // itinerary and open the Stripe payment modal on the Trip tab.
   const handleAwaitPayment = useCallback(() => {
-    if (!PAYMENTS_ENABLED) { reserveTrip(); return }
+    if (!PAYMENTS_ENABLED) { observe(reserveTrip(), 'page · reserveTrip()', toConsole); return }
     setPendingOffer(null)   // whole-trip checkout — never inherit a previously tapped card
     handleTabChange('trip')
     setPaymentModal('card')
@@ -786,8 +788,8 @@ export default function NextPage() {
     const pending = pendingCardRef.current
     pendingCardRef.current = null
     const card = savedCard?.last4 ? savedCard : (pending?.savedCard ?? savedCard)
-    if (pending?.item) reserveItem(pending.item, card)
-    else reserveTrip(card)
+    if (pending?.item) observe(reserveItem(pending.item, card), 'page · reserveItem(pending.item, card)', toConsole)
+    else observe(reserveTrip(card), 'page · reserveTrip(card)', toConsole)
   }, [reserveItem, reserveTrip])
 
   // Turn 2b: "a different card" — open the payment form for whatever was pending. This is the
@@ -809,7 +811,7 @@ export default function NextPage() {
     const w = window.open('', '_blank')
     if (!w) { setShareToast('Allow pop-ups to download the PDF.'); setTimeout(() => setShareToast(null), 2500); return }
     w.document.open(); w.document.write(html); w.document.close(); w.focus()
-    setTimeout(() => { try { w.print() } catch {} }, 500)
+    setTimeout(() => { try { w.print() } catch (e) { noted('page · w.print()')(e) } }, 500)
   }, [richItinerary, booked])
 
   // Native share sheet where available, else copy the itinerary text to the clipboard.
@@ -817,7 +819,7 @@ export default function NextPage() {
     if (!richItinerary) return
     const text = buildItineraryText(richItinerary, booked?.ref, booked?.paidWith ?? null)
     const title = richItinerary.title || 'My itinerary'
-    try { if (navigator.share) { await navigator.share({ title, text }); return } } catch {}
+    try { if (navigator.share) { await navigator.share({ title, text }); return } } catch (e) { noted('page · if (navigator.share) { await navigator.share({ title, text }')(e) }
     try { await navigator.clipboard.writeText(text); setShareToast('Itinerary copied to clipboard') }
     catch { setShareToast('Could not share automatically') }
     setTimeout(() => setShareToast(null), 2500)
@@ -874,18 +876,18 @@ export default function NextPage() {
   // trips or bookings, never again once closed (its ✕)
   const [meetHidden, setMeetHidden] = useState(false)
   useEffect(() => {
-    try { if (localStorage.getItem('sasha.meet.closed') === '1') setMeetHidden(true) } catch { /* private window: shown, closable */ }
+    try { if (localStorage.getItem('sasha.meet.closed') === '1') setMeetHidden(true) } catch (e) { noted('page · private window: shown, closable')(e) }
     bookingPeek('/api/booking/journeys').then((r) => {
       const j = r?.json as { journeys?: unknown[]; receipts?: unknown[]; everything?: unknown[] } | undefined
       if (r?.ok && ((j?.journeys?.length ?? 0) + (j?.receipts?.length ?? 0) + (j?.everything?.length ?? 0)) > 0) setMeetHidden(true)
-    }).catch(() => { /* not signed in: a first-time visitor */ })
+    }).catch(noted('page · bookingPeek(’/api/booking/journeys’).then((r) => { const j ='))
   }, [])
   useEffect(() => {
     try {
       const on = new URLSearchParams(window.location.search).get('ui') === 'preview'
       setUiPreview(on)
       if (on) setRichItinerary(PREVIEW_PLAN)   // layout QA only — never reached without the flag
-    } catch {}
+    } catch (e) { noted('page · const on = new URLSearchParams(window.location.search).get(’')(e) }
   }, [])
   const stageLive = started || uiPreview || textOnly
   const avatarPip = stageLive && rightTab !== 'chat'
@@ -946,7 +948,7 @@ export default function NextPage() {
     // Mindtrip's "New chat": a clean slate. Ending the live session first releases the
     // avatar; handleStart already resets messages/plan/tabs.
     setChatNote(null)
-    const r = await fetch('/api/sasha-agent/memory', { method: 'DELETE', cache: 'no-store' }).catch(() => null)
+    const r = await reach('/api/sasha-agent/memory', { method: 'DELETE', cache: 'no-store' }).catch(() => null)
     const j = r && r.ok ? await r.json().catch(() => null) : null
     if (!j?.ok) { setChatNote('I couldn’t clear our conversation just now — it’s still here, and I still remember it. Try New chat again in a moment.'); return }
     if (started) handleEndSession()
@@ -988,7 +990,7 @@ export default function NextPage() {
             </button>
           ))}
         </nav>
-        <button className="mt-newchat" onClick={() => { void newChat() }}><Plus size={14} strokeWidth={2.2} /> New chat</button>
+        <button className="mt-newchat" onClick={() => { observe(newChat(), 'New chat', announce) }}><Plus size={14} strokeWidth={2.2} /> New chat</button>
         {chatNote ? <p role="status" style={{ fontSize: 12, color: '#f5c26b', margin: '6px 2px 0', lineHeight: 1.35 }}>{chatNote}</p> : null}
         {/* Sasha 195 · the other pages, back beside Sasha */}
         <nav aria-label="More" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 12px', margin: '12px 4px 0', fontSize: 12.5 }}>
@@ -1193,7 +1195,7 @@ export default function NextPage() {
                 // returning account or once closed (Sasha 183 hid the whole block: Sasha "disappeared" for the founder)
                 <div className="mt-startwrap">{/* Sasha 215 · S2: at the foot of the stage, never over her face */}
                   {!meetHidden && (
-                    <button type="button" aria-label="Close the welcome" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch { /* fine */ } }}
+                    <button type="button" aria-label="Close the welcome" onClick={() => { setMeetHidden(true); try { localStorage.setItem('sasha.meet.closed', '1') } catch (e) { ((e: unknown) => announce(failed('Remembering that you closed the welcome', e)))(e) } }}
                       style={{ position: 'absolute', top: -6, right: -6, width: 28, height: 28, borderRadius: 999, border: '1px solid rgba(255,255,255,.3)', background: 'rgba(0,0,0,.45)', color: '#fff', cursor: 'pointer', zIndex: 4 }}>✕</button>
                   )}
                   {!meetHidden && <div className="mt-eyebrow">Your personal concierge</div>}
@@ -1439,8 +1441,8 @@ export default function NextPage() {
                   <div className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171' }}>{checkoutError}</div>
                 )}
                 <div className="flex gap-3 mt-2">
-                  <button onClick={() => { setCheckoutError(null); setPaymentModal(null); setPendingOffer(null) }} disabled={checkoutLoading} className="flex-1 py-3 rounded-xl text-sm disabled:opacity-40" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
-                  <button onClick={startCardCheckout} disabled={checkoutLoading} className="flex-1 py-3 rounded-xl text-sm font-medium disabled:opacity-60" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>
+                  <button onClick={(e: React.MouseEvent) => { if (checkoutLoading) { announce(stillGoing('Starting the payment', 'Cancel')); return } (() => { setCheckoutError(null); setPaymentModal(null); setPendingOffer(null) })() }} className="flex-1 py-3 rounded-xl text-sm disabled:opacity-40" style={{ border: '1px solid rgba(218,165,32,0.2)', color: 'rgba(255,255,255,0.6)' }}>Cancel</button>
+                  <button onClick={(e: React.MouseEvent) => { if (checkoutLoading) { announce(stillGoing('Starting the payment', 'Pay securely')); return } (() => observe(startCardCheckout(), 'Starting the payment', announce))() }} className="flex-1 py-3 rounded-xl text-sm font-medium disabled:opacity-60" style={{ background: 'linear-gradient(135deg, #DAA520, #B8860B)', color: 'white' }}>
                     {checkoutLoading ? 'Starting…' : 'Pay securely'}
                   </button>
                 </div>
@@ -1544,7 +1546,7 @@ export default function NextPage() {
             </div>
 
             <div className="flex-shrink-0 flex gap-3" style={{ padding: '16px 22px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <button onClick={shareItinerary} className="flex-1" style={{ padding: '12px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>↗ Share</button>
+              <button onClick={() => observe(shareItinerary(), 'Sharing the itinerary', announce)} className="flex-1" style={{ padding: '12px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>↗ Share</button>
               <button onClick={exportItineraryPdf} className="flex-1" style={{ padding: '12px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#DAA520,#B8860B)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>⬇ Download PDF</button>
               <button onClick={() => { endOnFinishRef.current = false; clearTimeout(bookEndTimerRef.current); if (started) handleEndSession(); setBooked(null) }} style={{ padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,.55)', fontSize: 13.5, cursor: 'pointer' }}>Done</button>
             </div>

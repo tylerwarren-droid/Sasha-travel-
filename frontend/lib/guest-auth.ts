@@ -11,6 +11,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import { apiUrl } from './api'
 import { ensureGuest } from './guest-start'
 import { actingOf } from './acting-rule.mjs'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 let token: string | null = null
 let client: ReturnType<typeof createBrowserClient> | null = null
@@ -23,7 +24,7 @@ async function refreshFounder(): Promise<void> {
   try {
     // Sasha 242 · who is ACTING (241's rule, /api/auth/whoami), not merely whether the founder cookie exists: a real sign-in on
     // a browser that also holds the founder cookie is that account, never the founder (found by EU's walk, row 730)
-    const r = await fetch('/api/auth/whoami', { cache: 'no-store' })
+    const r = await reach('/api/auth/whoami', { cache: 'no-store' })
     founder = r.ok && actingOf(await r.json()) === 'founder'   // Sasha 249 · the one reading of whoami (lib/acting-rule.mjs)
   } catch {
     founder = false   // can't tell: the call goes as the public demo's — never as the founder's

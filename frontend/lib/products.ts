@@ -1,4 +1,6 @@
 import { API_URL } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { noted } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 /**
  * CR 1 · server-side reads of /api/booking/products/* (CampusMe hand-overs, relocation files). The booking key stays on
@@ -13,7 +15,7 @@ export async function productsGet<T>(path: string): Promise<ProductsResult<T>> {
   if (!/^\/[\w\-./]+$/.test(path) || path.includes('..')) return { ok: false, status: 400, message: 'Not a product page.' }
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/booking/products${path}`, { headers: { 'x-sasha-booking-key': key }, cache: 'no-store' })
+    r = await reach(`${API_URL}/api/booking/products${path}`, { headers: { 'x-sasha-booking-key': key }, cache: 'no-store' })
   } catch (e) {
     return { ok: false, status: 502, message: `Sasha’s server could not be reached (${(e as Error).message}).` }
   }
@@ -23,7 +25,7 @@ export async function productsGet<T>(path: string): Promise<ProductsResult<T>> {
       const j = await r.json()
       const d = j && typeof j === 'object' && 'detail' in j ? (j as { detail: { message?: string } }).detail : j
       if (d && typeof d === 'object' && 'message' in d && typeof d.message === 'string') message = d.message
-    } catch { /* the status says it */ }
+    } catch (e) { noted('products · the status says it')(e) }
     return { ok: false, status: r.status, message }
   }
   return { ok: true, data: (await r.json()) as T }

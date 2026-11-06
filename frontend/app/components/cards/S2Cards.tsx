@@ -8,6 +8,8 @@ import { PlaceCard } from './PlaceCard'   // Sasha 252 · activities are places
 import { useRef, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
 import { subsHeading, subsFooter } from '@/lib/subscriptions-heading.mjs'   // Sasha 246
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, failed, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 export const C = { bg: '#0b0b10', card: '#16151d', line: 'rgba(255,255,255,.1)', gold: '#E8B923', dim: 'rgba(255,255,255,.6)' }
@@ -55,16 +57,16 @@ export function KeepCapture({ what, base = '/api/s2-keep/scan', onSaved }: { wha
     setPh({ p: 'reading' })
     try {
       const image = await shrink(f)
-      const r = await fetch(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: what, image, media_type: 'image/jpeg' }) })
+      const r = await reach(base, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: what, image, media_type: 'image/jpeg' }) })
       const j = await r.json().catch(() => ({}))
       setPh(j?.ok ? { p: 'confirm', token: j.token, shown: j.shown || [j.masked] } : { p: 'error', why: j?.message || 'That photo couldn\u2019t be read.' })
     } catch { setPh({ p: 'error', why: 'That photo couldn\u2019t be read.' }) }
     if (input.current) input.current.value = ''
   }
   async function act(token: string, action: 'confirm' | 'discard') {
-    if (action === 'discard') { fetch(`${base}/${encodeURIComponent(token)}/discard`, { method: 'POST' }).catch(() => {}); setPh({ p: 'pick' }); return }
+    if (action === 'discard') { reach(`${base}/${encodeURIComponent(token)}/discard`, { method: 'POST' }).catch(((e: unknown) => announce(failed('Discarding it', e)))); setPh({ p: 'pick' }); return }
     setPh({ p: 'saving' })
-    const r = await fetch(`${base}/${encodeURIComponent(token)}/confirm`, { method: 'POST' }).catch(() => null)
+    const r = await reach(`${base}/${encodeURIComponent(token)}/confirm`, { method: 'POST' }).catch(() => null)
     const j = r ? await r.json().catch(() => ({})) : {}
     setPh(j?.ok ? { p: 'saved', item: j.item } : { p: 'error', why: j?.message || 'It wasn\u2019t saved — try again.' })
     if (j?.ok) onSaved?.(String(j.item || ''))
@@ -73,15 +75,15 @@ export function KeepCapture({ what, base = '/api/s2-keep/scan', onSaved }: { wha
   return (
     <Box k={what === 'passport' ? 'Add your passport' : 'Add a loyalty card'} h={ph.p === 'saved' ? `Saved in your Keep: ${untag(ph.item)}` : ph.p === 'confirm' ? 'Is this yours?' : undefined}
       tone={ph.p === 'saved' ? 'rgba(126,226,168,.5)' : undefined}>
-      <input ref={input} type="file" accept="image/*" hidden onChange={e => picked(e.target.files?.[0])} aria-label="Photo for your Keep" />
+      <input ref={input} type="file" accept="image/*" hidden onChange={e => observe(picked(e.target.files?.[0]), 'The upload', announce)} aria-label="Photo for your Keep" />
       {ph.p === 'pick' && <><div style={{ fontSize: 14, color: C.dim, margin: '4px 0 10px' }}>A photo of {label}. It&rsquo;s read once and not kept; only a masked number is shown here.</div>
         <button onClick={() => input.current?.click()} style={{ ...btn, background: C.gold, color: '#111' }}>Take or choose a photo</button></>}
       {ph.p === 'reading' && <div style={{ fontSize: 14, color: C.dim }}>Reading it…</div>}
       {ph.p === 'saving' && <div style={{ fontSize: 14, color: C.dim }}>Saving…</div>}
       {ph.p === 'confirm' && <>{ph.shown.map((l, i) => <div key={i} style={{ fontSize: 15, padding: '2px 0' }}>{untag(l)}</div>)}
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button onClick={() => act(ph.token, 'confirm')} style={{ ...btn, background: C.gold, color: '#111' }}>Confirm</button>
-          <button onClick={() => act(ph.token, 'discard')} style={btn}>Retake</button></div></>}
+          <button onClick={() => observe(act(ph.token, 'confirm'), 'Confirming it', announce)} style={{ ...btn, background: C.gold, color: '#111' }}>Confirm</button>
+          <button onClick={() => observe(act(ph.token, 'discard'), 'Discarding it', announce)} style={btn}>Retake</button></div></>}
       {ph.p === 'saved' && <div style={{ fontSize: 13.5, color: C.dim }}>Encrypted. Sasha only ever sees the mask.</div>}
       {ph.p === 'error' && <><div style={{ fontSize: 14, color: '#f19999', margin: '4px 0 10px' }}>{ph.why}</div>
         <button onClick={() => input.current?.click()} style={btn}>Try another photo</button></>}
@@ -211,7 +213,7 @@ export function AccidentCard({ view, send }: { view: Ev; send: (t: string) => vo
     setBusy(shot.current)
     try {
       const image = await shrink(f)
-      const r = await fetch('/api/s2-agent/accident-photo', { method: 'POST', headers: { 'content-type': 'application/json' },
+      const r = await reach('/api/s2-agent/accident-photo', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ shot: shot.current, media_type: 'image/jpeg', content_base64: image }) })
       const j = await r.json().catch(() => ({}))
       if (j?.ok && j.result) setV(j.result)
@@ -228,11 +230,11 @@ export function AccidentCard({ view, send }: { view: Ev; send: (t: string) => vo
         <div>{(v.choices || []).map((c: string) => <button key={c} onClick={() => send(c)} style={btn(c === 'no')}>{c[0].toUpperCase() + c.slice(1)}</button>)}</div></>}
       {v.step === 'duties' && <><Lines title="The official rules" lines={v.lines} /><button onClick={() => send('done')} style={btn(true)}>Done</button></>}
       {v.step === 'photos' && <>
-        <input ref={pick} type="file" accept="image/*" capture="environment" hidden onChange={e => photo(e.target.files?.[0])} aria-label="Accident photo" />
+        <input ref={pick} type="file" accept="image/*" capture="environment" hidden onChange={e => observe(photo(e.target.files?.[0]), 'The photo', announce)} aria-label="Accident photo" />
         {(v.shots || []).map((s: Ev) => (
           <div key={s.shot} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: `1px solid ${C.line}` }}>
             <span style={{ fontSize: 14, color: s.taken ? '#7ee2a8' : '#fff' }}>{s.taken ? '✓ ' : ''}{s.say}</span>
-            <button onClick={() => { shot.current = s.shot; pick.current?.click() }} disabled={!!busy} style={{ ...btn(), marginTop: 0, padding: '5px 12px' }}>{busy === s.shot ? '…' : s.taken ? 'Retake' : 'Take'}</button>
+            <button onClick={(e: React.MouseEvent) => { if (!!busy) { announce(stillGoing('The photo upload', 'Take')); return } (() => { shot.current = s.shot; pick.current?.click() })() }} style={{ ...btn(), marginTop: 0, padding: '5px 12px' }}>{busy === s.shot ? '…' : s.taken ? 'Retake' : 'Take'}</button>
           </div>))}
         <button onClick={() => send('done')} style={btn(true)}>Done with photos</button></>}
       {v.step === 'statement' && <>
@@ -288,7 +290,7 @@ export function SubscriptionsCard({ items, total, source, send }: { items: Ev[];
 export function PreparedCard({ ev }: { ev: Ev }) {
   const [copied, setCopied] = useState<string | null>(null)
   const copy = (label: string, value: string) => {
-    navigator.clipboard?.writeText(value).then(() => { setCopied(label); setTimeout(() => setCopied(null), 1500) }).catch(() => {})
+    navigator.clipboard?.writeText(value).then(() => { setCopied(label); setTimeout(() => setCopied(null), 1500) }).catch(((e: unknown) => announce(failed('Copying', e))))
   }
   return (
     <Box k={ev.filled === false ? 'Not filled in — copy your details' : 'Ready to book'} h={untag(String(ev.venue || 'Their booking page'))} tone={C.gold}>{/* Sasha 264 · item 2: never an empty page called prefilled */}

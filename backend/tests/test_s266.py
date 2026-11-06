@@ -53,7 +53,7 @@ class OnOnlyWhenItHears(unittest.TestCase):
         body = src[src.index("const connect = useCallback(async () => {"):]
         fresh = body[body.index("const ctx = new AudioContext()"):]
         self.assertLess(fresh.index("await micPermission()"), fresh.index("prefetchKey()"))   # no key minted for a blocked site
-        self.assertIn("if (perm !== 'denied') void prefetchKey()", src)                        # Sasha 322 · nor before the tap
+        self.assertIn("if (perm !== 'denied') observe(prefetchKey(), 'Asking for the microphone’s key', toConsole)", src)                        # Sasha 322 · nor before the tap
         self.assertIn("if (perm === 'denied') {", body)
         self.assertIn("reportMicError(BLOCKED)", body)
         app = _tsx(self, "app/s2/S2App.tsx")
@@ -94,7 +94,7 @@ class SheStaysThroughTheFirstExchange(unittest.TestCase):
         # left full size had the next line said over it (a frozen face). Sasha 303 · MOVED: the quiet is the ONE gate's (server, 60 s);
         # its session's end is `ended` → collapse(), the same way — the page's FACE_IDLE_S timer is gone (tests.test_s303)
         self.assertNotIn("FACE_IDLE_S", hello)
-        self.assertIn("const ended = () => { if (mine && face.current === mine) void collapse() }", hello)
+        self.assertIn("const ended = () => { if (mine && face.current === mine) observe(collapse(), 'Taking her to the corner', toConsole) }", hello)
         self.assertIn("if (!openingEnds(phaseRef.current, started)) return", hello)      # his first reply: then the circle
         self.assertIn("started={tab !== 'sasha'} ctlRef={helloCtl}", _tsx(self, "app/s2/S2App.tsx"))   # 268: small talk keeps her; his first request (bye) ends it
 

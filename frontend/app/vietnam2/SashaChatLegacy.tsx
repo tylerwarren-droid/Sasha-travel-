@@ -4,7 +4,8 @@ import { Send, Loader2 } from 'lucide-react'
 import { User, Itinerary } from '@/types'
 import VoiceButton from './VoiceButton'
 import { renderMarkdown } from '@/lib/markdown'
-import axios from 'axios'
+import { axios } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, needs, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 interface SashaChatProps {
   user: User
@@ -114,7 +115,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
           {presetPrompts.map(prompt => (
             <button
               key={prompt}
-              onClick={() => sendMessage(prompt)}
+              onClick={() => observe(sendMessage(prompt), 'Your message', announce)}
               className="text-xs rounded-full px-3 py-1 transition-opacity hover:opacity-75"
               style={{ background: 'rgba(218,165,32,0.1)', border: '1px solid rgba(218,165,32,0.3)', color: '#DAA520' }}
             >
@@ -160,7 +161,7 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
       <div className="px-3 pb-3 pt-2 border-t border-white/5">
         <div className="flex items-center gap-2 bg-white/5 rounded-2xl px-4 py-2 border border-white/5">
           <VoiceButton
-            onTranscript={(text) => sendMessage(text)}
+            onTranscript={(text) => observe(sendMessage(text), 'Your message', announce)}
             autoStart={true}
             readyToListen={readyToListen}
             avatarSpeaking={avatarSpeaking}
@@ -176,18 +177,17 @@ export default function SashaChat({ user, itinerary, onItineraryUpdate, onSashaR
             className="flex-1 bg-transparent text-sm text-white/80 placeholder-white/20 outline-none"
           />
           <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isLoading}
+            onClick={(e: React.MouseEvent) => { if (!input.trim() || isLoading) { announce((!input.trim()) ? needs('Send', ['a message — type one first']) : stillGoing('Sasha’s reply', 'send')); return } (() => observe(sendMessage(input), 'Your message', announce))() }}
             className="p-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 transition-colors"
           >
             <Send className="w-3.5 h-3.5 text-white" />
           </button>
         </div>
         <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-          <button onClick={() => sendMessage("What are the best places to visit in Vietnam?")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best places →</button>
-          <button onClick={() => sendMessage("I want to play golf in Danang")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">⛳ Golf →</button>
-          <button onClick={() => sendMessage("Help me plan a 7 day Vietnam trip")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Plan trip →</button>
-          <button onClick={() => sendMessage("Find me flights to Hanoi")} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Flights →</button>
+          <button onClick={() => observe(sendMessage("What are the best places to visit in Vietnam?"), 'Your message', announce)} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Best places →</button>
+          <button onClick={() => observe(sendMessage("I want to play golf in Danang"), 'Your message', announce)} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">⛳ Golf →</button>
+          <button onClick={() => observe(sendMessage("Help me plan a 7 day Vietnam trip"), 'Your message', announce)} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Plan trip →</button>
+          <button onClick={() => observe(sendMessage("Find me flights to Hanoi"), 'Your message', announce)} className="text-xs text-white/30 hover:text-white/60 transition-colors whitespace-nowrap flex-shrink-0">Flights →</button>
         </div>
       </div>
     </div>

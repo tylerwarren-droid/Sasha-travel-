@@ -6,6 +6,8 @@
  */
 import { apiUrl } from '@/lib/api'
 import { withCamera } from '@/lib/presence-rule.mjs'
+import { noted } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 let rule: { line: string; re: RegExp; cameraOff: string; trip: RegExp | null; tryLine: string; hello: string; helloBack: string; acks: string[]
   stillHere: string; stillHereEs: string } | null = null
@@ -13,7 +15,7 @@ let loading: Promise<void> | null = null
 
 export function loadFirstLine(): Promise<void> {
   if (rule || loading) return loading || Promise.resolve()
-  loading = fetch(apiUrl('/api/agent/first-line'), { cache: 'no-store' })
+  loading = reach(apiUrl('/api/agent/first-line'), { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
     .then((j: { line?: string; work?: string; flags?: string; camera_off?: string; still_here?: string; still_here_es?: string; trip?: string; try?: string; hello?: string; hello_back?: string; acks?: string[] } | null) => {
       if (j?.line && j?.work) rule = { line: j.line, re: new RegExp(j.work, j.flags || 'i'), cameraOff: j.camera_off || '',
@@ -21,7 +23,7 @@ export function loadFirstLine(): Promise<void> {
                                        hello: j.hello || '', helloBack: j.hello_back || '', acks: Array.isArray(j.acks) ? j.acks.filter(x => typeof x === 'string' && x) : [],
                                        stillHere: j.still_here || '', stillHereEs: j.still_here_es || '' }
     })
-    .catch(() => { /* not read: the stream's own first line still comes (~1 s) */ })
+    .catch(noted('Fetching her first line'))
     .finally(() => { loading = null })
   return loading
 }

@@ -23,6 +23,7 @@
 import { readFileSync, readdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import ts from "typescript";
+import { sourceFiles, directRequests } from "./one-client.mjs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
@@ -77,21 +78,46 @@ export function findSilences(src) {
     if (ts.isVoidExpression(n) && ts.isCallExpression(n.expression)) {
       out.push({ rule: "S2", line: at(n), why: "a promise launched with `void` — its failure would write nothing" });
     }
-    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "then" && n.arguments.length < 2) {
-      let top = n, caught = false;   // up the chain: x.then(…).then(…).catch(…)
-      while (ts.isPropertyAccessExpression(top.parent) && ts.isCallExpression(top.parent.parent) && top.parent.parent.expression === top.parent) {
-        const name = top.parent.name.text;
-        top = top.parent.parent;
-        if (name === "catch" || (name === "then" && top.arguments.length >= 2)) caught = true;
-      }
-      let up = top.parent;
-      while (up && ts.isParenthesizedExpression(up)) up = up.parent;
-      const intoObserve = up && ts.isCallExpression(up) && ts.isIdentifier(up.expression) && up.expression.text === "observe";   // lib/outcome
-      if (!caught && !intoObserve && !(up && ts.isAwaitExpression(up))) {
-        out.push({ rule: "S2", line: at(n), why: "a `.then(` with no `.catch(` — a rejection would write nothing" });
-      }
+    // (Sasha 348) a `.then(` chain left without a `.catch(` is the type pass's floating-promise rule below — it knows a promise that is
+    // stored or returned (its consumer observes it) from one that is dropped; a syntax-only rule could not
+    // S4 (Sasha 348) · a catch that tells nobody: `catch {}` / `catch { /* … */ }`, `.catch(() => {})`, `.then(ok, () => {})` — the failure
+    // is swallowed. It must tell someone (lib/outcome: observe, failed → the person, or toConsole for a step that isn't theirs) or handle it.
+    const empty = (f) => f && (ts.isArrowFunction(f) || ts.isFunctionExpression(f)) && ts.isBlock(f.body) && f.body.statements.length === 0;
+    if (ts.isCatchClause(n) && n.block.statements.length === 0) {
+      out.push({ rule: "S4", line: at(n), why: "a catch that tells nobody — tell the failure (lib/outcome) or handle it" });
+    }
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
+        ((n.expression.name.text === "catch" && empty(n.arguments[0])) || (n.expression.name.text === "then" && empty(n.arguments[1])))) {
+      out.push({ rule: "S4", line: at(n.arguments[n.expression.name.text === "then" ? 1 : 0]), why: "a .catch(() => {}) that tells nobody — tell the failure (lib/outcome) or handle it" });
+    }
+    // S5 (Sasha 348) · a PRESS told only to the console: inside a JSX event handler (on…), observe(…, toConsole) or noted(…) — the person
+    // pressed; the failure is theirs to hear (announce, or the page's own line)
+    if (inHandler(n) && ts.isCallExpression(n) && ts.isIdentifier(n.expression) &&
+        ((n.expression.text === "observe" && n.arguments[2] && n.arguments[2].getText(sf) === "toConsole") || n.expression.text === "noted")) {
+      out.push({ rule: "S5", line: at(n), why: "a press whose failure is told only to the console — tell the person (announce, or the page's own line)" });
     }
     ts.forEachChild(n, visit);
+  };
+  // a handler is an on… attribute's own code, or a function of this file named there (onClick={begin}) or called from there
+  const handlers = new Set();
+  const named = (x) => {
+    if (ts.isJsxAttribute(x) && /^on[A-Z]/.test(x.name.getText(sf)) && x.initializer && ts.isJsxExpression(x.initializer) && x.initializer.expression) {
+      const e = x.initializer.expression;
+      if (ts.isIdentifier(e)) handlers.add(e.text);
+      const calls = (c) => { if (ts.isCallExpression(c) && ts.isIdentifier(c.expression)) handlers.add(c.expression.text); ts.forEachChild(c, calls); };
+      if (ts.isArrowFunction(e) || ts.isFunctionExpression(e)) calls(e.body);
+    }
+    ts.forEachChild(x, named);
+  };
+  named(sf);
+  const declaredHandler = (u) => (ts.isFunctionDeclaration(u) && u.name && handlers.has(u.name.text)) ||
+    ((ts.isArrowFunction(u) || ts.isFunctionExpression(u)) && ts.isVariableDeclaration(u.parent) && ts.isIdentifier(u.parent.name) && handlers.has(u.parent.name.text));
+  const inHandler = (n) => {
+    for (let u = n.parent; u; u = u.parent) {
+      if (ts.isJsxAttribute(u)) return /^on[A-Z]/.test(u.name.getText(sf));
+      if (declaredHandler(u)) return true;
+    }
+    return false;
   };
   visit(sf);
   const code = strip(src);
@@ -146,7 +172,7 @@ export function floatingPromises(files, options = null) {
     const found = [];
     const visit = (x) => {
       let hit = null;
-      if (ts.isExpressionStatement(x) && !ts.isVoidExpression(x.expression) && !ts.isAwaitExpression(x.expression) && isPromise(x.expression) && !observed(x.expression)) hit = x.expression;
+      if (ts.isExpressionStatement(x) && !ts.isVoidExpression(x.expression) && !ts.isAwaitExpression(x.expression) && !(ts.isBinaryExpression(x.expression) && x.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) && isPromise(x.expression) && !observed(x.expression)) hit = x.expression;   // `x = p` stores it: its consumer observes it
       if (ts.isArrowFunction(x) && !ts.isBlock(x.body) && ts.isJsxExpression(x.parent) && ts.isJsxAttribute(x.parent.parent) && isPromise(x.body) && !observed(x.body)) hit = x.body;
       if (hit) found.push({ rule: "S2", line: sf.getLineAndCharacterOfPosition(hit.getStart(sf)).line + 1,
         why: `a floating promise (${hit.getText(sf).slice(0, 40).replace(/\s+/g, " ")}…) — observe() it (lib/outcome): its failure is told` });
@@ -179,23 +205,30 @@ export function gatedButtonProblems(src) {
 const FIXTURES = [
   { name: "a raw disabled button", src: `<button disabled={busy || !paired} onClick={pair}>Pair</button>`, want: ["S1"] },
   { name: "a void-launched relay", src: `if (m.type === 'REPORT') { void relayReport(m) }`, want: ["S2"] },
-  { name: "a .then with no .catch", src: `call('/x').then((r) => setHealth(r))\n`, want: ["S2"] },
   { name: "a \"/*\" inside a string hides no code (Sasha 347)", src: `<input accept="image/*" />\n<button disabled={busy}>x</button>\n{/* a note */}`, want: ["S1"] },
   { name: "a bare disabled (Sasha 347)", src: `<button disabled onClick={go}>Go</button>`, want: ["S1"] },
   { name: "a long chain that ends in .catch passes (Sasha 347)", src: `fetch('/x').then((r) => r.json()).then((j) => {\n${"  set(j);\n".repeat(80)}}).catch(() => setFailed(true))`, want: [] },
   { name: "an awaited .then is its caller's (Sasha 347)", src: `const j = await fetch('/x').then((r) => r.json())`, want: [] },
+  { name: "a catch that tells nobody (Sasha 348)", src: `try { go() } catch { /* nothing */ }\np.catch(() => {})\np.then(ok, () => {})`, want: ["S4"] },
+  { name: "a catch that tells or handles passes (Sasha 348)", src: `try { go() } catch (e) { toConsole(failed('Go', e)) }\np.catch(() => null).catch((e) => tell(e))\ntry { a() } catch { return false }`, want: [] },
+  { name: "a press told only to the console (Sasha 348)", src: `<button onClick={() => observe(save(), 'Saving', toConsole)}>Save</button>\n<a onClick={() => { go().catch(noted('Go')) }}>x</a>`, want: ["S5"] },
+  { name: "a press reached by name is a press (Sasha 348)", src: `const begin = () => { observe(start(), 'Starting', toConsole) }\nconst bg = () => { observe(poll(), 'Reading', toConsole) }\nuseEffect(bg, [])\nreturn <button onClick={begin}>Go</button>`, want: ["S5"] },
+  { name: "a press told to the person passes (Sasha 348)", src: `<button onClick={() => observe(save(), 'Saving', announce)}>Save</button>\nuseEffect(() => { observe(poll(), 'Reading', toConsole) }, [])`, want: [] },
   { name: "Nothing yet from an empty list", src: `{log.length === 0 ? <p className="x">Nothing yet.</p> : null}`, want: ["S3"] },
   { name: "the clean forms pass", src: `<GatedButton label="Pair" needs={[!connected && 'Connect, first']} onClick={pair} />\nrelayReport(m).catch((e) => note(String(e), 'stop'))\ncall('/x').then((r) => set(r)).catch(() => set({ unreachable: true }))\n{!started ? <p>Nothing attempted yet.</p> : null}\ntype F = (m: Msg) => void`, want: [] },
 ];
 
-/** Every .tsx under app/ that calls bookingReq — a page where a person acts and must learn what happened. */
+/** Sasha 348 · every file that ACTS — it imports the one request client (lib/request) or the booking client built on it — in app/ and lib/,
+ *  but the server's route handlers (app/api/…, which answer a page; the page tells the person). Found, never listed. */
 export function actingPages(dir = "app") {
   const out = [];
   for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
     const rel = `${dir}/${e.name}`;
-    if (e.isDirectory()) out.push(...actingPages(rel));
-    else if (e.name.endsWith(".tsx") && /\bbookingReq\(/.test(strip(readFileSync(join(ROOT, rel), "utf8")))) out.push(rel);
+    if (e.isDirectory()) { if (rel !== "app/api") out.push(...actingPages(rel)); continue; }
+    if (!/\.tsx?$/.test(e.name) || /\.d\.ts$/.test(e.name) || /^(route|middleware)\.ts$/.test(e.name)) continue;
+    if (/^import (?!type\b)[^\n]*from ['"](@\/lib|\.{1,2}(\/\.\.)*\/lib|\.)\/(request|booking-client)['"]/m.test(readFileSync(join(ROOT, rel), "utf8"))) out.push(rel);
   }
+  if (dir === "app") out.push(...actingPages("lib"));
   return out.sort();
 }
 
@@ -210,12 +243,20 @@ function main() {
     console.error(`\ncheck-outcome-surfaces: the checker itself is broken (${failed} fixture(s)) — refusing to vouch for anything.`);
     process.exit(1);
   }
+  {   // Sasha 348 · the direct-request refusal on fixtures: each kind caught, the one client's names pass
+    const caught = directRequests("fetch('/a'); window.fetch('/b'); new EventSource('/c'); new WebSocket('wss://d'); navigator.sendBeacon('/e'); new XMLHttpRequest()\nimport axios from 'axios'\n", "f.ts").length;
+    const clean = directRequests("reach('/a'); events('/c'); socket('wss://d'); beacon('/e'); request('/f'); obj.fetch2('/g')\n", "g.ts").length;
+    if (caught !== 7 || clean !== 0) {
+      console.error(`check-outcome-surfaces: the direct-request checker is broken (caught ${caught} of 7, ${clean} false) — refusing to vouch for anything.`);
+      process.exit(1);
+    }
+  }
   {   // Sasha 347 · the floating-promise half runs on fixtures too: caught, and the clean forms pass
     const dir = mkdtempSync(join(tmpdir(), "outcome-"));
     const bad = join(dir, "bad.tsx"), good = join(dir, "good.tsx");
     const head = "declare function go(): Promise<void>\ndeclare function observe(p: Promise<unknown>, n: string, t: (s: string) => void): void\ndeclare const tell: (s: string) => void\n";
-    writeFileSync(bad, head + "declare function Kid(p: { act: () => void }): any\nexport function A() { go(); return <><button onClick={() => go()}>x</button><Kid act={go} /></> }\n");
-    writeFileSync(good, head + "export async function B() { await go(); go().catch(() => tell('no')); go().catch(() => tell('no')).finally(() => tell('done')); observe(go(), 'Go', tell); return <button onClick={() => observe(go(), 'Go', tell)}>x</button> }\n");
+    writeFileSync(bad, head + "declare function Kid(p: { act: () => void }): any\nexport function A() { go().then(() => tell('ok')); return <><button onClick={() => go()}>x</button><Kid act={go} /></> }\n");
+    writeFileSync(good, head + "let held: Promise<void> | null = null\nexport async function B() { held = go().then(() => tell('ok')); await go(); go().catch(() => tell('no')); go().catch(() => tell('no')).finally(() => tell('done')); observe(go(), 'Go', tell); return <button onClick={() => observe(go(), 'Go', tell)}>x</button> }\n");
     const fl = floatingPromises([bad, good], { jsx: ts.JsxEmit.Preserve, lib: ["lib.es2020.d.ts", "lib.dom.d.ts"], strict: true, skipLibCheck: true });
     if (fl.get(bad).length !== 3 || fl.get(good).length !== 0) {
       console.error(`check-outcome-surfaces: the floating-promise checker is broken (caught ${fl.get(bad).length} of 3, ${fl.get(good).length} false) — refusing to vouch for anything.`);
@@ -223,6 +264,11 @@ function main() {
     }
   }
   const problems = [];
+  // Sasha 348 · ONE request client: a direct fetch( / EventSource / WebSocket / sendBeacon / XMLHttpRequest / axios anywhere in the frontend
+  // but lib/request.ts is refused — zero exceptions (scripts/one-client.mjs --write moves a file onto it, mechanically)
+  for (const rel of sourceFiles()) {
+    for (const d of directRequests(readFileSync(join(ROOT, rel), "utf8"), rel)) problems.push(`${rel}:${d.line}  R1  a direct ${d.what} — every request goes through lib/request (node scripts/one-client.mjs --write)`);
+  }
   // Sasha 346/347 · a page that ACTS (calls bookingReq) is an outcome surface: every one is checked, with no exceptions
   const surfaces = [...new Set([...OUTCOME_SURFACES, ...actingPages()])];
   const floating = floatingPromises(surfaces);

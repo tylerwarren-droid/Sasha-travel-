@@ -14,6 +14,8 @@ import { bookingReq, contactReq, guestRefusal as refusal, type Consent } from '@
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { Reminders } from './Reminders'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { noted } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type View = { linked: boolean; opted_out: boolean; number: string | null; join: string | null
   consent: { version: string; text: string; sha256: string } }
@@ -44,7 +46,7 @@ export function WhatsAppLink() {
     }).catch((e) => { if (!off) setWords((e as Error).message) })
     contactReq('GET').then((r) => {
       if (!off && r.ok) setContact({ saved: !!r.json.contact, consent: r.json.consent as Consent })
-    }).catch(() => { /* the code step says what is missing */ })
+    }).catch(noted('WhatsAppLink · contactReq(’GET’).then((r) => { if (!off && r.ok) setContact'))
     return () => { off = true }
   }, [])
 
@@ -67,9 +69,9 @@ export function WhatsAppLink() {
   async function unlink() {
     setBusy(true)
     try {
-      const r = await fetch(bookingUrl('/api/booking/whatsapp'), { method: 'DELETE', headers: bookingHeaders() })
+      const r = await reach(bookingUrl('/api/booking/whatsapp'), { method: 'DELETE', headers: bookingHeaders() })
       let j: Record<string, unknown> = {}
-      try { j = await r.json() } catch { /* reported by its status */ }
+      try { j = await r.json() } catch { j = {} }   // not JSON: the status, said below, tells what happened
       setWords(r.ok ? 'Unlinked. Sasha won’t message you on WhatsApp.' : `Not unlinked — ${refusal(j, r.status)}.`)
       setCode(null)
       await load()

@@ -12,6 +12,7 @@
 import { Fragment, useEffect, useState, type CSSProperties } from 'react'
 import { GatedButton } from '../booking-helper/GatedButton'
 import { keepLead } from '@/lib/keep-lead.mjs'   // Sasha 246
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Use = { what: string; at?: string; for?: string }   // Sasha 235 · from the Activity rows the Keep writes
 type Item = { item_id: string; type: string; tier: 'free' | 'yes' | 'read_back'; masked: string; last_used_at?: string; uses?: Use[] }
@@ -41,7 +42,7 @@ const SECRET_FIELDS = new Set(['number', 'code', 'password', 'reference', 'activ
 const label = (f: string) => f.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
 
 async function call(path: string, init?: RequestInit): Promise<{ ok: boolean; status: number; j: Record<string, unknown> }> {
-  const r = await fetch(path, { cache: 'no-store', ...init })
+  const r = await reach(path, { cache: 'no-store', ...init })
   let j: Record<string, unknown> = {}
   try { j = await r.json() } catch { j = { message: `the server answered ${r.status}` } }
   return { ok: r.ok && j.ok !== false, status: r.status, j }

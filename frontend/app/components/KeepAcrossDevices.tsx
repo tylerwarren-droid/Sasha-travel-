@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react'
 import { BOOKED_EVENT } from '@/lib/guest-start'
 import { actingOf } from '@/lib/acting-rule.mjs'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 export function KeepAcrossDevices() {
   const [show, setShow] = useState(false)
@@ -14,7 +16,7 @@ export function KeepAcrossDevices() {
   const [said, setSaid] = useState<string | null>(null)
   useEffect(() => {
     const on = async () => {
-      const w = await fetch('/api/auth/whoami', { cache: 'no-store' }).then((r) => r.json()).catch(() => null)
+      const w = await reach('/api/auth/whoami', { cache: 'no-store' }).then((r) => r.json()).catch(() => null)
       if (actingOf(w) === 'guest') setShow(true)   // Sasha 249 · whoami's acting (the automatic guest), never the email suffix
     }
     window.addEventListener(BOOKED_EVENT, on)
@@ -22,7 +24,7 @@ export function KeepAcrossDevices() {
   }, [])
   if (!show) return null
   async function save() {
-    const r = await fetch('/api/guest/email', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }) })
+    const r = await reach('/api/guest/email', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }) })
     const j = await r.json().catch(() => ({})) as { say?: string; message?: string }
     setSaid(r.ok ? (j.say ?? 'Check your inbox.') : (j.message ?? `Not saved (HTTP ${r.status}).`))
   }
@@ -33,7 +35,7 @@ export function KeepAcrossDevices() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your email (optional)"
                  style={{ flex: '1 1 180px', padding: '6px 8px', borderRadius: 8, color: '#111' }} />
-          <button type="button" onClick={save} style={{ padding: '6px 10px', borderRadius: 8, background: '#7c5cff', color: '#fff' }}>Add</button>
+          <button type="button" onClick={() => observe(save(), 'Saving', announce)} style={{ padding: '6px 10px', borderRadius: 8, background: '#7c5cff', color: '#fff' }}>Add</button>
           <button type="button" onClick={() => setShow(false)} style={{ padding: '6px 10px', opacity: 0.7 }}>Not now</button>
         </div>
       )}

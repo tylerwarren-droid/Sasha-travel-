@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react'
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 export type Receipt = {
   venue: { name: string; source: string }; what: string; count: number | null; unit: string; date: string | null; time: string | null
@@ -85,7 +86,7 @@ export default function ReceiptCard({ path }: { path: string }) {
   const [state, setState] = useState<{ r: Receipt } | { why: string } | null>(null)
   useEffect(() => {
     let off = false
-    fetch(bookingUrl(path), { headers: bookingHeaders() })
+    reach(bookingUrl(path), { headers: bookingHeaders() })
       .then(async (res) => {
         if (off) return
         if (!res.ok) { setState({ why: res.status === 401 ? 'sign in to see it' : `it couldn't be loaded (${res.status})` }); return }

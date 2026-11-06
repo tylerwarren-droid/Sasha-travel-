@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { founderSignedIn } from '@/lib/signed-in'
 import { guest, guestClient, guestSignInOpen, supabaseConfigured } from '@/lib/guest-session'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * Sasha 153 · NO SIGN-IN WALL. A browser with no session gets its own AUTOMATIC PRIVATE GUEST ACCOUNT: the backend makes
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || request.headers.get('x-real-ip') || ''
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/booking/guest/start`, {
+    r = await reach(`${API_URL}/api/booking/guest/start`, {
       method: 'POST', cache: 'no-store',
       headers: { 'content-type': 'application/json', 'x-sasha-booking-key': key },
       body: JSON.stringify({ ip }),

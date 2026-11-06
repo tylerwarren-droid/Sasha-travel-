@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * Sasha 212 · /next's LIVE CHANNEL (backend /api/agent/events, server-sent events): a payment that completes on the phone
@@ -18,7 +19,7 @@ export async function GET(request: Request): Promise<Response> {
   const since = request.headers.get('last-event-id') || url.searchParams.get('since') || '0'
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/events?since=${encodeURIComponent(since)}`, { headers, cache: 'no-store', signal: request.signal })
+    r = await reach(`${API_URL}/api/agent/events?since=${encodeURIComponent(since)}`, { headers, cache: 'no-store', signal: request.signal })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }

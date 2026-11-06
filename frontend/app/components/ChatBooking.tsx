@@ -25,7 +25,7 @@ import { ChatBookingDo } from './ChatBookingDo'
 import ChatBookingCall from './ChatBookingCall'
 import ChatBookingLink from './ChatBookingLink'
 import { SignInToBook } from './SignedInLine'
-import { observe, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
+import { announce, failed, noted, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Find = { what: string; where?: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown; named?: boolean
   bare_time?: { day: string; hour: number; minute: number } }
@@ -167,7 +167,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
 
   // Sasha 158 · NAME IT: the one venue named is picked at once — straight to the read-back
   useEffect(() => {
-    if (find.named && state.phase === 'found' && state.cards.length === 1) pick(state.cards[0]).catch(() => { /* visible state set inside */ })
+    if (find.named && state.phase === 'found' && state.cards.length === 1) pick(state.cards[0]).catch(noted('ChatBooking · pick(state.cards[0])'))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase])
 
@@ -247,7 +247,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
       const byNumber = m && /\b(one|pick|choose|that|the)\b/.test(text.toLowerCase()) ? s.cards[ORDINAL[m[1]]] : undefined
       const card = byNumber ?? pickedBySaying(s.cards, text)   // Sasha 169 · its name, or "the one by the river"
       if (!card) return false
-      pick(card).catch(() => { /* every path above sets a visible state */ })
+      pick(card).catch(noted('ChatBooking · pick(card)'))
       return true
     })
     return () => setChatBookingHandler(null)
@@ -279,7 +279,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
               {/* Sasha 248 · ONE PLACE CARD (components/cards/PlaceCard): the same card and detail sheet as /s2 — a tap opens it */}
               <PlaceCard card={c as Record<string, unknown> as Record<string, any>} tone="dark"   // eslint-disable-line @typescript-eslint/no-explicit-any
                 badge={state.phase === 'found' && state.ranking?.picks?.[state.chip] === c.place_id ? 'Sasha’s pick' : null}
-                onBook={() => { pick(c).catch(() => { /* visible state set inside */ }) }} />
+                onBook={() => { pick(c).catch(((e: unknown) => announce(failed('Choosing that place', e)))) }} />
               {group && group !== 'main' ? <div style={{ fontSize: 12.5, color: '#f19999', marginTop: 4 }}>{GROUP_WORDS[group]}</div> : null}
               {near ? <div style={{ fontSize: 12.5, opacity: 0.7 }}>{c.distance ?? 'distance not known'}</div> : null}
             </li>

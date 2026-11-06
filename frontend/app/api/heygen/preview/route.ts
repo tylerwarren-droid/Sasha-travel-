@@ -1,3 +1,4 @@
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 // Sasha 215 · S2 — the start screen shows HER: the configured LiveAvatar avatar's own preview still, fetched with the key
 // that lives only on the server (HEYGEN_API_KEY) and served from here, cached for a day. No still → 404 and the page hides
 // the image (never a stand-in photo). public/sasha-preview.jpg, which the page used to point at, was never in the repo.
@@ -22,10 +23,10 @@ export async function GET(): Promise<Response> {
   const key = process.env.HEYGEN_API_KEY
   if (!key) return new Response('no LiveAvatar key', { status: 404 })
   try {
-    const r = await fetch(`https://api.liveavatar.com/v1/avatars/${AVATAR_ID}`, { headers: { 'X-API-KEY': key }, cache: 'no-store' })
+    const r = await reach(`https://api.liveavatar.com/v1/avatars/${AVATAR_ID}`, { headers: { 'X-API-KEY': key }, cache: 'no-store' })
     const url = r.ok ? imageUrlIn(await r.json().catch(() => null)) : null
     if (!url) return new Response('no preview', { status: 404 })
-    const img = await fetch(url)
+    const img = await reach(url)
     if (!img.ok || !img.body) return new Response('no preview', { status: 404 })
     const said = img.headers.get('content-type') ?? ''
     const type = said.startsWith('image/') ? said : /\.png(\?|$)/i.test(url) ? 'image/png' : /\.jpe?g(\?|$)/i.test(url) ? 'image/jpeg' : 'image/webp'

@@ -6,6 +6,8 @@ import SashaAvatar from '../components/SashaAvatar'
 import SashaChat from './SashaChatLegacy'
 import { stripMarkdown } from '@/lib/markdown'
 import { User, Itinerary } from '@/types'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { noted } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 const MapPanel = dynamic(() => import('./MapPanel'), { ssr: false })
 
@@ -79,10 +81,10 @@ export default function Vietnam2Page() {
   const handleGate = useCallback((value: boolean) => { gateRef.current?.(value) }, [])
 
   useEffect(() => {
-    fetch('https://sasha-travel-production.up.railway.app/api/photos/search', {
+    reach('https://sasha-travel-production.up.railway.app/api/photos/search', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: 'Vietnam landscape luxury travel', count: 5 })
-    }).then(r => r.json()).then(data => { if (data.photos?.length > 0) { setPhotos(data.photos); setActivePhoto(0) } }).catch(() => {})
+    }).then(r => r.json()).then(data => { if (data.photos?.length > 0) { setPhotos(data.photos); setActivePhoto(0) } }).catch(noted('page · reach(’https://sasha-travel-production.up.railway.app/api/ph'))
   }, [])
 
   useEffect(() => {

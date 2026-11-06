@@ -14,7 +14,7 @@ import { approveCall, bookingReq, getCall, prepareCall, guestRefusal as refusal,
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ReceiptCard from './ReceiptCard'
-import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
+import { noted, observe } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Draft = { parts?: { what?: { activity: string; activity_venue_lang: string; category: string }; when?: { mode: string; at?: string };
   how_many?: { count: number; unit: string }; flow?: string; who?: { name: string } } } | null
@@ -94,7 +94,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
       const w = (r.json.parts as { what?: { activity: string; activity_venue_lang: string; category: string } } | undefined)?.what
       // Sasha 86 · the venue's language wins over the chat's English draft ("a table" → "una mesa"), unless the guest typed one
       if (!off && w) setD((x) => ({ ...x, activity: x.activity || w.activity, venueLang: langEdited ? x.venueLang : (w.activity_venue_lang || x.venueLang), category: w.category }))
-    }).catch(() => { /* the field stays for the guest to fill */ })
+    }).catch(noted('ChatBookingCall · bookingReq(’/api/booking/draft’, { text: whatText, country: '))
     return () => { off = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- once per venue country; a later edit is the guest's
   }, [whatText, country])

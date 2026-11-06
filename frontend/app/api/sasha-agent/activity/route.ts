@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * CR 62 · the ACTIVITY view's data (backend GET /api/agent/activity): everything Sasha did for the signed-in person, newest
@@ -15,7 +16,7 @@ export async function GET(request: Request): Promise<Response> {
   const since = new URL(request.url).searchParams.get('since') ?? ''
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`, { headers: who, cache: 'no-store' })
+    r = await reach(`${API_URL}/api/agent/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`, { headers: who, cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }

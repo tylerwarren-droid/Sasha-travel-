@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { actingAs } from '@/lib/acting-as'
 import { agentHeaders, clientIp } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * S-41 · The booking pass-through. The booking page calls THIS (same origin); it checks the founder's session and
@@ -37,7 +38,7 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
   if (request.method !== 'GET') init.body = await request.text()
   let r: Response
   try {
-    r = await fetch(url, init)
+    r = await reach(url, init)
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: `Sasha's server could not be reached (${(e as Error).message})` }, { status: 502 })
   }

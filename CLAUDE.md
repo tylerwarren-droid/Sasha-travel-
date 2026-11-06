@@ -220,6 +220,13 @@ If deletions > 0, investigate each deleted file before proceeding (check it's no
 
 Stage B — re-apply CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the chat booking (above), the booking mount (below), the reservations insertion (below), the onboarding honesty (`python3 frontend/scripts/stage_b_onboarding_honesty.py`, S-62: Go Live never shows success for a refused save; refuses loudly if an anchor moved; the prebuild fails without it) and the onboarding sign-in gate (see Repo-only files), then import test.
 
+Stage B LAST STEP — the ONE request client (Sasha 348). Every request a page makes goes through frontend/lib/request.ts; the prebuild
+REFUSES any direct fetch( / EventSource / WebSocket / sendBeacon / XMLHttpRequest / axios anywhere in the frontend, and any catch that
+tells nobody. A CTO drop arrives with his own fetch( and axios: move them, mechanically, AFTER every other Stage B step:
+    cd ~/Projects/sasha-travel/frontend && node scripts/one-client.mjs --write && node scripts/one-client.mjs
+The second command must print "0 direct request(s)". Any S1/S2/S4 the prebuild then names in his files (a greyed button, a promise
+nobody watches, an empty catch) is fixed through lib/outcome (announce / observe / noted) — never by listing the file.
+
 Chat booking re-apply command (S-66, EU's booking-in-chat) — SashaChat.tsx is the CTO's; every zip drops these five
 lines. They give the chat Find → pick → read (frontend/app/components/ChatBooking.tsx, repo-only) and let a typed line
 reach the booking thread first. It REFUSES, loudly, if any anchor changed:

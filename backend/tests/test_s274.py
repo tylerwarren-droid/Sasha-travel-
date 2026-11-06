@@ -88,7 +88,7 @@ class MicAgrees(unittest.TestCase):
         self.assertIn("if (ACTING === 'guest' && ['read_back', 'prepared', 'wa_open', 'handover', 'pay'].includes(c.k)) add0({ k: 'sign_in' })", app)
         self.assertIn("const signIn = sessionStorage.getItem(SIGN_IN_CARRY)", app)
         self.assertIn("c.k !== 'pay' && c.k !== 'sign_in'", app)                              # a guest's sign-in card never follows them in
-        self.assertIn("onClick={() => { setOpen(false); if (acting === 'user') void signOut('sign_in'); else signIn(false) }}", sil)   # switching never carries
+        self.assertIn("onClick={() => { setOpen(false); if (acting === 'user') observe(signOut('sign_in'), 'Signing out', announce); else signIn(false) }}", sil)   # switching never carries
 
     def test_in_the_gate(self):
         self.assertIn('["tests.test_s274"]', (BACKEND / "scripts" / "one_truth_suite.py").read_text(encoding="utf-8"))

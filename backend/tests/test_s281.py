@@ -70,12 +70,12 @@ class OneWayToHerLips(unittest.TestCase):
     def test_a_late_face_is_never_shown_mid_line(self):
         self.assertNotIn("'faceLate')", self.hello)
         # Sasha 303 · MOVED: no face is started before his tap, so none can come mid-line; his tap's own face, late, is closed
-        self.assertIn("if (phaseRef.current !== 'face') { void f.stop('late'); return false }", self.hello)
+        self.assertIn("if (phaseRef.current !== 'face') { observe(f.stop('late'), 'Letting her late face go', toConsole); return false }", self.hello)
 
     def test_face_let_go_while_big_goes_to_the_corner(self):
         # Sasha 303 · MOVED: the quiet is the ONE gate's, on the server (tests.test_s303); its session's end → `ended` → collapse()
         self.assertNotIn("idle.current = setTimeout(", self.hello)
-        self.assertIn("const ended = () => { if (mine && face.current === mine) void collapse() }", self.hello)
+        self.assertIn("const ended = () => { if (mine && face.current === mine) observe(collapse(), 'Taking her to the corner', toConsole) }", self.hello)
         self.assertIn("if (phaseRef.current !== 'faceAgain') { letGo(f); return }", self.hello)
 
     def test_a_face_line_says_whether_it_reached_her_lips(self):

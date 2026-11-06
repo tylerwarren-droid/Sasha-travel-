@@ -10,6 +10,8 @@
  *                     so a device that fails says how; at most REPORT_MAX per page
  */
 import { apiUrl } from '@/lib/api'
+import { beacon, reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { noted, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 /** Sasha 320 · ONE short line, and only after HIS tap on the mic was refused (never on load): what to do now, and where to allow it. */
 export const BLOCKED = `Microphone is off — type instead, or allow it in ${browserName()} settings`
@@ -54,8 +56,8 @@ export function report(ev: string, data: Record<string, unknown> = {}): void {
   for (const k of KEEP) if (data[k] !== undefined) body[k] = typeof data[k] === 'string' ? String(data[k]).slice(0, 120) : data[k]
   try {
     const blob = new Blob([JSON.stringify(body)], { type: 'text/plain' })   // a simple request: no preflight, survives the page closing
-    if (!navigator.sendBeacon?.(apiUrl('/api/voice/mic-event'), blob)) {
-      void fetch(apiUrl('/api/voice/mic-event'), { method: 'POST', body: JSON.stringify(body), keepalive: true }).catch(() => {})
+    if (!beacon(apiUrl('/api/voice/mic-event'), blob)) {
+      observe(reach(apiUrl('/api/voice/mic-event'), { method: 'POST', body: JSON.stringify(body), keepalive: true }).catch(noted('Noting the microphone’s state')), 'Noting the microphone’s state', toConsole)
     }
-  } catch { /* never the mic's problem */ }
+  } catch (e) { noted('Noting the microphone’s state')(e) }
 }

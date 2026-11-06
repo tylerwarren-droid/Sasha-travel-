@@ -11,7 +11,8 @@ import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { gmailOffer, quietLine } from '@/lib/gmail-offer.mjs'   // Sasha 244 · never push a Gmail they don't have
-import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
+import { noted, observe } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Find = { id: string; kind: string; action: string | null; status: string; offer_sha256: string | null; sentence: string | null }
 type View = { configured: boolean; invited?: boolean; connected: boolean; expired: boolean; consent: { version: string; text: string; sha256: string }; finds: Find[] }
@@ -38,7 +39,7 @@ export function MailboxConnect() {
       const rest = params.toString()
       window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash)
     }
-    fetch('/api/auth/whoami', { cache: 'no-store' }).then(r => r.json()).then(w => { if (!off && typeof w?.email === 'string') setEmail(w.email) }).catch(() => {})
+    reach('/api/auth/whoami', { cache: 'no-store' }).then(r => r.json()).then(w => { if (!off && typeof w?.email === 'string') setEmail(w.email) }).catch(noted('MailboxConnect · reach(’/api/auth/whoami’, { cache: ’no-store’ }).then(r => r'))
     bookingReq('/api/booking/mailbox').then((r) => {
       if (off) return
       if (r.ok) setView(r.json as unknown as View)
@@ -72,7 +73,7 @@ export function MailboxConnect() {
     await load()
   })
   const disconnect = () => act(async () => {
-    const r = await fetch(bookingUrl('/api/booking/mailbox'), { method: 'DELETE', headers: bookingHeaders() })
+    const r = await reach(bookingUrl('/api/booking/mailbox'), { method: 'DELETE', headers: bookingHeaders() })
     setWords(r.ok ? 'Disconnected — the access is deleted, and so is everything found.' : 'Not disconnected.')
     await load()
   })

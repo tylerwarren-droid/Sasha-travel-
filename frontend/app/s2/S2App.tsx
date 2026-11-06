@@ -26,7 +26,7 @@ import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · t
 import { TRIP_BOARD_CSS } from './tripBoardCss'
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { bookingReq } from '@/lib/booking-client'   // Sasha 283 · the trip card reads the Trip view's own record
-import { again, needs, observe, stillGoing, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: every press answers, no promise floats
+import { again, announce, failed, needs, noted, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
@@ -37,6 +37,7 @@ import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one c
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 import { NO_SOUND, STARTERS, cueOf, returned } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING: its starters, her one cue, her no-sound line · 296: a return
 import { arrivalLine } from '@/lib/first-line'   // Sasha 295 · the empty conversation's line is her hello's own words
+import { events, reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -111,7 +112,7 @@ const LAST_KEY = 's2_last_at'
 // Sasha 279 · B · a finished booking is said ONCE on this device — its key, whether it came live, replayed, or kept for the return
 const NEWS_KEY = 's2_news_said'
 const newsSaid = (k?: unknown): boolean => { if (!k) return false; try { return (JSON.parse(localStorage.getItem(NEWS_KEY) || '[]') as string[]).includes(String(k)) } catch { return false } }
-const markNews = (k?: unknown): void => { if (!k) return; try { const a = (JSON.parse(localStorage.getItem(NEWS_KEY) || '[]') as string[]).filter(x => x !== String(k)); localStorage.setItem(NEWS_KEY, JSON.stringify([...a, String(k)].slice(-40))) } catch { /* private mode */ } }
+const markNews = (k?: unknown): void => { if (!k) return; try { const a = (JSON.parse(localStorage.getItem(NEWS_KEY) || '[]') as string[]).filter(x => x !== String(k)); localStorage.setItem(NEWS_KEY, JSON.stringify([...a, String(k)].slice(-40))) } catch (e) { noted('Remembering this page’s state')(e) } }
 const localLastAt = (): number | null => { try { const v = Number(localStorage.getItem(LAST_KEY)); return v > 0 ? v : null } catch { return null } }
 const noSub = () => () => {}
 /** Sasha 274 · item 1: the build this page was made from (next.config env) — compared with /api/version's. */
@@ -120,7 +121,7 @@ const CARRY = 's2_carry'
 type Carry = { msgs: Msg[]; hist: { role: string; content: string }[] }
 /** The conversation, across a reload for a new release — this tab only, read once, never a payment card. */
 function putCarry(msgs: Msg[], hist: { role: string; content: string }[], key: string = CARRY): void {
-  try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), msgs: msgs.slice(-40).map(m => ({ ...m, hold: undefined, cards: m.cards.filter(c => c.k !== 'pay' && c.k !== 'sign_in') })), hist: hist.slice(-30) })) } catch { /* private mode: recall restores what it can */ }
+  try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), msgs: msgs.slice(-40).map(m => ({ ...m, hold: undefined, cards: m.cards.filter(c => c.k !== 'pay' && c.k !== 'sign_in') })), hist: hist.slice(-30) })) } catch (e) { announce(failed('Keeping this conversation for after you sign in', e)) }
 }
 function takeCarry(): Carry | null {
   try {
@@ -153,7 +154,7 @@ let ACTING: 'user' | 'founder' | 'guest' | null = null
 function useSignedIn(): boolean | null {
   const [ok, setOk] = useState<boolean | null>(null)
   useEffect(() => {
-    fetch('/api/auth/whoami', { cache: 'no-store' })
+    reach('/api/auth/whoami', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null).then(w => { ACTING = actingOf(w); setOk(ACTING !== null) }).catch(() => setOk(false))
   }, [])
   return ok
@@ -187,7 +188,7 @@ function useSpeaker() {
   }
   const early = useRef(new Map<string, Promise<Blob | null>>())   // Sasha 295 · her hello's audio, fetched before his tap
   const tts = (text: string): Promise<Blob | null> =>
-    fetch(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text }) })   // Sasha 225 · ONE content-type (two were merged → 422: /s2 was silent)
+    reach(apiUrl('/api/voice/tts'), { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ text }) })   // Sasha 225 · ONE content-type (two were merged → 422: /s2 was silent)
       .then(r => (r.ok ? r.blob() : null)).catch(() => null)
   const mp3 = async (text: string): Promise<'played' | 'blocked' | 'failed'> => {
     const mine = epoch.current
@@ -211,7 +212,7 @@ function useSpeaker() {
     while (q.current.length) {
       emit(true)
       const text = q.current.shift() as string
-      if (route.current) await route.current(text).catch(() => {})   // Sasha 281 · S2Hello's speak(): her lips, or her voice from the corner
+      if (route.current) await route.current(text).catch(noted('Her voice'))   // Sasha 281 · S2Hello's speak(): her lips, or her voice from the corner
       else await mp3(text)
       emit(false)
     }
@@ -224,7 +225,7 @@ function useSpeaker() {
       on.current = true
       holdPlayAndRecord('her voice')   // Sasha 267 · ONE audio session: "playback" here made iOS refuse the mic (lib/audio-session)
       if (primed.current || playing.current) return
-      try { const a = audio(); a.src = SILENT; a.play().then(() => { primed.current = true }).catch(() => {}) } catch { /* no audio */ }
+      try { const a = audio(); a.src = SILENT; a.play().then(() => { primed.current = true }).catch(noted('Readying her voice')) } catch (e) { noted('Readying her voice')(e) }
     },
     say: (t: string) => { if (on.current && !muted.current && !asleep.current && t.trim()) { q.current.push(t); observe(next(), 'Her voice', toConsole) } },
     sayNow: async (t: string) => { emit(true); const r = muted.current || asleep.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
@@ -234,7 +235,7 @@ function useSpeaker() {
     speaking: (b: boolean) => emit(b),   // Sasha 295 · her face is saying a line: the same "speaking" as her voice (the mic's gate, the cue)
     setMuted: (m: boolean) => { muted.current = m; if (m) { q.current = []; setBlocked(null) } },
     /** Sasha 233 · "Thanks!" mid read-back: what she's saying stops now, and nothing queued is said. */
-    interrupt: () => { epoch.current++; q.current = []; try { if (el.current && !el.current.paused) el.current.pause() } catch { /* nothing playing */ } },
+    interrupt: () => { epoch.current++; q.current = []; try { if (el.current && !el.current.paused) el.current.pause() } catch (e) { noted('Stopping her voice')(e) } },
     onSpeaking: (fn: (b: boolean) => void) => { subs.current.add(fn); return () => { subs.current.delete(fn) } },
     /** Sasha 275 · her voice became audible (an element started playing) — for the measure only */
     onAudible: (fn: () => void) => { audibleSubs.current.add(fn); return () => { audibleSubs.current.delete(fn) } },
@@ -244,7 +245,7 @@ function useSpeaker() {
     /** Sasha 246 item 2 · asleep: what she's saying stops mid-word (as interrupt) and nothing is said until she wakes. */
     setAsleep: (a: boolean) => {
       asleep.current = a
-      if (a) { epoch.current++; q.current = []; setBlocked(null); try { if (el.current && !el.current.paused) el.current.pause() } catch { /* nothing playing */ } }
+      if (a) { epoch.current++; q.current = []; setBlocked(null); try { if (el.current && !el.current.paused) el.current.pause() } catch (e) { noted('Stopping her voice')(e) } }
     },
     isOn: () => on.current,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refs and a stable callback: one speaker for the page's life
@@ -382,7 +383,7 @@ function Clip({ busy, send, say, onGroup }: { busy: boolean; send: (t: string) =
         content = await asBase64(f); media = isPdf ? 'application/pdf' : 'text/csv'
       }
       if (!content || (content.length * 3) / 4 > UPLOAD_MAX) { say(content ? 'That file is too large — 5 MB at most.' : 'That file couldn’t be read.'); return }
-      const r = await fetch(what === 'statement' ? '/api/s2-upload/statement' : '/api/s2-upload/card-image', {
+      const r = await reach(what === 'statement' ? '/api/s2-upload/statement' : '/api/s2-upload/card-image', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ media_type: media, content_base64: content }) })
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const j = await r.json().catch(() => ({}))
@@ -476,7 +477,7 @@ function TripCard() {
   const [t, setT] = useState<TripSay | null | undefined>(undefined)
   useEffect(() => {
     let off = false
-    const pull = () => { bookingReq('/api/booking/plan').then(r => { if (!off && r.ok) setT((untagDeep(r.json.card ?? null) as TripSay | null)) }).catch(() => {}) }
+    const pull = () => { bookingReq('/api/booking/plan').then(r => { if (!off && r.ok) setT((untagDeep(r.json.card ?? null) as TripSay | null)) }).catch(noted('Reading the trip card')) }
     pull()
     window.addEventListener('sasha-plan-refresh', pull)
     return () => { off = true; window.removeEventListener('sasha-plan-refresh', pull) }
@@ -578,7 +579,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
 function Activity() {
   const [items, setItems] = useState<Item[] | null>(null)
   useEffect(() => {
-    fetch('/api/sasha-agent/activity', { cache: 'no-store' }).then(r => r.json()).then(j => setItems(untagDeep(j.items ?? []))).catch(() => setItems([]))
+    reach('/api/sasha-agent/activity', { cache: 'no-store' }).then(r => r.json()).then(j => setItems(untagDeep(j.items ?? []))).catch(() => setItems([]))
   }, [])
   if (!items) return <p style={{ padding: 24, color: C.dim }}>Loading…</p>
   if (!items.length) return <p style={{ padding: 24, color: C.dim }}>Nothing yet today. When Sasha books, sends or adds something for you, it’s listed here with its proof.</p>
@@ -600,7 +601,7 @@ function Activity() {
 export default function S2App() {
   const signedIn = useSignedIn()
   const [hasGroup, setHasGroup] = useState(false)   // Sasha 336 · S2 links to /group once there is a movement
-  const checkGroup = useCallback(() => { bookingReq('/api/booking/group/list').then(r => setHasGroup(Boolean(r.ok && (r.json as { movement?: unknown }).movement))).catch(() => {}) }, [])
+  const checkGroup = useCallback(() => { bookingReq('/api/booking/group/list').then(r => setHasGroup(Boolean(r.ok && (r.json as { movement?: unknown }).movement))).catch(noted('Checking for a group')) }, [])
   useEffect(() => { checkGroup() }, [checkGroup])
   const [tab, setTab] = useState<'sasha' | 'activity' | 'keep' | 'trip'>('sasha')   // Sasha 235 · 'keep': My Keep · 236 · 'trip': the trip board
   const [handover, setHandover] = useState<string | null>(null)   // Sasha 236 · Tap to finish, in a sheet over her
@@ -633,7 +634,7 @@ export default function S2App() {
   useEffect(() => speaker.onSpeaking(b => micGate.current?.(b)), [speaker])
   useEffect(() => {   // Sasha 230 · the voice toggle is remembered (this browser): read once, applied to her voice
     let m = false
-    try { m = localStorage.getItem('s2_muted') === '1' } catch { /* private mode: voice on */ }
+    try { m = localStorage.getItem('s2_muted') === '1' } catch (e) { noted('Remembering your sound setting')(e) }
     if (m) { speaker.setMuted(true); const t = setTimeout(() => setMuted(true), 0); return () => clearTimeout(t) }
   }, [speaker])
   // Sasha 295 · THE OPENING (lib/opening-rule.mjs): its panel is up (no second welcome under it) · her voice failed after the tap ·
@@ -645,7 +646,7 @@ export default function S2App() {
   useEffect(() => {
     if (!signedIn) return
     const t = setTimeout(() => setName(n => (n === undefined ? null : n)), 900)
-    fetch('/api/s2-me', { cache: 'no-store' }).then(r => r.json()).then(j => setName(j?.name || null)).catch(() => setName(null))
+    reach('/api/s2-me', { cache: 'no-store' }).then(r => r.json()).then(j => setName(j?.name || null)).catch(() => setName(null))
     return () => clearTimeout(t)
   }, [signedIn])
   useEffect(() => { if (name !== undefined) observe(arrivalLine(name, !!name, false).then(setGreet), 'Her greeting', toConsole) }, [name])
@@ -663,7 +664,7 @@ export default function S2App() {
   const [micState, setMicState] = useState<MicState>('off')   // Sasha 322 · the ONE state machine (VoiceButton onState): label, cue and her face
   const voiceCtl = useRef<VoiceCtl | null>(null)
   const lastAt = useRef<number | null>(null)
-  const touch = useCallback(() => { const t = Date.now(); lastAt.current = t; try { localStorage.setItem(LAST_KEY, String(t)) } catch { /* private mode */ } }, [])
+  const touch = useCallback(() => { const t = Date.now(); lastAt.current = t; try { localStorage.setItem(LAST_KEY, String(t)) } catch (e) { noted('Remembering this page’s state')(e) } }, [])
   const [arrive, setArrive] = useState<boolean | undefined>(undefined)
   // a reload while this browser's own last activity is recent: no arrival, from the first paint (never a one-tick full-size flip)
   const quick = useSyncExternalStore(noSub, () => { const l = localLastAt(); return l && !reappear({ lastAt: l, now: Date.now(), tz: tzNow() }).greet ? false : undefined }, () => undefined)
@@ -682,7 +683,7 @@ export default function S2App() {
     if (nowAsleep === asleepRef.current) return
     asleepRef.current = nowAsleep
     setAsleep(nowAsleep)
-    try { sessionStorage.setItem('s2_paused', nowAsleep ? '1' : '0') } catch { /* private mode */ }   // Sasha 273 · paused stays paused, a reload too
+    try { sessionStorage.setItem('s2_paused', nowAsleep ? '1' : '0') } catch (e) { noted('Remembering this page’s state')(e) }   // Sasha 273 · paused stays paused, a reload too
     if (r.effects.stopAudio) speaker.setAsleep(true)   // mid-word: the element pauses, the queue empties (her face: S2Hello)
     if (nowAsleep) return
     speaker.setAsleep(false)
@@ -708,7 +709,7 @@ export default function S2App() {
     const l = localLastAt()
     if (l) lastAt.current = l
     const t = setTimeout(() => { setBackLine(b => (b === undefined ? null : b)); setArrive(a => (a === undefined ? rule4().greet : a)); askWordRef.current?.() }, 2500)   // Sasha 283 · item 4c · a page that came back reloaded: the one question too
-    fetch(`/api/s2-memory?session=${encodeURIComponent(session.current)}`, { cache: 'no-store' }).then(r => r.json()).then((j: Ev) => {
+    reach(`/api/s2-memory?session=${encodeURIComponent(session.current)}`, { cache: 'no-store' }).then(r => r.json()).then((j: Ev) => {
       if (!live) return
       const line = typeof j?.line === 'string' && j.line ? untag(j.line) : null
       const server = typeof j?.last_at === 'string' ? Date.parse(j.last_at) : NaN   // Sasha 273 · the conversation's last turn, every device
@@ -749,7 +750,7 @@ export default function S2App() {
   }, [signedIn, rule4, touch])
   useEffect(() => {   // Sasha 273 · paused stays paused — a reload of this tab too (the Pause is theirs, kept for the tab)
     let p = false
-    try { p = sessionStorage.getItem('s2_paused') === '1' } catch { /* private mode */ }
+    try { p = sessionStorage.getItem('s2_paused') === '1' } catch (e) { noted('Remembering this page’s state')(e) }
     if (!p || asleepRef.current) return
     asleepRef.current = true; speaker.setAsleep(true)
     const t = setTimeout(() => setAsleep(true), 0)
@@ -759,7 +760,7 @@ export default function S2App() {
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [msgs])
   useEffect(() => {   // a payment settled (Pacioli): said here, and the pay card turns to Paid
     if (!signedIn) return
-    const es = new EventSource('/api/sasha-agent/events?since=0')
+    const es = events('/api/sasha-agent/events?since=0')
     es.onmessage = m => {
       let ev: Ev
       try { ev = untagDeep(JSON.parse(m.data)) } catch { return }
@@ -817,7 +818,7 @@ export default function S2App() {
                 visible: null as number | null, audible: null as number | null, done: null as number | null, sent: false }
     const offAudible = speaker.onAudible(() => { if (m.audible === null) m.audible = Date.now() - m.t0 })
     const postM = () => { if (m.sent || !m.tid) return; m.sent = true; offAudible()
-      observe(fetch('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
+      observe(reach('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
         body: JSON.stringify({ tid: m.tid, channel: m.channel, surface: 's2', first_visible_ms: m.visible, first_audible_ms: m.audible, done_ms: m.done }) }), 'The timing note', toConsole) }
     // Sasha 257 · Jon (row 861): "she can't hear me or just doesn't respond — tried 5 times". One turn reached her; the rest were
     // DROPPED here while a reply was still open (busy). A message sent while she's answering is kept and sent next — never lost.
@@ -862,7 +863,7 @@ export default function S2App() {
     const arm = () => { if (stall) clearTimeout(stall); stall = setTimeout(() => abort.abort(), STALL_MS) }
     try {
       arm()
-      const r = await fetch('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
+      const r = await reach('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
         body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, channel: m.channel, lang: pageLang(), ...(pick ? { pick } : {}), ...(tap ? { tap } : {}), ...(said1 && !leaving ? { said_first: said1 } : {}) }) })   // Sasha 265 · the card's tap
       if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
       const rd = r.body?.getReader()
@@ -893,7 +894,7 @@ export default function S2App() {
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
           // Sasha 249 · ONE STATUS: the "Booked" card was made here by a regex on her reply (/^✅ Booked/) — deleted. It comes only
           // from the `booked` event, its line from the server's one status (agapi/s2_status.py — get_status's own)
-          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(() => {}) }
+          else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(noted('Closing the reply stream')) }
           else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line }] })) }
           else if (ev.type === 'render') {
             const add0 = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
@@ -973,7 +974,7 @@ export default function S2App() {
     setClearing(true)
     speaker.interrupt()
     try {
-      const r = await fetch('/api/s2-memory', { method: 'DELETE', cache: 'no-store' })
+      const r = await reach('/api/s2-memory', { method: 'DELETE', cache: 'no-store' })
       const j = await r.json().catch(() => null)
       if (!r.ok || !j?.ok) throw new Error('not cleared')
       histRef.current = []
@@ -1014,9 +1015,9 @@ export default function S2App() {
   }, [])
   const checkRelease = useCallback(() => {
     if (BUILD === 'dev') return
-    fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(j => {
+    reach('/api/version', { cache: 'no-store' }).then(r => r.json()).then(j => {
       if (typeof j?.build === 'string' && j.build && j.build !== 'dev' && j.build !== BUILD) { stale.current = true; safeReload() }
-    }).catch(() => { /* asked again at the next return or turn */ })
+    }).catch(noted('Checking for a new version'))
   }, [safeReload])
   useEffect(() => { checkReleaseRef.current = checkRelease }, [checkRelease])
   useEffect(() => {   // Sasha 274 · the conversation's sign-in card: the same carry and sign-in as the header's account control
@@ -1040,7 +1041,7 @@ export default function S2App() {
       setMsgs(ms => [...ms, { role: 'sasha', text, cards: typeof j.ask === 'string' ? [{ k: 'did_it', key: String(j.key), venue: String(j.venue || '') }] : [] }])
       histRef.current = [...histRef.current, { role: 'assistant', content: text }]
       speaker.say(text)
-    }).catch(() => { /* asked again at the next return */ }).finally(() => { askingWord.current = false })
+    }).catch(noted('Asking whether it went through')).finally(() => { askingWord.current = false })
   }, [speaker])
   const NOT_NOTED = 'I couldn’t note that just now — tell me again in a moment.'   // her line when the record didn't take their word
   const answerWord = useCallback((key: string, booked: boolean, how: string) => {
@@ -1078,7 +1079,7 @@ export default function S2App() {
       // Sasha 296 · RETURNED short of rule 4 (lib/opening-rule.mjs returned): her still full size, "Tap to continue" — the tap hears
       // her pick up where they were (voice.pickup_line, read now: GET /api/s2-memory?pickup=1, read only)
       if (returned({ away, asleep: asleepRef.current, dormant: dormantRef.current, busy: busyRef.current, here: tabRef.current === 'sasha' }))
-        helloCtl.current?.returned(fetch('/api/s2-memory?pickup=1', { cache: 'no-store' }).then(r2 => r2.json()).then(j => (typeof j?.line === 'string' ? untag(j.line) : '')).catch(() => ''))
+        helloCtl.current?.returned(reach('/api/s2-memory?pickup=1', { cache: 'no-store' }).then(r2 => r2.json()).then(j => (typeof j?.line === 'string' ? untag(j.line) : '')).catch(() => ''))
       return
     }
     newsRef.current = null
@@ -1203,7 +1204,7 @@ export default function S2App() {
               <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" title="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17 }}>
                 🔈</button>
             ) : (   /* her SPEAKER (Sasha 230's remembered mute) — its own word, never "Voice": that word is the mic's */
-            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Her sound is off — turn it on' : 'Her sound is on — mute it'} title={muted ? 'Sound off' : 'Sound on'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17, opacity: muted ? 0.6 : 1 }}>
+            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch (e) { ((e: unknown) => announce(failed('Remembering your sound setting', e)))(e) } }} aria-pressed={muted} aria-label={muted ? 'Her sound is off — turn it on' : 'Her sound is on — mute it'} title={muted ? 'Sound off' : 'Sound on'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17, opacity: muted ? 0.6 : 1 }}>
               {muted ? '🔇' : '🔊'}</button>)}
             <button onClick={() => { listenOnTap(); if (busy || clearing) { tell(stillGoing(clearing ? 'Clearing the conversation' : 'Sasha’s reply', 'New chat')); return } observe(newChat(), 'New chat', tell) }} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
               style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
@@ -1263,7 +1264,7 @@ export default function S2App() {
 export function S2Handoff({ code }: { code: string }) {
   const [st, setSt] = useState<{ s: 'checking' } | { s: 'open'; what: 'passport' | 'loyalty' } | { s: 'gone'; why: string } | { s: 'done'; item: string }>({ s: 'checking' })
   useEffect(() => {
-    fetch(`/api/keep-handoff/${encodeURIComponent(code)}`, { cache: 'no-store' }).then(r => r.json())
+    reach(`/api/keep-handoff/${encodeURIComponent(code)}`, { cache: 'no-store' }).then(r => r.json())
       .then(j => setSt(j?.ok ? { s: 'open', what: j.kind === 'loyalty' ? 'loyalty' : 'passport' } : { s: 'gone', why: j?.message || 'This link has expired.' }))
       .catch(() => setSt({ s: 'gone', why: 'This link couldn’t be checked — try scanning it again.' }))
   }, [code])

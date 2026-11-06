@@ -12,6 +12,7 @@ import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type View = { configured: boolean; invited?: boolean; connected: boolean; consent: { version: string; text: string; sha256: string } }
 
@@ -59,7 +60,7 @@ export function OutlookConnect() {
     window.location.href = String(r.json.url)
   })
   const disconnect = () => act(async () => {
-    const r = await fetch(bookingUrl('/api/booking/outlook'), { method: 'DELETE', headers: bookingHeaders() })
+    const r = await reach(bookingUrl('/api/booking/outlook'), { method: 'DELETE', headers: bookingHeaders() })
     const j = r.ok ? await r.json() : null
     setWords(r.ok ? `Disconnected — the access is deleted here. ${j?.at_microsoft ?? ''}`.trim() : 'Not disconnected.')
     await load()

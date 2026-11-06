@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * S-80 · the invited guest's page talks to Sasha's server through THIS pass-through: no session, no booking key —
@@ -16,7 +17,7 @@ async function pass(request: Request, ctx: { params: Promise<{ path: string[] }>
   if (request.method === 'POST') init.body = await request.text()
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/booking/invite/${path.map(encodeURIComponent).join('/')}`, init)
+    r = await reach(`${API_URL}/api/booking/invite/${path.map(encodeURIComponent).join('/')}`, init)
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: `Sasha's server could not be reached (${(e as Error).message})` }, { status: 502 })
   }

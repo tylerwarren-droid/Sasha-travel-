@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { User } from '@/types'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 export interface Idea {
   title: string
@@ -53,7 +55,7 @@ export default function IdeasPanel({ user, onBuild, building, cached, onLoaded }
     setLoading(true)
     setFailed(false)
     try {
-      const res = await fetch(apiUrl('/api/agents/ideas'), {
+      const res = await reach(apiUrl('/api/agents/ideas'), {
         method: 'POST',
         headers: apiHeaders(),
         body: JSON.stringify({
@@ -79,7 +81,7 @@ export default function IdeasPanel({ user, onBuild, building, cached, onLoaded }
 
   // Only fetch when the parent has nothing cached — returning to this tab must not discard
   // the ideas the guest was already looking at.
-  useEffect(() => { if (!cached?.length) load() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!cached?.length) observe(load(), 'IdeasPanel · load()', toConsole) }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -97,7 +99,7 @@ export default function IdeasPanel({ user, onBuild, building, cached, onLoaded }
           <div className="lw-empty-ic">💡</div>
           <div className="lw-empty-t">Couldn't load ideas</div>
           <div className="lw-empty-s">Sasha can still plan anything you ask for — just tell her where you'd like to go.</div>
-          <button className="lw-empty-cta" onClick={() => load(true)}>Try again</button>
+          <button className="lw-empty-cta" onClick={() => observe(load(true), 'Loading', announce)}>Try again</button>
         </div>
       </div>
     )
@@ -107,7 +109,7 @@ export default function IdeasPanel({ user, onBuild, building, cached, onLoaded }
     <div className="lw-stream">
       <div className="lw-when">
         Ideas for you
-        <button className="lw-refresh" onClick={() => load(true)} title="Generate new ideas">↻</button>
+        <button className="lw-refresh" onClick={() => observe(load(true), 'Loading', announce)} title="Generate new ideas">↻</button>
       </div>
       <p className="lw-lead">
         Built around how you travel, skipping the places you've already been. Pick one and Sasha
@@ -138,8 +140,7 @@ export default function IdeasPanel({ user, onBuild, building, cached, onLoaded }
               ) : null}
               <button
                 className="lw-idea-cta"
-                disabled={building}
-                onClick={() => { setBuiltTitle(idea.title); onBuild(idea.build_prompt) }}
+                onClick={(e: React.MouseEvent) => { if (building) { announce(stillGoing('Building that trip', 'this idea')); return } (() => { setBuiltTitle(idea.title); onBuild(idea.build_prompt) })() }}
               >
                 {building && builtTitle === idea.title ? 'Building…' : 'Build this →'}
               </button>

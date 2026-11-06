@@ -8,7 +8,7 @@ import { bookingReq } from '@/lib/booking-client'
 import type { RichItinerary } from '../ItineraryDays'
 import { termHead, type Term } from '../cards/S2Cards'   // Sasha 301 · the fine print: one way to say a term
 import TrainLine, { type Train } from './TrainLine'   // Sasha 327 · trains are trains
-import { observe, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
+import { announce, failed, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 // Sasha 301 · a day's booking line says the cancellation deadline the venue stated (their sentence is on its card) — nothing if none
 const cancelBy = (ts?: Term[]) => { const t = (ts || []).find((x) => x.kinds.includes('cancellation') && x.by_words); return t ? ` · cancel by ${t.by_words}` : '' }
 
@@ -202,7 +202,7 @@ export default function TripPanel({
               setTripId(t.key); setView('trip')
               // Sasha 195 · a product's tab opens its SPACE (its word, as if said) — the strict-space rule
               const sp = (t as { space?: string }).space
-              if (sp) { try { window.dispatchEvent(new CustomEvent('sasha-open-space', { detail: sp })) } catch { /* the tab still shows its journey */ } }
+              if (sp) { try { window.dispatchEvent(new CustomEvent('sasha-open-space', { detail: sp })) } catch (e) { ((e: unknown) => announce(failed('Opening that space', e)))(e) } }
             }}>{t.label}{t.count ? ` · ${t.count}` : ''}</button>
           {/* Sasha 181 (4) · ✕ removes a plan / a city's saved searches — one confirm, never a booking */}
           {(!t.virtual || t.key.startsWith('city:')) && (

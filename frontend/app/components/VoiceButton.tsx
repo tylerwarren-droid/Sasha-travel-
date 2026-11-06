@@ -78,6 +78,8 @@ import { BLOCKED, micPermission } from '@/lib/mic-state'   // Sasha 266 · "on" 
 import { holdPlayAndRecord, audioSessionType } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session
 import { makeDownsampler, sendRate } from '@/lib/downsample.mjs'   // Sasha 215 (d) · the mic at 16 kHz
 import { micState as readMic, MIC_WORDS, REPLY_MS } from '@/lib/mic-machine.mjs'   // Sasha 322 · the ONE state machine, read from the pipeline
+import { reach, socket } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, noted, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
 
@@ -86,11 +88,11 @@ const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
 async function getDeepgramKey(): Promise<string> {
   let status = 0, key = ''
   try {
-    const res = await fetch(apiUrl('/api/voice/deepgram-key'), { method: 'POST', headers: apiHeaders() })
+    const res = await reach(apiUrl('/api/voice/deepgram-key'), { method: 'POST', headers: apiHeaders() })
     status = res.status
     micLog('key', { status: res.status })
     if (res.ok) key = ((await res.json())?.key as string) || ''
-  } catch { /* unreachable: status 0 */ }
+  } catch (e) { noted('Asking for the microphone’s key')(e) }
   return keyOrFail(status, key, PUBLIC_DEEPGRAM_KEY).key
 }
 
@@ -282,9 +284,9 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   useEffect(() => { thinkingRef.current = !!thinking; recomputeRef.current() }, [thinking])
   useEffect(() => {   // Sasha 322 · the key minted before any tap — never for a site the browser blocks (Sasha 266)
     let live = true
-    try { preconnect('https://api.deepgram.com') } catch { /* a hint only */ }
-    void fetch('/pcm-capture.js', { cache: 'force-cache' }).catch(() => {})   // the worklet's file in cache before the tap
-    micPermission().then(perm => { if (!live) return; permStateRef.current = perm; if (perm !== 'denied') void prefetchKey() })
+    try { preconnect('https://api.deepgram.com') } catch (e) { noted('Warming the connection')(e) }
+    observe(reach('/pcm-capture.js', { cache: 'force-cache' }).catch(noted('Fetching the microphone’s helper')), 'Fetching the microphone’s helper', toConsole)   // the worklet's file in cache before the tap
+    observe(micPermission().then(perm => { if (!live) return; permStateRef.current = perm; if (perm !== 'denied') observe(prefetchKey(), 'Asking for the microphone’s key', toConsole) }), 'Reading the microphone permission', toConsole)
     return () => { live = false }
   }, [])
   const [isConnecting, setIsConnecting] = useState(false)
@@ -436,9 +438,9 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
 
   // the audio pipeline (stream, audio, worklet) — torn down only on a stop, a dead track or a new device; never for a dropped socket
   const teardownAudio = () => {
-    try { workletNodeRef.current?.disconnect() } catch {}
+    try { workletNodeRef.current?.disconnect() } catch (e) { noted('Letting go of the microphone')(e) }
     workletNodeRef.current = null; flushRef.current = null
-    try { audioCtxRef.current?.close() } catch {}
+    try { audioCtxRef.current?.close() } catch (e) { noted('Closing the microphone')(e) }
     audioCtxRef.current = null
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
   }
@@ -589,10 +591,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     const cur = wsRef.current
     if (cur && (cur.readyState === WebSocket.OPEN || cur.readyState === WebSocket.CONNECTING)) return
     const dgLang = DG_LANG[languageRef.current || 'en'] || 'en-US'
-    const ws = new WebSocket(
-      `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${sendRate(ctx.sampleRate)}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true${KEYTERMS}`,
-      ['token', dgKey]
-    )
+    const ws = socket(`wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${sendRate(ctx.sampleRate)}&channels=1&model=nova-3&language=${dgLang}&smart_format=true&interim_results=true&endpointing=150&utterance_end_ms=1000&vad_events=true${KEYTERMS}`, ['token', dgKey])
     wsRef.current = ws
     sendFromRef.current = 0; replyAtRef.current = 0
     recomputeRef.current()
@@ -603,7 +602,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     connectTimeoutRef.current = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
         console.warn('[DG] connect watchdog — socket never opened, closing to retry')
-        try { ws.close() } catch {}
+        try { ws.close() } catch (e) { noted('Closing the microphone')(e) }
       }
     }, 8000)
 
@@ -732,7 +731,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
           speechEndRef.current = speechEndRef.current && Date.now() - speechEndRef.current < 3000 ? speechEndRef.current : Date.now()   // Sasha 275
           scheduleFire()
         }
-      } catch(e) {}
+      } catch (e) { noted('Reading what was heard')(e) }
     }
 
     ws.onerror = () => {
@@ -766,7 +765,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       dgReconnectTimerRef.current = setTimeout(() => {
         if (manualStopRef.current || !readyToListenRef.current) return
         if (pipelineLive()) {   // Sasha 322 · the socket alone: the audio is still running (no new tap needed)
-          void prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; reportMicError('Voice service unavailable'); recomputeRef.current() } })
+          observe(prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; reportMicError('Voice service unavailable'); recomputeRef.current() } }), 'Asking for the microphone’s key', toConsole)
         } else { connectingRef.current = false; connectRef.current() }   // the pipeline died too (a dead track): rebuilt whole
       }, backoff)
     }
@@ -789,18 +788,18 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     // Made and resumed HERE, before the first await — inside the tap when a tap started it — and never waited on (RESUME_WAIT_MS).
     holdPlayAndRecord('the mic')   // Sasha 267 · before any mic request: "playback" makes iOS refuse capture (InvalidStateError)
     if (pipelineLive()) {   // Sasha 322 · the pipeline is up (a socket dropped): the socket alone
-      if (audioCtxRef.current && audioCtxRef.current.state !== 'running') audioCtxRef.current.resume().catch(() => {})
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'running') audioCtxRef.current.resume().catch(noted('Waking the audio'))
       recompute()
-      void prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); recompute() } })
+      observe(prefetchKey().then(k => { if (k) openSocket(k); else { connectingRef.current = false; setIsConnecting(false); reportMicError('Voice service unavailable'); recompute() } }), 'Asking for the microphone’s key', toConsole)
       return
     }
     teardownAudio()   // the pieces of a pipeline that died
     const ctx = new AudioContext()
     audioCtxRef.current = ctx
-    const resumed = ctx.resume().catch(() => {})
+    const resumed = ctx.resume().catch(noted('Waking the audio'))
     const workletReady = ctx.audioWorklet.addModule('/pcm-capture.js')   // Sasha 322 · loaded beside the mic, not after the socket
-    workletReady.catch(() => {})
-    const dropCtx = () => { if (audioCtxRef.current === ctx) audioCtxRef.current = null; ctx.close().catch(() => {}) }
+    workletReady.catch(noted('Starting the microphone’s helper'))
+    const dropCtx = () => { if (audioCtxRef.current === ctx) audioCtxRef.current = null; ctx.close().catch(noted('Closing the microphone')) }
     recompute()
     try {
       // Sasha 266 · row 943 (a): his iPhone minted 16 keys and never asked for the mic. The browser's own answer first — a site the
@@ -817,7 +816,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       }
       // Sasha 322 · the key was minted on mount (prefetchKey): ready now — and the socket opens BESIDE the mic, not after it
       const keyPromise = prefetchKey()
-      void keyPromise.then(k => { if (k && audioCtxRef.current === ctx && !manualStopRef.current) openSocket(k) })
+      observe(keyPromise.then(k => { if (k && audioCtxRef.current === ctx && !manualStopRef.current) openSocket(k) }), 'The microphone', (t: string) => reportMicError(t))
       const baseAudio: MediaTrackConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       // Resolve the device BEFORE opening anything. Once mic permission was granted in a
       // prior session, enumerateDevices() exposes labels without an active stream — so we
@@ -829,7 +828,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       // catch below retries with defaults.
       let wantId = selectedMicIdRef.current
       if (!wantId) {
-        try { wantId = preferredAudioDeviceId(await navigator.mediaDevices.enumerateDevices(), '') } catch {}
+        try { wantId = preferredAudioDeviceId(await navigator.mediaDevices.enumerateDevices(), '') } catch (e) { noted('Choosing the microphone')(e) }
       }
       let stream: MediaStream
       try {
@@ -863,7 +862,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
             }
           }
         }
-      } catch { /* enumerate/re-acquire is best-effort */ }
+      } catch (e) { noted('Choosing the microphone')(e) }
       streamRef.current = stream
       permStateRef.current = 'granted'
       micLog('permission', { granted: true, device: stream.getAudioTracks()[0]?.label || '' })
@@ -882,7 +881,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
             console.warn(`[MIC] input track ${why} (${track.label || 'unknown device'}) — recycling connection`)
             reportMicError('Microphone disconnected — reconnecting')
             teardownAudio()
-            if (wsRef.current) { try { wsRef.current.close() } catch {} } else { connectingRef.current = false; connectRef.current() }
+            if (wsRef.current) { try { wsRef.current.close() } catch (e) { noted('Closing the microphone')(e) } } else { connectingRef.current = false; connectRef.current() }
             recompute()
           }
           track.onended = () => { notHearing('the track ended'); dead('ended') }
@@ -893,7 +892,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       const dgKey = await keyPromise
       if (asleepRef.current) {   // Sasha 246 · fell asleep while the mic was opening: close it, listen again only when she wakes
         connectingRef.current = false; setIsConnecting(false); resumeRef.current = true
-        if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
+        if (wsRef.current) { try { wsRef.current.close() } catch (e) { noted('Closing the microphone')(e) } wsRef.current = null }
         teardownAudio(); recompute()
         return
       }
@@ -917,7 +916,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       connectingRef.current = false
       setIsConnecting(false)
       teardownAudio()
-      if (wsRef.current) { try { wsRef.current.close() } catch {} wsRef.current = null }
+      if (wsRef.current) { try { wsRef.current.close() } catch (e) { noted('Closing the microphone')(e) } wsRef.current = null }
       recompute()
       // Name the actual failure. "Could not access microphone" sent people hunting for a
       // permission problem when the real cause was another app holding the device.
@@ -943,7 +942,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     } else if (asleepRef.current) {
       asleepRef.current = false
       micLog('awake', { resume: resumeRef.current })
-      if (resumeRef.current) { resumeRef.current = false; connect() }
+      if (resumeRef.current) { resumeRef.current = false; observe(connect(), 'The microphone', (t: string) => reportMicError(t)) }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stopAll and connect are stable
   }, [asleep])
@@ -958,7 +957,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       if (ws0 && ws0.readyState === WebSocket.OPEN && sendFromRef.current && now - lastSentRef.current < 1000 &&
           now - Math.max(replyAtRef.current, sendFromRef.current) > 2 * REPLY_MS) {
         micLog('socket_silent', { ms: now - Math.max(replyAtRef.current, sendFromRef.current) })
-        sendFromRef.current = 0; try { ws0.close() } catch { /* onclose reconnects */ }
+        sendFromRef.current = 0; try { ws0.close() } catch (e) { noted('Closing the microphone')(e) }
       }
       // a gate closed from the start (before her greeting) gets a clock too, so rule 1 covers the first turn
       if (micGatedRef.current && !gatedSinceRef.current && connectedRef.current) gatedSinceRef.current = now
@@ -984,11 +983,11 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
         console.warn('[WATCHDOG] speech with no transcript for 8 s — restarting the stream')
         heardAtRef.current = 0
         setNotCaught(true); setTimeout(() => setNotCaught(false), 6000)
-        try { wsRef.current?.close() } catch { /* onclose reconnects */ }
+        try { wsRef.current?.close() } catch (e) { noted('Closing the microphone')(e) }
       } else if (act === 'reconnect') {
         console.warn('[WATCHDOG] connection lost and not retrying — reconnecting')
         lastAliveRef.current = now
-        connect()
+        observe(connect(), 'The microphone', (t: string) => reportMicError(t))
       }
     }, 250)   // Sasha 322 · the machine re-reads a frame's age 4× a second (the watchdog's own clocks are its own)
     return () => clearInterval(t)
@@ -1002,7 +1001,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
       onWakeRef.current?.()
     }
     if (connectedRef.current && deafRef.current) {   // Sasha 264 · item 7: the tap a phone needs — the same mic turned on, not off
-      audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(() => {})
+      audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(noted('Waking the audio'))
       micGatedRef.current = false; gateOpenedAtRef.current = Date.now()
       deafRef.current = false; reportMicError(null); recomputeRef.current()
       return
@@ -1015,7 +1014,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     micGatedRef.current = false
     gateOpenedAtRef.current = Date.now()
     console.log('[GATE] opened by a click on the mic')
-    connect()
+    observe(connect(), 'The microphone', (t: string) => reportMicError(t))
   }
 
   // Sasha 273 · item 3 · the page's one return handler and its "Tap to talk" (/s2, strict). resume: on return from the background,
@@ -1026,16 +1025,16 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     const tr = streamRef.current?.getAudioTracks()[0]
     const ctx = audioCtxRef.current
     micLog('return', { state: ctx?.state || 'none', why: tr ? tr.readyState : 'no track' })
-    if (connectedRef.current && (!tr || tr.readyState === 'ended')) { stopAll(); manualStopRef.current = false; connect(); return }
-    if (connectedRef.current && ctx && ctx.state !== 'running') { ctx.resume().then(() => micLog('audiocontext', { state: ctx.state, by: 'return' })).catch(() => {}); return }
-    if (!connectedRef.current && !connectingRef.current) connect()
+    if (connectedRef.current && (!tr || tr.readyState === 'ended')) { stopAll(); manualStopRef.current = false; observe(connect(), 'The microphone', (t: string) => reportMicError(t)); return }
+    if (connectedRef.current && ctx && ctx.state !== 'running') { ctx.resume().then(() => micLog('audiocontext', { state: ctx.state, by: 'return' })).catch(noted('Waking the audio')); return }
+    if (!connectedRef.current && !connectingRef.current) observe(connect(), 'The microphone', (t: string) => reportMicError(t))
   }
   const listenNow = () => {
     if (stateRef.current !== 'listening') { tapAtRef.current = Date.now(); micLog('tap') }   // Sasha 322 · tap / New chat → Listening, measured
     if (asleepRef.current || !connectedRef.current) { toggleListening(); return }   // asleep: wakes her and listens · off: starts it
     const tr = streamRef.current?.getAudioTracks()[0]
-    if (!tr || tr.readyState === 'ended') { stopAll(); manualStopRef.current = false; micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); connect(); return }
-    audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(() => {})   // inside the tap
+    if (!tr || tr.readyState === 'ended') { stopAll(); manualStopRef.current = false; micGatedRef.current = false; gateOpenedAtRef.current = Date.now(); observe(connect(), 'The microphone', (t: string) => reportMicError(t)); return }
+    audioCtxRef.current?.resume().then(() => micLog('audiocontext', { state: audioCtxRef.current?.state, by: 'tap' })).catch(noted('Waking the audio'))   // inside the tap
     micGatedRef.current = false; gateOpenedAtRef.current = Date.now()
     if (deafRef.current) { deafRef.current = false; reportMicError(null) }
     recomputeRef.current()
@@ -1055,7 +1054,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
 
   useEffect(() => {
     console.log('[DG] readyToListen:', readyToListen, 'autoStart:', autoStart, 'disabled:', disabled)
-    if (autoStart && readyToListen && !disabled) connect()
+    if (autoStart && readyToListen && !disabled) observe(connect(), 'The microphone', (t: string) => reportMicError(t))
   }, [readyToListen])
 
   useEffect(() => {
@@ -1066,11 +1065,11 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   // should show up in the picker. Before permission, labels are blank; connect() re-enumerates
   // with real labels once the mic is granted, which is what drives the avoid-phone logic.
   useEffect(() => {
-    try { const s = localStorage.getItem(MIC_PREF_KEY) || ''; if (s) { setSelectedMicId(s); selectedMicIdRef.current = s } } catch {}
+    try { const s = localStorage.getItem(MIC_PREF_KEY) || ''; if (s) { setSelectedMicId(s); selectedMicIdRef.current = s } } catch (e) { noted('Remembering your microphone')(e) }
     const refresh = () => navigator.mediaDevices?.enumerateDevices?.()
       .then(list => setAudioDevices(list.filter(d => d.kind === 'audioinput')))
-      .catch(() => {})
-    refresh()
+      .catch(noted('Choosing the microphone'))
+    observe(refresh(), 'Listing the microphones', toConsole)
     navigator.mediaDevices?.addEventListener?.('devicechange', refresh)
     return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh)
   }, [])
@@ -1080,10 +1079,10 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   const switchMic = useCallback((id: string) => {
     setSelectedMicId(id)
     selectedMicIdRef.current = id
-    try { id ? localStorage.setItem(MIC_PREF_KEY, id) : localStorage.removeItem(MIC_PREF_KEY) } catch {}
+    try { id ? localStorage.setItem(MIC_PREF_KEY, id) : localStorage.removeItem(MIC_PREF_KEY) } catch (e) { noted('Remembering your microphone')(e) }
     const wasConnected = connectedRef.current
     stopAll()
-    if (wasConnected) setTimeout(() => { connect() }, 150)
+    if (wasConnected) setTimeout(() => { observe(connect(), 'The microphone', (t: string) => reportMicError(t)) }, 150)
   }, [connect, stopAll])
 
   // Only worth showing once there's a real choice AND labels have loaded (pre-permission the
@@ -1124,8 +1123,7 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
   return (
     <div className="flex flex-col items-center gap-1" data-mic-state={state}>
       <button
-        onClick={toggleListening}
-        disabled={disabled}
+        onClick={(e: React.MouseEvent) => { if (disabled) { announce('The microphone is off on this page just now — type your message instead.'); return } (toggleListening)() }}
         aria-label={stateWords} title={stateWords} data-mic-state={state}
         className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${look} disabled:opacity-40`}
       >

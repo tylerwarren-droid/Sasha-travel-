@@ -1,6 +1,8 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Mic, MicOff, Loader2 } from 'lucide-react'
+import { socket } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, noted, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 interface VoiceButtonProps {
   onTranscript: (text: string) => void
@@ -129,10 +131,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
       await ctx.resume()
       console.log('[DG] AudioContext sampleRate:', ctx.sampleRate)
 
-      const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`,
-        ['token', DEEPGRAM_API_KEY || '']
-      )
+      const ws = socket(`wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=${ctx.sampleRate}&channels=1&model=nova-3&language=en-US&smart_format=true&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true`, ['token', DEEPGRAM_API_KEY || ''])
       wsRef.current = ws
 
       // Dedup state for BUG 4 — scoped to this connection's lifetime
@@ -264,7 +263,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
             transcriptRef.current = ''
             fireTranscript(final)
           }
-        } catch(e) {}
+        } catch (e) { noted('VoiceButton · const data = JSON.parse(event.data) if (data.type === ’Speec')(e) }
       }
 
       ws.onerror = (e) => { console.error('[DG] error:', e) }
@@ -276,9 +275,9 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
 
         // Tear down this connection's audio graph so a reconnect rebuilds cleanly.
         clearInterval(keepAliveIntervalRef.current)
-        try { workletNodeRef.current?.disconnect() } catch {}
+        try { workletNodeRef.current?.disconnect() } catch (e) { noted('VoiceButton · workletNodeRef.current?.disconnect()')(e) }
         workletNodeRef.current = null
-        try { audioCtxRef.current?.close() } catch {}
+        try { audioCtxRef.current?.close() } catch (e) { noted('VoiceButton · audioCtxRef.current?.close()')(e) }
         audioCtxRef.current = null
         if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
         connectedRef.current = false
@@ -293,7 +292,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
         console.log(`[DG] unexpected close — reconnecting in ${backoff}ms (attempt ${attempt})`)
         clearTimeout(dgReconnectTimerRef.current)
         dgReconnectTimerRef.current = setTimeout(() => {
-          if (!manualStopRef.current && readyToListenRef.current) connect()
+          if (!manualStopRef.current && readyToListenRef.current) observe(connect(), 'VoiceButton · connect()', toConsole)
         }, backoff)
       }
 
@@ -307,12 +306,12 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
 
   const toggleListening = () => {
     if (connectedRef.current) stopAll()
-    else connect()
+    else observe(connect(), 'VoiceButton · connect()', toConsole)
   }
 
   useEffect(() => {
     console.log('[DG] readyToListen:', readyToListen, 'autoStart:', autoStart, 'disabled:', disabled)
-    if (autoStart && readyToListen && !disabled) connect()
+    if (autoStart && readyToListen && !disabled) observe(connect(), 'VoiceButton · connect()', toConsole)
   }, [readyToListen])
 
   useEffect(() => {
@@ -322,8 +321,7 @@ export default function VoiceButton({ onTranscript, disabled, autoStart = false,
   return (
     <div className="flex flex-col items-center gap-1">
       <button
-        onClick={toggleListening}
-        disabled={disabled || isConnecting}
+        onClick={(e: React.MouseEvent) => { if (disabled || isConnecting) { announce(isConnecting ? stillGoing('Connecting the microphone', 'the mic') : 'The microphone is off on this page just now — type your message instead.'); return } (toggleListening)() }}
         className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
           isSpeaking    ? 'bg-green-500 animate-pulse scale-110'
           : isConnected ? 'bg-red-500 animate-pulse'

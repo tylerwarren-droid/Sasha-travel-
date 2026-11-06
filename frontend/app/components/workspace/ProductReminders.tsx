@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from 'react'
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Reminder = { on: string; text: string; product: string; label: string; sent: boolean }
 type State = { phase: 'loading' } | { phase: 'hidden' } | { phase: 'failed' } | { phase: 'loaded'; items: Reminder[] }
@@ -28,7 +29,7 @@ export default function ProductReminders() {
 
   useEffect(() => {
     let cancelled = false
-    fetch(bookingUrl('/api/booking/products/reminders'), { headers: bookingHeaders() })
+    reach(bookingUrl('/api/booking/products/reminders'), { headers: bookingHeaders() })
       .then(async (r) => {
         if (cancelled) return
         if (r.status === 401) { setState({ phase: 'hidden' }); return }

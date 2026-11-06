@@ -4,6 +4,8 @@
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import { apiUrl } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 // Sasha 215 (b) / 216 · the sign-in email carries a 6-digit code as well as the link once its Supabase template has
 // {{ .Token }} (the founder's yes, 9 Oct). The box says "if your email shows a code", so it's true whether or not the
@@ -25,7 +27,7 @@ function CodeEntry({ to, next }: { to: string; next: string }) {
     e.preventDefault()
     setBusy(true); setWhy(null)
     try {
-      const r = await fetch('/auth/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to, code, next }) })
+      const r = await reach('/auth/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to, code, next }) })
       const j = await r.json().catch(() => ({}))
       if (j?.ok) { if (j.already) setWhy(null); setAlready(!!j.already); setTimeout(() => { window.location.href = j.next || next }, j.already ? 900 : 0); return }   // Sasha 257 · "You're already signed in", then on
       setWhy(j?.why || `it didn\u2019t work (HTTP ${r.status})`)
@@ -33,14 +35,14 @@ function CodeEntry({ to, next }: { to: string; next: string }) {
     setBusy(false)
   }
   return (
-    <form onSubmit={verify}>
+    <form onSubmit={(e) => observe(verify(e), 'Sign in', setWhy)}>
       {already && <p role="status" style={{ color: '#1c6b3a', fontWeight: 600 }}>You&rsquo;re already signed in — taking you to Sasha.</p>}
       <p>We&rsquo;ve emailed <strong>{to}</strong> a sign-in link. Open it on this device — or, if the email shows a 6-digit code, type it here (that works in the Home Screen app too).</p>
       <label htmlFor="code">The 6-digit code</label>
       <input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={14} required value={code}
         onChange={(e) => setCode(e.target.value)} className="si-field" placeholder="123456" style={{ ...FIELD, fontSize: 20, letterSpacing: 4 }} />
       <style>{FIELD_CSS}</style>
-      <button type="submit" disabled={busy} style={BUTTON}>{busy ? 'Signing in…' : 'Sign in'}</button>
+      <button type="submit" onClick={(e: React.MouseEvent) => { if (busy) { e.preventDefault(); announce(stillGoing('Signing in', 'Sign in')); return } }} style={BUTTON}>{busy ? 'Signing in…' : 'Sign in'}</button>
       {why && <p role="alert" style={{ color: '#9a1c1c' }}>Not signed in: {why}.</p>}
     </form>
   )
@@ -58,7 +60,7 @@ export default function SignInForm({ next }: { next: string }) {
     try {
       // Sasha 338 · WHO may sign in is ONE place (backend booking_signer/sign_up.py — anyone, Tyler 4 Nov): it opens their account
       // first; Supabase's own public sign-up stays off. Then Supabase emails the link, as before.
-      const open = await fetch(apiUrl('/api/booking/sign-up'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to }) })
+      const open = await reach(apiUrl('/api/booking/sign-up'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: to }) })
         .then(r => r.json()).catch(() => null) as { ok?: boolean; why?: string } | null
       if (!open?.ok) { setState({ phase: 'failed', why: open?.why || 'Sasha couldn\u2019t open your account just now — try again in a minute' }); return }
       const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
@@ -73,7 +75,7 @@ export default function SignInForm({ next }: { next: string }) {
 
   if (state.phase === 'sent') return CODE_IN_EMAIL ? <CodeEntry to={state.to} next={next} /> : <p>We&rsquo;ve emailed a sign-in link to <strong>{state.to}</strong>. Open it on this device to continue.</p>
   return (
-    <form onSubmit={send}>
+    <form onSubmit={(e) => observe(send(e), 'Sending the sign-in email', (t) => setState({ phase: 'failed', why: t }))}>
       <label htmlFor="email">Your email</label>
       <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)}
         className="si-field" placeholder="you@example.com" style={FIELD} />

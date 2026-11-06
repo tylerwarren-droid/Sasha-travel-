@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /** Sasha 228 · the phone's passport photo, under a one-time "Add from your phone" code: straight through to the backend, which
  *  reads it once and drops it (keep_scan) — nothing stored here, nothing logged. Back: a MASKED card to confirm. */
@@ -10,7 +11,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   const { code } = await params
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/keep/handoff/${encodeURIComponent(code)}/scan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: await request.text(), cache: 'no-store' })
+    r = await reach(`${API_URL}/api/agent/keep/handoff/${encodeURIComponent(code)}/scan`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: await request.text(), cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }

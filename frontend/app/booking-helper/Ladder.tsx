@@ -17,6 +17,7 @@ import { GatedButton } from './GatedButton'
 import { PhoneCall } from './PhoneCall'
 import { FormSend } from './FormSend'
 import { whatsappText } from '@/lib/whatsapp-template'
+import { noted } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 type Fact = { kind: string; value: string; source_label: string; source_url: string }
 type Rung = { rung: string; available: boolean; value: string | null; source: string | null; why_not: string | null }
@@ -48,7 +49,7 @@ export function Ladder({ defaults }: { defaults: { name: string; email: string; 
   useEffect(() => {
     const c = new URLSearchParams(window.location.search).get('cancel') ?? ''
     if (!/^[0-9a-f-]{36}$/i.test(c)) return
-    ;(async () => { await Promise.resolve(); setCancelId(c) })().catch(() => { /* nothing to show */ })
+    ;(async () => { await Promise.resolve(); setCancelId(c) })().catch(noted('Ladder · (async () => { await Promise.resolve(); setCancelId(c) })()'))
   }, [])
   const [finding, setFinding] = useState<'idle' | 'finding' | 'done' | 'stopped'>('idle')
   const [found, setFound] = useState<Candidate[]>([])

@@ -8,6 +8,8 @@
  */
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
 import { announceBooked, ensureGuest } from '@/lib/guest-start'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { noted } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 export type Res = { ok: boolean; status: number; json: Record<string, unknown> }
 
@@ -33,14 +35,14 @@ async function bookingReqOnce(path: string, body?: unknown, timeoutMs = 30000): 
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   let r: Response
   try {
-    r = await fetch(bookingUrl(path), body === undefined
+    r = await reach(bookingUrl(path), body === undefined
       ? { headers: bookingHeaders(), signal: ctl.signal }
       : { method: 'POST', headers: bookingHeaders(), body: JSON.stringify(body), signal: ctl.signal })
   } catch (e) {
     throw new Error((e as Error).name === 'AbortError' ? `Sasha's server did not answer within ${timeoutMs / 1000}s` : `could not reach Sasha's server (${(e as Error).message})`)
   } finally { clearTimeout(timer) }
   let json: Record<string, unknown> = {}
-  try { json = await r.json() } catch { /* reported by its status */ }
+  try { json = await r.json() } catch (e) { noted('booking-client · reported by its status')(e) }
   return { ok: r.ok, status: r.status, json }
 }
 
@@ -55,12 +57,12 @@ export async function contactReq(method: 'GET' | 'PUT' | 'DELETE', body?: unknow
 async function contactReqOnce(method: 'GET' | 'PUT' | 'DELETE', body?: unknown): Promise<Res> {
   let r: Response
   try {
-    r = await fetch(bookingUrl('/api/booking/contact'), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+    r = await reach(bookingUrl('/api/booking/contact'), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   } catch (e) {
     throw new Error(`could not reach Sasha's server (${(e as Error).message})`)
   }
   let json: Record<string, unknown> = {}
-  try { json = await r.json() } catch { /* reported by its status */ }
+  try { json = await r.json() } catch (e) { noted('booking-client · reported by its status')(e) }
   return { ok: r.ok, status: r.status, json }
 }
 

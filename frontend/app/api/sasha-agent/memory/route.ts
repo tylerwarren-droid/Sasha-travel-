@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /** Sasha 241 · S1 PARITY: /next's welcome back — the same memory as /s2 (one per account), from the backend's /api/agent/memory.
  *  Signed-in only; the session is the chat's own, so her first turn back hears what was (and wasn't) decided. */
@@ -11,7 +12,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!who) return NextResponse.json({ ok: false, rule: 'sign_in_required' }, { status: 401 })
   const session = new URL(request.url).searchParams.get('session')?.slice(0, 64) ?? ''
   try {
-    const r = await fetch(`${API_URL}/api/agent/memory?session=${encodeURIComponent(session)}`, { headers: { ...who }, cache: 'no-store' })
+    const r = await reach(`${API_URL}/api/agent/memory?session=${encodeURIComponent(session)}`, { headers: { ...who }, cache: 'no-store' })
     return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
@@ -23,7 +24,7 @@ export async function DELETE(): Promise<Response> {
   const who = await agentHeaders()
   if (!who) return NextResponse.json({ ok: false, rule: 'sign_in_required' }, { status: 401 })
   try {
-    const r = await fetch(`${API_URL}/api/agent/memory`, { method: 'DELETE', headers: { ...who }, cache: 'no-store' })
+    const r = await reach(`${API_URL}/api/agent/memory`, { method: 'DELETE', headers: { ...who }, cache: 'no-store' })
     return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })

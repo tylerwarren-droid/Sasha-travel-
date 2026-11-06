@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
   const prompt = `Generate a warm, professional welcome message for ${persona_name || 'Sasha'}, the AI travel concierge for ${business_name || 'our travel company'}. ${destinations ? `They specialise in ${destinations}.` : ''} ${description ? `About the property/destinations: ${description}` : ''} The message should be 2-3 sentences, welcoming and inviting. Do not include quotation marks. Return only the welcome message text.`
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/agents/conductor`, {
+    const res = await reach(`${API_BASE_URL}/api/agents/conductor`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: prompt }),

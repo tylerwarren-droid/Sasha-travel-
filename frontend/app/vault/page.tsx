@@ -13,6 +13,8 @@ import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { SignedInGate } from '../components/SignedInGate'
 import { GatedButton } from '../booking-helper/GatedButton'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { noted } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 
 type Use = { action_kind: string; action_ref: string; status: string; started_at: string; ended_at: string | null }
 type Item = { id: string; provider: string; label: string; kind: string; special_category: boolean; created_at: string
@@ -27,9 +29,9 @@ const FIELDS: Record<string, string[]> = { app_password: ['username', 'password'
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 
 async function send(method: 'DELETE', path: string, body?: unknown) {
-  const r = await fetch(bookingUrl(path), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+  const r = await reach(bookingUrl(path), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
   let json: Record<string, unknown> = {}
-  try { json = await r.json() } catch { /* reported by its status */ }
+  try { json = await r.json() } catch (e) { noted('page · reported by its status')(e) }
   return { ok: r.ok, status: r.status, json }
 }
 

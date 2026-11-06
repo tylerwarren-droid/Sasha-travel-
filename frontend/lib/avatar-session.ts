@@ -1,3 +1,5 @@
+import { beacon, reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { observe, toConsole } from '@/lib/outcome'   // Sasha 348 · the ONE outcome path: nothing swallowed
 /**
  * Sasha 303 · the page's link to the ONE gate (backend app/avatar_gate.py) for one live face. The gate decides every limit — 60 s with
  * nobody talking, no beat for 30 s (the tab is gone), his minutes, Kanoe's — and closes the session itself on the server. The page
@@ -8,15 +10,13 @@ const BEAT_MS = 15000
 
 export type GateLink = { talk: () => void; close: (why: string) => void; end: () => void }
 
-const send = (action: 'beat' | 'close', body: Record<string, unknown>, beacon = false) => {
+const send = (action: 'beat' | 'close', body: Record<string, unknown>, leaving = false) => {
   const data = JSON.stringify(body)
-  try {
-    if (beacon && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-      navigator.sendBeacon(`/api/s2-avatar/${action}`, new Blob([data], { type: 'application/json' }))
-      return Promise.resolve(null)
-    }
-  } catch { /* the fetch below */ }
-  return fetch(`/api/s2-avatar/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: data, keepalive: true })
+  if (leaving) {   // the tab is going: the one client's beacon (it falls back to a keepalive request itself, its failure told)
+    beacon(`/api/s2-avatar/${action}`, new Blob([data], { type: 'application/json' }))
+    return Promise.resolve(null)
+  }
+  return reach(`/api/s2-avatar/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: data, keepalive: true })
     .then(r => r.json().catch(() => null)).catch(() => null)
 }
 
@@ -30,14 +30,14 @@ export function gateLink(sid: string): GateLink {
     document.removeEventListener('visibilitychange', onVis)
     window.removeEventListener('pagehide', onHide)
   }
-  const close = (why: string, beacon = false) => { if (over) return; end(); void send('close', { sid, why }, beacon) }
+  const close = (why: string, beacon = false) => { if (over) return; end(); observe(send('close', { sid, why }, beacon), 'Closing her face’s session', toConsole) }
   const onVis = () => { if (document.visibilityState === 'hidden') close('hidden', true) }
   const onHide = () => close('closed', true)
   const beat = () => {
     if (over) return
     const t = talked
     talked = false
-    void send('beat', { sid, talking: t, visible: document.visibilityState === 'visible' }).then(j => { if (j && j.ok === false) end() })
+    observe(send('beat', { sid, talking: t, visible: document.visibilityState === 'visible' }).then(j => { if (j && j.ok === false) end() }), 'Keeping her face’s session', toConsole)
   }
   const timer = setInterval(beat, BEAT_MS)
   document.addEventListener('visibilitychange', onVis)

@@ -6,6 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { GatedButton } from './GatedButton'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type State = { phase: 'checking' } | { phase: 'in' } | { phase: 'out'; configured: boolean; note: string | null }
 
@@ -14,14 +15,14 @@ export function FounderGate({ children }: { children: ReactNode }) {
   const [pass, setPass] = useState('')
 
   useEffect(() => {
-    fetch('/api/founder-session').then(async (r) => {
+    reach('/api/founder-session').then(async (r) => {
       const j = (await r.json()) as { signed_in?: boolean; configured?: boolean }
       setState(j.signed_in ? { phase: 'in' } : { phase: 'out', configured: j.configured !== false, note: null })
     }).catch((e) => setState({ phase: 'out', configured: true, note: `Could not check the session (${(e as Error).message}).` }))
   }, [])
 
   async function signIn() {
-    const r = await fetch('/api/founder-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passphrase: pass }) })
+    const r = await reach('/api/founder-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passphrase: pass }) })
     const j = (await r.json().catch(() => ({}))) as { message?: string }
     setPass('')
     if (r.ok) setState({ phase: 'in' })

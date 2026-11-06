@@ -26,8 +26,13 @@ export function heard(name: string, r: Res): string {
     : `${name}: the server answered ${r.status} without words — nothing was changed. Try again.`)
 }
 
+/** a browser's words for "the network is gone" (Chrome · Safari · Firefox) */
+const OFFLINE = /failed to fetch|load failed|networkerror|network request failed|err_internet_disconnected|could(n’t|n't| not) be reached/i
+
 export function failed(name: string, e: unknown): string {
-  const why = e instanceof Error && e.message ? e.message : ''
+  const why = e instanceof Error && e.message ? e.message : typeof e === 'string' ? e : ''
+  if (OFFLINE.test(why) || (typeof navigator !== 'undefined' && navigator.onLine === false))   // Sasha 348 · the connection, said plainly
+    return `${name} couldn’t reach Sasha — your connection seems to be off. Try again when it’s back.`
   return `${name} didn’t go through${why ? ` (${why})` : ''} — nothing was changed. Try again.`
 }
 
@@ -42,4 +47,29 @@ export const toConsole = (said: string) => console.warn(`[outcome] ${said}`)
 
 export function observe<T>(p: Promise<T> | null | undefined, name: string, tell: (said: string) => void): void {
   if (p) p.catch((e: unknown) => tell(failed(name, e)))   // nothing started (an optional step that wasn't there): nothing to tell
+}
+
+/** Sasha 348 · a catch's own teller for a step that isn't the person's (a browser capability, a background read): `.catch(noted('…'))`,
+ *  `catch (e) { noted('…')(e) }` — the failure is named in the console, never swallowed. */
+export const noted = (name: string) => (e: unknown): void => toConsole(failed(name, e))
+
+/** Sasha 348 · THE page's one line to a person when a page has no message place of its own: a polite live region (role=status), shown for
+ *  a few seconds. A page with its own place to say things uses that instead. */
+export function announce(text: string): void {
+  if (typeof document === 'undefined') { toConsole(text); return }
+  let el = document.getElementById('sasha-outcome') as (HTMLDivElement & { _t?: ReturnType<typeof setTimeout> }) | null
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'sasha-outcome'
+    el.setAttribute('role', 'status')
+    el.setAttribute('aria-live', 'polite')
+    Object.assign(el.style, { position: 'fixed', left: '50%', top: '12px', transform: 'translateX(-50%)', maxWidth: 'min(92vw, 520px)',
+      padding: '10px 14px', borderRadius: '12px', background: 'rgba(20,20,28,.96)', color: '#fff', border: '1px solid rgba(255,255,255,.18)',
+      font: '14px/1.4 system-ui, sans-serif', zIndex: '2147483647', boxShadow: '0 6px 24px rgba(0,0,0,.45)' })
+    document.body.appendChild(el)
+  }
+  el.textContent = text
+  el.style.display = 'block'
+  if (el._t) clearTimeout(el._t)
+  el._t = setTimeout(() => { if (el) el.style.display = 'none' }, 7000)
 }

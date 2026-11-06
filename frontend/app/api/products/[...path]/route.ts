@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * CR 1 · the public door to /api/booking/products/* — GET only (a hand-over page's calendar file, a relocation file's
@@ -15,7 +16,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ path: strin
   }
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/booking/products/${path.join('/')}`, { headers: { 'x-sasha-booking-key': key }, cache: 'no-store' })
+    r = await reach(`${API_URL}/api/booking/products/${path.join('/')}`, { headers: { 'x-sasha-booking-key': key }, cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, message: `Sasha's server could not be reached (${(e as Error).message})` }, { status: 502 })
   }
@@ -40,7 +41,7 @@ export async function POST(_request: Request, ctx: { params: Promise<{ path: str
   if (!ok) return NextResponse.json({ ok: false, message: 'not an allowed action' }, { status: 400 })
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/booking/products/${path.join('/')}`, { method: 'POST', headers: { 'x-sasha-booking-key': key }, cache: 'no-store' })
+    r = await reach(`${API_URL}/api/booking/products/${path.join('/')}`, { method: 'POST', headers: { 'x-sasha-booking-key': key }, cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, message: `Sasha's server could not be reached (${(e as Error).message})` }, { status: 502 })
   }

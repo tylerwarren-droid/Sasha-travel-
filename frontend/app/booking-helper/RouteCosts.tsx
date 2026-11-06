@@ -9,6 +9,8 @@ import { useState } from 'react'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { guestRefusal as refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Route = { route: string; count: number; eur: number | null; usd?: number; source: string }
 type Row = { id: string; venue: string | null; status: string; confirmed: boolean; routes: Route[]; eur: number | null }
@@ -21,14 +23,14 @@ export function RouteCosts() {
   const [out, setOut] = useState<Out | null>(null)
   const [words, setWords] = useState<string | null>(null)
   async function load() {
-    const r = await fetch(bookingUrl('/api/booking/ops/route-costs'), { headers: bookingHeaders() })
+    const r = await reach(bookingUrl('/api/booking/ops/route-costs'), { headers: bookingHeaders() })
     const j = await r.json().catch(() => ({}))
     if (r.ok) { setOut(j as Out); setWords(null) } else setWords(`Route costs — ${refusal(j, r.status)}.`)
   }
   return (
     <section className="space-y-2 rounded border p-3">
       <h2 className="font-semibold">Cost per confirmed booking</h2>
-      <GatedButton label="Show route costs" onClick={() => { load() }} needs={[]} />
+      <GatedButton label="Show route costs" onClick={() => { observe(load(), 'Loading', announce) }} needs={[]} />
       {words && <p>{words}</p>}
       {out && (
         <div className="space-y-2 text-sm">

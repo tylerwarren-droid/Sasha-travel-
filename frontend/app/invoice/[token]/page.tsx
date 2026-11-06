@@ -6,6 +6,7 @@
  */
 import { use, useEffect, useState } from 'react'
 import { apiUrl } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Line = { who: string; route: string; dates: string; hotel_nights?: number | null; price: string; references: string[]; what?: string; refund?: string }
 type Inv = { to: string; number: string; date: string; test: boolean; movement: { destination?: string; starts_on?: string; ends_on?: string; hotel_area?: string }
@@ -16,7 +17,7 @@ export default function InvoicePage({ params }: { params: Promise<{ token: strin
   const [inv, setInv] = useState<Inv | null>(null)
   const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
-    fetch(apiUrl(`/api/booking/group-invoice/${encodeURIComponent(token)}`), { cache: 'no-store' })
+    reach(apiUrl(`/api/booking/group-invoice/${encodeURIComponent(token)}`), { cache: 'no-store' })
       .then(async r => { const j = await r.json().catch(() => null); if (r.ok && j && !j.why) setInv(j); else setErr((j && (j.message || j.why)) || 'This invoice couldn’t be opened.') })
       .catch(() => setErr('This invoice couldn’t be opened.'))
   }, [token])

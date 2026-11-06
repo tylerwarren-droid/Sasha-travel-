@@ -16,6 +16,7 @@
 import { useEffect, useState } from 'react'
 import { bookingUrl, bookingHeaders } from '@/lib/booking-api'
 import ReceiptCard from '../ReceiptCard'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Reservation = {
   id: string; channel: string; venue: string; date: string | null; time: string | null; timezone: string | null; party: number | null
@@ -49,7 +50,7 @@ export default function SashaReservations() {
 
   useEffect(() => {
     let cancelled = false
-    fetch(bookingUrl('/api/booking/reservations'), { headers: bookingHeaders() })
+    reach(bookingUrl('/api/booking/reservations'), { headers: bookingHeaders() })
       .then(async (r) => {
         if (cancelled) return
         if (r.status === 401) { setState({ phase: 'hidden' }); return }

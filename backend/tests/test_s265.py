@@ -64,8 +64,8 @@ class TheMicOpensItsSocketWhatever(unittest.TestCase):
         self.assertNotIn("await ctx.resume()", body)                       # 264: waited for good on a phone — no socket
         self.assertIn("Promise.race([resumed, new Promise(r => setTimeout(r, RESUME_WAIT_MS))])", body)
         # Sasha 322 · the socket opens BESIDE the mic (openSocket on the key, never after the audio): it opens either way, sooner
-        self.assertIn("void keyPromise.then(k => { if (k && audioCtxRef.current === ctx && !manualStopRef.current) openSocket(k) })", body)
-        self.assertLess(body.index("void keyPromise.then("), body.index("Promise.race([resumed"))
+        self.assertIn("observe(keyPromise.then(k => { if (k && audioCtxRef.current === ctx && !manualStopRef.current) openSocket(k) }), 'The microphone', (t: string) => reportMicError(t))", body)
+        self.assertLess(body.index("observe(keyPromise.then("), body.index("Promise.race([resumed"))
 
     def test_gate_a_word_said_over_her_is_kept_and_her_own_voice_never(self):
         src = _tsx(self, "app/components/VoiceButton.tsx")
@@ -120,7 +120,7 @@ class NewChatClearsTheConversationOnly(unittest.TestCase):
     def test_gate_one_route_both_surfaces(self):
         self.assertIn(("/memory", "DELETE"), {(r.path.replace("/api/agent", ""), m) for r in S.router.routes for m in getattr(r, "methods", [])})
         self.assertIn("method: 'DELETE'", _tsx(self, "app/s2/S2App.tsx"))
-        self.assertIn("fetch('/api/sasha-agent/memory', { method: 'DELETE'", _tsx(self, "app/next/page.tsx"))
+        self.assertIn("reach('/api/sasha-agent/memory', { method: 'DELETE'", _tsx(self, "app/next/page.tsx"))
         for rel in ("app/api/s2-memory/route.ts", "app/api/sasha-agent/memory/route.ts"):
             self.assertIn("/api/agent/memory`, { method: 'DELETE'", _tsx(self, rel))
 

@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { bookingReq, contactReq, refusal } from '@/lib/booking-client'
 import { GatedButton } from '../booking-helper/GatedButton'
+import { announce, failed, noted } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Link = { link_id: string; url: string; sha256: string; platform: string; lines: string[] }
 type Draft = { parts?: { when?: { mode: string; at?: string }; how_many?: { count: number; unit: string }; who?: { name: string } } } | null
@@ -27,7 +28,7 @@ export default function ChatBookingLink({ readId, platform, draft, openAt }: {
     contactReq('GET').then((r) => {
       const n = ((r.json.contact ?? null) as { name?: string } | null)?.name
       if (!off && n) setD((x) => (x.name ? x : { ...x, name: n }))
-    }).catch(() => { /* the form below asks */ })
+    }).catch(noted('ChatBookingLink · contactReq(’GET’).then((r) => { const n = ((r.json.contact ?'))
     return () => { off = true }
   }, [])
   const [note, setNote] = useState<string | null>(null)
@@ -79,7 +80,7 @@ export default function ChatBookingLink({ readId, platform, draft, openAt }: {
             : link.lines.map((l, i) => <div key={i} style={{ marginBottom: 2 }}>{l}</div>)}
           <a href={link.url} target="_blank" rel="noopener noreferrer"
             style={{ display: 'inline-block', marginTop: 6, padding: '4px 10px', border: '1px solid rgba(0,0,0,.3)', borderRadius: 6 }}
-            onClick={() => { state('/opened', { read_back_sha256: link.sha256 }).catch(() => { /* shown by the next state */ }) }}>
+            onClick={() => { state('/opened', { read_back_sha256: link.sha256 }).catch(((e: unknown) => announce(failed('Noting that you opened their page', e)))) }}>
             {phone ? `or open it here ↗` : `Open their ${link.platform} page ↗`}
           </a>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>

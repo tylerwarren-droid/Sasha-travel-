@@ -2,6 +2,8 @@
 
 import { useState, type ChangeEvent } from 'react'
 import { OnboardingData } from '../types'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 interface Step3Props {
   data: OnboardingData
@@ -54,7 +56,7 @@ export default function Step3Prompt({ data, onChange }: Step3Props) {
   const handleGenerateWelcome = async () => {
     setGeneratingWelcome(true)
     try {
-      const res = await fetch('/api/onboarding/generate-welcome', {
+      const res = await reach('/api/onboarding/generate-welcome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -224,8 +226,7 @@ export default function Step3Prompt({ data, onChange }: Step3Props) {
           </label>
           <button
             type="button"
-            onClick={handleGenerateWelcome}
-            disabled={generatingWelcome}
+            onClick={(e: React.MouseEvent) => { if (generatingWelcome) { announce(stillGoing('Writing the welcome', 'Generate')); return } (() => observe(handleGenerateWelcome(), 'Writing the welcome', announce))() }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
             style={{
               background: generatingWelcome ? '#E5E7EB' : '#0F6E56',

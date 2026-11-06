@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /** Sasha 228 · the phone's Confirm (→ saved encrypted in the account's Keep; the code is spent) or Retake (→ that reading dropped). */
 export const dynamic = 'force-dynamic'
@@ -9,7 +10,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ co
   if (action !== 'confirm' && action !== 'discard') return NextResponse.json({ ok: false, rule: 'unknown_action' }, { status: 404 })
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/keep/handoff/${encodeURIComponent(code)}/${encodeURIComponent(token)}/${action}`, { method: 'POST', cache: 'no-store' })
+    r = await reach(`${API_URL}/api/agent/keep/handoff/${encodeURIComponent(code)}/${encodeURIComponent(token)}/${action}`, { method: 'POST', cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }

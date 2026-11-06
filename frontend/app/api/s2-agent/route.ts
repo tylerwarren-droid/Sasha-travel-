@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * Sasha 221 · /s2's pass-through to Sasha's agent — the SAME agent as /next (backend /api/agent/turn), streamed, with ONE
@@ -16,7 +17,7 @@ export async function POST(request: Request): Promise<Response> {
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-sasha-surface': 's2', ...who }
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/turn`, { method: 'POST', headers, body: await request.text(), cache: 'no-store' })
+    r = await reach(`${API_URL}/api/agent/turn`, { method: 'POST', headers, body: await request.text(), cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }

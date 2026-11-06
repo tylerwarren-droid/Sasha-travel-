@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /**
  * CR 8 · "Return to applicant with this list". Every outcome is shown: recorded (with the exact message), or why not.
@@ -14,7 +15,7 @@ export default function ReturnButton({ caseId, appId, message, already }: { case
   const send = async () => {
     setState({ kind: 'busy' })
     try {
-      const r = await fetch(`/api/products/relocation/officer/${encodeURIComponent(caseId)}/return/${encodeURIComponent(appId)}`, { method: 'POST' })
+      const r = await reach(`/api/products/relocation/officer/${encodeURIComponent(caseId)}/return/${encodeURIComponent(appId)}`, { method: 'POST' })
       const j = await r.json()
       if (!r.ok) {
         setState({ kind: 'failed', why: (j && j.message) || `HTTP ${r.status}` })

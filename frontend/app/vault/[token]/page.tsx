@@ -8,6 +8,8 @@
 import { use, useCallback, useEffect, useState } from 'react'
 import { apiUrl } from '@/lib/api'
 import { T, page, card, field as fieldS, btn, btn2, small, off } from '@/lib/group-theme'   // Sasha 336 · readable on the dark theme
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Page = { name: string; company?: string; destination?: string; saved: { type: string; masked: string; item_id: string }[] }
 const empty = { number: '', country: '', expires_on: '', name: '', born_on: '' }
@@ -23,25 +25,25 @@ export default function VaultPage({ params }: { params: Promise<{ token: string 
   const [said, setSaid] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const r = await fetch(url, { cache: 'no-store' }).catch(() => null)
+    const r = await reach(url, { cache: 'no-store' }).catch(() => null)
     const j = r ? await r.json().catch(() => null) : null
     if (r?.ok && j) { setP(j as Page); setErr(null) } else setErr((j && (j.message as string)) || 'This page couldn’t be opened.')
   }, [url])
-  useEffect(() => { load() }, [load])
+  useEffect(() => { observe(load(), 'Reading your vault', announce) }, [load])
 
   const save = async () => {
     setBusy(true); setSaid(null)
     const body = { passport: pp.number ? pp : null, loyalty: loy.filter(l => l.number.trim()) }
-    const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null)
+    const r = await reach(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null)
     const j = r ? await r.json().catch(() => null) : null
     setBusy(false)
-    if (r?.ok) { setPp(empty); setLoy([{ program: '', number: '' }]); setSaid('Saved.'); load() }   // the values leave the page's memory
+    if (r?.ok) { setPp(empty); setLoy([{ program: '', number: '' }]); setSaid('Saved.'); observe(load(), 'Reading your vault', announce) }   // the values leave the page's memory
     else setSaid((j && (j.message as string)) || 'That wasn’t saved — try again.')
   }
   const erase = async (item?: string) => {
     setBusy(true)
-    await fetch(url + (item ? `?item=${encodeURIComponent(item)}` : ''), { method: 'DELETE' }).catch(() => null)
-    setBusy(false); setSaid(item ? 'Deleted.' : 'Everything deleted.'); load()
+    await reach(url + (item ? `?item=${encodeURIComponent(item)}` : ''), { method: 'DELETE' }).catch(() => null)
+    setBusy(false); setSaid(item ? 'Deleted.' : 'Everything deleted.'); observe(load(), 'Reading your vault', announce)
   }
 
   const field = (k: keyof typeof empty, label: string, type = 'text', ph = '') => (
@@ -59,8 +61,8 @@ export default function VaultPage({ params }: { params: Promise<{ token: string 
       {p.saved.length > 0 && <section data-saved style={{ ...card, margin: '12px 0' }}>
         <h2 style={{ fontSize: 16 }}>Saved</h2>
         {p.saved.map(s => <div key={s.item_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-          <span>✓ {s.masked}</span><button type="button" disabled={busy} onClick={() => erase(s.item_id)} style={off(small, busy)}>Delete</button></div>)}
-        <button type="button" disabled={busy} onClick={() => erase()} style={{ ...off(btn2, busy), marginTop: 8 }}>Delete everything</button>
+          <span>✓ {s.masked}</span><button type="button" onClick={(e: React.MouseEvent) => { if (busy) { announce(stillGoing('Saving your vault', 'Delete')); return } (() => observe(erase(s.item_id), 'Deleting', announce))() }} style={off(small, busy)}>Delete</button></div>)}
+        <button type="button" onClick={(e: React.MouseEvent) => { if (busy) { announce(stillGoing('Saving your vault', 'Delete everything')); return } (() => observe(erase(), 'Deleting', announce))() }} style={{ ...off(btn2, busy), marginTop: 8 }}>Delete everything</button>
       </section>}
       <section>
         <h2 style={{ fontSize: 16, color: T.text }}>Passport</h2>
@@ -76,7 +78,7 @@ export default function VaultPage({ params }: { params: Promise<{ token: string 
           <input placeholder="Number" value={l.number} autoComplete="off"
             onChange={e => setLoy(loy.map((x, j) => j === i ? { ...x, number: e.target.value } : x))} style={{ ...fieldS, flex: 1 }} /></div>)}
         <button type="button" onClick={() => setLoy([...loy, { program: '', number: '' }])} style={{ ...small, marginTop: 8 }}>Add another</button>
-        <div><button type="button" disabled={busy} onClick={save} style={{ ...off(btn, busy), marginTop: 14 }}>Save</button></div>
+        <div><button type="button" onClick={(e: React.MouseEvent) => { if (busy) { announce(stillGoing('Saving your vault', 'Save')); return } (() => observe(save(), 'Saving', announce))() }} style={{ ...off(btn, busy), marginTop: 14 }}>Save</button></div>
         {said && <p data-said role="status" style={{ color: T.text, fontWeight: 600 }}>{said}</p>}
       </section>
     </main>)

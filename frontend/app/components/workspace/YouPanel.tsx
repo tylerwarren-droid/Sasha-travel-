@@ -5,6 +5,7 @@ import { User } from '@/types'
 import { apiUrl, apiHeaders } from '@/lib/api'
 import SashaReservations from './SashaReservations'  // S-45, Stage B re-applies
 import ProductReminders from './ProductReminders'  // CR 10 · the products' dated reminders, in their own block (not bookings)
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 interface YouPanelProps {
   user: User
@@ -56,7 +57,7 @@ export default function YouPanel({ user, plannedThisSession = 0, language = 'en'
   const [tripsFailed, setTripsFailed] = useState(false)
   useEffect(() => {
     let cancelled = false
-    refreshGuestAuth().then(() => fetch(accountUrl('/api/trips'), { headers: apiHeaders(guestAuth()) }))  // S-62 step 7 · their own trips
+    refreshGuestAuth().then(() => reach(accountUrl('/api/trips'), { headers: apiHeaders(guestAuth()) }))  // S-62 step 7 · their own trips
       .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
       .then(d => { if (!cancelled) setBooked(Array.isArray(d.trips) ? d.trips : []) })
       .catch(() => { if (!cancelled) { setBooked([]); setTripsFailed(true) } })

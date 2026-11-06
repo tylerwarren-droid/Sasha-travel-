@@ -1,3 +1,4 @@
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 /**
  * Sasha 303 · THE ONE place a LiveAvatar (HeyGen) session token is minted — SERVER ONLY. Its one caller is
  * app/api/s2-avatar/token/route.ts, and only after the gate (backend app/avatar_gate.py) said yes; the token then goes to the gate
@@ -11,7 +12,7 @@ export async function mintSession(): Promise<{ token: string; sessionId: string 
   const controller = new AbortController()
   const t = setTimeout(() => controller.abort(), 8000)
   try {
-    const r = await fetch('https://api.liveavatar.com/v1/sessions/token', {
+    const r = await reach('https://api.liveavatar.com/v1/sessions/token', {
       method: 'POST', headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'LITE', avatar_id: AVATAR_ID, is_sandbox: false }), signal: controller.signal, cache: 'no-store',
     })

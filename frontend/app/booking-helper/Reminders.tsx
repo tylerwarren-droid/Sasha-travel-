@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type View = { prefs: { all_off: boolean; off_kinds: string[] }; place: { label: string; address: string } | null }
 
@@ -33,9 +34,9 @@ export function Reminders() {
   async function put(path: string, method: 'PUT' | 'POST' | 'DELETE', body?: unknown) {
     setBusy(true)
     try {
-      const r = await fetch(bookingUrl(path), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+      const r = await reach(bookingUrl(path), { method, headers: bookingHeaders(), ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
       let j: Record<string, unknown> = {}
-      try { j = await r.json() } catch { /* reported by its status */ }
+      try { j = await r.json() } catch { j = {} }   // not JSON: the status, said below, tells what happened
       if (!r.ok) { setWords(`Not saved — ${refusal(j, r.status)}.`); return }
       const g = await bookingReq('/api/booking/proactive')
       if (g.ok) setView(g.json as unknown as View)

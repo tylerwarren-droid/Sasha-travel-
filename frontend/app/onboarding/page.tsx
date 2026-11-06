@@ -9,6 +9,8 @@ import Step3Prompt from './components/Step3Prompt'
 import Step4Inventory from './components/Step4Inventory'
 import Step5Agents from './components/Step5Agents'
 import Step6Deploy from './components/Step6Deploy'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, failed, noted, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 const DRAFT_KEY = 'kanoe_onboarding_draft'
 
@@ -36,9 +38,7 @@ export default function OnboardingPage() {
         const parsed = JSON.parse(raw) as OnboardingData
         setFormData(parsed)
       }
-    } catch {
-      // ignore parse errors
-    }
+    } catch (e) { noted('page · ignore parse errors')(e) }
     setMounted(true)
   }, [])
 
@@ -47,9 +47,7 @@ export default function OnboardingPage() {
     if (!mounted) return
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(formData))
-    } catch {
-      // ignore storage errors
-    }
+    } catch (e) { noted('page · ignore storage errors')(e) }
   }, [formData, mounted])
 
   const handleChange = useCallback((partial: Partial<OnboardingData>) => {
@@ -58,14 +56,12 @@ export default function OnboardingPage() {
 
   const saveDraft = async (data: OnboardingData) => {
     try {
-      await fetch('/api/onboarding/save', {
+      await reach('/api/onboarding/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ formData: data }),
       })
-    } catch {
-      // non-blocking
-    }
+    } catch (e) { noted('page · non-blocking')(e) }
   }
 
   const handleNext = async () => {
@@ -99,7 +95,7 @@ export default function OnboardingPage() {
     setFormData(updatedData)
     // S-62 onboarding honesty (Stage B): a refused or failed save never reaches "Sasha is live!" — the server's own
     // reason is thrown to Step6Deploy, which shows it. The draft is kept until the save is accepted.
-    const res = await fetch('/api/onboarding/save', {
+    const res = await reach('/api/onboarding/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ formData: updatedData, goLive: true }),
@@ -109,15 +105,13 @@ export default function OnboardingPage() {
       try {
         const j = await res.json() as { error?: string; message?: string }
         why = j.error ?? j.message ?? why
-      } catch { /* not JSON: the status says it */ }
+      } catch { why = `the server answered HTTP ${res.status} (not JSON)` }   // the status says it
       throw new Error(why)
     }
     // Clear draft
     try {
       localStorage.removeItem(DRAFT_KEY)
-    } catch {
-      // ignore
-    }
+    } catch (e) { announce(failed('Clearing your saved draft on this device', e)) }
   }
 
   if (!mounted) {
@@ -151,8 +145,7 @@ export default function OnboardingPage() {
           >
             <button
               type="button"
-              onClick={handleBack}
-              disabled={step === 1}
+              onClick={(e: React.MouseEvent) => { if (step === 1) { announce('This is the first step — there is nothing before it.'); return } (handleBack)() }}
               className="px-5 py-2.5 rounded-xl text-sm font-medium border transition-all duration-150"
               style={{
                 borderColor: step === 1 ? '#E5E7EB' : '#D1D5DB',
@@ -171,8 +164,7 @@ export default function OnboardingPage() {
               </span>
               <button
                 type="button"
-                onClick={handleNext}
-                disabled={isSaving}
+                onClick={(e: React.MouseEvent) => { if (isSaving) { announce(stillGoing('Saving', 'Next')); return } (() => observe(handleNext(), 'Saving this step', announce))() }}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150"
                 style={{
                   background: isSaving ? '#D1D5DB' : '#0F6E56',

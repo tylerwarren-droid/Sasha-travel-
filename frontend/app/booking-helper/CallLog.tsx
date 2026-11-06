@@ -9,6 +9,8 @@
 import { useState } from 'react'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { guestRefusal as refusal } from '@/lib/booking-client'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Call = { call_id: string; test: boolean; venue: string | null; purpose: string | null; language: string | null; created_at: string | null
   placed_at: string | null; status: string | null; outcome: string | null; venue_words: string | null; not_placed_why: string | null
@@ -29,7 +31,7 @@ const fmt = (iso: string | null) => {
 }
 
 async function call(path: string, init?: RequestInit) {
-  const r = await fetch(bookingUrl(path), { ...init, headers: { ...bookingHeaders(), ...(init?.headers || {}) } })
+  const r = await reach(bookingUrl(path), { ...init, headers: { ...bookingHeaders(), ...(init?.headers || {}) } })
   const j = await r.json().catch(() => ({}))
   return { ok: r.ok, status: r.status, j }
 }
@@ -61,7 +63,7 @@ export function CallLog() {
     const r = await call('/api/booking/ops/calls/test', { method: 'POST', body: JSON.stringify({ language: 'en', minutes: 1 }) })
     setWords(r.ok ? (r.j.placed ? `Test call placed and logged (Bland ${r.j.bland_call_id}). Its outcome is read in about a minute.`
       : `Test call logged but NOT placed — ${r.j.why}.`) : `Test call — ${refusal(r.j, r.status)}.`)
-    if (r.ok) load()
+    if (r.ok) observe(load(), 'Loading the calls', announce)
   }
   async function importBland() {
     const r = await call('/api/booking/ops/calls/import-bland', { method: 'POST' })
@@ -69,14 +71,14 @@ export function CallLog() {
     const other = (r.j.not_in_our_log_other_numbers || []) as { bland_call_id: string; at: string }[]
     setWords(`Imported ${r.j.imported_test_calls.length} test-line call(s) from Bland’s log (of ${r.j.bland_calls_seen} seen).` +
       (other.length ? ` ⚠ ${other.length} call(s) to OTHER numbers are in Bland’s log but not ours: ${other.map(o => o.bland_call_id).join(', ')}.` : ' No other call is missing.'))
-    load()
+    observe(load(), 'Loading the calls', announce)
   }
 
   return (
     <section className="space-y-3">
       <div>
         <input className="w-full rounded border px-2 py-1" placeholder="Search: venue, reference, K-reference, words, Bland id…"
-               value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load() }} />
+               value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') observe(load(), 'Loading', announce) }} />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <select className="rounded border px-1" value={kind} onChange={e => setKind(e.target.value)}>
             <option value="all">Calls and bookings</option><option value="calls">Calls only</option><option value="bookings">Bookings only</option>
@@ -87,9 +89,9 @@ export function CallLog() {
           <select className="rounded border px-1" value={days} onChange={e => setDays(Number(e.target.value))}>
             {[7, 30, 60, 180, 365].map(d => <option key={d} value={d}>Last {d} days</option>)}
           </select>
-          <button className="rounded border px-2 py-1" onClick={load} disabled={busy}>{busy ? 'Loading…' : 'Show'}</button>
-          <button className="rounded border px-2 py-1" onClick={testCall}>Place a logged test call</button>
-          <button className="rounded border px-2 py-1" onClick={importBland}>Import test calls Bland has</button>
+          <button className="rounded border px-2 py-1" onClick={(e: React.MouseEvent) => { if (busy) { announce(stillGoing('Loading the calls', 'Show')); return } (() => observe(load(), 'Loading', announce))() }}>{busy ? 'Loading…' : 'Show'}</button>
+          <button className="rounded border px-2 py-1" onClick={() => observe(testCall(), 'The test call', announce)}>Place a logged test call</button>
+          <button className="rounded border px-2 py-1" onClick={() => observe(importBland(), 'Importing the calls', announce)}>Import test calls Bland has</button>
         </div>
       </div>
       {words && <p>{words}</p>}
@@ -113,7 +115,7 @@ export function CallLog() {
                       {c.bland_call_id ? (
                         <>
                           <code className="break-all">{c.bland_call_id}</code>
-                          <div><button className="underline" onClick={() => blandRecord(c.bland_call_id!)}>Bland’s record</button></div>
+                          <div><button className="underline" onClick={() => observe(blandRecord(c.bland_call_id!), 'Reading the call record', announce)}>Bland’s record</button></div>
                           {(() => {
                             const b = bland[c.bland_call_id!]
                             if (!b) return null

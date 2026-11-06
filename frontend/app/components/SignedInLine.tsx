@@ -8,6 +8,8 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { usePathname } from 'next/navigation'
 import { ensureGuest } from '@/lib/guest-start'
 import { actingOf, badgeFor, whoKey, changed, PER_PERSON_LOCAL, WHO_KEY } from '@/lib/acting-rule.mjs'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { announce, failed, noted, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Who = { who: 'founder' | 'guest' | null; acting?: 'founder' | 'user' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
 
@@ -15,16 +17,16 @@ function useWho(): Who | null | 'unknown' {
   const [who, setWho] = useState<Who | null | 'unknown'>(null)
   useEffect(() => {
     let off = false
-    ;(async () => {
+    ;observe((async () => {
       try {
-        const r = await fetch('/api/auth/whoami', { cache: 'no-store' })
+        const r = await reach('/api/auth/whoami', { cache: 'no-store' })
         const j = r.ok ? (await r.json() as Who) : null
         if (j) forgetIfSomeoneElse(j)   // Sasha 242 · before anything reads them
         if (!off) setWho(j ?? 'unknown')
       } catch {
         if (!off) setWho('unknown')
       }
-    })()
+    })(), 'SignedInLine · (async () => { try { const r = await reach(’/api/auth/whoami', toConsole)
     return () => { off = true }
   }, [])
   return who
@@ -33,12 +35,12 @@ function useWho(): Who | null | 'unknown' {
 /** Sasha 242 · per-person browser storage belongs to ONE person: when the person acting changes (sign-out, another sign-in),
  *  it goes (lib/acting-rule.mjs). Found by EU's walk (row 730): a new account saw trips it never made. */
 export function forgetPerson(): void {
-  try { for (const k of PER_PERSON_LOCAL) localStorage.removeItem(k) } catch { /* private window */ }
+  try { for (const k of PER_PERSON_LOCAL) localStorage.removeItem(k) } catch (e) { noted('Remembering your sign-in on this device')(e) }
   // Sasha 274 · rows 1063/1064: the ONE thing that crosses a change of person — the guest's own conversation, handed to the account
   // they chose to sign in as (SIGN_IN_CARRY, set only by that tap, read once by /s2). Everything else of this tab goes.
   let carry: string | null = null
-  try { carry = sessionStorage.getItem(SIGN_IN_CARRY) } catch { /* private window */ }
-  try { sessionStorage.clear(); if (carry) sessionStorage.setItem(SIGN_IN_CARRY, carry) } catch { /* private window */ }
+  try { carry = sessionStorage.getItem(SIGN_IN_CARRY) } catch (e) { noted('Remembering your sign-in on this device')(e) }
+  try { sessionStorage.clear(); if (carry) sessionStorage.setItem(SIGN_IN_CARRY, carry) } catch (e) { noted('Remembering your sign-in on this device')(e) }
 }
 /** Sasha 274 · the guest's conversation, carried through their own sign-in (S2App puts it; it reads it once). */
 export const SIGN_IN_CARRY = 's2_carry_sign_in'
@@ -47,13 +49,13 @@ function forgetIfSomeoneElse(j: Who): void {
     const now = whoKey(actingOf(j), j.email)   // Sasha 249 · whoami's acting, never re-derived here
     if (changed(localStorage.getItem(WHO_KEY), now)) forgetPerson()
     localStorage.setItem(WHO_KEY, now)
-  } catch { /* storage off: nothing kept to leak */ }
+  } catch (e) { noted('Forgetting this device’s data')(e) }
 }
 
 export function SignInToBook() {
   // Sasha 153 · no sign-in wall: this only shows when the automatic guest session couldn't open — it tries again
   const [state, setState] = useState<'starting' | 'ready' | 'failed'>('starting')
-  useEffect(() => { ensureGuest().then((ok) => setState(ok ? 'ready' : 'failed')) }, [])
+  useEffect(() => { observe(ensureGuest().then((ok) => setState(ok ? 'ready' : 'failed')), 'Starting your private session', toConsole) }, [])
   if (state === 'starting') return <span>Opening your private session…</span>
   if (state === 'ready') return <span>Your private session is open — ask again and I&rsquo;ll carry on.</span>
   return <span>I couldn&rsquo;t open your private session just now — try again in a moment.</span>
@@ -66,8 +68,8 @@ export function WhoIsBooking() {
   if (who === null || who === 'unknown' || !acting) return null
   async function signOut() {
     try {
-      const r = await fetch('/api/auth/sign-out', { method: 'POST' })
-      if (r.ok) { forgetPerson(); try { localStorage.removeItem(WHO_KEY) } catch { /* fine */ } }   // Sasha 242
+      const r = await reach('/api/auth/sign-out', { method: 'POST' })
+      if (r.ok) { forgetPerson(); try { localStorage.removeItem(WHO_KEY) } catch (e) { announce(failed('Forgetting this device', e)) } }   // Sasha 242
       const j = await r.json().catch(() => ({})) as { message?: string }
       setOut(r.ok ? 'Signed out.' : `Not signed out — ${j.message ?? `HTTP ${r.status}`}`)
     } catch (e) {
@@ -78,7 +80,7 @@ export function WhoIsBooking() {
     <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
       {acting === 'founder' ? 'Booking as the founder.' : acting === 'guest'
         ? 'Booking as a private guest — only you see these bookings.'
-        : <>Booking as {who.email ?? 'your account'}. <button type="button" onClick={signOut} style={{ textDecoration: 'underline' }}>Sign out</button></>}
+        : <>Booking as {who.email ?? 'your account'}. <button type="button" onClick={() => observe(signOut(), 'Signing out', announce)} style={{ textDecoration: 'underline' }}>Sign out</button></>}
       {' · '}<a href="/you" style={{ textDecoration: 'underline' }}>You</a>
       {out && <> {out}</>}
     </div>
@@ -116,10 +118,10 @@ export function AccountControl({ style, onSignIn }: { style?: CSSProperties; onS
   async function signOut(then: 'guest' | 'sign_in') {
     setNote(null)
     try {
-      const r = await fetch('/api/auth/sign-out', { method: 'POST' })
+      const r = await reach('/api/auth/sign-out', { method: 'POST' })
       const j = await r.json().catch(() => ({})) as { message?: string }
       if (!r.ok) { setNote(`Not signed out — ${j.message ?? `HTTP ${r.status}`}`); return }
-      forgetPerson(); try { localStorage.removeItem(WHO_KEY) } catch { /* fine */ }
+      forgetPerson(); try { localStorage.removeItem(WHO_KEY) } catch (e) { announce(failed('Forgetting this device', e)) }
       if (then === 'sign_in') { window.location.href = next; return }
       await ensureGuest()   // back to a private guest (Sasha 153: no sign-in wall)
       window.location.href = '/s2'
@@ -135,9 +137,9 @@ export function AccountControl({ style, onSignIn }: { style?: CSSProperties; onS
             {badgeFor(who)} ▾</button>}
       {open && acting !== 'guest' ? (
         <div role="menu" style={{ position: 'absolute', right: 0, top: 22, minWidth: 190, zIndex: 30, background: '#16161f', border: '1px solid rgba(255,255,255,.12)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}>
-          {acting === 'user' ? <button type="button" role="menuitem" style={item} onClick={() => { setOpen(false); void signOut('guest') }}>Sign out</button> : null}
+          {acting === 'user' ? <button type="button" role="menuitem" style={item} onClick={() => { setOpen(false); observe(signOut('guest'), 'Signing out', announce) }}>Sign out</button> : null}
           <button type="button" role="menuitem" style={{ ...item, borderTop: acting === 'user' ? '1px solid rgba(255,255,255,.1)' : 0 }}
-            onClick={() => { setOpen(false); if (acting === 'user') void signOut('sign_in'); else signIn(false) }}>Switch account</button>
+            onClick={() => { setOpen(false); if (acting === 'user') observe(signOut('sign_in'), 'Signing out', announce); else signIn(false) }}>Switch account</button>
         </div>) : null}
       {note ? <div role="status" style={{ color: '#f19999', marginTop: 4 }}>{note}</div> : null}
     </div>

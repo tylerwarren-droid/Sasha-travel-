@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { API_URL } from '@/lib/api'
 import { agentHeaders } from '@/lib/agent-auth'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 /** Sasha 224 · the masked card's Confirm (→ saved encrypted in the Keep) or Retake (→ the reading dropped). */
 export const dynamic = 'force-dynamic'
@@ -12,7 +13,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ to
   if (action !== 'confirm' && action !== 'discard') return NextResponse.json({ ok: false, rule: 'unknown_action' }, { status: 404 })
   let r: Response
   try {
-    r = await fetch(`${API_URL}/api/agent/keep/scan/${encodeURIComponent(token)}/${action}`, { method: 'POST', headers: who, cache: 'no-store' })
+    r = await reach(`${API_URL}/api/agent/keep/scan/${encodeURIComponent(token)}/${action}`, { method: 'POST', headers: who, cache: 'no-store' })
   } catch (e) {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }

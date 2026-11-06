@@ -7,6 +7,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { ensureGuest } from '@/lib/guest-start'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Who = { who: 'founder' | 'guest' | null; email?: string | null; guest_sign_in_open: boolean }
 
@@ -15,7 +16,7 @@ export function SignedInGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     let off = false
     // Sasha 153 · no sign-in wall: a visitor with no account gets their own private guest account first
-    const ask = () => fetch('/api/auth/whoami', { cache: 'no-store' }).then(async (r) => (r.ok ? (await r.json() as Who) : null))
+    const ask = () => reach('/api/auth/whoami', { cache: 'no-store' }).then(async (r) => (r.ok ? (await r.json() as Who) : null))
     ask().then(async (w) => {
       if (w && !w.who && (await ensureGuest())) w = await ask()
       if (!off) setWho(w ?? 'unknown')

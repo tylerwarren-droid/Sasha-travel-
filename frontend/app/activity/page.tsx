@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react'
 import { SignedInGate } from '../components/SignedInGate'
+import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Proof = { reference: string | null; at: string; approved: string | null; fingerprint: string | null; verified: boolean; source: string }
 type Item = { kind: string; state: string; check: 'green' | 'red' | 'amber'; line: string; at: string; ref: string; about?: string | null; proof?: Proof }
@@ -52,7 +53,7 @@ function ActivityList() {
     let live = true
     const get = async () => {
       try {
-        const r = await fetch('/api/sasha-agent/activity', { cache: 'no-store' })
+        const r = await reach('/api/sasha-agent/activity', { cache: 'no-store' })
         const j = await r.json()
         if (!live) return
         if (!r.ok || !j.ok) setLoad({ phase: 'failed', why: j.message ?? `the server answered ${r.status}` })

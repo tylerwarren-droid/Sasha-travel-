@@ -64,6 +64,7 @@ class S2Tells(unittest.TestCase):
         self.assertIn("export const noted =", o)
         self.assertIn("export function announce(", o)
         self.assertIn("couldn’t reach Sasha — your connection seems to be off. Try again when it’s back.", o)
+        self.assertIn("couldn’t load part of this page — reload the page and try again.", o)            # a chunk lost while offline
 
     def test_the_hello_and_the_mic(self):
         hello = (FE / "app/s2/S2Hello.tsx").read_text()
@@ -71,6 +72,8 @@ class S2Tells(unittest.TestCase):
         self.assertIn("else announce(failed('Bringing her face back', e))", hello)
         mic = (FE / "app/components/VoiceButton.tsx").read_text()
         self.assertIn("observe(connect(), 'The microphone', (t: string) => reportMicError(t))", mic)
+        self.assertIn("if (connectingRef.current) {", mic)                                     # a press while connecting is answered
+        self.assertIn("stillGoing('Connecting the microphone', 'it')", mic)
         self.assertIn("socket(", mic)
         self.assertNotIn("new WebSocket(", mic)
 

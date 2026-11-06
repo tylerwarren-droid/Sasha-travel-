@@ -79,7 +79,7 @@ import { holdPlayAndRecord, audioSessionType } from '@/lib/audio-session'   // S
 import { makeDownsampler, sendRate } from '@/lib/downsample.mjs'   // Sasha 215 (d) · the mic at 16 kHz
 import { micState as readMic, MIC_WORDS, REPLY_MS } from '@/lib/mic-machine.mjs'   // Sasha 322 · the ONE state machine, read from the pipeline
 import { reach, socket } from '@/lib/request'   // Sasha 348 · the ONE request client
-import { announce, noted, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import { announce, failed, noted, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 const PUBLIC_DEEPGRAM_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || ''
 
@@ -1008,6 +1008,13 @@ export default function VoiceButton({ onTranscript, quiet = false, muted = false
     }
     if (connectedRef.current && strictRef.current && !hearingRef.current) { listenRef.current?.(); return }   // Sasha 273 · "Tap to talk": resume, never off
     if (connectedRef.current) { stopAll(); return }
+    // Sasha 348 · a press while it is still connecting is ANSWERED (connect() would return quietly): where the mic stands, in its own line
+    if (connectingRef.current) {
+      reportMicError(typeof navigator !== 'undefined' && navigator.onLine === false
+        ? failed('The microphone', new Error('Failed to fetch')).replace('Try again when it’s back.', 'It connects again by itself when it’s back.')
+        : stillGoing('Connecting the microphone', 'it'))
+      return
+    }
     // Sasha 171 · a CLICK on the mic is the guest asking to talk: the gate opens now. It started closed "until the avatar
     // finishes speaking" — in the text box, with no call, the avatar never speaks, so nothing said ever reached Deepgram
     // (live: "the 🎙 in the text box does not accept"). The call's own gate (onSetGate) still closes it while she talks.

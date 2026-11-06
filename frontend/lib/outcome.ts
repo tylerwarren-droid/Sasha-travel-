@@ -27,12 +27,15 @@ export function heard(name: string, r: Res): string {
 }
 
 /** a browser's words for "the network is gone" (Chrome · Safari · Firefox) */
+const CHUNK = /failed to load chunk|loading chunk [\w-]+ failed|chunkloaderror|importing a module script failed|error loading dynamically imported module/i
 const OFFLINE = /failed to fetch|load failed|networkerror|network request failed|err_internet_disconnected|could(n’t|n't| not) be reached/i
 
 export function failed(name: string, e: unknown): string {
   const why = e instanceof Error && e.message ? e.message : typeof e === 'string' ? e : ''
   if (OFFLINE.test(why) || (typeof navigator !== 'undefined' && navigator.onLine === false))   // Sasha 348 · the connection, said plainly
     return `${name} couldn’t reach Sasha — your connection seems to be off. Try again when it’s back.`
+  if (CHUNK.test(why))   // Sasha 348 · a piece of the page that failed to load (while offline) stays failed until the page loads again
+    return `${name} couldn’t load part of this page — reload the page and try again.`
   return `${name} didn’t go through${why ? ` (${why})` : ''} — nothing was changed. Try again.`
 }
 

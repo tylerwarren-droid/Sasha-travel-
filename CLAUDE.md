@@ -1,3 +1,11 @@
+## ⛔ NO PATCHES — ROOT CAUSES ONLY (Tyler, 6 Nov 2026)
+Kanoe does NOT ship patches. Ever.
+1. Before any fix, name the CAUSE and the ONE source of truth for the behaviour.
+2. The fix changes that one source so the WHOLE CLASS of bug becomes impossible, not just the instance in front of you.
+3. A patch = a second copy, a special case, a flag, a bigger timeout/limit, an env var holding someone else's fact, a per-button/per-page/per-door exception, a hand-kept list, or a symptom silenced. It is NEVER shipped, not even labelled "PATCH".
+4. If the root fix can't be done in this ticket, STOP: post "⛔ STOPPED — root cause: <cause> · one source: <where> · root fix needs: <what>". Shipping a patch "for now" is not allowed.
+5. Existing "PATCH, said" items (e.g. NOT_YET_CLEAN lists, fallback notes) are debts: list them in your report so they get a root ticket. Never add to them.
+
 # CLAUDE.md — Sasha / Kanoe.ai Project
 
 This file gives Claude Code the full context and operating rules for the sasha-travel repo.

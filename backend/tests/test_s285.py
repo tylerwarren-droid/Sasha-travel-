@@ -199,7 +199,7 @@ class NoSecondTwilioSender(unittest.TestCase):
         self.assertEqual(users, {"booking_signer/guest_whatsapp.py", "booking_signer/proactive.py", "booking_signer/invitations.py"})
 
     def test_the_hand_off_sits_before_the_call_match(self):
-        src = inspect.getsource(IP.sms)
+        src = inspect.getsource(IP.sms) + inspect.getsource(IP._sms)   # Sasha 350 · the webhook, then its body
         self.assertLess(src.index("VS.whatsapp_inbound(sender, body"), src.index("GW.dispatch("))   # Sasha 294 · + message_id, guest
         self.assertLess(src.index("VS.whatsapp_inbound(sender, body"), src.index("STORE.call_for_number(sender"))
 

@@ -236,6 +236,19 @@ async def sms(request: Request):
     body, sid = p.get("Body", ""), p.get("MessageSid") or p.get("SmsSid")
     if not sid:
         return Response("no message id", status_code=400)
+    # Sasha 350 · EVERY WhatsApp message shows it's being worked on, from here until its reply leaves (wa_working — the ONE place)
+    held = None
+    if channel == "whatsapp" and sender:
+        from . import guest_whatsapp as _GWk, wa_working as WK
+        held = sid if WK.start(_GWk.wa_key(sender), sid) else None
+    try:
+        return await _sms(p, channel, sender, body, sid)
+    finally:
+        if held:
+            WK.settle(held)   # the webhook's answer has left (a background turn's hold stays until its reply leaves: deliver)
+
+
+async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str):
     if channel == "whatsapp" and sender:
         # Sasha 285 · CR 118 (b) · ONE WHATSAPP PATH: AgAPI's ONE inbound op FIRST — a venue's reply to Kanoe's number lands on ITS booking
         # record there. Sasha 294 · for EVERY sender, guests too (Tyler is one: his "investigate …" must reach AgAPI's classifier, CR 127's

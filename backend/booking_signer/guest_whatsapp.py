@@ -470,6 +470,8 @@ class Out:
 async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime]) -> List[str]:
     """Sends a turn's messages — or nothing, with the reason logged: opted out, or outside the 24-hour window (the sandbox
     has no templates; the email receipt still goes)."""
+    from . import wa_working as _WK   # Sasha 350 · a reply to this person leaves (or can't): their "working" dots end here
+    _WK.stop_for(ch.get("wa_id_sha256") or "")
     if ch.get("opted_out_at"):
         log.info("[guest_whatsapp] not sent: the guest has opted out (STOP)")
         return ["not sent: opted out"]
@@ -694,6 +696,8 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         said = await confirmed_by_code(ch, sender, p)   # Sasha 309 / 311 · a linked number's own code: the number confirmed, once
         if said is not None:
             return _twiml_message(said)
+        from . import wa_working as _WK   # Sasha 350 · the turn answers in the background: the dots hold until its reply leaves
+        _WK.keep(key)
         _spawn(_turn(ch, to, p))
         return ""
     now = NOW()
@@ -821,6 +825,9 @@ async def _turn(ch: dict, frm: str, p: Dict[str, str]) -> None:
             st = await STORE.get_state(ch["wa_id_sha256"])
             await deliver(ch, frm, Out().text("Something went wrong on my side — nothing was sent to any venue. Please try "
                                               "again in a minute."), st.get("last_inbound_at"))
+        finally:   # Sasha 350 · the turn is over: its reply has left (deliver), or it had none to send — the dots end either way
+            from . import wa_working as _WK
+            _WK.stop_for(ch["wa_id_sha256"])
 
 
 async def _follow_last_tool(ch: dict, st: dict, account: str, body: str, payload: str) -> None:

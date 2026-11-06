@@ -298,7 +298,7 @@ class TheWhatsAppYes(unittest.TestCase):
         self.assertEqual(seen[1][1]["session"]["kind"], "whatsapp")
 
     def test_only_a_signature_checked_message_sets_it(self):
-        src = inspect.getsource(IP.sms)
+        src = inspect.getsource(IP.sms) + inspect.getsource(IP._sms)   # Sasha 350 · the webhook, then its body
         self.assertLess(src.index("p = await _verified(request"), src.index("VS.WA.set("))
 
 

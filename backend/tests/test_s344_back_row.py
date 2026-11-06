@@ -107,7 +107,7 @@ class TheOneReader(unittest.TestCase):
 
     def test_no_per_tool_exception(self):
         import inspect
-        src = inspect.getsource(IP.sms)
+        src = inspect.getsource(IP.sms) + inspect.getsource(IP._sms)   # Sasha 350 · the webhook, then its body
         self.assertIn("TL.switch_tap(p)", src)
         self.assertLess(src.index("TL.switch_tap(p)"), src.index("VS.whatsapp_inbound(sender, body"))   # BEFORE any door
         self.assertNotIn("diligence", inspect.getsource(TL.switch_tap))

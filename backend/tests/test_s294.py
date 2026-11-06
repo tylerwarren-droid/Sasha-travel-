@@ -77,7 +77,7 @@ class EveryWhatsAppGoesToAgAPIFirst(unittest.TestCase):
     def test_e_no_whatsapp_skips_the_classifier(self):
         """Root test (3): the only early exit before AgAPI's op is a message without a SID (refused) — no sender filter, no keywords."""
         import inspect
-        src = inspect.getsource(IP.sms)
+        src = inspect.getsource(IP.sms) + inspect.getsource(IP._sms)   # Sasha 350 · the webhook, then its body
         import re as _re
         code = "\n".join(_re.sub(r"#.*$", "", ln) for ln in src.splitlines())   # the code, not its comments
         head = code[:code.index("VS.whatsapp_inbound(")]

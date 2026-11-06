@@ -71,11 +71,8 @@ class TheGuard(unittest.TestCase):
         S._currencies({"price": {"amount_minor": 72900, "currency": "USD"}}, out)
         self.assertIn(("USD", 729.0), out)
 
-    def test_a_promised_list_over_nothing(self):
-        self.assertTrue(V.promises_card("Here's the list."))
-        self.assertTrue(V.promises_card("The list is below."))
-        self.assertFalse(V.promises_card("Here is what I can do."))
-        self.assertFalse(V.promises_card("Your invoice is ready: https://x/invoice/1"))
+    def test_the_phrase_guard_is_retired(self):   # Sasha 349 · one payload per reply (sasha.draws + on_screen), no phrase guard
+        self.assertFalse(hasattr(V, "promises_card"))
 
 
 class OneMovementPerTrip(unittest.TestCase):

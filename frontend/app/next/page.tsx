@@ -21,6 +21,7 @@ import { User, Itinerary } from '@/types'
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249
 import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 import { announce, failed, noted, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import { usePhone } from '@/lib/device'
 
 // Sasha 213 · ONE IDENTITY: a concierge for anywhere — no destination is assumed
 // Sasha 249 · ONE CAPABILITY LIST: the chips are /s2's, generated from backend/agapi/s2_home.py CAPABILITIES (S1 = S2)
@@ -206,13 +207,7 @@ export default function NextPage() {
   }, [handleTabChange])
   // Sasha 214 · THE PHONE: portrait, her face on top, one mic button, the cards as a bottom sheet — the same page, agent and
   // turn state as the desktop (no second logic path); only the layout and the human step's device change
-  const [isPhone, setIsPhone] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 640px), (pointer: coarse) and (max-width: 920px) and (orientation: portrait)')
-    const on = () => setIsPhone(mq.matches)
-    on(); mq.addEventListener?.('change', on)
-    return () => mq.removeEventListener?.('change', on)
-  }, [])
+  const isPhone = usePhone()   // Sasha 349 · the ONE phone rule (lib/device)
   const [thinking, setThinking] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [handover, setHandover] = useState<string | null>(null)

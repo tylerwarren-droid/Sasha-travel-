@@ -233,6 +233,9 @@ async def _latest(ctx: Ctx) -> Optional[dict]:
 async def _plan(ctx: Ctx) -> dict:
     from booking_signer import plan_store as PS
     p = await _latest(ctx)
+    if not p and _standalone(ctx) and await _offers(ctx):   # Sasha 349 · a search's flights make no trip until one is chosen
+        raise ToolError("nothing_chosen", "the flights shown aren't in a trip until one is chosen — choose_offer the one they picked "
+                                          "(or ask which one), then book it")
     if not p and _standalone(ctx):   # Sasha 280 · nothing yet: what they asked for, on its own — never "plan a trip first"
         raise ToolError("no_trip", "nothing is on this account to book yet — search what they asked for (search_flights for a flight, "
                                    "search_stays then swap_stay for a hotel); propose_trip only when they ask for a whole trip")
@@ -387,6 +390,24 @@ def _in_eur(cards: List[dict]) -> List[dict]:
     return BK.in_eur(eur or cards or [])
 
 
+OFFERS_KIND = "offers"   # Sasha 349 · a search's offers, kept on the person's ONE record (s2_memory) until one is chosen
+_OFFERS: Dict[str, dict] = {}   # this process's copy (the record when s2_memory's table isn't there)
+
+
+async def _offers(ctx: Ctx) -> Optional[dict]:
+    if ctx.account in _OFFERS:
+        return _OFFERS[ctx.account]
+    from agapi import s2_memory as MEM
+    kept = await MEM.kind(ctx.account, OFFERS_KIND)
+    return kept if isinstance(kept, dict) and kept.get("cards") else None
+
+
+async def _keep_offers(ctx: Ctx, off: dict) -> None:
+    _OFFERS[ctx.account] = off
+    from agapi import s2_memory as MEM
+    await MEM.put_kind(ctx.account, OFFERS_KIND, off)
+
+
 async def _offer_flights(ctx: Ctx, a: dict, cards: List[dict], leg: str, party: int) -> dict:
     """Sasha 249 · OFFERED == BOOKABLE — the ONE way a flight search (Sasha's own, or /s2's AgAPI source) reaches her: the offers
     STORED in the trip's basket first (the leg's earlier options marked superseded, never deleted in this turn), THEN shown, each
@@ -396,13 +417,25 @@ async def _offer_flights(ctx: Ctx, a: dict, cards: List[dict], leg: str, party: 
     isn't part of, and never needing propose_trip. Old S1 (parity off): as before."""
     p = await _latest(ctx)
     if _standalone(ctx):
+        c0 = cards[0] if cards else {}
+        fit = flight_fits(p, _place_words(a.get("origin"), c0.get("from"), c0.get("from_city")),
+                          _place_words(a.get("destination"), c0.get("to"), c0.get("to_city")), a["date"])
+        if not (p and fit):
+            # Sasha 349 · NO TRIP UNTIL ONE IS CHOSEN (Tyler, 6 Nov): a search belonging to no trip made a placeholder trip ("0 days, 2
+            # travellers, $0" in the Trip tab). Its offers are kept on the person's record — the cards she shows ARE them — and
+            # choose_offer makes the trip from the one picked.
+            await _keep_offers(ctx, {"leg": leg, "date": a["date"], "origin": a["origin"], "destination": a["destination"], "party": party,
+                                     "cards": cards, "at": time.time()})
+            return {"leg": leg, "date": a["date"], "party": party, "flights": [_flight_out(c) for c in cards],
+                    "note": "Duffel TEST fares — nothing is held until book", "stored": True,
+                    "how": "They tap one (or say which) to choose it — that makes their trip; nothing is held or paid until they book."}
         p, leg = await _flight_record(ctx, p, a, cards, leg, party)
     stored: Optional[Dict[str, str]] = None
     if p:   # the flights shown are the trip's suggestions (the basket), so choose_offer can take any of them
         ids = await _suggest_flights(ctx, p["trip_id"], cards, a["origin"], a["destination"], a["date"], party, leg)
         stored = {c["id"]: i for c, i in zip(cards, ids or [])} if ids and len(ids) == len(cards) else None
     shown = [{**_flight_out(c), **({"option_id": stored[c["id"]]} if stored and c.get("id") in stored else {})} for c in cards]
-    return {"leg": leg, "date": a["date"], "flights": shown, "note": "Duffel TEST fares — nothing is held until book",
+    return {"leg": leg, "date": a["date"], "party": party, "flights": shown, "note": "Duffel TEST fares — nothing is held until book",
             "stored": bool(p), **({} if p else {"how": "No trip yet, so none of these can be booked: propose_trip first, then pick one."})}
 
 
@@ -476,7 +509,7 @@ async def _suggest_flights(ctx: Ctx, trip_id: str, cards: List[dict], origin: st
 
 async def search_flights(ctx: Ctx, a: dict) -> dict:
     from booking_signer import travel as T
-    party = int(a.get("passengers") or 2)
+    party = int(a.get("passengers") or 1)   # Sasha 349 · the person asking, unless they said more (was a silent 2: "2 travellers" for one)
     leg = a.get("leg") or leg_said(ctx.user_said) or "out"   # Sasha 249 · "flights home" is the back leg, said or not by the model
     r, day = await _search_healed(airport_of(a["origin"]), airport_of(a["destination"]), a["date"], party)
     if r.get("outage"):
@@ -1110,8 +1143,16 @@ async def read_booking_route(ctx: Ctx, a: dict) -> dict:
 
 async def choose_offer(ctx: Ctx, a: dict) -> dict:
     from booking_signer import basket as BK
-    p = await _plan(ctx)
-    row = await BK.by_ref(ctx.account, p["trip_id"], a["offer_id"]) if a.get("offer_id") else await _find_option(ctx, p, a)
+    p = await _latest(ctx)
+    row = None
+    if p:
+        row = await BK.by_ref(ctx.account, p["trip_id"], a["offer_id"]) if a.get("offer_id") else await _find_option(ctx, p, a)
+    if not row and _standalone(ctx):   # Sasha 349 · picked from a search that made no trip: the trip is made NOW, with this flight
+        made = await _trip_from_offers(ctx, p, a)
+        if made:
+            p, row = made
+    if not row and not p:
+        await _plan(ctx)   # its refusal: nothing on this account to book yet
     if not row:   # Sasha 253 · never a bare "couldn't find": what IS on that leg travels with the refusal
         raise ToolError("offer_not_in_trip", await _not_an_option(ctx, p, a))
     row, moved = await _still_offered(ctx, p, row)   # Sasha 253 · a fare that went away is said, with what's there now
@@ -1127,6 +1168,35 @@ async def choose_offer(ctx: Ctx, a: dict) -> dict:
     except BK.BasketError as e:
         raise ToolError("not_choosable", str(e))
     return {"chosen": _flight_out(row.get("snapshot") or {}, row), **({"price_moved": moved} if moved else {}), **(await _total(ctx, p))}
+
+
+async def _trip_from_offers(ctx: Ctx, p: Optional[dict], a: dict) -> Optional[tuple]:
+    """Sasha 349 · the offer picked from the record's last search (by its id, or the airline / time / cheapest / fastest said) → its trip
+    made (plan_store.single: the trip IS the flight chosen) and that flight in it → (trip, its basket row). None: not among them."""
+    from booking_signer import basket as BK
+    off = await _offers(ctx)
+    if not off:
+        return None
+    cards = [c for c in off.get("cards") or [] if isinstance(c, dict)]
+    if a.get("offer_id"):
+        cards = [c for c in cards if c.get("id") == a["offer_id"]]
+    else:
+        hh = _said_hhmm(a["departs"]) if a.get("departs") else None
+        if a.get("airline"):
+            cards = [c for c in cards if a["airline"].lower() in str(c.get("owner") or "").lower()]
+        if hh:
+            cards = [c for c in cards if str(c.get("departs") or "")[11:16] == hh] or [c for c in cards if str(c.get("arrives") or "")[11:16] == hh]
+    if not cards:
+        return None
+    card = min(cards, key=lambda c: int(c.get("minutes") or 9e9)) if a.get("pick") == "fastest" else \
+        min(cards, key=lambda c: float(BK.card_eur(c) or c.get("amount") or 9e9))
+    q = {"origin": off["origin"], "destination": off["destination"], "date": off["date"], **({"leg": off["leg"]} if off.get("leg") else {})}
+    trip, leg = await _flight_record(ctx, p if p else None, q, [card], off.get("leg") or "out", int(off.get("party") or 1))
+    if not trip:
+        return None
+    await _suggest_flights(ctx, trip["trip_id"], [card], off["origin"], off["destination"], off["date"], int(off.get("party") or 1), leg)
+    row = await BK.by_ref(ctx.account, trip["trip_id"], card["id"])
+    return (trip, row) if row else None
 
 
 def _said_hhmm(v: Any) -> Optional[str]:

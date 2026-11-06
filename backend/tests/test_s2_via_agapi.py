@@ -184,7 +184,9 @@ class S2Modes(unittest.TestCase):
                 r = run(VIA.runner(rec.call, "reads")(ctx, "search_flights", FLIGHTS))
         self.assertEqual([f["offer_id"] for f in r["result"]["flights"]], ["off_1", "off_2"])  # AgAPI's offers, Sasha's card shape
         self.assertEqual(r["result"]["flights"][1]["price_eur"], 120.0)
-        self.assertEqual(fed, [["off_1", "off_2"]])                                            # the basket gets them, as her search does
+        # Sasha 349 · the same way as her own search: not part of that trip → kept on the record until one is chosen (no trip made)
+        self.assertEqual(fed, [])
+        self.assertEqual([c["id"] for c in API._OFFERS[ACCOUNT]["cards"]], ["off_1", "off_2"])
         self.assertEqual(rec.engine, [])                                                       # Sasha's engine wasn't needed
 
     def test_reads_falls_back_to_sasha_when_agapi_has_nothing(self):

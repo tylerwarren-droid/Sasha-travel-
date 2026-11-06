@@ -128,7 +128,7 @@ class Memory(unittest.TestCase):
         run(MEM.remember(GUEST, "s-1", "my card is 4242 4242 4242 4242", "I can't take a card number here.", {}))
         run(MEM.remember(GUEST, "s-1", "my passport number is PAA123456", "Use the photo instead.", {}))
         run(MEM.remember(GUEST, "s-1", "use my passport", "I have your passport (ES ••••456) and will apply it.", {}))
-        lines = [x["content"] for x in MEM._MEM[GUEST]["recent"]]
+        lines = [x["content"] for x in MEM.recent_of(MEM._MEM[GUEST])]
         self.assertEqual(lines[0], MEM.REMOVED)
         self.assertEqual(lines[2], MEM.REMOVED)
         self.assertIn("ES ••••456", lines[5])                                 # a mask is kept
@@ -139,7 +139,7 @@ class Memory(unittest.TestCase):
         for i in range(15):
             run(MEM.remember(GUEST, "s-1", f"line {i}", "ok.", SEARCH))
         m = MEM._MEM[GUEST]
-        self.assertEqual(len(m["recent"]), MEM.KEEP)
+        self.assertEqual(len(MEM.recent_of(m)), MEM.KEEP)
         m["updated_at"] = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
         self.assertIsNone(MEM.line_for(m, GUEST))
 

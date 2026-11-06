@@ -235,7 +235,17 @@ KINDS_S2_ONLY |= {"subscriptions"}   # CR 84 · the subscriptions list card (ser
 KINDS_S2_ONLY |= {"activities"}   # CR 81 · the ActivityCard (things to do, verified on each place's own site)
 KINDS_S2_ONLY |= {"group_list"}   # Sasha 345 · the master list's card: its rows, the Group page — never "here's the list" without it
 KINDS_S2_ONLY |= {"wa_open"}   # Sasha 230 · the message, pre-filled in the person's own WhatsApp (they press send)   # CR 75 · fine print's cards, rendered by /s2 only
-KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}   # what the /next UI renders (SashaChat agentTurn)
+KINDS = KINDS_S2 | {"flights", "flight_chosen", "total", "stays", "venues", "focus", "read_back", "pay", "handover", "trip", "inline"}
+#: Sasha 349 · WHAT /s2 DRAWS — every card kind its page renders IN the conversation (frontend/app/s2/S2App.tsx's cardOf; a test holds
+#: them equal). A card event of any other kind never counts as shown on /s2: the reply's text may name only the cards in its payload.
+S2_DRAWS = frozenset({"venues", "read_back", "calendar", "pay_here", "pay", "keep_capture", "wa_open", "capabilities", "plans", "notice",
+                      "group_list", "counter_card", "my_cards", "accident", "claim_status", "handover", "operators", "prepared", "subscriptions",
+                      "activities", "discover", "kind_ask", "flights", "stays", "flight_chosen", "total", "trip"})
+
+
+def draws(surface: Optional[str], kind: Optional[str], wa: bool = False) -> bool:
+    """Sasha 349 · does this surface draw a card of this kind? (/s2: S2_DRAWS; WhatsApp and /next: their own renderers, as before)"""
+    return wa or surface != "s2" or str(kind or "") in S2_DRAWS   # what the /next UI renders (SashaChat agentTurn)
 KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport): on the read-back's event
 
 
@@ -421,7 +431,7 @@ def flight_card(res: dict, args: dict) -> dict:
     """Sasha 205 · search_flights' result as the Live Workspace's flight card (the same shape the current UI renders),
     each to CHOOSE — the Choose button says "the <airline> one" to her."""
     fl = res.get("flights") or []
-    party = int(args.get("passengers") or 2)
+    party = int(res.get("party") or args.get("passengers") or 1)   # Sasha 349 · the search's own party (was a silent 2)
     leg = res.get("leg") or args.get("leg") or "out"
     opts = []
     for f in fl:
@@ -1157,6 +1167,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 bev = await booked_event(account)   # Sasha 249 · ONE STATUS: /s2's "Booked" card comes from this event only (never
                 if bev:                             # a regex on her reply), its line from get_status's one source
                     yield bev
+            ev, shown_here = None, False
             if r.get("ok"):
                 _names_in(r["result"], tstate["tool_names"])
                 tstate["allowed"] |= tstate["tool_names"]
@@ -1185,10 +1196,16 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                                                {"ref": o.get("ref"), "website": o.get("link")}), "name": o.get("name")}   # a ref is never a listing
                                            for o in ev.get("options") or [] if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")]
                         tstate["searched"] = {"what": str(args.get("what") or "")[:120], "where": str(args.get("where") or "")[:120]}   # its line was said by code
-                if ev:
+                shown_here = bool(ev) and draws(surface, ev.get("kind"), wa)
+                if shown_here:
                     tstate["drawn"] = True   # Sasha 251 · something reached their screen this turn
                     yield {**ev, "turn": turn_key}
-            results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(model_result(r, u.name), default=str)[:12000]})
+                elif ev:   # Sasha 349 · a card this surface can't draw: never counted as shown, and she is told so
+                    log.warning("[agent] a %s card isn't drawn on %s — not shown", ev.get("kind"), surface)
+            mr = model_result(r, u.name)
+            if r.get("ok") and ev and not shown_here:
+                mr["on_screen"] = "nothing from this result was shown on their screen — say what it found in words; never say it's on screen"
+            results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(mr, default=str)[:12000]})
             agapi_out = agapi_out or (r.get("error") or {}).get("code") == "agapi_unreachable"
         msgs.append({"role": "user", "content": results})
         if agapi_out or read_back_said:   # Sasha 261 · production (o261): after the line she offered a retry, an alternative, then
@@ -1218,13 +1235,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         text = f"{spoken} {rest}".strip() if spoken else new
         guard_log += [f"rewritten{' then stripped: ' + '; '.join(bad2) if bad2 else ''}"]
         yield {"type": "replace", "text": text, "speak": bool(held and rest), "say": SP.speakable(rest)}
-    promised = _V.promises_card(text) if not tstate["drawn"] else []
-    if promised:   # Sasha 345 · "here's the list" over nothing: the promise goes; what's missing is said (the record decides, not her words)
-        kept = [x for x in re.split(r"(?<=[.!?])\s+", text) if x.strip() and x not in promised]
-        line = "I haven't got a list to show you yet — ask me for the group's list and I'll put it on screen."
-        text = " ".join(kept + [line]).strip()
-        guard_log.append(f"card promised, none shown — dropped: {promised}")
-        yield {"type": "replace", "text": text, "speak": True, "say": SP.speakable(line)}
+    # Sasha 349 · 345's phrase guard ("here's the list" over nothing) is RETIRED: a reply is ONE payload — the cards it can draw on this
+    # surface (draws()), and a result that couldn't be drawn tells her so in its own tool result (on_screen) — so her words follow the payload
     failed = _V.unshown(tstate["showing"], tstate["drawn"]) if honest else []
     if failed:   # Sasha 251 · HONEST RESULTS: a showing tool failed and nothing was drawn — she says so, never what isn't there
         claims = _V.claims_shown(text)
@@ -2123,11 +2135,18 @@ async def agent_turn(request: Request):
             # Sasha 273 · item 8: the first line ONCE per request, then the quiver (voice.first_ack) — the page's own (said_first) kept as said
             held = with_holding(turn_events, account, first=_V.first_ack(account, message, said=body.get("said_first")),
                                 venue=tapped_venue(account, body)) if remembers else turn_events   # Sasha 299 · + the venue his tap named
+            quiet = await _V.silent(account)   # Sasha 349 · Silent mode: text only — no spoken line leaves this turn
             async for ev in held:   # Sasha 257 · the holding line
+                if quiet and ev.get("type") == "say":
+                    continue
+                if quiet and ev.get("speak"):
+                    ev = {**ev, "speak": False, "say": ""}
                 if timing and not ev.get("first"):   # Sasha 265 · item 5: the timing goes out after the first line (if one), never before
                     yield timing
                     timing = ""
                 if remembers:
+                    if ev.get("type") == "render":   # Sasha 349 · the reply's payload: its cards, kept WITH its text in the one record
+                        seen.setdefault("payload", []).append({k: v for k, v in ev.items() if k != "turn"})
                     if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
                         seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))
                     elif ev.get("type") == "render" and ev.get("kind") == "discover":   # Sasha 276 · its place / independent cards, remembered
@@ -2251,13 +2270,25 @@ async def s2_memory(request: Request, session: str = ""):
     from agapi import s2_memory as MEM
     from booking_signer import live_events as LE
     try:
-        out = {"ok": True, **(await MEM.recall(account, session[:64] or None, surface="s2"))}
+        out = {"ok": True, **(await MEM.recall(account, session[:64] or None, surface="s2")), "silent": await _V.silent(account)}   # Sasha 349
         news = await LE.take_news(account)   # Sasha 279 · B: a booking finished while they were away — her return leads with it, once
         return {**out, **({"news": {"key": news.get("key"), "text": news["text"], **({"url": news["url"]} if news.get("url") else {})}}
                            if news else {})}
     except Exception as e:
         log.warning("[memory] recall failed: %s: %s", type(e).__name__, e)
         return {"ok": True, "line": None, "recent": [], "screen": None}
+
+
+@router.put("/s2/silent")
+async def s2_silent(request: Request):
+    """Sasha 349 · the page's "Silent mode" switch → kept on the person (voice.set_silent): text only, until turned off."""
+    from app.services.chat_account import chat_account, signed_in
+    account = await chat_account(request)
+    if not signed_in(account):
+        return JSONResponse({"ok": False, "rule": "sign_in", "message": "Sign in to keep Silent mode on your account."}, status_code=403)
+    body = await request.json()
+    on = await _V.set_silent(account, bool((body or {}).get("on")))
+    return {"ok": True, "silent": on, "say": "Silent mode is on — I'll answer in text only." if on else "Silent mode is off — I'll talk again."}
 
 
 @router.get("/s2/pickup")

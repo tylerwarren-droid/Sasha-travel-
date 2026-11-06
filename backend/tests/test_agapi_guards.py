@@ -210,7 +210,7 @@ class EveryResultIsRendered(unittest.TestCase):
         if os.path.exists(s2):
             src2 = open(s2, encoding="utf-8").read()
             for kind in AG.KINDS_S2_ONLY:
-                self.assertIn(f"ev.kind === '{kind}'", src2, f"the /s2 UI doesn't render '{kind}'")
+                self.assertIn(f"k === '{kind}'", src2, f"the /s2 UI doesn't render '{kind}'")   # Sasha 349 · in cardsOf, the one mapping
         chat = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "app", "components", "SashaChat.tsx")
         if os.path.exists(chat):
             src = open(chat, encoding="utf-8").read()

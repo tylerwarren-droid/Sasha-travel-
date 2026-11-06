@@ -443,7 +443,8 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
             shown = ""   # her line is on the read-back's own message (one message, not two); her history keeps it
     for part in split(shown):
         out.text(part)
-    if voice_in and text.strip():   # Sasha 238 · a voice note in → her answer as a voice note too (text in → text out only)
+    from app.agent import voice as _VO
+    if voice_in and text.strip() and not await _VO.silent(account):   # Sasha 238 · a voice note in → her answer as a voice note too · 349: never in Silent mode
         url = await tts_note(text)
         if url:
             out.media("🔊", url)

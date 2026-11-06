@@ -495,7 +495,24 @@ async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[dateti
             else:   # no buttons: the same question, answered by typing
                 opts = " · ".join(f"{t}" for t, _ in it[2])
                 results.append(await SENDER.send(frm, ch["number_e164"], body=f"{it[1]}\n(Reply: {opts})"))
+    await _record_out(ch, out.said(), _tool_of(out))
     return results
+
+
+def _tool_of(out: "Out") -> str:
+    """Sasha 349 · the tool that sends these messages: the space the turn ended in (out.space), else Sasha's own (travel)."""
+    from products import space as SPC
+    sp = out.space() if callable(out.space) else out.space
+    return SPC.normalize(sp)
+
+
+async def _record_out(ch: dict, text: str, tool: str) -> None:
+    """Sasha 349 · THE ONE CONVERSATION RECORD (s2_memory messages): what went out on WhatsApp, and which tool said it — a reply
+    answers THAT tool (_follow_last_tool)."""
+    if not text.strip() or not ch.get("account_id"):
+        return
+    from agapi import s2_memory as MEM
+    await MEM.record(ch["account_id"], MEM.message("out", "wa", text, tool))
 
 
 def _with_menu(out: Out) -> None:
@@ -806,6 +823,34 @@ async def _turn(ch: dict, frm: str, p: Dict[str, str]) -> None:
                                               "again in a minute."), st.get("last_inbound_at"))
 
 
+async def _follow_last_tool(ch: dict, st: dict, account: str, body: str, payload: str) -> None:
+    """Sasha 349 · A REPLY ANSWERS THE TOOL THAT SPOKE LAST (Tyler, 6 Nov 07:06: "Picking up: Flight Madrid → London…" came from Travel
+    while his space was Due diligence, and his "Carry on" went to AD). The record (s2_memory messages) names the tool of the last
+    message sent to this person on WhatsApp; unless this message picks a tool itself (a tool's row — handled before this — or its word,
+    "sasha"…), the space moves to that tool: the product he was in steps aside (kept), the other resumes where it was."""
+    from agapi import s2_memory as MEM
+    from products import space as SPC, whatsapp as PW
+    last = await MEM.last_tool(account, "wa")
+    if not last or payload or SPC.asked(body or ""):
+        return
+    want, here = SPC.normalize(last), SPC.from_pending(st.get("pending"))
+    if want == here:
+        return
+    pend = None
+    if want != "sasha":
+        pend = await PW._resume(ch, SPC.engine_key(want))
+        if not pend and want == "diligence":   # AD's space holds no state of its own: in it, every message is AD's
+            pend = {"kind": "product", "product": "diligence", "step": "ask", "touched": NOW().isoformat()}
+        if not pend:
+            return   # a product with no conversation to resume: its own word opens it (nothing guessed)
+    if here != "sasha":
+        await PW._set_aside(st, ch)
+    if pend:
+        st["pending"] = pend
+    await SPC.set_space(account, want, "reply")
+    log.info("[guest_whatsapp] a reply to %s's message: the space is %s again", want, want)
+
+
 async def voice_text(p: Dict[str, str]) -> Optional[str]:
     """Sasha 165 (5) · a WhatsApp VOICE NOTE → its words (Deepgram, any language), handled like typed text. The audio is
     fetched once from Twilio with our own credentials and not kept. None when it isn't a voice note or can't be read."""
@@ -923,6 +968,11 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         body = tap[1]["word"] if tap[0] == "tool" else tap[1]
         payload = ""
         p = {**p, "Body": body, "ButtonPayload": ""}
+    else:
+        await _follow_last_tool(ch, st, account, body, payload)
+    if body:
+        from agapi import s2_memory as MEM   # Sasha 349 · every message in, in the ONE record
+        await MEM.record(account, MEM.message("in", "wa", body))
     # Sasha 249 / 253 · ONE BRAIN FOR EVERYONE: everything after STOP / opt-out and the reminders consent words goes to sasha.turn —
     # empty messages, documents, every button. Only the FRONT items below stay in front of it (see the routing at the end).
     from . import wa_agent as WA
@@ -3280,6 +3330,7 @@ async def _tell(ch: dict, text: str, template: Optional[tuple] = None) -> str:
         sid = TEMPLATES[name][1 if str(ch["number_e164"]).startswith("+34") else 0]
         r = await SENDER.send(sender_for(st), ch["number_e164"], content_sid=sid, variables=variables)
         log.info("[guest_whatsapp] %s template outside the window: %s", name, str(r)[:80])
+        await _record_out(ch, text, "sasha")   # Sasha 349 · Sasha's own word (travel), in the one record
         return f"{r} (template)" 
     return ", ".join(await deliver(ch, sender_for(st), Out().text(text), last))
 

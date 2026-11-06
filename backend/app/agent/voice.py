@@ -340,16 +340,7 @@ _SAYS_FAILED = re.compile(r"\b(?:didn'?t|did not|couldn'?t|could not|can'?t|cann
                           r"working|went wrong|no luck|nothing came back|failed)\b", re.I)
 
 
-#: Sasha 345 · a sentence that hands over a list or card ("here's the list", "the list is below", "it's on your screen") — said only when
-#: one reached their screen this turn (found live, 5 Nov: "here's the list" over nothing; group_list had no card)
-_CARD_PROMISE = re.compile(r"(?i)\b(?:here(?:'s| is| are| it is)|below|on (?:your|the) (?:screen|card)|i(?:'ve| have) (?:put|pulled) (?:up|together)|"
-                           r"take a look|have a look)\b[^.!?\n]*\b(?:list|card|table|line-?up|roster)\b|"
-                           r"\b(?:list|card|table)\b[^.!?\n]*\b(?:below|on (?:your|the) screen|is up)\b")
-
-
-def promises_card(text: str) -> List[str]:
-    """Sasha 345 · the sentences that say a list or card is being shown (and don't say it failed)."""
-    return [s for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip() and _CARD_PROMISE.search(s) and not _SAYS_FAILED.search(s)]
+# Sasha 349 · 345's _CARD_PROMISE / promises_card are RETIRED: a reply is one payload (sasha.draws, on_screen) — no phrase guard
 
 
 def claims_shown(text: str) -> List[str]:
@@ -1227,3 +1218,31 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
            "wa_done_line", "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]
+
+
+# ── Sasha 349 · SILENT MODE (Tyler, 6 Nov): ONE switch on the person — text only, every surface, until they turn it off ─────────
+# Kept on the person's record (s2_memory, kind "silent"); this process keeps a copy. Read here, the one place: /s2's turn sends no
+# spoken lines while it's on, WhatsApp answers a voice note in text, and the page's own switch shows it.
+SILENT_KIND = "silent"
+_SILENT: dict = {}
+
+
+async def silent(account) -> bool:
+    if not account:
+        return False
+    if account in _SILENT:
+        return _SILENT[account]
+    try:
+        from agapi import s2_memory as MEM
+        v = bool(await MEM.kind(account, SILENT_KIND))
+    except Exception:
+        v = False
+    _SILENT[account] = v
+    return v
+
+
+async def set_silent(account, on: bool) -> bool:
+    _SILENT[account] = bool(on)
+    from agapi import s2_memory as MEM
+    await MEM.put_kind(account, SILENT_KIND, True if on else None)
+    return bool(on)

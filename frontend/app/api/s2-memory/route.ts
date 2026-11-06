@@ -33,3 +33,16 @@ export async function DELETE(): Promise<Response> {
     return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
   }
 }
+
+/** Sasha 349 · the "Silent mode" switch → kept on the person (backend PUT /api/agent/s2/silent → voice.set_silent). */
+export async function PUT(request: Request): Promise<Response> {
+  const who = await agentHeaders()
+  if (!who) return NextResponse.json({ ok: false, rule: 'sign_in_required', message: 'Sign in to keep Silent mode on your account.' }, { status: 401 })
+  try {
+    const r = await reach(`${API_URL}/api/agent/s2/silent`, { method: 'PUT', headers: { ...who, 'content-type': 'application/json', 'x-sasha-surface': 's2' },
+      body: await request.text(), cache: 'no-store' })
+    return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
+  } catch (e) {
+    return NextResponse.json({ ok: false, rule: 'backend_unreachable', message: (e as Error).message }, { status: 502 })
+  }
+}

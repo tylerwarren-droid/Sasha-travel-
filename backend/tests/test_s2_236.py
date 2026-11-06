@@ -168,11 +168,12 @@ class BookSaysThisScreen(unittest.TestCase):
 class S2Draws(unittest.TestCase):
     def test_handover_and_the_trip(self):
         src = open(S2APP, encoding="utf-8").read()
-        self.assertIn("ev.kind === 'handover'", src)
+        self.assertIn("k === 'handover'", src)
         self.assertIn("Tap to finish", src)
         self.assertIn("<TripPanel", src)                                               # S1's board itself, on the same records
-        for k in ("flights", "stays", "flight_chosen", "total", "trip", "trip_changed"):
-            self.assertIn(f"'{k}'", src)
+        # Sasha 349 · a search's options are drawn IN the conversation (the Trip board holds what's chosen or booked), not a trip card
+        for k in ("flights", "stays", "flight_chosen", "total", "trip"):
+            self.assertIn(f"k === '{k}'", src)
 
 
 if __name__ == "__main__":

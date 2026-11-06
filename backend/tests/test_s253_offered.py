@@ -25,7 +25,8 @@ ACCOUNT = "00000000-0000-4000-8000-000000000253"
 TRIP = "11111111-1111-4111-8111-111111111253"
 DAY = "2026-11-02"   # Monday 2 November: the flight home
 run = asyncio.run
-PLAN = {"trip_id": TRIP, "title": "3 Days in Lisbon", "plan": {"party": 2, "days": [{"day": 1, "date": "2026-10-31", "city": "Lisbon"}]}}
+PLAN = {"trip_id": TRIP, "title": "3 Days in Lisbon", "cities": ["Lisbon"], "start": "2026-10-31", "end": "2026-11-02",   # Sasha 349 · a trip
+        "plan": {"party": 2, "days": [{"day": 1, "date": "2026-10-31", "city": "Lisbon"}]}}   # record's own shape: its home flight fits it
 ASK = "EU251 check: for the Lisbon trip, what flights home on Monday 2 November could we take instead? List the times."
 SWAP = "EU251 check: swap our flight home to the {} one. Don't book."
 

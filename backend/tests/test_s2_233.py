@@ -189,10 +189,13 @@ class ServicesFromTheirPage(unittest.TestCase):
 class CardsUnderTheirLine(unittest.TestCase):
     def test_the_line_that_showed_them_is_marked(self):
         from agapi import s2_memory as MEM
+        ev = {"type": "render", "kind": "venues", "preset": {"cards": [{"place_id": "p1", "name": "A"}]}}
         m = MEM.fold(None, "Indian in Madrid tonight", "Here are five.", {"cards": [{"place_id": "p1", "name": "A"}], "ribbon": "5 Indian in Madrid",
-                                                                           "calls": [{"tool": "search_venues", "ok": True}]})
+                                                                           "calls": [{"tool": "search_venues", "ok": True}], "payload": [ev]})
         m = MEM.fold(m, "What's the weather?", "Sunny.", {})
-        self.assertEqual([x.get("cards", False) for x in m["recent"]], [False, True, False, False])
+        # Sasha 349 · the reply that showed them carries them — its payload, in the ONE record (drawn again there on return)
+        self.assertEqual([x.get("cards", False) for x in MEM.recent_of(m)], [False, True, False, False])
+        self.assertEqual(MEM.messages_of(m)[1]["cards"], [ev])
 
 
 class MemoryIsAnObject(unittest.TestCase):

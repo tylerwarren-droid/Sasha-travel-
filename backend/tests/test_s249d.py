@@ -374,7 +374,7 @@ class ServerHistory(WithTable):
         run(MEM.put_kind(ACCOUNT, "space", {"space": "campus"}))
         self.remember("s1", "hi", "Hello!")
         self.assertEqual(run(MEM.kind(ACCOUNT, "space")), {"space": "campus"})
-        self.assertEqual(self.table.rows[ACCOUNT]["recent"][-1]["content"], "Hello!")
+        self.assertEqual(MEM.recent_of(self.table.rows[ACCOUNT])[-1]["content"], "Hello!")
 
 
 if __name__ == "__main__":

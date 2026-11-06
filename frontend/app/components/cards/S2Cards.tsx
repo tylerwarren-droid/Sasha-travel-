@@ -9,7 +9,7 @@ import { useRef, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
 import { subsHeading, subsFooter } from '@/lib/subscriptions-heading.mjs'   // Sasha 246
 import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
-import { announce, failed, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import { again, announce, failed, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 export const C = { bg: '#0b0b10', card: '#16151d', line: 'rgba(255,255,255,.1)', gold: '#E8B923', dim: 'rgba(255,255,255,.6)' }
@@ -355,4 +355,51 @@ export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) 
         </div>))}
     </Box>)
   return null
+}
+
+// ── Sasha 349 · OPTIONS IN THE CONVERSATION (Tyler, 6 Nov): a search's flights / stays as tappable cards on the Sasha page — the
+// reply's own payload (never "listed on your screen" over nothing). A tap says which one, in her words' own form (the option's `pick`);
+// the trip is made from the one chosen (agapi/v0 choose_offer), and only then does the Trip tab hold it.
+export type Opt = { name: string; detail?: string; price?: string; pick?: string; chosen?: boolean; provider_offer_id?: string }
+
+export function OptionsCard({ kind, title, options, choose }: { kind: 'flight' | 'hotel'; title: string; options: Opt[]; choose: (said: string) => void }) {
+  const [tapped, setTapped] = useState<string | null>(null)
+  return (
+    <Box k={kind === 'flight' ? 'Flights' : 'Places to stay'} h={untag(title)}>
+      {options.map((o, i) => {
+        const id = o.provider_offer_id || `${o.name}#${i}`
+        const on = o.chosen || tapped === id
+        return (
+          <div key={id} data-option={id} data-chosen={on ? '1' : '0'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: i ? `1px solid ${C.line}` : 'none' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700 }}>{untag(o.name)}</div>
+              {o.detail ? <div style={{ fontSize: 13, color: C.dim }}>{untag(o.detail)}</div> : null}
+              {o.price ? <div style={{ fontSize: 13.5, color: C.gold, fontWeight: 600 }}>{untag(o.price)}</div> : null}
+            </div>
+            <button type="button" data-choose={id}
+              onClick={() => { if (on) { announce(again(o.name)); return } setTapped(id); choose(o.pick || `the ${o.name} one`) }}
+              style={{ padding: '8px 14px', borderRadius: 999, border: on ? 0 : `1px solid ${C.gold}`, background: on ? C.gold : 'transparent',
+                color: on ? '#111' : C.gold, fontWeight: 700, flexShrink: 0 }}>{on ? '✓ Chosen' : 'Choose'}</button>
+          </div>)
+      })}
+    </Box>)
+}
+
+const euro = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? `€${n.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—')
+
+/** Sasha 349 · ONE TOTAL with its parts (basket.breakdown), in the record's own currency (€) */
+export function TotalCard({ total }: { total: Ev }) {
+  return (
+    <Box k="All in" h={euro(total.total_eur)}>
+      {total.flights_eur ? <div style={{ fontSize: 14, color: C.dim }}>Flights {euro(total.flights_eur)} · {String(total.flights_are || 'quoted')}</div> : null}
+      {total.stays_eur ? <div style={{ fontSize: 14, color: C.dim }}>Stays {euro(total.stays_eur)} · {String(total.stays_are || '')}</div> : null}
+    </Box>)
+}
+
+/** Sasha 349 · a payment step that is a page of its own (his bank's confirm, a checkout link) — its button, in the conversation */
+export function PayLink({ url, label }: { url: string; label?: string }) {
+  return (
+    <Box k="Payment" h={label || 'Pay now'}>
+      <a href={url} data-pay-link style={{ display: 'inline-block', marginTop: 4, padding: '10px 18px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>{label || 'Pay now'}</a>
+    </Box>)
 }

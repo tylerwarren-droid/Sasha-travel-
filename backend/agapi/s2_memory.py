@@ -24,7 +24,9 @@ from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("agapi.s2_memory")
 NOW = lambda: datetime.now(timezone.utc)   # noqa: E731
-KEEP = 20                                  # messages kept (user + Sasha)
+KEEP = 20                                  # the lines the model hears (user + Sasha) — read from `messages`
+MESSAGES_MAX = 200                         # Sasha 349 · THE CONVERSATION: every message in and out, each with its cards and its tool
+CARDS_MAX = 12000                          # a message's cards (json chars) kept with it — what the page draws again on return
 LINE_MAX = 700
 OFFER_FOR = timedelta(hours=24)
 SUMMARY_MAX = 6
@@ -55,6 +57,72 @@ def masked(text: str) -> str:
     return t
 
 
+# ── Sasha 349 · THE ONE CONVERSATION RECORD per person (sasha-prod's s2_memory row, `messages`) ────────────────────────────────
+# Every message in and out — on /s2, /next and WhatsApp — each {at, dir: "in"|"out", ch, tool, text, cards?}. An outbound message names
+# the TOOL that sent it (a space: "sasha" = travel, "diligence", "campus", "relocation", "espana"): a reply answers THAT tool. A reply is
+# ONE payload — its text with its cards — so on return the page draws both again, from here (never a second copy in the tab).
+# `recent` (the model's last lines) is read from it; nothing else keeps the conversation.
+
+def message(direction: str, ch: str, text: str, tool: Optional[str] = None, cards: Optional[list] = None) -> dict:
+    m = {"at": NOW().isoformat(), "dir": "in" if direction == "in" else "out", "ch": str(ch or "s2")[:12], "text": masked(text)}
+    if tool:
+        m["tool"] = str(tool)[:20]
+    if cards:
+        try:
+            if len(json.dumps(cards, default=str)) <= CARDS_MAX:
+                m["cards"] = json.loads(json.dumps(cards, default=str))
+        except (TypeError, ValueError):
+            pass
+    return m
+
+
+def messages_of(m: Optional[dict]) -> List[dict]:
+    """The conversation, oldest first (a row written before 349 has only `recent`: read as its messages, without cards)."""
+    m = m or {}
+    if isinstance(m.get("messages"), list):
+        return [x for x in m["messages"] if isinstance(x, dict)]
+    return [{"at": m.get("updated_at"), "dir": "in" if x.get("role") == "user" else "out", "ch": "s2", "text": str(x.get("content") or "")}
+            for x in m.get("recent") or [] if x.get("role") in ("user", "assistant")]
+
+
+def recent_of(m: Optional[dict], n: int = KEEP) -> List[dict]:
+    """The model's last lines, from the record (role/content; `cards` marks the line that showed some)."""
+    out = [{"role": "user" if x["dir"] == "in" else "assistant", "content": x.get("text") or "", **({"cards": True} if x.get("cards") else {})}
+           for x in messages_of(m) if x.get("text") or x.get("cards")]
+    return out[-n:]
+
+
+def appended(m: dict, *msgs: dict) -> dict:
+    m["messages"] = (messages_of(m) + [x for x in msgs if x])[-MESSAGES_MAX:]
+    m.pop("recent", None)   # the record is the one place (a pre-349 row's lines are now its messages)
+    return m
+
+
+def last_out_tool(m: Optional[dict], ch: str = "wa") -> Optional[str]:
+    """The tool that sent the last message out to this person on this channel (a reply there answers THAT tool)."""
+    for x in reversed(messages_of(m)):
+        if x.get("dir") == "out" and x.get("tool") and x.get("ch") == ch:
+            return x["tool"]
+    return None
+
+
+async def record(account: Optional[str], *msgs: dict) -> None:
+    """Messages said outside a turn's memory fold (WhatsApp's sends and arrivals, AD's hand-over) — appended to the ONE record."""
+    if not account or not msgs:
+        return
+    try:
+        m = (await _load(account)) or {}
+        appended(m, *msgs)
+        m["updated_at"] = NOW().isoformat()
+        await _save(account, m)
+    except Exception as e:
+        log.warning("[memory] a message not recorded: %s", type(e).__name__)
+
+
+async def last_tool(account: Optional[str], ch: str = "wa") -> Optional[str]:
+    return last_out_tool(await _load(account), ch) if account else None
+
+
 def _thing_of_ribbon(ribbon: str) -> str:
     """'5 Indian restaurants in Madrid · tonight 21:00' → 'Indian restaurants in Madrid, tonight 21:00'."""
     t = re.sub(r"^\d+\s+", "", str(ribbon or "").strip())
@@ -74,16 +142,17 @@ def _card(c: dict) -> dict:
 
 def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:
     """The memory after one turn. `seen` is what the turn showed: {"ribbon", "cards", "focus", "calls": [{tool, ok, status}]}."""
-    m = {"recent": [], "summary": [], "thing": None, "pending": None, "screen": None, **(mem or {})}
-    m["recent"] = (list(m["recent"]) + [{"role": "user", "content": masked(said)}, {"role": "assistant", "content": masked(reply)}])[-KEEP:]
+    m = {"summary": [], "thing": None, "pending": None, "screen": None, **(mem or {})}
+    if seen.get("ch") != "wa":   # WhatsApp's messages are recorded where they arrive and leave (guest_whatsapp), once
+        appended(m, message("in", seen.get("ch") or "s2", said), message("out", seen.get("ch") or "s2", reply, seen.get("tool") or "sasha",
+                                                                          seen.get("payload") or None))
+    else:
+        appended(m)
     calls = seen.get("calls") or []
     status = {c.get("tool"): c.get("status") for c in calls if c.get("ok")}
     ran = {c.get("tool") for c in calls if c.get("ok")}
     if seen.get("cards"):
         m["screen"] = {"cards": [_card(c) for c in seen["cards"] if c.get("place_id")][:8], "ribbon": seen.get("ribbon"), "focus": seen.get("focus")}
-        for x in m["recent"]:
-            x.pop("cards", None)
-        m["recent"][-1]["cards"] = True   # Sasha 233 · the line that SHOWED them — restored there, not under the last line
     topic = None
     if "search_venues" in ran and seen.get("ribbon"):
         topic = _thing_of_ribbon(seen["ribbon"])
@@ -217,7 +286,7 @@ async def verified_history(account: str, session: Optional[str], history: List[d
     n = int(m.get("session_lines") or 0)
     if not session or m.get("session") != session or n <= 0:
         return history
-    stored = [x for x in (m.get("recent") or []) if x.get("role") in ("user", "assistant")][-n:]   # THIS conversation's lines only
+    stored = [x for x in recent_of(m) if x.get("role") in ("user", "assistant")][-n:]   # THIS conversation's lines only
     if not stored:
         return history
     client = [x for x in (history or []) if x.get("role") in ("user", "assistant") and str(x.get("content") or "").strip()]
@@ -254,12 +323,14 @@ async def remember(account: str, session: Optional[str], said: str, reply: str, 
         h = VN._HELD.get(account) or {}
         if h.get("venue"):   # the place she read back, by its name
             seen = {**seen, "held": str(h["venue"])[:120]}
+    if (session or "").startswith("wa:"):   # WhatsApp's brain: its messages are recorded at the door (guest_whatsapp), once
+        seen = {**seen, "ch": "wa"}
     before = await _load(account) or {}
     m = fold(before, said, reply, seen)
     m["session"] = (session or "")[:64]
     # Sasha 249 · how many of `recent`'s lines are THIS conversation's (verified_history compares only those)
     same = bool(before) and before.get("session") == m["session"]
-    m["session_lines"] = min(len(m["recent"]), (int(before.get("session_lines") or 0) if same else 0) + 2)
+    m["session_lines"] = min(len(recent_of(m)), (int(before.get("session_lines") or 0) if same else 0) + 2)
     await _save(account, m)
     return m
 
@@ -393,8 +464,9 @@ async def recall(account: str, session: Optional[str], surface: Optional[str] = 
     line = line_for(m, account)
     opening_line = await opening(account)
     last_at = (m or {}).get("updated_at")
-    if not m or not line:
-        return {"line": opening_line, "recent": [], "screen": None, "summary": (m or {}).get("summary") or [], "last_at": last_at}
+    if not m or not line:   # Sasha 349 · no "welcome back" line — the conversation still comes back, whole (it was dropped here)
+        return {"line": opening_line, "recent": recent_of(m), "messages": messages_of(m), "screen": None, "summary": (m or {}).get("summary") or [],
+                "last_at": last_at}
     scr = m.get("screen") or None
     if scr and scr.get("cards") and session:
         from app.agent import sasha as AG
@@ -414,7 +486,7 @@ async def recall(account: str, session: Optional[str], surface: Optional[str] = 
                                   **({"screen": {"session": session, "cards": scr["cards"], "ribbon": scr.get("ribbon"),
                                                  "names": [c.get("name") for c in scr["cards"] if c.get("name")]}}
                                      if scr and scr.get("cards") else {})})
-    return {"line": opening_line, "recent": m.get("recent") or [], "screen": scr, "summary": m.get("summary") or [], "handover": note,
+    return {"line": opening_line, "recent": recent_of(m), "messages": messages_of(m), "screen": scr, "summary": m.get("summary") or [], "handover": note,
             "last_at": last_at,
             "pending": ({"kind": "hold", "what": p.get("what"), "waiting": _hold_live(account, p)} if p.get("kind") == "hold" else
                         {"kind": "question", "asked": p.get("asked")} if p.get("kind") == "question" else None)}
@@ -424,7 +496,7 @@ async def recall(account: str, session: Optional[str], surface: Optional[str] = 
 # Its lines, its summary, what she was looking at / waiting on, the cards on screen, the handover and the openers go; the read-backs
 # she showed in it are forgotten (a "yes" in the new chat can never land on them). Bookings, trips and receipts are not here (the trip
 # record, the acts, the ledger) — nor are her name for them, or the kinds that track an act (venue_acts, prepared, outcomes_open …).
-CONVERSATION = ("recent", "summary", "thing", "pending", "screen", "decided", "session", "session_lines")
+CONVERSATION = ("messages", "recent", "summary", "thing", "pending", "screen", "decided", "session", "session_lines")
 CONVERSATION_KINDS = ("handover", "screen", "openers")
 
 
@@ -449,4 +521,5 @@ async def clear_conversation(account: str) -> dict:
 
 
 __all__ = ["remember", "closing", "recall", "fold", "line_for", "masked", "opening", "first_name", "set_name", "OPEN", "ASK_NAME",
-           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "verified_history", "clear_conversation"]
+           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "verified_history", "clear_conversation",
+           "message", "messages_of", "recent_of", "record", "last_tool", "last_out_tool", "MESSAGES_MAX"]

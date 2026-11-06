@@ -9,6 +9,7 @@ import type { RichItinerary } from '../ItineraryDays'
 import { termHead, type Term } from '../cards/S2Cards'   // Sasha 301 · the fine print: one way to say a term
 import TrainLine, { type Train } from './TrainLine'   // Sasha 327 · trains are trains
 import { announce, failed, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import { usePhone } from '@/lib/device'   // Sasha 349
 // Sasha 301 · a day's booking line says the cancellation deadline the venue stated (their sentence is on its card) — nothing if none
 const cancelBy = (ts?: Term[]) => { const t = (ts || []).find((x) => x.kinds.includes('cancellation') && x.by_words); return t ? ` · cancel by ${t.by_words}` : '' }
 
@@ -178,6 +179,7 @@ export default function TripPanel({
   // Sasha 177 · ONE TRIPS SPACE: a tab per journey (from /journeys), home, requests, receipts, everything. Switching tabs never
   // moves a booking — each is filed by the server into the journey whose dates AND place fit.
   const [view, setView] = useState<'trip' | 'home' | 'requests' | 'receipts' | 'everything'>('trip')
+  const phone = usePhone()   // Sasha 349 · the ONE phone rule (lib/device)
   const [tripId, setTripId] = useState<string | null>(null)
   const [, setPlans] = useState<PlanRef[]>([])
   const server = useServerPlan(tripId, setPlans)
@@ -313,8 +315,9 @@ export default function TripPanel({
         )}
         <div className="lw-sumcell tot">
           {/* Sasha 249 · the $ figure is the planner's guess, shown only while the basket has no priced row — said as one */}
-          <span className="k">{isBooked ? 'Trip total' : tt ? 'All in' : "Planner's guess"}</span>
-          <span className="amt">{tt ? eur(tt.total_eur) : `$${(richItinerary.estimated_total_usd || 0).toLocaleString()}`}</span>
+          <span className="k">{isBooked ? 'Trip total' : tt ? 'All in' : 'Not priced yet'}</span>
+          {/* Sasha 349 · the trip record's figure, in its own currency (€) — never a guess in another ("Planner's guess $0", found live) */}
+          <span className="amt">{tt ? eur(tt.total_eur) : '—'}</span>
         </div>
       </div>
 
@@ -326,11 +329,12 @@ export default function TripPanel({
               <div className="lw-k">Your itinerary</div>
               <div className="lw-h">{richItinerary.title}</div>
               {/* Sasha 165 · hand-off: ONE WhatsApp, "Picking up: <trip> — <the open item>. Reply to carry on." */}
-              <button type="button" className="lw-handoff" onClick={async () => {
+              {/* Sasha 349 · offered only where it means something: never on the phone itself (lib/device, the one rule) */}
+              {!phone && <button type="button" className="lw-handoff" onClick={async () => {
                 setHandoff('Sending…')
                 const r = await bookingReq('/api/booking/handoff/phone', {}).catch(() => null)
                 setHandoff(String(r?.json?.say ?? 'Not sent — try again.'))
-              }}>📱 Continue on my phone</button>
+              }}>📱 Continue on my phone</button>}
               {handoff && <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 2 }}>{handoff}</div>}
             </div>
           </div>
@@ -374,10 +378,10 @@ export default function TripPanel({
             )}
             {cb && (
               <div className="lw-breakdown">
-                <span>🏨 Hotels ${Number(cb.hotels || 0).toLocaleString()}</span>
-                <span>🎟️ Experiences ${Number(cb.experiences || 0).toLocaleString()}</span>
-                <span>🍜 Meals ${Number(cb.meals || 0).toLocaleString()}</span>
-                <span>🚐 Transfers ${Number(cb.transport || 0).toLocaleString()}</span>
+                <span>🏨 Hotels US${Number(cb.hotels || 0).toLocaleString()}</span>
+                <span>🎟️ Experiences US${Number(cb.experiences || 0).toLocaleString()}</span>
+                <span>🍜 Meals US${Number(cb.meals || 0).toLocaleString()}</span>
+                <span>🚐 Transfers US${Number(cb.transport || 0).toLocaleString()}</span>
               </div>
             )}
             {isBooked ? (
@@ -474,7 +478,7 @@ export default function TripPanel({
                               {(showHotel as { price_label?: string }).price_label ? (   /* Sasha 211 · an ESTIMATE, labelled as one */
                                 <div className="lw-hotel-price">{(showHotel as { price_label?: string }).price_label}{continuing ? ' · same stay' : ''}</div>
                               ) : showHotel.price_from ? (
-                                <div className="lw-hotel-price">${Number(showHotel.price_from).toLocaleString()}/night{continuing ? ' · same stay' : ''}</div>
+                                <div className="lw-hotel-price">US${Number(showHotel.price_from).toLocaleString()}/night{continuing ? ' · same stay' : ''}</div>
                               ) : null}
                             </div>
                             {/* Stays are paid inside the whole-trip checkout — never a

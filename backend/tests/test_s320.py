@@ -82,7 +82,7 @@ class EveryKindAgAPIHandsOver(unittest.TestCase):
 
     def test_the_card_is_drawn_and_the_screen_keeps_it(self):
         src = (FRONT / "app/s2/S2App.tsx").read_text()
-        self.assertIn("ev.kind === 'operators'", src)
+        self.assertIn("k === 'operators'", src)
         self.assertIn("c.k === 'operators'", src)
         self.assertIn("operators", AG.KINDS_S2_PAGE)
         self.assertIn("operators", AG._MODEL_DROP_KEYS)                                      # the buttons are the screen's, never her words

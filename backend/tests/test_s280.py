@@ -72,7 +72,7 @@ class World:
         self.p = [mock.patch.object(PS, "latest", self.latest), mock.patch.object(PS, "by_id", self.by_id),
                   mock.patch.object(PS, "touch", self.touch), mock.patch.object(PS, "single", self.single),
                   mock.patch.object(BK, "suggest", b.suggest), mock.patch.object(BK, "items", b.items),
-                  mock.patch.object(BK, "choose", b.choose)]
+                  mock.patch.object(BK, "choose", b.choose), mock.patch.object(BK, "by_ref", b.by_ref), mock.patch.object(BK, "_go", b.go)]
         for x in self.p:
             x.start()
         return self
@@ -106,21 +106,34 @@ class TheRule(unittest.TestCase):
         self.assertIsNone(API.flight_fits({"plan": {"single": "stay"}}, w("Madrid"), w("Lisbon"), "2026-11-12"))
 
 
+def choose(c, **a):   # Sasha 349 · the pick that makes the trip (the fare re-read is the airline's: still offered, as shown)
+    with mock.patch.object(API, "_still_offered", mock.AsyncMock(side_effect=lambda ctx, p, row: (row, None))), \
+            mock.patch.object(API, "_total", mock.AsyncMock(return_value={"total_eur": 64.0})):
+        return run(API.choose_offer(c, a))
+
+
 class FlightOnItsOwn(unittest.TestCase):
     def test_gate_a_flight_only_is_bookable_with_no_trip(self):
-        """THE GATE (21 Oct 13:44): fails on 279 — "No trip yet, so none of these can be booked: propose_trip first"."""
+        """THE GATE (21 Oct 13:44) · Sasha 349 (Tyler, 6 Nov): bookable on its own — and NO trip until one is chosen (a search made a
+        placeholder trip: "0 days, 2 travellers, $0"). The pick makes the trip, with that flight in it."""
         with World() as wd:
             r = search(ctx(), [lis("a", 72.0), lis("b", 64.0)])
-        self.assertTrue(r["stored"])
-        self.assertTrue(all(f.get("option_id") for f in r["flights"]), r["flights"])   # each one bookable
-        self.assertNotIn("propose_trip", json.dumps(r))
-        self.assertEqual(wd.singles, [("flight", "Flight Madrid → Lisbon")])
+            self.assertTrue(r["stored"])
+            self.assertNotIn("propose_trip", json.dumps(r))
+            self.assertEqual(wd.singles, [])                                        # no trip from a search
+            self.assertFalse(wd.basket.rows)
+            got = choose(ctx(said="the Iberia one at 08:30, the cheaper one"), offer_id="off_b")
+            self.assertEqual(got["chosen"]["offer_id"], "off_b")
+            self.assertEqual(wd.singles, [("flight", "Flight Madrid → Lisbon")])      # the trip IS the flight chosen
+            self.assertEqual([(x["provider_ref"], x["state"]) for x in wd.basket.rows], [("off_b", "chosen")])
         self.assertFalse([x for x in wd.basket.rows if x["kind"] == "stay"])      # no hotel pushed
 
     def test_gate_it_never_joins_a_trip_it_isnt_part_of(self):
         """A Kenya proposal with hotels exists; a flight to Lisbon is its own — never a leg of Kenya (fails on 279: it joined it)."""
         with World(proposal=True) as wd:
             search(ctx(), [lis("a", 72.0)])
+            self.assertEqual(run(wd.latest(ACCT))["trip_id"], KENYA)                 # the search touched no trip
+            choose(ctx(), offer_id="off_a")
             lat = run(wd.latest(ACCT))
         self.assertNotEqual(lat["trip_id"], KENYA)
         self.assertEqual(PS.is_single(lat), "flight")
@@ -128,14 +141,26 @@ class FlightOnItsOwn(unittest.TestCase):
     def test_the_way_back_joins_its_own_flight(self):
         with World() as wd:
             search(ctx(), [lis("a", 72.0)])
+            choose(ctx(), offer_id="off_a")
             search(ctx(said="and a flight back on the 15th"), [lis("r", 70.0, day="2026-11-15", frm="LIS", to="MAD")], "Lisbon", "Madrid", "2026-11-15")
         self.assertEqual(len(wd.singles), 1)
         self.assertEqual(sorted({x["slice_key"].split(":")[0] for x in wd.basket.rows}), ["back", "out"])
 
+    def test_book_it_before_one_is_chosen_asks_which(self):
+        """Sasha 349 · "book it" over a search's flights, none chosen: she is told to choose (or ask) — never a trip guessed for them."""
+        with World():
+            search(ctx(), [lis("a", 72.0), lis("b", 64.0)])
+            r = run(API.call(ctx(said="book it"), "choose_offer", {"offer_id": "off_zzz"}))
+            self.assertFalse(r["ok"])
+            with self.assertRaises(API.ToolError) as e:
+                run(API._plan(ctx(said="book it")))
+        self.assertEqual(e.exception.code, "nothing_chosen")
+
     def test_it_books_with_only_what_was_asked(self):
-        """The read-back of a flight on its own: nothing chosen → the cheapest SHOWN on its one leg; never a way back, never a hotel."""
+        """The read-back of a flight on its own: the one chosen, on its one leg; never a way back, never a hotel."""
         with World() as wd:
             search(ctx(), [lis("a", 72.0), lis("b", 64.0)])
+            choose(ctx(said="the cheapest"), pick="cheapest")
             p = run(wd.latest(ACCT))
             got = run(BB._plan_dates(ACCT))
             self.assertEqual((got[1], got[2]), ([], date(2026, 11, 12)))

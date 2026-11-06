@@ -19,6 +19,7 @@ import S2Hello, { type HelloCtl } from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
 import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
+import { OptionsCard, TotalCard, PayLink, type Opt } from '@/app/components/cards/S2Cards'   // Sasha 349
 import { C, Box, shrink, KeepCapture, GroupListCard, WaOpen, Plans, type CalUpdate, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
@@ -37,7 +38,7 @@ import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one c
 import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acting
 import { NO_SOUND, STARTERS, cueOf, returned } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING: its starters, her one cue, her no-sound line · 296: a return
 import { arrivalLine } from '@/lib/first-line'   // Sasha 295 · the empty conversation's line is her hello's own words
-import { events, reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { events, reach, request } from '@/lib/request'   // Sasha 348 · the ONE request client
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -60,6 +61,9 @@ type Card =
   | { k: 'operators'; line: string; buttons: { label: string; url: string }[] }   // Sasha 320 · CR 150: the trip line + one button per page   // Sasha 236 · Tap to finish · 286: the floor's button + alternatives
   | { k: 'reconnect'; label: string; url: string }   // Sasha 323 · a link that stopped working: one tap to fix it (/you)
   | { k: 'trip' }                                        // Sasha 236 · the trip changed: one tap to the Trip board · 283: it says what the trip is
+  | { k: 'options'; kind: 'flight' | 'hotel'; title: string; leg?: string; options: Opt[] }   // Sasha 349 · a search's options IN the conversation
+  | { k: 'total'; total: Ev }                             // Sasha 349 · the one total, its parts (€)
+  | { k: 'paylink'; url: string; label?: string }         // Sasha 349 · a payment step that is a page of its own
   | { k: 'did_it'; key: string; venue: string; done?: boolean }   // Sasha 283 · item 4c · the way back: her ONE question, its two answers
   | { k: 'activities'; cards: Ev[]; unread: string[]; date?: string }   // CR 81 · things to do, verified on each place's own site
   | { k: 'prepared'; ev: Ev }   // Sasha 248 · "fill it now": their page + the details to copy
@@ -150,6 +154,73 @@ function shownCards(preset: Ev): Extract<Card, { k: 'venues' }>['cards'] {
 /** Sasha 249 · ONE IDENTITY: signed in = whoami names someone ACTING (the same answer the badge renders) — not a second
  *  decision from an activity ping that could fail for other reasons. */
 /** Sasha 274 · who is acting (whoami's own answer) — a guest's booking offers sign-in in the conversation */
+/** Sasha 349 · THE ONE MAPPING from a reply's card event to the cards drawn — used by a live turn AND by the conversation coming back
+ *  from the record (s2_memory messages: each reply's payload). Every kind here is one the server counts as drawn on /s2
+ *  (backend sasha.S2_DRAWS — a test holds the two lists equal), so her words never name a card that isn't here. */
+export const S2_KINDS = ['venues', 'discover', 'read_back', 'calendar', 'keep_capture', 'wa_open', 'capabilities', 'kind_ask', 'plans', 'group_list',
+  'notice', 'pay_here', 'pay', 'counter_card', 'my_cards', 'accident', 'claim_status', 'operators', 'handover', 'prepared', 'subscriptions', 'activities',
+  'flights', 'stays', 'flight_chosen', 'total', 'trip'] as const
+function cardsOf(ev: Ev): Card[] {
+  const k = String(ev.kind || '')
+  if (k === 'venues' && ev.preset) { const cs = shownCards(ev.preset); return cs.length ? [{ k: 'venues', cards: cs }] : [] }
+  if (k === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length)   // Sasha 276 · refused: no cards
+    return [{ k: 'discover', groups: ev.groups, options: ev.options, pick: ev.pick || null, sources_url: ev.sources_url || null }]
+  if (k === 'read_back' && Array.isArray(ev.read_back)) return [{ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
+    ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) }]
+  if (k === 'calendar' && ev.links) return [{ k: 'calendar', title: ev.title, links: ev.links, update: ev.update }]   // Sasha 312
+  if (k === 'keep_capture') return [{ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' }]
+  if (k === 'wa_open' && typeof ev.open === 'string' && ev.open.startsWith('https://wa.me/')) return [{ k: 'wa_open', to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') }]   // Sasha 230
+  if (k === 'capabilities' && Array.isArray(ev.groups)) return [{ k: 'capabilities', groups: ev.groups }]
+  if (k === 'kind_ask' && Array.isArray(ev.choices) && ev.choices.length) return [{ k: 'kind_ask', ask: String(ev.ask || ''), choices: ev.choices.map(String) }]   // Sasha 297
+  if (k === 'plans' && Array.isArray(ev.items)) return [{ k: 'plans', items: ev.items, on: ev.on, updates: ev.calendar_updates }]   // Sasha 312
+  if (k === 'group_list' && ev.title) return [{ k: 'group_list', title: String(ev.title), rows: Array.isArray(ev.rows) ? ev.rows : [], counts: ev.counts, link: String(ev.link || '/group'), empty: ev.empty ?? null }]   // Sasha 345
+  if (k === 'notice' && ev.title) return [{ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status }]
+  if (k === 'pay_here') return [{ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid }]
+  if (k === 'pay' && typeof ev.url === 'string' && ev.url.startsWith('https://')) return [{ k: 'paylink', url: ev.url, label: typeof ev.label === 'string' ? ev.label : undefined }]   // Sasha 349
+  if (k === 'counter_card' && ev.card) return [{ k: 'counter_card', card: ev.card }]   // CR 75 · fine print
+  if (k === 'my_cards') return [{ k: 'my_cards', cards: ev.cards || [] }]
+  if (k === 'accident' && ev.view) return [{ k: 'accident', view: ev.view }]
+  if (k === 'claim_status' && ev.claim) return [{ k: 'claim_status', claim: ev.claim }]
+  if (k === 'operators' && Array.isArray(ev.buttons) && ev.buttons.length)   // Sasha 320 · AgAPI's hand-over, every kind
+    return [{ k: 'operators', line: String(ev.line || ''), buttons: ev.buttons.filter((b: { url?: unknown; label?: unknown }) => typeof b?.url === 'string' && String(b.url).startsWith('https://') && typeof b?.label === 'string') }]
+  if (k === 'handover' && typeof ev.url === 'string' && (ev.url.startsWith('https://') || (ev.external && ev.url.startsWith('http://'))))   // Sasha 286 · a venue's own site may be http
+    return [{ k: 'handover', url: ev.url, external: !!ev.external, label: typeof ev.label === 'string' ? ev.label : undefined,
+              alts: Array.isArray(ev.alternatives) ? ev.alternatives.filter((x: { link?: unknown }) => typeof x?.link === 'string' && /^(https:\/\/|tel:)/.test(String(x.link))) : undefined }]   // Sasha 236
+  if (k === 'prepared' && typeof ev.url === 'string') return [{ k: 'prepared', ev }]   // Sasha 248
+  if (k === 'subscriptions' && Array.isArray(ev.items)) return [{ k: 'subscriptions', items: ev.items, total: ev.total, source: ev.source }]   // CR 84
+  if (k === 'activities' && Array.isArray(ev.cards)) return [{ k: 'activities', cards: ev.cards, unread: Array.isArray(ev.unread) ? ev.unread : [], date: ev.date }]   // CR 81
+  // Sasha 349 · a search's OPTIONS, in the conversation (the 236 trip-board card stood in for them: no cards, and a placeholder trip)
+  const opts = (c: Ev | undefined, kind: 'flight' | 'hotel'): Card[] => (c && Array.isArray(c.options) && c.options.length
+    ? [{ k: 'options', kind, title: String(c.title || ''), leg: c.leg, options: c.options as Opt[] }] : [])
+  if (k === 'flights') return opts(ev.card, 'flight')
+  if (k === 'stays') return opts(ev.card, 'hotel')
+  if (k === 'trip') return [...(Array.isArray(ev.cards) ? ev.cards.flatMap((c: Ev) => opts(c, 'flight')) : []), ...(ev.total ? [{ k: 'total' as const, total: ev.total }] : [])]
+  if (k === 'total' && ev.total) return [{ k: 'total', total: ev.total }]
+  if (k === 'flight_chosen') return [...(ev.total ? [{ k: 'total' as const, total: ev.total }] : []), { k: 'trip' }]   // the trip exists now: its card
+  return []
+}
+
+/** Sasha 349 · a flight chosen: marked on the options card that offered it, wherever in the conversation that card is */
+function markChosen(ms: Msg[], offerId: string): Msg[] {
+  return ms.map(m => ({ ...m, cards: m.cards.map(c => (c.k === 'options' && c.options.some(o => o.provider_offer_id === offerId)
+    ? { ...c, options: c.options.map(o => ({ ...o, chosen: o.provider_offer_id === offerId })) } : c)) }))
+}
+
+/** Sasha 349 · the conversation as the record keeps it → the page's messages, each reply WITH its cards (its payload) */
+function fromRecord(rows: Ev[]): Msg[] {
+  let out: Msg[] = []
+  for (const r of rows) {
+    if (!r || (r.dir !== 'in' && r.dir !== 'out')) continue
+    const text = typeof r.text === 'string' && r.text !== '[removed]' ? untag(r.text) : ''
+    const evs: Ev[] = Array.isArray(r.cards) ? r.cards : []
+    const cards = untagDeep(evs.flatMap(cardsOf)) as Card[]
+    if (!text && !cards.length) continue
+    out.push({ role: r.dir === 'in' ? 'user' : 'sasha', text, cards, restored: true })
+    for (const e of evs) if (e.kind === 'flight_chosen' && e.offer_id) out = markChosen(out, String(e.offer_id))
+  }
+  return out
+}
+
 let ACTING: 'user' | 'founder' | 'guest' | null = null
 function useSignedIn(): boolean | null {
   const [ok, setOk] = useState<boolean | null>(null)
@@ -531,6 +602,9 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
   if (c.k === 'reconnect') return (   /* Sasha 323 · the mailbox link died: told once, one tap to /you */
     <a href={c.url} data-reconnect style={{ display: 'inline-block', marginTop: 6, padding: '10px 18px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>{c.label}</a>)
   if (c.k === 'trip') return <TripCard />
+  if (c.k === 'options') return <OptionsCard kind={c.kind} title={c.title} options={c.options} choose={send} />   // Sasha 349 · a tap says which one
+  if (c.k === 'total') return <TotalCard total={c.total} />
+  if (c.k === 'paylink') return <PayLink url={c.url} label={c.label} />
   if (c.k === 'did_it') return (   // Sasha 283 · item 4c · the tap IS his answer (on the hand-over's one record)
     <Box k="Your booking" h={untag(c.venue)}>
       {c.done ? null : <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -632,11 +706,11 @@ export default function S2App() {
   // auto-started mic stayed gated, deaf, while it showed connected)
   const micGate = useRef<((v: boolean) => void) | null>(null)
   useEffect(() => speaker.onSpeaking(b => micGate.current?.(b)), [speaker])
-  useEffect(() => {   // Sasha 230 · the voice toggle is remembered (this browser): read once, applied to her voice
-    let m = false
-    try { m = localStorage.getItem('s2_muted') === '1' } catch (e) { noted('Remembering your sound setting')(e) }
-    if (m) { speaker.setMuted(true); const t = setTimeout(() => setMuted(true), 0); return () => clearTimeout(t) }
-  }, [speaker])
+  // Sasha 349 · SILENT MODE is on the PERSON (the record, voice.silent) — read with the conversation on load, never this browser's copy
+  const saveSilent = useCallback(async (on: boolean) => {
+    const r = await request('/api/s2-memory', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on }) })
+    if (!r.ok) throw new Error(String(r.json.message || r.json.rule || `the server answered ${r.status}`))
+  }, [])
   // Sasha 295 · THE OPENING (lib/opening-rule.mjs): its panel is up (no second welcome under it) · her voice failed after the tap ·
   // she is speaking (the cue) · the empty conversation's line, her hello's own words
   const [openingUp, setOpeningUp] = useState(false)
@@ -734,16 +808,14 @@ export default function S2App() {
       if (r.lead === 'news') { setLead(newsRef.current); newsRef.current = null }   // she leads with it (her arrival's first words)
       setArrive(a => (a === undefined ? r.greet : a))
       setBackLine(line)
+      if (typeof j?.silent === 'boolean') { setMuted(j.silent); speaker.setMuted(j.silent) }   // Sasha 349 · Silent mode, from the person
       if (r.greet) touch()
-      if (!line) return
-      histRef.current = [...recent.map(m => ({ role: m.role, content: m.content })), ...(greet ? [{ role: 'assistant', content: line }] : [])]   // she carries on from where it stopped
-      // Sasha 233 · her cards go back under the line that SHOWED them (marked by the server), never simply under the last line
-      const marked = recent.map(m => !!m.cards).lastIndexOf(true)
-      const from = Math.max(0, Math.min(recent.length - 8, marked >= 0 ? marked - 1 : recent.length))
-      const cards = j.screen?.cards
-      const shown: Msg[] = recent.slice(from).map(m => ({ role: m.role === 'user' ? 'user' as const : 'sasha' as const, text: untag(m.content), restored: true,
-        cards: m.cards && Array.isArray(cards) && cards.length ? [{ k: 'venues' as const, cards: untagDeep(cards) }] : [] }))
-      setMsgs(ms => (ms.length ? ms : carried ? carried.msgs : [...shown, ...(greet ? [{ role: 'sasha' as const, text: line, cards: [], restored: true }] : [])]))
+      // Sasha 349 · THE CONVERSATION COMES BACK FROM ITS ONE RECORD — always (before, only with a "welcome back" line: switching tabs
+      // and back lost it), each reply WITH its cards (its payload, drawn by the same cardsOf as a live turn)
+      const rows: Ev[] = Array.isArray(j.messages) ? j.messages : []
+      const shown = fromRecord(rows).slice(-40)
+      histRef.current = [...recent.map(m => ({ role: m.role, content: m.content })), ...(greet && line ? [{ role: 'assistant', content: line }] : [])]   // she carries on from where it stopped
+      setMsgs(ms => (ms.length ? ms : carried ? carried.msgs : [...shown, ...(greet && line ? [{ role: 'sasha' as const, text: line, cards: [], restored: true }] : [])]))
       if (carried) histRef.current = carried.hist
     }).catch(() => { setBackLine(null); setArrive(a => (a === undefined ? rule4().greet : a)) })
     return () => { live = false; clearTimeout(t) }
@@ -897,39 +969,13 @@ export default function S2App() {
           else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(noted('Closing the reply stream')) }
           else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line }] })) }
           else if (ev.type === 'render') {
-            const add0 = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k), c] }))
+            const add0 = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k || (c.k === 'options' && x.k === 'options' && x.title !== c.title)), c] }))
             // Sasha 274 · rows 1063/1064: a booking tried as a GUEST offers sign-in, in the conversation, under its card
             const add = (c: Card) => { add0(c); if (ACTING === 'guest' && ['read_back', 'prepared', 'wa_open', 'handover', 'pay'].includes(c.k)) add0({ k: 'sign_in' }) }
-            if (ev.kind === 'venues' && ev.preset) { const cs = shownCards(ev.preset); if (cs.length) add({ k: 'venues', cards: cs }) }
-            else if (ev.kind === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length)   // Sasha 276 · refused: no cards
-              add({ k: 'discover', groups: ev.groups, options: ev.options, pick: ev.pick || null, sources_url: ev.sources_url || null })
-            else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) add({ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
-              ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) })
-            else if (ev.kind === 'calendar' && ev.links) add({ k: 'calendar', title: ev.title, links: ev.links, update: ev.update })   // Sasha 312
-            else if (ev.kind === 'keep_capture') add({ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' })
-            else if (ev.kind === 'wa_open' && typeof ev.open === 'string' && ev.open.startsWith('https://wa.me/')) add({ k: 'wa_open', to: ev.to || {}, text: String(ev.text || ''), open: ev.open, why: String(ev.why || '') })   // Sasha 230
-            else if (ev.kind === 'capabilities' && Array.isArray(ev.groups)) add({ k: 'capabilities', groups: ev.groups })
-            else if (ev.kind === 'kind_ask' && Array.isArray(ev.choices) && ev.choices.length) add({ k: 'kind_ask', ask: String(ev.ask || ''), choices: ev.choices.map(String) })   // Sasha 297
-            else if (ev.kind === 'plans' && Array.isArray(ev.items)) add({ k: 'plans', items: ev.items, on: ev.on, updates: ev.calendar_updates })   // Sasha 312
-            else if (ev.kind === 'group_list' && ev.title) add({ k: 'group_list', title: String(ev.title), rows: Array.isArray(ev.rows) ? ev.rows : [], counts: ev.counts, link: String(ev.link || '/group'), empty: ev.empty ?? null })   // Sasha 345
-            else if (ev.kind === 'notice' && ev.title) add({ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status })
-            else if (ev.kind === 'pay_here') add({ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid })
-            else if (ev.kind === 'counter_card' && ev.card) add({ k: 'counter_card', card: ev.card })   // CR 75 · fine print
-            else if (ev.kind === 'my_cards') add({ k: 'my_cards', cards: ev.cards || [] })
-            else if (ev.kind === 'accident' && ev.view) add({ k: 'accident', view: ev.view })
-            else if (ev.kind === 'claim_status' && ev.claim) add({ k: 'claim_status', claim: ev.claim })
-            else if (ev.kind === 'operators' && Array.isArray(ev.buttons) && ev.buttons.length)   // Sasha 320 · AgAPI's hand-over, every kind
-              add({ k: 'operators', line: String(ev.line || ''), buttons: ev.buttons.filter((b: { url?: unknown; label?: unknown }) => typeof b?.url === 'string' && String(b.url).startsWith('https://') && typeof b?.label === 'string') })
-            else if (ev.kind === 'handover' && typeof ev.url === 'string' && (ev.url.startsWith('https://') || (ev.external && ev.url.startsWith('http://'))))   // Sasha 286 · a venue's own site may be http
-              add({ k: 'handover', url: ev.url, external: !!ev.external, label: typeof ev.label === 'string' ? ev.label : undefined,
-                    alts: Array.isArray(ev.alternatives) ? ev.alternatives.filter((x: { link?: unknown }) => typeof x?.link === 'string' && /^(https:\/\/|tel:)/.test(String(x.link))) : undefined })   // Sasha 236
-            else if (['flights', 'stays', 'flight_chosen', 'total', 'trip', 'trip_changed'].includes(String(ev.kind))) {   // Sasha 236 · the trip board refreshes; one card says so
-              window.dispatchEvent(new Event('sasha-plan-refresh'))
-              add({ k: 'trip' })   // Sasha 283 · item 1 · what it says comes from the trip record (TripCard), never from the event's kind
-            }
-            else if (ev.kind === 'prepared' && typeof ev.url === 'string') add({ k: 'prepared', ev })   // Sasha 248
-            else if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) add({ k: 'subscriptions', items: ev.items, total: ev.total, source: ev.source })   // CR 84
-            else if (ev.kind === 'activities' && Array.isArray(ev.cards)) add({ k: 'activities', cards: ev.cards, unread: Array.isArray(ev.unread) ? ev.unread : [], date: ev.date })   // CR 81
+            // Sasha 349 · THE ONE MAPPING (cardsOf) — the same cards come back from the record on return
+            if (['flights', 'stays', 'flight_chosen', 'total', 'trip'].includes(String(ev.kind))) window.dispatchEvent(new Event('sasha-plan-refresh'))
+            if (ev.kind === 'flight_chosen' && ev.offer_id) setMsgs(ms => markChosen(ms, String(ev.offer_id)))
+            for (const c of cardsOf(ev)) add(c)
           }
         }
       }
@@ -1203,9 +1249,14 @@ export default function S2App() {
             {voiceBlocked && !muted ? (
               <button onClick={() => { speaker.unlock(); speaker.replayBlocked() }} aria-label="Tap to hear her" title="Tap to hear her" style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17 }}>
                 🔈</button>
-            ) : (   /* her SPEAKER (Sasha 230's remembered mute) — its own word, never "Voice": that word is the mic's */
-            <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch (e) { ((e: unknown) => announce(failed('Remembering your sound setting', e)))(e) } }} aria-pressed={muted} aria-label={muted ? 'Her sound is off — turn it on' : 'Her sound is on — mute it'} title={muted ? 'Sound off' : 'Sound on'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17, opacity: muted ? 0.6 : 1 }}>
-              {muted ? '🔇' : '🔊'}</button>)}
+            ) : (   /* Sasha 349 · ONE SWITCH, "Silent mode" (the 🔊 icon folded in): on the person, text only until it's turned off */
+            <button type="button" role="switch" aria-checked={muted} data-silent-mode aria-label="Silent mode"
+              onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); observe(saveSilent(m), 'Silent mode', tell) }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 0, color: '#fff', padding: 4, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 13 }}>
+              <span>Silent mode</span>
+              <span aria-hidden style={{ width: 30, height: 18, borderRadius: 999, background: muted ? C.gold : 'rgba(255,255,255,.25)', position: 'relative', display: 'inline-block' }}>
+                <span style={{ position: 'absolute', top: 2, left: muted ? 14 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} /></span>
+            </button>)}
             <button onClick={() => { listenOnTap(); if (busy || clearing) { tell(stillGoing(clearing ? 'Clearing the conversation' : 'Sasha’s reply', 'New chat')); return } observe(newChat(), 'New chat', tell) }} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
               style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
             <span style={{ flex: 1 }} />

@@ -53,7 +53,8 @@ def rows_496():   # D1's trip: two flights chosen + the stay = €496.10; an opt
             stay("s", 312.8), flight("c", "back", D3, "17:48", 140.0, state="suggested", owner="TAP", num="TP 1030", frm="LIS", to="MAD")]
 
 
-PLAN = {"trip_id": TRIP, "title": "Lisbon", "plan": {"party": 2, "days": [{"day": 1, "date": D1, "city": "Lisbon"}]}}
+PLAN = {"trip_id": TRIP, "title": "Lisbon", "cities": ["Lisbon"], "start": D1, "end": D3,   # Sasha 349 · a trip record's own shape
+        "plan": {"party": 2, "days": [{"day": 1, "date": D1, "city": "Lisbon"}]}}
 
 
 def items_of(rows):
@@ -376,8 +377,10 @@ class OfferedIsBookable(unittest.TestCase):
         with mock.patch.object(API, "_search_healed", mock.AsyncMock(return_value=({"cards": cards}, D1))), \
                 mock.patch.object(API, "_latest", mock.AsyncMock(return_value=None)):
             r = run(API.call(ctx(), "search_flights", {"origin": "Madrid", "destination": "Lisbon", "date": D1}))
-        self.assertFalse(r["result"]["stored"])
-        self.assertIn("propose_trip first", r["result"]["how"])
+        # Sasha 349 · no trip is made by a search (the placeholder Tyler saw): its offers are kept, and the one tapped makes the trip
+        self.assertTrue(r["result"]["stored"])
+        self.assertIn("They tap one", r["result"]["how"])
+        self.assertNotIn("propose_trip", r["result"]["how"])
 
     def test_s2s_agapi_flights_go_into_the_same_basket_in_euros(self):
         from agapi import via_agapi as VIA

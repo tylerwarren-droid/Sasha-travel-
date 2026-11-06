@@ -66,3 +66,27 @@ The yes to a read-back ("Yes." / "Yes, book it") still goes through the model to
 
 - `backend/tests/test_s352_next_action.py`: the table; the state; the words; the group rows; `next_uses`; a real turn where "Book it." runs `hold_booking` by code before any model step; WhatsApp taps.
 - `frontend/scripts/next-action-352.test.mjs` (npm test): no surface hard-wires a trip or group button.
+
+## Live proof (6 Nov, project.kanoe.ai, the test organiser, phone viewport, a fictional traveller; no card number entered)
+
+**S2, Madrid → Paris, 25 Nov:**
+1. After the pick turn (the model also read the trip back in it), the trip card showed [Yes, book it] · [See the whole trip].
+2. A tap on [Yes, book it] brought up the Pay card (Stripe TEST embedded checkout), and the card then showed [Pay] · [See the whole trip].
+3. An earlier run (Madrid → London) showed [Book it] · [See the whole trip] after the choice. The tap went straight to Pay, because a read-back had already run in the pick turn: the stale button the end-of-turn refresh now fixes.
+4. Not done here: paying on Stripe TEST, after which the card shows [Change] · [Cancel]. That needs Stripe's test card typed on a production page, so it is left to Tyler.
+
+**/group, Porto:**
+- The list showed [Book all] · [Invite everyone to the vault].
+- Ana, Luis and Marta (planned) each showed [Book]; Nuria Prieto (needs vault) showed [Invite].
+
+**WhatsApp** (the production code against the organiser's live state; sent nothing):
+- With the trip pending payment, the chosen-flight line and the "Picking up" hand-off carry [Pay] (`say:Pay here`).
+- When chosen, the same line carries [Book it] (`say:Book it`).
+- The organiser has no WhatsApp linked, so nothing was sent.
+
+**VOICE LOOP 5:** in a209d897's gate it passed the suite (15/15), then the 6-run probe ("0 failure(s) in 6 run(s)"), so 7 of 7. In these runs the model proposed the trip at "From Madrid.", so "Book it." went to `hold_booking`. The prepared-trip branch (the 6 Nov failure) is held by the unit test.
+
+**Found, not this class (said, not patched):**
+- A pick on a slice whose earlier choice is pending payment fails in the store (AlreadyRecorded, `trip_basket_items_one_chosen_per_slice`). Sasha says "still waiting for payment", but no card is drawn.
+- "Yes" with nothing waiting for a yes (a payment already pending) led the model to search again.
+- frontend `presence-rule.test.mjs`: 273 and 281 fail on main as they do here (pre-existing).

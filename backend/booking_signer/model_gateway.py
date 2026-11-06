@@ -66,9 +66,12 @@ def account_cap() -> int:
 
 # ── the day's record ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-_DAY: Dict[str, Any] = {"day": None, "total": 0, "accounts": {}, "models": {}, "callers": {}, "loaded": False}
+_DAY: Dict[str, Any] = {"day": None, "total": 0, "accounts": {}, "models": {}, "callers": {}, "loaded": False}   # THIS process's use
+_OTHERS: Dict[str, Any] = {"total": 0, "accounts": {}, "at": None}   # every other process's use today (the service, the gate…), re-read
+OTHERS_EVERY_S = 30.0
+PROC = __import__("uuid").uuid4().hex[:12]   # this process's own row: processes never overwrite each other's counts
 _DIRTY = {"since": None}
-STORE: Any = None   # tests replace it: an object with async load(day) -> dict|None and save(day, data)
+STORE: Any = None   # tests replace it: an object with async load(day, proc) -> [day records of OTHER processes] and save(day, proc, data)
 
 
 def _today() -> str:
@@ -98,15 +101,20 @@ async def _db(fn):
 
 
 class _PgStore:
-    async def load(self, day: str) -> Optional[dict]:
-        r = await _db(lambda c: c.fetchval("select data from sasha_measures where id = $1", f"model_day:{day}"))
-        return json.loads(r) if isinstance(r, str) else r
+    """One row per process and day (model_day:<day>:<process>) — found live: the service and the gate each saved the whole day, the
+    last writer erasing the other's use. The caps count every row."""
 
-    async def save(self, day: str, data: dict) -> None:
+    async def load(self, day: str, proc: str) -> List[dict]:
+        rows = await _db(lambda c: c.fetch("select data from sasha_measures where kind = 'model_day' and day = $1 and id <> $2",
+                                           __import__("datetime").date.fromisoformat(day), f"model_day:{day}:{proc}"))
+        return [json.loads(r["data"]) if isinstance(r["data"], str) else r["data"] for r in rows]
+
+    async def save(self, day: str, proc: str, data: dict) -> None:
         await _db(lambda c: c.execute(
             "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'model_day', now(), $2::date, "
             "$3::jsonb, 0, $4, null, now() + interval '400 days') on conflict (id) do update set data = excluded.data, at = excluded.at",
-            f"model_day:{day}", __import__("datetime").date.fromisoformat(day), json.dumps(data), os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
+            f"model_day:{day}:{proc}", __import__("datetime").date.fromisoformat(day), json.dumps(data),
+            os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
 
 
 def _store():
@@ -117,31 +125,31 @@ async def _ensure_day() -> None:
     d = _today()
     if _DAY["day"] != d:
         _DAY.update(day=d, total=0, accounts={}, models={}, callers={}, loaded=False)
-    if not _DAY["loaded"]:
+        _OTHERS.update(total=0, accounts={}, at=None)
+    if _OTHERS["at"] is None or time.monotonic() - _OTHERS["at"] >= OTHERS_EVERY_S or not _DAY["loaded"]:   # None: never read
         _DAY["loaded"] = True
-        try:
-            kept = await _store().load(d)
+        _OTHERS["at"] = time.monotonic()
+        try:   # a restart, another process: the caps count what every process used today
+            rows = await _store().load(d, PROC)
         except Exception as e:
-            log.warning("[model_gateway] the day's record wasn't read (%s) — counting from zero", type(e).__name__)
-            kept = None
-        if kept:   # a restart never resets the caps: the day goes on from what was used
-            _DAY["total"] += int(kept.get("total") or 0)
-            for k, v in (kept.get("accounts") or {}).items():
-                _DAY["accounts"][k] = _DAY["accounts"].get(k, 0) + int(v)
-            for part in ("models", "callers"):
-                for k, v in (kept.get(part) or {}).items():
-                    cur = _DAY[part].setdefault(k, {})
-                    for kk, vv in (v or {}).items():
-                        cur[kk] = cur.get(kk, 0) + int(vv)
+            log.warning("[model_gateway] the day's other records weren't read (%s) — counting this process only", type(e).__name__)
+            return
+        tot, acc = 0, {}
+        for r in rows or []:
+            tot += int((r or {}).get("total") or 0)
+            for k, v in ((r or {}).get("accounts") or {}).items():
+                acc[k] = acc.get(k, 0) + int(v)
+        _OTHERS.update(total=tot, accounts=acc)
 
 
 def _check(account_k: str) -> None:
     g, a = global_cap(), account_cap()
-    if _DAY["total"] >= g:
-        msg = f"the global daily model cap is reached ({_DAY['total']:,} of {g:,} tokens today) — nothing was sent (SASHA_MODEL_DAILY_TOKENS)"
+    total = _DAY["total"] + _OTHERS["total"]
+    if total >= g:
+        msg = f"the global daily model cap is reached ({total:,} of {g:,} tokens today) — nothing was sent (SASHA_MODEL_DAILY_TOKENS)"
         log.error("[model_gateway] REFUSED: %s", msg)
         raise ModelBudgetExceeded(msg)
-    used = _DAY["accounts"].get(account_k, 0)
+    used = _DAY["accounts"].get(account_k, 0) + _OTHERS["accounts"].get(account_k, 0)
     if account_k != "-" and used >= a:
         msg = (f"this account's daily model budget is reached ({used:,} of {a:,} tokens today) — nothing was sent "
                "(SASHA_MODEL_ACCOUNT_DAILY_TOKENS)")
@@ -180,13 +188,14 @@ def _flush_soon() -> None:
 async def _flush() -> None:
     _DIRTY["since"] = None
     try:
-        await _store().save(_DAY["day"], {k: _DAY[k] for k in ("total", "accounts", "models", "callers")})
+        await _store().save(_DAY["day"], PROC, {k: _DAY[k] for k in ("total", "accounts", "models", "callers")})
     except Exception as e:
         log.warning("[model_gateway] the day's record wasn't saved (%s)", type(e).__name__)
 
 
 def today() -> Dict[str, Any]:
-    return {k: _DAY[k] for k in ("day", "total", "accounts", "models", "callers")} | {"global_cap": global_cap(), "account_cap": account_cap()}
+    return {k: _DAY[k] for k in ("day", "accounts", "models", "callers")} | {"total": _DAY["total"] + _OTHERS["total"], "this_process": _DAY["total"],
+                                                                           "global_cap": global_cap(), "account_cap": account_cap()}
 
 
 # ── what a call carries ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -450,6 +459,7 @@ def install() -> bool:
         caller, acct = _caller(), _acct_key(ACCOUNT.get())
         if _DAY["day"] != _today():
             _DAY.update(day=_today(), total=0, accounts={}, models={}, callers={}, loaded=True)
+            _OTHERS.update(total=0, accounts={}, at=time.monotonic())
         _check(acct)
         kw = prepare(kw)
         r = orig["screate"](self, *a, **kw)

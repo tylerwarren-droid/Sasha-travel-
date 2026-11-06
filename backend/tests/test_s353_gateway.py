@@ -38,11 +38,11 @@ class Mem:
     def __init__(self, kept=None):
         self.kept, self.saved = kept, []
 
-    async def load(self, day):
-        return self.kept
+    async def load(self, day, proc):
+        return [self.kept] if self.kept else []
 
-    async def save(self, day, data):
-        self.saved.append(data)
+    async def save(self, day, proc, data):
+        self.saved.append((proc, data))
 
 
 class Replays:
@@ -58,6 +58,7 @@ class Replays:
 
 def fresh(kept=None):
     MG._DAY.update(day=None, total=0, accounts={}, models={}, callers={}, loaded=False)
+    MG._OTHERS.update(total=0, accounts={}, at=None)
     MG.STORE = Mem(kept)
     return MG.STORE
 
@@ -124,7 +125,7 @@ class TheCaps(unittest.TestCase):
         self.assertEqual(MG.today()["total"], 10050)
 
     def test_the_global_cap_and_a_restart_never_resets_it(self):
-        fresh(kept={"total": 999_000, "accounts": {}, "models": {}, "callers": {}})   # what the day's record already holds
+        fresh(kept={"total": 999_000, "accounts": {}, "models": {}, "callers": {}})   # another process's (or before a restart) use today
         sent = []
 
         async def go():
@@ -134,6 +135,25 @@ class TheCaps(unittest.TestCase):
             self.assertEqual(MG.today()["total"], 1_009_050)
             with self.assertRaises(MG.ModelBudgetExceeded):
                 run(go())
+        self.assertEqual(len(sent), 1)
+
+    def test_each_process_keeps_its_own_row_and_the_caps_count_them_all(self):
+        """Found live: the service and the gate each saved the whole day — the last writer erased the other's use."""
+        st = fresh()
+        sent = []
+
+        async def go():
+            await client(sent).messages.create(model="claude-haiku-4-5", max_tokens=5, messages=[{"role": "user", "content": "x"}])
+            await MG._flush()
+            st.kept = {"total": 4_000_000, "accounts": {}}                              # another process used 4 M meanwhile
+            MG._OTHERS["at"] = None                                                     # due to be read again
+            with self.assertRaises(MG.ModelBudgetExceeded):
+                await client(sent).messages.create(model="claude-haiku-4-5", max_tokens=5, messages=[{"role": "user", "content": "y"}])
+        with mock.patch.dict(os.environ, {"SASHA_MODEL_DAILY_TOKENS": "4000000", "SASHA_MODEL_REPLAY": ""}), \
+                self.assertLogs("booking_signer.model_gateway", "ERROR"):
+            run(go())
+        self.assertEqual(st.saved[-1][0], MG.PROC)                                       # its own row
+        self.assertEqual(st.saved[-1][1]["total"], 10050)                                # its own use only
         self.assertEqual(len(sent), 1)
 
     def test_a_stream_is_capped_and_metered_too(self):

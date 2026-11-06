@@ -188,7 +188,10 @@ class OnlyWhatItNeeds(unittest.TestCase):
         self.assertEqual(fam("Yes.", [], trip=False, places=True), {"core", "reserve", "find"})   # the place on their screen (found first)
         self.assertTrue({"book", "reserve"} <= fam("Book it."))                                # unknown: either booking
         self.assertIn("group", fam("Book all", []))
-        self.assertTrue({"reserve", "find"} <= fam("Uh, a table for two at the Sasha Test Venue in Madrid, Saturday at nine at night, please."))
+        venue = fam("Uh, a table for two at the Sasha Test Venue in Madrid, Saturday at nine at night, please.")
+        self.assertTrue({"reserve", "find"} <= venue)
+        self.assertNotIn("plan", venue)                                                      # "nine at night" is a time, not a trip's nights
+        self.assertIn("plan", fam("Five nights in Lisbon"))
         self.assertIn("plan", fam("Yes", [{"role": "assistant", "content": "Do you need flights as well?"}]))   # her last line
         tools = [{"name": n} for ns in TN.FAMILIES.values() for n in ns] + [{"name": "a_new_tool"}]
         got = {t["name"] for t in TN.select(tools, "Hi Sasha!")}
@@ -208,6 +211,7 @@ class OnlyWhatItNeeds(unittest.TestCase):
         self.assertIn("tools = _TN.select(tools, message, history,", src)
         self.assertIn('_by_code = {u.name for u in tap_uses} - {x["name"] for x in tools}', src)
         self.assertIn("base = _TN.system_for(base, offered)", src)
+        self.assertIn("if account and _VNh._HELD.get(account):", src)                     # what's waiting for their yes decides
         self.assertIn("_MG.ACCOUNT.set(account or None)", src)
 
 

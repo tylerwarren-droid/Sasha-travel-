@@ -41,7 +41,8 @@ FAMILIES: Dict[str, Iterable[str]] = {
 _W = lambda s: re.compile(r"(?i)\b(?:" + s + r")")
 WORDS = {
     "activity": _W(r"activity|proof|what (?:have|did) you (?:do|done|send|sent)|note (?:that|this)|remember (?:that|this)"),
-    "plan": _W(r"fl(?:y|ight|ights|ying|ew)|plane|hotel|stay|trip|holiday|itinerar|nights?\b|travel|vacation|airport|weekend|getaway|"
+    "plan": _W(r"fl(?:y|ight|ights|ying|ew)|plane|hotel|stay|trip|holiday|itinerar|(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+               r"a few|several|couple of) nights?\b|travel|vacation|airport|weekend|getaway|"
                r"go(?:ing)? to|from [A-Z]|to [A-Z]|days? in|week in|beach|total|price|cost|cheap|seat|visit|instead|another|other one|"
                r"the (?:first|second|third|last|cheapest|earlier|later) one|\bthe .{1,40} (?:flight|one)\b"),
     "book": _W(r"\bpay\b|payment|traveller|passenger|born|date of birth|\bmr\b|\bms\b|\bmrs\b|full name|on my phone|saved card|"

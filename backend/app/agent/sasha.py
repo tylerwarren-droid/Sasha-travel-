@@ -903,9 +903,18 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     # every call); a tapped place keeps the places' tools (the tap's own calls run by code below)
     from app.agent import tool_need as _TN
     all_tools = tools   # Sasha 353 · the calls code makes this turn (next_uses, the tap's) are offered even when the words don't name them
-    _trip = (await API.trip_next(account))["state"] in ("prepared", "chosen", "held", "pending_payment", "booked") if account else None
+    # the record decides which booking a go-ahead means: what's WAITING for their yes (a place's hold, a trip's read-back), else the trip's
+    # state and the places on screen (found by the gate: with a chosen flight on the account, the venue's "yes" was offered the trip's)
+    from agapi import venues as _VNh
+    if account and _VNh._HELD.get(account):
+        _trip, _places = False, True
+    elif account and API._HELD.get(account):
+        _trip, _places = True, False
+    else:
+        _trip = (await API.trip_next(account))["state"] in ("prepared", "chosen", "held", "pending_payment", "booked") if account else None
+        _places = bool((_SCREEN.get(session or "-") or {}).get("cards"))
     tools = _TN.select(tools, message, history, keep=(*_TN.FAMILIES["find"], *_TN.FAMILIES["reserve"]) if (surface == "s2" and API.TAP_PICK.get()) else (),
-                       trip=_trip, places=bool((_SCREEN.get(session or "-") or {}).get("cards")))
+                       trip=_trip, places=_places)
     offered = {t["name"] for t in tools}
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []

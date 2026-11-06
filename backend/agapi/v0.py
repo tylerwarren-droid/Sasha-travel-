@@ -1554,8 +1554,13 @@ def _group_err(r: dict) -> dict:
 async def group_start(ctx: Ctx, a: dict) -> dict:
     from booking_signer import groups as G
     r = await G.start(ctx.account, a["company"], a["destination"], a.get("starts_on"), a.get("ends_on"), a.get("hotel_area"))
+    # Sasha 351 · a trip is a SELECTION from the company's roster: who's going is asked from the people already there, never re-typed
+    grp = await G.store().company(ctx.account, a["company"])
+    n = len(await G.store().people(grp["id"])) if grp else 0
+    who = (f" Who's going? Name them, or tick them on the People list ({n} on your roster)." if n else
+           " Who's going? Add your people once — a spreadsheet, a photo of it, or paste it here — and every trip after picks from them.")
     return {**r, "say": f"Got it — {a['company']} to {a['destination']}" + (f", hotel near {a['hotel_area']}" if a.get("hotel_area") else "")
-            + ". Send me the list of people: a spreadsheet, a photo of it, or paste it here."}
+            + "." + who}
 
 
 async def group_upload(ctx: Ctx, a: dict) -> dict:
@@ -1598,7 +1603,7 @@ async def group_limits(ctx: Ctx, a: dict) -> dict:
     started = await _start_plan(ctx.account)
     say = (f"Saved: {saved}." if saved else "No limits are saved.") + (
         f" I'm planning all {started} now, one by one, within those limits — the master list fills in as I go. Nothing is booked yet."
-        if started else " Send me the list of people next, and I'll plan them within these limits.")
+        if started else " Tell me who's going next (from your People, or add them once), and I'll plan them within these limits.")
     return {**r, "saved": saved, "planning": bool(started), "say": say}
 
 

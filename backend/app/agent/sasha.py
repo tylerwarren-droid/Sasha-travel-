@@ -334,6 +334,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
             if cards or res.get("flights_needed") is False else None   # Sasha 283 · item 2: a trip with no flights still has its card
     if kind == "total":   # Sasha 212 · one figure, its parts marked quoted / estimated — on the card
         return {"type": "render", "kind": kind, "total": res["breakdown"]} if res.get("breakdown") else None
+    if kind == "flight_chosen" and res.get("status") in ("pending_pick", "pending_payment"):   # Sasha 354 · what is pending: its ONE card
+        return {"type": "render", "kind": "trip", "ask": res.get("ask") or ""}                  # (its actions: Keep it · Switch, or Pay)
     if kind == "flight_chosen":
         ch = res.get("chosen") or {}
         return {"type": "render", "kind": kind, "offer_id": ch.get("offer_id"),
@@ -1081,10 +1083,40 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     # Sasha 352 · THE NEXT ACTION, by code: words that only ask for an item's next action ("Book it." · "Pay here" · "Book all" — typed,
     # spoken, or its button, which says them) run the calls that action is (agapi.v0.next_uses, from booking_signer/next_actions — the
     # ONE table); the model then only says it. Every surface: the S2 tap, S1's voice, WhatsApp's say: tap — one path.
+    # Sasha 354 · A REPLY MEANS WHAT IS PENDING NOW (agapi/pending — ONE record, read before any model step): a bare yes is resolved
+    # against it by code — the read-back it answers (book · book_venue), her question (the conversation, as ever), or, when nothing waits
+    # for a yes, said so plainly with what IS pending (a payment, a pick's question) on its one card — never a new search
+    if not tap_uses and account:
+        from booking_signer import next_actions as _NA
+        from agapi import pending as _PEND
+        _act0 = _NA.heard(message)
+        if _act0 in ("yes", "keep"):
+            _pst = await _PEND.now(account)
+            _line, _card = None, False
+            if _act0 == "keep":
+                if (_pst.get("now") or {}).get("kind") == "pick":
+                    await _PEND.drop_pick(account)
+                    _pay = _pst.get("payment")
+                    _line, _card = ("Kept — " + (_PEND.payment_line(_pay).split("— ", 1)[-1] if _pay else "the earlier flight stays.")), True
+            else:
+                _r = _PEND.resolve_yes(_pst)
+                if _r["do"] == "book":
+                    tap_uses = [_TapUse(f"toolu_yes_{turn_key}", "book", {"approval": {"said": message}})]
+                elif _r["do"] == "book_venue" and _r.get("venue"):
+                    tap_uses = [_TapUse(f"toolu_yes_{turn_key}", "book_venue", {"name": _r["venue"], "approval": {"said": message}})]
+                elif _r["do"] == "say":
+                    _line, _card = _r["line"], _r["card"]
+            if _line:
+                yield {"type": "text", "delta": _line}
+                yield {"type": "say", "text": _line}
+                if _card:
+                    yield {"type": "render", "kind": "trip", "ask": _line, "actions": (await API.trip_next(account))["actions"], "turn": turn_key}
+                yield {"type": "done", "text": _line, "guard": [], "tools": [{"tool": "pending", "ok": True, "status": _act0}]}
+                return
     if not tap_uses and account:
         from booking_signer import next_actions as _NA
         _act = _NA.heard(message)
-        if _act and _act != "yes":
+        if _act and _act not in ("yes", "keep"):
             _uses = [(n, a) for n, a in await API.next_uses(account, _act, message) if any(t["name"] == n for t in all_tools)]
             tap_uses = [_TapUse(f"toolu_next_{turn_key}_{i}", n, a) for i, (n, a) in enumerate(_uses)]
             tools = tools + [t for t in all_tools if t["name"] in {n for n, _ in _uses} - {x["name"] for x in tools}]   # Sasha 353

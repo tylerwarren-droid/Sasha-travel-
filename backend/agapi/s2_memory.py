@@ -171,15 +171,31 @@ def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:
         m["thing"] = topic = f"{what} — it's ready, waiting for your yes" if held == "hold_venue" else what
         if held == "hold_venue" and seen.get("held"):
             m["decided"] = {"what": masked(str(seen["held"]))[:120], "state": "chosen and read back — waiting for their yes"}
+    # Sasha 354 · WHAT IS PENDING NOW — ONE record, written by the turn that made it: a trip's read-back waiting for the yes, a pick that
+    # waits for "keep or switch?" (an earlier choice of that flight is waiting for payment), else her question. The LATEST turn decides:
+    # a question asked after a read-back is what a "yes" answers (never the older read-back).
+    from agapi.s2_status import HELD as _HELD_ST
+    made = False
+    if any(c.get("tool") == "hold_booking" and c.get("ok") and c.get("status") == _HELD_ST for c in calls):
+        m["pending"] = {"kind": "yes", "scope": "trip", "what": m.get("thing") or "your trip", "at": NOW().isoformat()}
+        made = True
+    if any(c.get("tool") == "choose_offer" and c.get("ok") and c.get("status") == "pending_pick" for c in calls):
+        m["pending"] = {"kind": "pick", "scope": "trip", "at": NOW().isoformat()}
+        made = True
+    if held:
+        made = True
     if any(status.get(t) in ("confirmed", "requested", "sent", "booked") for t in ("book_venue", "book", "send_email", "send_whatsapp")) \
             or re.search(r"✅\s*Booked", reply or ""):
         topic = topic or "done: " + (m.get("thing") or "your booking")
         m["thing"], m["pending"], m["decided"] = None, None, None
+        made = True
+    if any(c.get("tool") == "book" and c.get("ok") for c in calls) and (m.get("pending") or {}).get("kind") == "yes":
+        m["pending"] = None   # the yes was given: what waits now is the payment (the basket's own state — pending.now reads it)
     q = _question(reply)
     if (m.get("pending") or {}).get("kind") == "question":
         m["pending"] = None   # a question is only unfinished until her next reply
-    if q and not m.get("pending"):
-        m["pending"] = {"kind": "question", "asked": masked(q), "at": NOW().isoformat()}
+    if q and not made:
+        m["pending"] = {"kind": "question", "asked": masked(q), "at": NOW().isoformat()}   # her latest question is what's pending
     if topic and masked(topic) != REMOVED:
         m["summary"] = ([s for s in m["summary"] if s != topic] + [topic])[-SUMMARY_MAX:]
     m["updated_at"] = NOW().isoformat()

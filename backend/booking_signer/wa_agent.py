@@ -278,6 +278,14 @@ def next_taps(ev: dict) -> list:
     return [(_cut(a.get("label"), 20), "say:" + str(a["say"])[:190]) for a in ev.get("actions") or [] if isinstance(a, dict) and a.get("say")][:3]
 
 
+def _pending(ev: dict, out) -> None:
+    """Sasha 354 · what is pending now, as its ONE card on WhatsApp: the pending item's next actions as taps (Pay · Keep it · Switch) —
+    under her line (already sent as her reply). A trip card without actions draws nothing here (the Trip tab is the page's)."""
+    taps = next_taps(ev)
+    if taps:
+        out.ask("Your trip:", taps)
+
+
 def _line(ev: dict, out) -> None:
     """flight_chosen / total: one line — and the trip's next action as its button (Sasha 352: "Book it")."""
     t = ev.get("total") or {}
@@ -305,7 +313,7 @@ KIND_MAP = {
                   + [f"Their page: {ev.get('url')}"])),
     "keep_capture": "keep_capture",          # sets st["photo_for"] (needs the state)
     "keep_handoff": _nothing,                # WhatsApp takes the photo directly
-    "focus": _nothing, "trip": _nothing, "inline": _nothing,
+    "focus": _nothing, "trip": lambda ev, out: _pending(ev, out), "inline": _nothing,
     "kind_ask": _nothing,   # Sasha 297 · her one question before a vague search: /s2's page only (v0._discover via "page") — never on WhatsApp
     "operators": lambda ev, out: out.text("\n".join([str(ev.get("line") or "")] + [f"{b.get('label')}: {b.get('url')}"   # Sasha 320 · the line,
                                                                                  for b in ev.get("buttons") or []])),        # then each page

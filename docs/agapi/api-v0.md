@@ -914,7 +914,7 @@ How a venue takes bookings (its own form, a platform page, email, phone, WhatsAp
 
 Put another flight into the trip, replacing the flight on that leg. Returns the new total. Give its offer_id, OR describe one of the trip's options (the proposal's flight cards, a search's): its leg and the airline and/or departure time a tap or the person named ("the British Airways flight out at 08:30"), or pick cheapest/fastest.
 
-**Errors:** `no_trip`, `offer_not_in_trip`, `not_choosable`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
+**Errors:** `no_trip`, `offer_not_in_trip`, `not_choosable`, `not_switched`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
 **Input**
 
@@ -943,6 +943,10 @@ Put another flight into the trip, replacing the flight on that leg. Returns the 
     "cheapest",
     "fastest"
    ]
+  },
+  "switch": {
+   "type": "boolean",
+   "description": "only when they answered “switch” to keeping an earlier flight that waits for payment"
   },
   "idempotency_key": {
    "type": "string",

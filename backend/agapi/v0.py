@@ -856,8 +856,13 @@ async def trip_next(account: str) -> Dict[str, Any]:
         log.info("[agapi] trip_next: the record didn't answer (%s)", type(e).__name__)
         return {"state": None, "actions": []}
     h = _HELD.get(account)
+    from agapi import pending as PEND   # Sasha 354 · a pick waiting for "keep or switch?" is the one question pending
+    try:
+        st = await PEND.now(account)
+    except Exception:
+        st = {"now": None}
     state = NA.trip_state(held=bool(h and not stale(h.get("at"))), rows=rows, prepared=account in _PREP and not rows,
-                          offers=account in _OFFERS and not rows)
+                          offers=account in _OFFERS and not rows, pick=((st.get("now") or {}).get("kind") == "pick"))
     return {"state": state, "actions": NA.for_trip(state)}
 
 
@@ -878,6 +883,10 @@ async def next_uses(account: str, act: str, said: str) -> List[tuple]:
         return []
     if act == "pay":
         return [("book", {"approval": {"said": said}})]
+    if act == "switch":   # Sasha 354 · their answer to "keep it, or switch?": the new pick, the earlier payment closed first
+        from agapi import pending as PEND
+        cur = (await PEND.now(account)).get("now") or {}
+        return [("choose_offer", {"offer_id": cur["offer_id"], "switch": True})] if cur.get("kind") == "pick" and cur.get("offer_id") else []
     if act in ("book", "see") and st == "prepared":   # the trip she's been preparing: ITS proposal (the prepared work, used as it is), then
         prep = _PREP.get(account) or {}             # for "book it" its read-back — the first plan on the record, never a second
         args = dict(prep.get("args") or {})
@@ -1208,6 +1217,11 @@ async def choose_offer(ctx: Ctx, a: dict) -> dict:
         await _plan(ctx)   # its refusal: nothing on this account to book yet
     if not row:   # Sasha 253 · never a bare "couldn't find": what IS on that leg travels with the refusal
         raise ToolError("offer_not_in_trip", await _not_an_option(ctx, p, a))
+    # Sasha 354 · WHAT IS PENDING NOW: this flight is already waiting for payment, or an earlier choice of this flight is — never a second
+    # choice written over a payment (it failed in the store: AlreadyRecorded); the pending one is shown, and they're asked which to keep
+    waiting_now = await _pick_against_payment(ctx, p, row, a)
+    if waiting_now is not None:
+        return waiting_now
     row, moved = await _still_offered(ctx, p, row)   # Sasha 253 · a fare that went away is said, with what's there now
     leg = (row.get("slice_key") or "out:").split(":", 1)[0]
     for other in await BK.items(ctx.account, p["trip_id"], ("chosen",)):   # one flight per LEG (searches of the leg may differ)
@@ -1221,6 +1235,40 @@ async def choose_offer(ctx: Ctx, a: dict) -> dict:
     except BK.BasketError as e:
         raise ToolError("not_choosable", str(e))
     return {"chosen": _flight_out(row.get("snapshot") or {}, row), **({"price_moved": moved} if moved else {}), **(await _total(ctx, p))}
+
+
+def _flight_words(r: dict) -> str:
+    sn = r.get("snapshot") or {}
+    return " ".join(x for x in (sn.get("owner"), f"{sn.get('from') or ''} → {sn.get('to') or ''}".strip(" →"),
+                                str(sn.get("departs") or "")[:16].replace("T", " ")) if x) or "that flight"
+
+
+async def _pick_against_payment(ctx: Ctx, p: dict, row: dict, a: dict) -> Optional[dict]:
+    """Sasha 354 · a pick against what is pending now (agapi/pending): the flight already waiting for payment → that payment, said, with
+    its card; an earlier choice of this flight waiting for payment → its card and ONE question (keep it, or switch?) — the pick is held
+    for that answer. "switch" (their answer) → the earlier payment closed the basket's own way (expired at Stripe, its items cancelled,
+    never paid twice), then this one chosen. None: nothing pending stands in the way."""
+    from booking_signer import basket as BK, basket_book as BB
+    from agapi import pending as PEND
+    if row.get("state") == "pending_payment":
+        pay = await PEND.payment(ctx.account)
+        return {"status": "pending_payment", "say": PEND.payment_line(pay) if pay else "That flight is already waiting for your payment."}
+    waiting = [r for r in await BK.items(ctx.account, p["trip_id"], ("pending_payment",))
+               if r.get("kind") == "flight" and r["id"] != row["id"] and (r.get("slice_key") or "") == (row.get("slice_key") or "")]
+    if not waiting:
+        return None
+    pay = await PEND.payment(ctx.account)
+    if a.get("switch") and pay:
+        out = await BB._supersede(ctx.account, {"sid": pay["sid"], "trip_id": pay["trip_id"]})
+        if out:   # paid already, or the page couldn't be closed: said as it is, nothing changed
+            raise ToolError("not_switched", out["why"])
+        await PEND.drop_pick(ctx.account)
+        return None
+    pick = {"offer_id": row.get("provider_ref") or a.get("offer_id"), "trip_id": p["trip_id"], "new": _flight_words(row),
+            "old": _flight_words(waiting[0]), "sid": (pay or {}).get("sid")}
+    await PEND.hold_pick(ctx.account, pick)
+    return {"status": "pending_pick", "pending": pick, "ask": PEND.pick_line(pick),
+            "say": "Say its ask word for word and wait: their answer keeps the earlier flight, or switches to this one."}
 
 
 async def _trip_from_offers(ctx: Ctx, p: Optional[dict], a: dict) -> Optional[tuple]:
@@ -1951,8 +1999,10 @@ TOOLS: List[dict] = [
        "Give its offer_id, OR describe one of the trip's options (the proposal's flight cards, a search's): its leg and the airline "
        "and/or departure time a tap or the person named (\"the British Airways flight out at 08:30\"), or pick cheapest/fastest.",
        {"offer_id": {"type": "string"}, "leg": {"enum": ["out", "back"]}, "airline": {"type": "string"},
-        "departs": {"type": "string", "description": "HH:MM"}, "pick": {"enum": ["cheapest", "fastest"]}}, [], {"type": "object", "properties": {"chosen": FLIGHT, **TOTAL["properties"]}},
-       ["no_trip", "offer_not_in_trip", "not_choosable"], austen=True),
+        "departs": {"type": "string", "description": "HH:MM"}, "pick": {"enum": ["cheapest", "fastest"]},
+        "switch": {"type": "boolean", "description": "only when they answered “switch” to keeping an earlier flight that waits for payment"}},
+       [], {"type": "object", "properties": {"chosen": FLIGHT, **TOTAL["properties"]}},
+       ["no_trip", "offer_not_in_trip", "not_choosable", "not_switched"], austen=True),
     _t("save_travellers", "Austen", save_travellers, "Save the travellers the airline needs (asked once, kept on the account).",
        {"travellers": {"type": "array", "items": {"type": "object", "properties": {
            "given_name": {"type": "string"}, "family_name": {"type": "string"}, "date_of_birth": DATE,

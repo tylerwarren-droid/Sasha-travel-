@@ -30,12 +30,16 @@ ACTIONS: Dict[str, Dict[str, Any]] = {
     "book_all": {"label": "Book all", "say": "Book all", "tool": "group_book"},
     "invoice": {"label": "The invoice", "say": "The invoice", "tool": "group_invoice"},
     "invite_all": {"label": "Invite everyone to the vault", "say": "Invite everyone", "tool": "group_invite_vault"},
+    # Sasha 354 · a new pick while an earlier choice of that flight waits for payment: ONE question, its two answers
+    "keep": {"label": "Keep it", "say": "Keep the earlier one", "tool": None},
+    "switch": {"label": "Switch", "say": "Switch to the new one", "tool": "choose_offer"},
 }
 #: a view, not an action: the Trip tab (it says nothing; it opens what is already there)
 OPEN_TRIP = {"id": "open_trip", "label": "See the whole trip", "open": "trip"}
 
-TRIP_STATES = ("offers", "prepared", "chosen", "held", "pending_payment", "booked")
-_TRIP = {"offers": [], "prepared": ["see"], "chosen": ["book"], "held": ["yes"], "pending_payment": ["pay"], "booked": ["change", "cancel"]}
+TRIP_STATES = ("offers", "prepared", "chosen", "held", "pending_payment", "choice", "booked")
+_TRIP = {"offers": [], "prepared": ["see"], "chosen": ["book"], "held": ["yes"], "pending_payment": ["pay"], "choice": ["keep", "switch"],
+         "booked": ["change", "cancel"]}
 
 
 def action(aid: str, **more: Any) -> Dict[str, Any]:
@@ -52,8 +56,11 @@ def for_trip(state: Optional[str]) -> List[Dict[str, Any]]:
 
 
 def trip_state(*, held: bool = False, pending: bool = False, rows: Optional[List[dict]] = None, prepared: bool = False,
-               offers: bool = False) -> Optional[str]:
-    """The trip's state as its record has it (the caller reads the record; this only decides). rows: the trip's live basket rows."""
+               offers: bool = False, pick: bool = False) -> Optional[str]:
+    """The trip's state as its record has it (the caller reads the record; this only decides). rows: the trip's live basket rows.
+    pick: a new pick waiting for "keep or switch?" (Sasha 354) — the one question comes first."""
+    if pick:
+        return "choice"
     rows = [r for r in rows or [] if r.get("state") in ("suggested", "chosen", "pending_payment", "booked")]
     if pending or any(r["state"] == "pending_payment" for r in rows):
         return "pending_payment"
@@ -109,6 +116,8 @@ _PAY = re.compile(r"(?i)^\s*(?:pay(?: it)?(?: now)?(?: here)?|pay on (?:my|this)
 _BOOK_ALL = re.compile(r"(?i)^\s*book (?:them )?all(?: planned)?(?: of them)?[.! ]*$")
 _INVOICE = re.compile(r"(?i)^\s*(?:the |send me the |show me the )?invoice[.! ?]*$")
 _INVITE_ALL = re.compile(r"(?i)^\s*invite (?:them all|everyone|everybody|all of them)(?: to the vault)?[.! ]*$")
+_KEEP = re.compile(r"(?i)^\s*(?:keep (?:it|that|that one|the (?:first|earlier|old|other) (?:one|flight)?)|the earlier one)[.! ]*$")
+_SWITCH = re.compile(r"(?i)^\s*(?:switch(?: (?:it|to (?:it|that|the new (?:one|flight)|this one)))?|(?:take|use) the new (?:one|flight))[.! ]*$")
 _SEE = re.compile(r"(?i)^\s*(?:show me|see) the trip[.! ]*$")
 
 
@@ -118,6 +127,10 @@ def heard(text: Optional[str]) -> Optional[str]:
     t = (text or "").strip()
     if not t or len(t) > 60:
         return None
+    if _KEEP.match(t):
+        return "keep"
+    if _SWITCH.match(t):
+        return "switch"
     if _BOOK_ALL.match(t):
         return "book_all"
     if _BOOK.match(t):   # before the yes: "Ok, book it" asks to book (and, after a read-back, IS the yes — v0.next_uses)

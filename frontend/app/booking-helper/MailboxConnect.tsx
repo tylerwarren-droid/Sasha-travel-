@@ -11,6 +11,7 @@ import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
 import { gmailOffer, quietLine } from '@/lib/gmail-offer.mjs'   // Sasha 244 · never push a Gmail they don't have
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 type Find = { id: string; kind: string; action: string | null; status: string; offer_sha256: string | null; sentence: string | null }
 type View = { configured: boolean; invited?: boolean; connected: boolean; expired: boolean; consent: { version: string; text: string; sha256: string }; finds: Find[] }
@@ -89,14 +90,14 @@ export function MailboxConnect() {
             <div key={f.id} className="rounded border p-2">
               <p>{f.sentence}</p>
               <div className="flex gap-2">
-                <GatedButton label="Yes" onClick={() => { answer(f, true) }} needs={[busy && 'the last step to finish']} />
-                <GatedButton label="No" onClick={() => { answer(f, false) }} needs={[busy && 'the last step to finish']} />
+                <GatedButton label="Yes" onClick={() => { observe(answer(f, true), 'Your answer', setWords) }} needs={[busy && 'the last step to finish']} />
+                <GatedButton label="No" onClick={() => { observe(answer(f, false), 'Your answer', setWords) }} needs={[busy && 'the last step to finish']} />
               </div>
             </div>
           ))}
           <div className="flex gap-2">
-            <GatedButton label="Check my email now" onClick={() => { sync() }} needs={[busy && 'the last step to finish']} />
-            <GatedButton label="Disconnect" onClick={() => { disconnect() }} needs={[busy && 'the last step to finish']} />
+            <GatedButton label="Check my email now" onClick={() => { observe(sync(), 'Check my email now', setWords) }} needs={[busy && 'the last step to finish']} />
+            <GatedButton label="Disconnect" onClick={() => { observe(disconnect(), 'Disconnect', setWords) }} needs={[busy && 'the last step to finish']} />
           </div>
         </div>
       )}
@@ -110,7 +111,7 @@ export function MailboxConnect() {
         <div className="space-y-2">
           {view.expired && <p><strong>Your Gmail link stopped working.</strong> Google stopped accepting it — reconnect once and Sasha sees your booking emails again.</p>}
           <label className="flex items-start gap-2"><input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} /><span>{view.consent.text}</span></label>
-          <GatedButton label={view.expired ? 'Reconnect Gmail' : 'Connect Gmail (read-only)'} onClick={() => { connect() }}
+          <GatedButton label={view.expired ? 'Reconnect Gmail' : 'Connect Gmail (read-only)'} onClick={() => { observe(connect(), 'Connect Gmail', setWords) }}
             needs={[!ticked && 'the box above ticked', busy && 'the last step to finish']} />
         </div>
       )}

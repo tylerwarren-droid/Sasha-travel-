@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 /** Sasha 186 · the card's answers look and act like buttons on every panel (they read as plain text in the chat) */
 const YES_BTN = { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' } as const
@@ -20,6 +21,7 @@ export function FlightBookTest({ offerId: firstOffer, autoStart = false }: { off
   const [offerId, setOfferId] = useState(firstOffer)   // Sasha 183 · an expired offer comes back priced again, with a new id
   const [note, setNote] = useState<string | null>(null)
   const [p, setP] = useState<Phase>({ k: 'idle' })
+  const failWith = (t: string) => setP({ k: 'error', say: t })   // Sasha 347 · a failure the outcome path tells, on this card
   async function prepare() {
     setP({ k: 'reading' })
     const r = await bookingReq('/api/booking/travel/flight/prepare', { offer_id: offerId })
@@ -40,11 +42,11 @@ export function FlightBookTest({ offerId: firstOffer, autoStart = false }: { off
     if (!phone) window.open(String(r.json.url), '_blank', 'noopener')
   }
   // Sasha 182 · picked by words in the chat: the read-back at once; a typed or spoken "yes" answers it, as the button does
-  useEffect(() => { if (autoStart) prepare() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autoStart) observe(prepare(), 'Reading the flight', failWith) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (p.k !== 'readback') return
     const sha = p.sha
-    setPendingYes((said) => { yes(sha, said) })
+    setPendingYes((said) => { observe(yes(sha, said), 'Booking the flight', failWith) })
     return () => setPendingYes(null)
   }, [p])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -57,13 +59,13 @@ export function FlightBookTest({ offerId: firstOffer, autoStart = false }: { off
     }, 3000)
     return () => clearInterval(t)
   }, [p, offerId])
-  if (p.k === 'idle') return <button className="price" style={YES_BTN} onClick={() => { prepare() }}>Book it</button>
+  if (p.k === 'idle') return <button className="price" style={YES_BTN} onClick={() => { observe(prepare(), 'Reading the flight', failWith) }}>Book it</button>
   if (p.k === 'reading') return <span className="o2">Reading the offer…</span>
   if (p.k === 'readback') return (
     <div className="o2" style={{ maxWidth: 420 }}>
       {note && <div style={{ marginBottom: 4 }}>{note}</div>}
       <ul>{p.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
-      <button className="price" style={YES_BTN} onClick={() => { yes(p.sha) }}>Yes, book it</button>{' '}
+      <button className="price" style={YES_BTN} onClick={() => { observe(yes(p.sha), 'Booking the flight', failWith) }}>Yes, book it</button>{' '}
       <button className="viewlink" style={NO_BTN} onClick={() => setP({ k: 'idle' })}>No</button>
     </div>
   )

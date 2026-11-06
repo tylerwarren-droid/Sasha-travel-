@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from 'react'
 import { bookingReq } from '@/lib/booking-client'
+import { heard as heardWords, failed, observe, stillGoing, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path
 import { T, TONE, page, card as cardS, field, btn, btn2, small } from '@/lib/group-theme'   // Sasha 336 · readable on the dark theme
 
 type Row = { member_id: string; name: string; grade?: string | null; home_city?: string | null; out?: string | null; back?: string | null
@@ -46,29 +47,27 @@ export default function GroupPage() {
       const r = await bookingReq('/api/booking/group/list').catch(() => null)
       if (!off && r?.ok) setV(r.json as unknown as View)
     }
-    pull()
+    observe(pull(), 'Reading the master list', toConsole)
     bookingReq('/api/booking/group/waiting').then(r => {   // Sasha 340 · a moved fare's card survives a reload
       const re = ((r?.json || {}) as { reasked?: NonNullable<typeof card>[] }).reasked || []
       if (!off && re.length) { setCard(re[0]); setQueue(re.slice(1)) }
-    }).catch(() => {})
-    const t = setInterval(pull, 6000)
+    }).catch(e => setSaid(failed('Reading the cards waiting for a yes', e)))
+    const t = setInterval(() => observe(pull(), 'Reading the master list', toConsole), 6000)
     return () => { off = true; clearInterval(t) }
   }, [])
 
-  // Sasha 346 · THE ONE READER of every answer: the server's words (say / why / message), else what happened to the request — never empty
+  // Sasha 346 · every answer through the ONE reader (lib/outcome, Sasha 347): the server's words, else what happened to the request
   const heard = (name: string, r: { ok: boolean; status: number; json: Record<string, unknown> } | null): Record<string, unknown> => {
     const j = (r?.json || {}) as Record<string, unknown>
-    const words = String(j.say || j.why || j.message || '').trim()
     setMissing(Array.isArray(j.missing) ? (j.missing as string[]) : [])
-    setSaid(words || (!r ? `${name}: Sasha’s server didn’t answer — nothing was changed. Try again.`
-      : `${name}: the server answered ${r.status} without words — nothing was changed. Try again.`))
+    setSaid(heardWords(name, r))
     return j
   }
   // a press while another action runs is TOLD so — the button is never greyed out
   const press = (name: string, fn: () => Promise<unknown>) => () => {
-    if (busy) { setSaid(`${busy} is still running — its answer comes here first. Then ${name}.`); return }
+    if (busy) { setSaid(stillGoing(busy, name)); return }
     setInvoiceLink(null)
-    fn().catch(e => { setBusy(false); setSaid(`${name}: ${(e as Error).message || 'it didn’t go through'} — nothing was changed. Try again.`) })
+    fn().catch(e => { setBusy(false); setSaid(failed(name, e)) })
   }
   const send = async (body: Record<string, unknown>) => {
     setBusy('Add these'); setSaid('Adding…')

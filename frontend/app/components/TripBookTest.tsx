@@ -10,6 +10,7 @@ import { untag } from '@/lib/no-test-label.mjs'   // Sasha 218
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 /** Sasha 186 · the card's answers look and act like buttons on every panel (they read as plain text in the chat) */
 const YES_BTN = { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' } as const
@@ -21,9 +22,10 @@ type Phase = { k: 'reading' } | { k: 'readback'; lines: string[]; sha: string; s
 
 export function TripBookTest({ from }: { from: string }) {
   const [p, setP] = useState<Phase>({ k: 'reading' })
+  const failWith = (t: string) => setP({ k: 'error', say: t })   // Sasha 347 · a failure the outcome path tells, on this card
   useEffect(() => {
     let off = false
-    bookingReq('/api/booking/travel/trip/prepare', { from }, 60000)
+    observe(bookingReq('/api/booking/travel/trip/prepare', { from }, 60000)
       .catch((e: Error) => ({ ok: false, status: 0, json: { message: e.message } as Record<string, unknown> }))
       .then((r) => {
         if (off) return
@@ -31,7 +33,7 @@ export function TripBookTest({ from }: { from: string }) {
         if (!r.ok) return setP({ k: 'error', say: `Not booked — ${refusal(r.json, r.status)}.` })
         const rb = r.json.read_back as { lines: string[]; sha256: string }
         setP({ k: 'readback', lines: rb.lines, sha: rb.sha256, sum: (r.json.summary ?? null) as Summary | null })
-      })
+      }), 'Reading the trip', failWith)
     return () => { off = true }
   }, [from])
   async function yes(sha: string, said: string | null = null) {
@@ -45,7 +47,7 @@ export function TripBookTest({ from }: { from: string }) {
   useEffect(() => {
     if (p.k !== 'readback') return
     const sha = p.sha
-    setPendingYes((said) => { yes(sha, said) })
+    setPendingYes((said) => { observe(yes(sha, said), 'Booking the trip', failWith) })
     return () => setPendingYes(null)
   }, [p])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -71,7 +73,7 @@ export function TripBookTest({ from }: { from: string }) {
         </div>
       ) : <ul style={{ margin: 0, paddingLeft: 18 }}>{p.lines.map((l, i) => <li key={i} style={{ marginBottom: 3 }}>{l}</li>)}</ul>}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="price" style={YES_BTN} onClick={() => { yes(p.sha) }}>Yes, book it</button>
+        <button className="price" style={YES_BTN} onClick={() => { observe(yes(p.sha), 'Booking the trip', failWith) }}>Yes, book it</button>
         <button className="viewlink" style={NO_BTN} onClick={() => setP({ k: 'no' })}>No</button>
       </div>
     </div>

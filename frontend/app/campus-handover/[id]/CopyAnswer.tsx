@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 /** CR 1 · copies one answer. Every outcome is shown: copied, or why not (then the text is there to select by hand). */
 export default function CopyAnswer({ text }: { text: string }) {
@@ -14,7 +15,7 @@ export default function CopyAnswer({ text }: { text: string }) {
     }
   }
   return (
-    <button type="button" onClick={copy} className="ml-2 rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50">
+    <button type="button" onClick={() => observe(copy(), 'Copy', () => setState('failed'))} className="ml-2 rounded border border-slate-300 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-50">
       {state === 'copied' ? 'Copied ✓' : state === 'failed' ? 'Copy blocked — select it by hand' : 'Copy'}
     </button>
   )

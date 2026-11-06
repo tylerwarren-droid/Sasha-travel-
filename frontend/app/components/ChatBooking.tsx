@@ -25,6 +25,7 @@ import { ChatBookingDo } from './ChatBookingDo'
 import ChatBookingCall from './ChatBookingCall'
 import ChatBookingLink from './ChatBookingLink'
 import { SignInToBook } from './SignedInLine'
+import { observe, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 type Find = { what: string; where?: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown; named?: boolean
   bare_time?: { day: string; hour: number; minute: number } }
@@ -112,8 +113,8 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
       const hit = all.find((b) => !seen!.has(String(b.id)) && b.date === at.slice(0, 10) && (b.time ?? '') === at.slice(11, 16))
       if (hit) setElsewhere(`Booked on your phone ✅ — ${hit.venue.replace(/ \(TEST stand-in\)$/, '')}, ${hit.time} — it's on Day ${hit.day} of your trip.`)
     }
-    look()
-    const t = setInterval(look, 5000)
+    observe(look(), 'Checking the trip for this booking', toConsole)
+    const t = setInterval(() => observe(look(), 'Checking the trip for this booking', toConsole), 5000)
     return () => { off = true; clearInterval(t) }
   }, [find])
   const stateRef = useRef(state)
@@ -135,7 +136,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
   useEffect(() => {
     if (preset) return   // Sasha 213 · the turn's own cards: no second search
     let off = false
-    ;(async () => {
+    ;observe((async () => {
       setState({ phase: 'finding' })
       try {
         const r = await findVenues(find.what, find.where, find.country, find.near, find.open_at, find.named)
@@ -158,7 +159,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
       } catch (e) {
         if (!off) setState({ phase: 'refused', words: `I couldn't search just now: ${(e as Error).message}.` })
       }
-    })()
+    })(), 'Reading the places', toConsole)
     return () => { off = true }
   // Sasha 86 · every booking message starts afresh — a new `find` object, even for the same words, drops the last pick,
   // its read and its details card, so nothing from an earlier request (another day, another count) is carried over
@@ -188,7 +189,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
     const need = s.cards.filter((c) => !(c.place_id in styles))
     if (!need.length) return
     setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, 'reading' as const])) }))
-    ;(async () => {
+    ;observe((async () => {
       try {
         const r = await styleVenues(find.what, need.map((c) => ({ place_id: c.place_id, website: c.website })))
         const got = (r.ok ? (r.json.styles ?? {}) : {}) as Record<string, Style>
@@ -197,7 +198,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
       } catch (e) {
         setStyles((m) => ({ ...m, ...Object.fromEntries(need.map((c) => [c.place_id, { why: (e as Error).message }])) }))
       }
-    })()
+    })(), 'Reading the places', toConsole)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the cards shown change
   }, [shownIds])
   useEffect(() => {
@@ -205,11 +206,11 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
     if (s.phase !== 'found') return
     const names = s.cards.filter((c) => !c.gphoto?.uri).map((c) => c.gphoto?.name).filter((n): n is string => !!n && !(n in gphotos))
     if (!names.length) return
-    ;(async () => {
+    ;observe((async () => {
       const r = await bookingReq('/api/booking/venues/gphotos', { names, width: 480 }).catch(() => null)
       const got = (r?.ok ? (r.json.photos ?? {}) : {}) as Record<string, string>
       if (Object.keys(got).length) setGphotos((m) => ({ ...m, ...got }))
-    })()
+    })(), 'Reading the places', toConsole)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the cards shown change
   }, [shownIds])
 

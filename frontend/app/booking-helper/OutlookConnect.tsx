@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { bookingHeaders, bookingUrl } from '@/lib/booking-api'
 import { GatedButton } from './GatedButton'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 type View = { configured: boolean; invited?: boolean; connected: boolean; consent: { version: string; text: string; sha256: string } }
 
@@ -73,13 +74,13 @@ export function OutlookConnect() {
       {view && view.configured && view.connected && (
         <div className="space-y-2">
           <p>Connected. Ask Sasha &ldquo;what subscriptions am I paying for?&rdquo; — she reads only receipt and renewal emails.</p>
-          <GatedButton label="Disconnect" onClick={() => { disconnect() }} needs={[busy && 'the last step to finish']} />
+          <GatedButton label="Disconnect" onClick={() => { observe(disconnect(), 'Disconnect', setWords) }} needs={[busy && 'the last step to finish']} />
         </div>
       )}
       {view && view.configured && view.invited !== false && !view.connected && (
         <div className="space-y-2">
           <label className="flex items-start gap-2"><input type="checkbox" checked={ticked} onChange={(e) => setTicked(e.target.checked)} /><span>{view.consent.text}</span></label>
-          <GatedButton label="Connect Outlook (read-only)" onClick={() => { connect() }}
+          <GatedButton label="Connect Outlook (read-only)" onClick={() => { observe(connect(), 'Connect Outlook', setWords) }}
             needs={[!ticked && 'the box above ticked', busy && 'the last step to finish']} />
         </div>
       )}

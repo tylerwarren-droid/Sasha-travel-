@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 /**
  * CR 8 · "Return to applicant with this list". Every outcome is shown: recorded (with the exact message), or why not.
@@ -30,7 +31,7 @@ export default function ReturnButton({ caseId, appId, message, already }: { case
       {state.kind === 'done' ? (
         <p className="text-sm text-emerald-800">↩ Returned to the applicant with this list{state.at ? ` (${new Date(state.at).toUTCString().replace(' GMT', ' UTC')})` : ''}. Illustration: recorded only — nothing was sent.</p>
       ) : (
-        <button type="button" onClick={send} className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">
+        <button type="button" onClick={() => observe(send(), 'Return', (t: string) => setState({ kind: 'failed', why: t }))} className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">
           {state.kind === 'busy' ? 'Returning…' : 'Return to applicant with this list'}
         </button>
       )}

@@ -26,6 +26,7 @@ import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · t
 import { TRIP_BOARD_CSS } from './tripBoardCss'
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { bookingReq } from '@/lib/booking-client'   // Sasha 283 · the trip card reads the Trip view's own record
+import { again, needs, observe, stillGoing, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: every press answers, no promise floats
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
@@ -225,7 +226,7 @@ function useSpeaker() {
       if (primed.current || playing.current) return
       try { const a = audio(); a.src = SILENT; a.play().then(() => { primed.current = true }).catch(() => {}) } catch { /* no audio */ }
     },
-    say: (t: string) => { if (on.current && !muted.current && !asleep.current && t.trim()) { q.current.push(t); next() } },
+    say: (t: string) => { if (on.current && !muted.current && !asleep.current && t.trim()) { q.current.push(t); observe(next(), 'Her voice', toConsole) } },
     sayNow: async (t: string) => { emit(true); const r = muted.current || asleep.current ? 'played' as const : await mp3(t); if (r === 'played') on.current = true; emit(false); return r },
     setRoute: (fn: ((t: string) => Promise<void>) | null) => { route.current = fn },
     heard: () => { audibleSubs.current.forEach(f => f()) },   // Sasha 281 · her face started a line (its audio isn't the page's element)
@@ -239,7 +240,7 @@ function useSpeaker() {
     onAudible: (fn: () => void) => { audibleSubs.current.add(fn); return () => { audibleSubs.current.delete(fn) } },
     /** Sasha 232 · a reply the phone refused to play: the toggle says so (never "Voice on" while she's silent); a tap replays it. */
     onBlocked: (fn: (b: boolean) => void) => { blockSubs.current.add(fn); return () => { blockSubs.current.delete(fn) } },
-    replayBlocked: () => { const t = lastBlocked.current; setBlocked(null); if (t && !muted.current && !asleep.current) { q.current.unshift(t); next() } },
+    replayBlocked: () => { const t = lastBlocked.current; setBlocked(null); if (t && !muted.current && !asleep.current) { q.current.unshift(t); observe(next(), 'Her voice', toConsole) } },
     /** Sasha 246 item 2 · asleep: what she's saying stops mid-word (as interrupt) and nothing is said until she wakes. */
     setAsleep: (a: boolean) => {
       asleep.current = a
@@ -269,7 +270,10 @@ function DiscoverCards({ c, choose }: { c: Extract<Card, { k: 'discover' }>; cho
   const byRef = new Map(c.options.map(o => [String(o.ref), o]))
   const asCard = (o: Ev) => ({ place_id: String(o.place_id || o.ref), name: o.name, rating: o.rating, rating_count: o.reviews, type: o.type,
                                photo: o.photo?.url || undefined, ...(o.kind === 'independent' ? { website: o.link } : {}) })
-  const copy = (v: string) => { try { void navigator.clipboard?.writeText(v) } catch { /* the person copies by hand */ } }
+  // Sasha 347 · Copy answers: "Copied ✓" on the button, or why it didn't (then they copy by hand) — never a silent press
+  const [copied, setCopied] = useState<{ label: string; said: string } | null>(null)
+  const copy = (label: string, v: string) => observe((navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject(new Error('this browser gives no clipboard')))
+    .then(() => setCopied({ label, said: 'Copied ✓' })), 'Copy', t => setCopied({ label, said: t }))
   return (
     <div data-discover style={{ width: '100%' }}>
       {c.groups.map(g => {
@@ -296,8 +300,9 @@ function DiscoverCards({ c, choose }: { c: Extract<Card, { k: 'discover' }>; cho
           {(over.hand_over.fields || []).map((f: Ev, i: number) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 0', fontSize: 14 }}>
               <span><span style={{ color: C.dim }}>{untag(String(f.label))}: </span>{untag(String(f.value))}</span>
-              <button type="button" data-copy={String(f.label)} onClick={() => copy(String(f.value))} style={{ padding: '4px 10px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600, fontSize: 12.5 }}>Copy</button>
+              <button type="button" data-copy={String(f.label)} onClick={() => copy(String(f.label), String(f.value))} style={{ padding: '4px 10px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600, fontSize: 12.5 }}>{copied?.label === String(f.label) && copied.said === 'Copied ✓' ? 'Copied ✓' : 'Copy'}</button>
             </div>))}
+          {copied && copied.said !== 'Copied ✓' ? <div role="status" style={{ fontSize: 13, color: C.dim }}>{copied.said}</div> : null}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             {over.hand_over.link ? <a href={String(over.hand_over.link)} target="_blank" rel="noopener noreferrer" data-hand-over-link style={{ padding: '9px 16px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>Open their page</a> : null}
             <button type="button" onClick={() => setOver(null)} style={{ padding: '9px 16px', borderRadius: 999, border: `1px solid ${C.line}`, background: 'transparent', color: C.dim }}>Close</button>
@@ -391,11 +396,11 @@ function Clip({ busy, send, say, onGroup }: { busy: boolean; send: (t: string) =
   const item = { display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', background: 'transparent', border: 0, color: '#fff', fontSize: 15 } as const
   return (
     <div style={{ position: 'relative', flex: 'none' }}>
-      <input ref={stmt} type="file" accept=".csv,.pdf,image/*" hidden onChange={e => picked('statement', e.target.files?.[0])} aria-label="A bank statement" />
-      <input ref={card} type="file" accept="image/*" hidden onChange={e => picked('card', e.target.files?.[0])} aria-label="A card (photo or Wallet screenshot)" />
-      <input ref={grp} type="file" accept=".csv,.xlsx,image/*" hidden onChange={e => pickedGroup(e.target.files?.[0])} aria-label="A group list (csv, xlsx or a photo)" />
-      <button type="button" onClick={() => setOpen(o => !o)} disabled={busy || working} aria-label="Add a statement or a card" aria-expanded={open}
-        style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 18, opacity: busy || working ? 0.5 : 1 }}>
+      <input ref={stmt} type="file" accept=".csv,.pdf,image/*" hidden onChange={e => observe(picked('statement', e.target.files?.[0]), 'The upload', say)} aria-label="A bank statement" />
+      <input ref={card} type="file" accept="image/*" hidden onChange={e => observe(picked('card', e.target.files?.[0]), 'The upload', say)} aria-label="A card (photo or Wallet screenshot)" />
+      <input ref={grp} type="file" accept=".csv,.xlsx,image/*" hidden onChange={e => observe(pickedGroup(e.target.files?.[0]), 'The upload', say)} aria-label="A group list (csv, xlsx or a photo)" />
+      <button type="button" onClick={() => { if (busy || working) { say(stillGoing(working ? 'The upload' : 'Sasha’s reply', '📎')); return } setOpen(o => !o) }} aria-label="Add a statement or a card" aria-expanded={open}
+        style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 18 }}>
         {working ? '…' : '📎'}</button>
       {open && (
         <div role="menu" style={{ position: 'absolute', bottom: 48, left: 0, minWidth: 250, background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,.5)', zIndex: 20 }}>
@@ -427,6 +432,7 @@ const isYes = (route: string) => YES.has(route) || /^say:yes\b/i.test(route)
  *  "Yes, cancel it" / "No, keep it" go to the same tap; a "say:<words>" route sends its words as their own message. */
 function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (title: string, readBackId: string, route: string) => void }) {
   const [tapped, setTapped] = useState<string | null>(null)
+  const [twice, setTwice] = useState<string | null>(null)   // Sasha 347 · a second press is TOLD (nothing is sent twice), never greyed out
   const head = c.act === 'cancel' ? 'Ready to cancel · one tap'
     : c.total ? `Ready to book · €${Math.round(c.total).toLocaleString()} all in` : 'Your booking · one tap'
   return (
@@ -434,11 +440,12 @@ function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (titl
       {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
         {(c.choices || []).map(o => (
-          <button key={o.route} type="button" disabled={!!tapped} data-card-choice={o.route}
-            onClick={() => { setTapped(o.route); tap(o.title, c.read_back_id || '', o.route) }}
+          <button key={o.route} type="button" data-card-choice={o.route}
+            onClick={() => { if (tapped) { setTwice(again((c.choices || []).find(x => x.route === tapped)?.title || tapped)); return } setTapped(o.route); tap(o.title, c.read_back_id || '', o.route) }}
             style={{ padding: '10px 18px', borderRadius: 999, border: isYes(o.route) ? 0 : `1px solid ${C.gold}`, background: isYes(o.route) ? C.gold : 'transparent',
               color: isYes(o.route) ? '#111' : C.gold, fontWeight: 700, opacity: tapped && tapped !== o.route ? 0.4 : 1 }}>{o.title}</button>))}
       </div>
+      {twice ? <div role="status" data-card-twice style={{ fontSize: 13.5, color: C.dim, marginTop: 6 }}>{twice}</div> : null}
     </Box>)
 }
 
@@ -446,17 +453,19 @@ function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (titl
  *  call, no new card · "Fill in their form" → their page), or — the second time — their page alone. Labels and words: the engine's. */
 function NoAnswerCard({ c, tap }: { c: Extract<Card, { k: 'no_answer' }>; tap: (title: string, actId: string, route: string) => void }) {
   const [tapped, setTapped] = useState(false)
+  const [twice, setTwice] = useState<string | null>(null)   // Sasha 347 · a second press is told, never greyed out
   const pill = (gold: boolean) => ({ padding: '10px 18px', borderRadius: 999, border: gold ? 0 : `1px solid ${C.gold}`, background: gold ? C.gold : 'transparent',
     color: gold ? '#111' : C.gold, fontWeight: 700, textDecoration: 'none', display: 'inline-block' })
   return (
     <Box k="No answer" h={untag(c.ask || '')}>
       <div data-no-answer={c.act_id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
         {c.choices.map(o => o.id === 'call_again'
-          ? <button key={o.id} type="button" disabled={tapped} data-card-choice="call_again" style={{ ...pill(true), opacity: tapped ? 0.4 : 1 }}
-              onClick={() => { setTapped(true); tap(o.label, c.act_id, 'call_again') }}>{o.label}</button>
+          ? <button key={o.id} type="button" data-card-choice="call_again" style={{ ...pill(true), opacity: tapped ? 0.4 : 1 }}
+              onClick={() => { if (tapped) { setTwice(again(o.label)); return } setTapped(true); tap(o.label, c.act_id, 'call_again') }}>{o.label}</button>
           : (o.page || c.page) ? <a key={o.id} href={o.page || c.page} target="_blank" rel="noopener noreferrer" data-card-choice="their_page" style={pill(false)}>{o.label}</a> : null)}
         {!c.choices.length && c.page ? <a href={c.page} target="_blank" rel="noopener noreferrer" data-card-choice="their_page" style={pill(false)}>{untag(c.page)}</a> : null}
       </div>
+      {twice ? <div role="status" data-card-twice style={{ fontSize: 13.5, color: C.dim, marginTop: 6 }}>{twice}</div> : null}
     </Box>)
 }
 
@@ -639,7 +648,7 @@ export default function S2App() {
     fetch('/api/s2-me', { cache: 'no-store' }).then(r => r.json()).then(j => setName(j?.name || null)).catch(() => setName(null))
     return () => clearTimeout(t)
   }, [signedIn])
-  useEffect(() => { if (name !== undefined) void arrivalLine(name, !!name, false).then(setGreet) }, [name])
+  useEffect(() => { if (name !== undefined) observe(arrivalLine(name, !!name, false).then(setGreet), 'Her greeting', toConsole) }, [name])
   const histRef = useRef<{ role: string; content: string }[]>([])
   // Sasha 231 · "thanks / bye" → she rests: faded, the mic off (not listening) until a tap; a tap brings her back, no re-introduction
   const [dormant, setDormant] = useState(false)
@@ -808,8 +817,8 @@ export default function S2App() {
                 visible: null as number | null, audible: null as number | null, done: null as number | null, sent: false }
     const offAudible = speaker.onAudible(() => { if (m.audible === null) m.audible = Date.now() - m.t0 })
     const postM = () => { if (m.sent || !m.tid) return; m.sent = true; offAudible()
-      void fetch('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
-        body: JSON.stringify({ tid: m.tid, channel: m.channel, surface: 's2', first_visible_ms: m.visible, first_audible_ms: m.audible, done_ms: m.done }) }).catch(() => {}) }
+      observe(fetch('/api/sasha-agent/timing', { method: 'POST', headers: { 'content-type': 'application/json' }, keepalive: true,
+        body: JSON.stringify({ tid: m.tid, channel: m.channel, surface: 's2', first_visible_ms: m.visible, first_audible_ms: m.audible, done_ms: m.done }) }), 'The timing note', toConsole) }
     // Sasha 257 · Jon (row 861): "she can't hear me or just doesn't respond — tried 5 times". One turn reached her; the rest were
     // DROPPED here while a reply was still open (busy). A message sent while she's answering is kept and sent next — never lost.
     // Sasha 283 · item 4c · her ONE question waits ("Did it go through?"): a plain yes / no answers it, on its record — never a turn
@@ -819,7 +828,7 @@ export default function S2App() {
       answerWordRef.current?.(wordKey.current, word, spokenAt ? 'voice' : 'chat')
       return
     }
-    if (helloCtl.current?.waiting()) void helloCtl.current.bye('', false)   // Sasha 295 · he typed or spoke before the tap: the opening ends, no hello
+    if (helloCtl.current?.waiting()) observe(helloCtl.current.bye('', false), 'Her opening', toConsole)   // Sasha 295 · he typed or spoke before the tap: the opening ends, no hello
     setSoundNote(null)
     if (busy) { queued.current = [...queued.current, t]; setInput(''); return }
     if (dormant) setDormant(false)   // Sasha 231 · a message wakes her, with no re-introduction
@@ -840,9 +849,9 @@ export default function S2App() {
     if (onCamera) {
       if (said1) patch(m => ({ ...m, hold: said1 }))
       byeUntil.current = Date.now() + 9000   // her line first: the stream's lines are shown, not spoken over it
-      void helloCtl.current?.bye(said1 || '', !muted)
+      observe(helloCtl.current?.bye(said1 || '', !muted), 'Her opening', toConsole)
     } else {
-      if (leaving) void helloCtl.current?.bye('', false)   // to the corner, before a word is said (S2Hello speak)
+      if (leaving) observe(helloCtl.current?.bye('', false), 'Her opening', toConsole)   // to the corner, before a word is said (S2Hello speak)
       if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }
     }
     let reply = ''
@@ -878,7 +887,7 @@ export default function S2App() {
           else if (ev.type === 'tool_start' && helloCtl.current?.big()) {   // Sasha 268 · a request the rule missed: the first tool it starts
             const l = helloCtl.current.live() ? helloCtl.current.settleLine() : ''   // Sasha 281 · the camera line only on her live lips · 296: once a session
             if (l) { patch(m => ({ ...m, hold: l })); byeUntil.current = Date.now() + 9000 }
-            void helloCtl.current.bye(l, !muted) }
+            observe(helloCtl.current.bye(l, !muted), 'Her opening', toConsole) }
           else if (ev.type === 'hold') { if (ev.first && said1) continue; patch(m => ({ ...m, hold: ev.text })); if (Date.now() > byeUntil.current) speaker.say(ev.say || ev.text) }   // 265 · never twice   // Sasha 257 · the holding line (row 863)
           else if (ev.type === 'replace') { reply = ev.text; patch(m => ({ ...m, text: untag(reply) })); if (ev.speak && ev.say) speaker.say(ev.say) }
           else if (ev.type === 'error') { reply = ev.message; patch(m => ({ ...m, text: untag(reply) })); speaker.say(ev.message) }
@@ -937,17 +946,21 @@ export default function S2App() {
       setTimeout(() => checkReleaseRef.current?.(), 0)   // Sasha 274 · a turn ended: a new release? (reloads only at a safe moment)
     }
   }, [busy, speaker, dormant, sleepEvent, muted, touch])
+  // Sasha 347 · THE ONE OUTCOME PATH here: her line in the conversation (tell), and a send whose failure is told there (sendNow) — every
+  // tap, chip, card choice, the mic and the box go through sendNow; nothing a person presses floats
+  const tell = useCallback((t: string) => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }]), [])
+  const sendNow = useCallback((...a: Parameters<typeof send>) => observe(send(...a), 'Your message', tell), [send, tell])
   useEffect(() => {   // Sasha 257 · what they said while she was answering goes next, in order (never dropped)
     if (busy || asleep || !queued.current.length) return   // Sasha 268 · paused: it waits for Wake — a message typed BEFORE the pause never undoes it
     const [nxt, ...rest] = queued.current
     queued.current = rest
-    void send(nxt)
-  }, [busy, asleep, send])
+    sendNow(nxt)
+  }, [busy, asleep, sendNow])
 
   // Sasha 265 · item 3 · NEW CHAT: the conversation goes from the screen AND from her short-term memory, in its one place (the
   // conversation record, DELETE /api/s2-memory → s2_memory.clear_conversation — the same clear as /next). Bookings, trips and
   // receipts stay (the trip record). Only once the record says it's cleared is the screen cleared; if not, she says so.
-  useEffect(() => { void loadFirstLine() }, [])
+  useEffect(() => { observe(loadFirstLine(), 'Her first line', toConsole) }, [])
   useEffect(() => { holdPlayAndRecord('the page') }, [])   // Sasha 267 · before her face or voice starts, before any mic request   // Sasha 265 · item 5: voice.first_line's words and rule, read once
   const [clearing, setClearing] = useState(false)
   const helloCtl = useRef<HelloCtl | null>(null)   // Sasha 268 · her arrival: big? and bye (the line, then the circle)
@@ -1029,17 +1042,21 @@ export default function S2App() {
       speaker.say(text)
     }).catch(() => { /* asked again at the next return */ }).finally(() => { askingWord.current = false })
   }, [speaker])
+  const NOT_NOTED = 'I couldn’t note that just now — tell me again in a moment.'   // her line when the record didn't take their word
   const answerWord = useCallback((key: string, booked: boolean, how: string) => {
     if (wordKey.current !== key) return
     wordKey.current = null
     setMsgs(ms => ms.map(m => ({ ...m, cards: m.cards.map(c => (c.k === 'did_it' && c.key === key ? { ...c, done: true } : c)) })))
     bookingReq('/api/booking/handover/word', { key, booked, how }).then(r => {
-      const say = r.ok && typeof r.json.say === 'string' ? r.json.say : 'I couldn’t note that just now — tell me again in a moment.'
+      const say = r.ok && typeof r.json.say === 'string' ? r.json.say : NOT_NOTED
       setMsgs(ms => [...ms, { role: 'sasha', text: say, cards: [] }])
       histRef.current = [...histRef.current, { role: 'assistant', content: say }]
       speaker.say(say)
       window.dispatchEvent(new Event('sasha-plan-refresh'))
-    }).catch(() => { wordKey.current = key })
+    }).catch(() => {   // Sasha 347 · their tap is answered even when the note failed: said, and the question stays open
+      wordKey.current = key
+      setMsgs(ms => [...ms, { role: 'sasha', text: NOT_NOTED, cards: [] }])
+    })
   }, [speaker])
   useEffect(() => {
     const h = (e: Event) => { const d = (e as CustomEvent).detail || {}; answerWord(String(d.key), !!d.booked, String(d.how || 'button')) }
@@ -1100,7 +1117,7 @@ export default function S2App() {
     return () => clearTimeout(t)
   }, [signedIn])
   const typeNow = () => typeBox.current?.focus()
-  const starter = (t: string) => { listenOnTap(); void send(t) }
+  const starter = (t: string) => { listenOnTap(); sendNow(t) }
   const noSound = () => { setSoundNote(NO_SOUND); typeBox.current?.focus() }
   const hello = <S2Hello talker={speaker} name={name} signedIn={signedIn} backLine={backLine} dormant={dormant} asleep={asleep} onWake={() => sleepEvent('tap_face')}
     started={tab !== 'sasha'} ctlRef={helloCtl} arrive={arrive !== undefined ? arrive : quick} micLive={micLive} lead={lead} working={working}
@@ -1150,7 +1167,7 @@ export default function S2App() {
                 <div style={{ fontSize: 28, fontWeight: 600, fontFamily: "'Playfair Display',Georgia,serif", lineHeight: 1.25 }}>{greet}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 22 }}>
                   {STARTERS.map(c => (   /* Sasha 295 · the opening's starters (backend s2_home.STARTERS), never a rotating eight */
-                    <button key={c} data-starter onClick={() => { speaker.unlock(); listenOnTap(); send(c) }} style={{ padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 14.5 }}>{c}</button>))}
+                    <button key={c} data-starter onClick={() => { speaker.unlock(); listenOnTap(); sendNow(c) }} style={{ padding: '9px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 14.5 }}>{c}</button>))}
                 </div>
               </div>)
             ) : msgs.map((m, i) => (
@@ -1160,7 +1177,7 @@ export default function S2App() {
                     {m.text}</div>
                 ) : <div aria-busy="true" data-sasha-working style={{ color: C.dim, padding: '8px 4px' }}>{m.hold || '…'}</div>}{/* Sasha 259 · ONE working mark: the holding line, else "…" (aria-busy says she's working) */}
                 {/* Sasha 230 · a pick sends the card's name QUOTED: a listing like "Comida Hindu - Restaurante India, NAMASTE INDIA(…)" + ", please." read as TWO places — she asked which, the yes didn't answer it, the loop */}
-                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); send(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); send(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); send(t) }} tap={(title, rid, route) => { speaker.unlock(); if (route.startsWith('say:')) { send(route.slice(4)); return }   /* Sasha 330 · a typed-word tap: their own words */ send(title, undefined, route === 'call_again' ? { act_id: rid, choice: route } : { read_back_id: rid, choice: route }) }} />)}</div> : null}
+                {m.cards.length ? <div style={{ width: '100%', minWidth: 0, maxWidth: '100%' }}>{m.cards.map((c, j) => <CardView key={j} c={c} choose={t => { speaker.unlock(); sendNow(`This one: “${t}”`) }} pick={(t, id) => { speaker.unlock(); sendNow(`This one: “${t}”`, { place_id: id }) }} send={t => { speaker.unlock(); sendNow(t) }} tap={(title, rid, route) => { speaker.unlock(); if (route.startsWith('say:')) { sendNow(route.slice(4)); return }   /* Sasha 330 · a typed-word tap: their own words */ sendNow(title, undefined, route === 'call_again' ? { act_id: rid, choice: route } : { read_back_id: rid, choice: route }) }} />)}</div> : null}
               </div>))}
             <div ref={end} />
           </section>
@@ -1188,8 +1205,8 @@ export default function S2App() {
             ) : (   /* her SPEAKER (Sasha 230's remembered mute) — its own word, never "Voice": that word is the mic's */
             <button onClick={() => { const m = !muted; setMuted(m); speaker.setMuted(m); if (!m) speaker.unlock(); try { localStorage.setItem('s2_muted', m ? '1' : '0') } catch { /* private mode */ } }} aria-pressed={muted} aria-label={muted ? 'Her sound is off — turn it on' : 'Her sound is on — mute it'} title={muted ? 'Sound off' : 'Sound on'} style={{ background: 'none', border: 0, color: muted ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, fontSize: 17, opacity: muted ? 0.6 : 1 }}>
               {muted ? '🔇' : '🔊'}</button>)}
-            <button onClick={() => { listenOnTap(); void newChat() }} disabled={busy || clearing} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
-              style={{ background: 'none', border: 0, color: busy || clearing ? C.dim : C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
+            <button onClick={() => { listenOnTap(); if (busy || clearing) { tell(stillGoing(clearing ? 'Clearing the conversation' : 'Sasha’s reply', 'New chat')); return } observe(newChat(), 'New chat', tell) }} aria-label="New chat" title="Clear this conversation — your bookings and trips stay"
+              style={{ background: 'none', border: 0, color: C.gold, padding: 4, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>＋ New chat</button>{/* Sasha 265 · item 3 */}
             <span style={{ flex: 1 }} />
             <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40, flexShrink: 0 }} />{/* her corner: S2Hello's circle sits over this space (Sasha 271 · measured, never portalled) */}
           </div>
@@ -1198,17 +1215,17 @@ export default function S2App() {
                 on the mic itself — "Voice on" and its green ring only while it hears; otherwise "Tap to talk" (the tap starts or resumes it) */}
             {(() => { const vo = voiceOf({ asleep, dormant, micLive }); const cue = cueOf({ asleep, dormant, micLive, speaking, thinking: busy || working, micNote, mic: micState }); return (
             <div className="s2-mic" data-live={vo.live ? '1' : '0'} data-cue={!vo.live && !asleep && !!micNote ? '1' : '0'} data-cue-state={cue.state} onPointerDown={() => { micUsed.current = true; speaker.unlock() }} style={{ flex: 'none', width: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-              {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={t => { voiceNext.current = voiceCtl.current?.speechEndAt() ?? Date.now(); void send(t) }} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
+              {dormant ? null : <VoiceButton quiet onMicError={setMicNote} onTranscript={t => { voiceNext.current = voiceCtl.current?.speechEndAt() ?? Date.now(); sendNow(t) }} onSetGate={g => { micGate.current = g; g(false) }} readyToListen muted={busy} autoStart={woke} asleep={asleep} onWake={() => sleepEvent('press_mic')}
                 strict ctlRef={voiceCtl} onConnectedChange={setMicLive} speaking={speaking} thinking={busy || working} onState={setMicState} />}{/* Sasha 273 · item 3: "on" only while it hears */}{/* resting: unmounted — the mic is off · Sasha 246: asleep, the mic off (pressing it wakes her) */}
               <span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-live="polite"
                 style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{cue.words}</span>{/* Sasha 295 · ONE cue: listening · thinking · speaking */}
             </div>) })()}
-            <Clip busy={busy} send={send} say={t => setMsgs(ms => [...ms, { role: 'sasha', text: t, cards: [] }])} onGroup={checkGroup} />
-            <form onSubmit={e => { e.preventDefault(); speaker.unlock(); send(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
+            <Clip busy={busy} send={sendNow} say={tell} onGroup={checkGroup} />
+            <form onSubmit={e => { e.preventDefault(); speaker.unlock(); if (!input.trim()) { tell(needs('Send', ['a message — type one, or tap the mic to talk'])); return } sendNow(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
               <input ref={typeBox} value={input} onChange={e => { if (asleepRef.current) sleepEvent('typed'); setInput(e.target.value) }} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />
-              <button type="submit" disabled={!input.trim()} aria-label="Send"
-                style={{ padding: '0 16px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700, opacity: !input.trim() ? 0.5 : 1 }}>➤</button>{/* Sasha 257 · sendable while she answers: it goes next */}
+              <button type="submit" aria-label="Send"
+                style={{ padding: '0 16px', borderRadius: 999, border: 0, background: C.gold, color: '#111', fontWeight: 700 }}>➤</button>{/* Sasha 257 · sendable while she answers: it goes next */}
             </form>
           </footer>
           <style>{`.s2-mic button{width:56px;height:56px;border-radius:50%}.s2-mic[data-live="1"] button{box-shadow:0 0 0 3px #34d399}`

@@ -197,9 +197,8 @@ class OnePlace(unittest.TestCase):
     def test_every_page_that_acts_is_checked(self):
         chk = (ROOT / "frontend/scripts/check-outcome-surfaces.mjs").read_text()
         self.assertIn('"app/group/page.tsx"', chk)
-        self.assertIn("...actingPages().filter((f) => !(f in NOT_YET_CLEAN))", chk)           # found, not remembered
-        self.assertIn("is clean now — take it off NOT_YET_CLEAN", chk)                         # the PATCH list can only shrink
-        self.assertNotIn("app/group/", chk[chk.index("NOT_YET_CLEAN = {"):chk.index("};", chk.index("NOT_YET_CLEAN = {"))])
+        self.assertIn("const surfaces = [...new Set([...OUTCOME_SURFACES, ...actingPages()])];", chk)   # found, not remembered — no exceptions
+        self.assertNotIn("NOT_YET_CLEAN", chk)                                                   # Sasha 347 · the debt list is gone
 
 
 if __name__ == "__main__":

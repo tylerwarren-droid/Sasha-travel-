@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal, SIGN_IN_TO_BOOK } from '@/lib/booking-client'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 type Phase = { k: 'idle' } | { k: 'form' } | { k: 'readback'; lines: string[]; sha: string } | { k: 'paying'; url: string; sid: string; phone?: boolean }
   | { k: 'done'; say: string; sid?: string } | { k: 'error'; say: string }
@@ -17,6 +18,7 @@ const inAWeek = () => new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10
 
 export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 }: { hotel: string; city?: string; nights?: number; checkin?: string; party?: number }) {
   const [p, setP] = useState<Phase>({ k: 'idle' })
+  const failWith = (t: string) => setP({ k: 'error', say: t })   // Sasha 347 · a failure the outcome path tells, on this card
   const [checkin, setCheckin] = useState(c0 && /^\d{4}-\d{2}-\d{2}$/.test(c0) ? c0 : inAWeek())   // Sasha 143 · the stay asked for
   const [nights, setNights] = useState(n0 && n0 > 0 ? n0 : 2)
   const [party, setParty] = useState(p0 && p0 > 0 ? p0 : 2)
@@ -69,13 +71,13 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
       <label>Check-in <input type="date" value={checkin} onChange={e => setCheckin(e.target.value)} /></label>{' '}
       <label>Nights <input type="number" min={1} max={30} value={nights} onChange={e => setNights(Number(e.target.value))} style={{ width: 48 }} /></label>{' '}
       <label>People <input type="number" min={1} max={10} value={party} onChange={e => setParty(Number(e.target.value))} style={{ width: 48 }} /></label>{' '}
-      <button className="price" onClick={() => { prepare() }}>Continue</button>
+      <button className="price" onClick={() => { observe(prepare(), 'Reading the stay', failWith) }}>Continue</button>
     </div>
   )
   if (p.k === 'readback') return (
     <div className="o2" style={{ maxWidth: 420, flexBasis: '100%' }}>
       <ul>{p.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
-      <button className="price" onClick={() => { yes(p.sha) }}>Yes, test-book it</button>{' '}
+      <button className="price" onClick={() => { observe(yes(p.sha), 'Booking the stay', failWith) }}>Yes, test-book it</button>{' '}
       <button className="viewlink" onClick={() => setP({ k: 'idle' })}>No</button>
     </div>
   )
@@ -84,7 +86,7 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
     ? <span className="o2" style={{ flexBasis: '100%' }}>Waiting for you to confirm on your phone… (nothing is charged) · or <a href={p.url} target="_blank" rel="noopener noreferrer">pay here</a></span>
     : <span className="o2">Pay the price on <a href={p.url} target="_blank" rel="noopener noreferrer">Stripe&rsquo;s test page</a> (Apple Pay or a saved card; nothing is charged, no hotel is contacted)…</span>
   if (p.k === 'done') return (
-    <span className="o2" style={{ flexBasis: '100%' }}>✅ {p.say}{p.sid ? <>{' '}<button className="price" onClick={() => { finishLive(p.say, p.sid!) }}>Finish on the hotel&rsquo;s page (live) →</button></> : null}</span>
+    <span className="o2" style={{ flexBasis: '100%' }}>✅ {p.say}{p.sid ? <>{' '}<button className="price" onClick={() => { observe(finishLive(p.say, p.sid!), 'Finishing on the hotel’s page', failWith) }}>Finish on the hotel&rsquo;s page (live) →</button></> : null}</span>
   )
   if (p.k === 'live') return (
     <div className="o2" style={{ maxWidth: 420 }}>

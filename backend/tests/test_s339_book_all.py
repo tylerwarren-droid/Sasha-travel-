@@ -90,7 +90,8 @@ class OneJobOneCard(unittest.TestCase):
         self.assertEqual((done["state"], done["result"]["status"]), ("ready", "awaiting_yes"))
         page = (ROOT / "frontend/app/group/page.tsx").read_text()
         self.assertIn("bookingReq('/api/booking/group/job')", page)
-        self.assertIn("Sasha’s server didn’t answer — nothing was changed. Try again.", page)    # Sasha 346 · heard(), the ONE reader
+        self.assertIn("from '@/lib/outcome'", page)                                              # Sasha 347 · heard() is lib/outcome's
+        self.assertIn("Sasha’s server didn’t answer — nothing was changed. Try again.", (ROOT / "frontend/lib/outcome.ts").read_text())
         self.assertNotIn("'Nothing to do.'", page)                                           # a lost request never reads as nothing to do
 
     def test_agapi_busy_is_waited_out_once(self):

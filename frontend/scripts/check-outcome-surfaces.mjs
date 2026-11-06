@@ -20,7 +20,9 @@
 // ⚠ The checks run on FIXTURES first, every time: each defect must be caught and the clean form must pass.
 // A guard that has only ever been seen passing has not been shown to check anything.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import ts from "typescript";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
@@ -35,42 +37,129 @@ OUTCOME_SURFACES.push("app/keep/page.tsx");
 // Sasha 346 · the group pages (/group: Tyler's Swap and Book all were greyed and said nothing, 5 Nov) — and EVERY page that acts through
 // bookingReq is an outcome surface whether or not someone remembered to list it (actingPages() below finds them; an unlisted one fails)
 OUTCOME_SURFACES.push("app/group/page.tsx", "app/vault/page.tsx");
-/** Pages that act (bookingReq) and are not clean yet — each named, PATCH (said): they are checked the day they leave this list. */
-export const NOT_YET_CLEAN = {
-  "app/s2/S2App.tsx": "the S2 chat: 4 raw disabled + 14 unobserved promises — its own ticket",
-  "app/components/ChatBookingDo.tsx": "1 raw disabled", "app/components/TripBookTest.tsx": "1 .then without .catch",
-  "app/booking-helper/CalendarConnect.tsx": "1 .then without .catch", "app/booking-helper/OutlookConnect.tsx": "1 .then without .catch",
-};
 /** The one component allowed to set `disabled=` — because it derives it from rendered needs. */
 export const GATED_BUTTON = "app/booking-helper/GatedButton.tsx";
 
-const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+// Sasha 347 · comments found by TypeScript's own parser, never a regex: a regex took the "/*" inside accept="image/*" for a comment's start
+// and erased real code up to the next "*/" — S2's 📎 button (`disabled={busy || working}`) was invisible to this check. Each comment is
+// blanked to spaces (newlines kept), so a finding's line is the file's own line.
+export const strip = (src) => {
+  const sf = ts.createSourceFile("surface.tsx", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const out = src.split("");
+  const seen = new Set();
+  const visit = (n) => {
+    if (n.kind !== ts.SyntaxKind.JsxText) {
+      for (const r of ts.getLeadingCommentRanges(src, n.pos) || []) {
+        if (seen.has(r.pos)) continue;
+        seen.add(r.pos);
+        for (let i = r.pos; i < r.end; i++) if (out[i] !== "\n") out[i] = " ";
+      }
+    }
+    for (const c of n.getChildren(sf)) visit(c);
+  };
+  visit(sf);
+  return out.join("");
+};
 const lineOf = (src, i) => src.slice(0, i).split("\n").length;
 
-/** @returns {Array<{ rule: string; line: number; why: string }>} */
+/** @returns {Array<{ rule: string; line: number; why: string }>}
+ *  Sasha 347 · S1 and S2 are read from TypeScript's syntax tree (a regex window of 600 characters both missed a short chain and flagged a
+ *  long one that DID end in .catch): S1 — a `disabled` JSX attribute, with or without a value; S2 — `void <call>`, or a `.then(` chain that
+ *  ends without a `.catch(` (or a second, rejection argument) and isn't awaited. */
 export function findSilences(src) {
-  const code = strip(src);
   const out = [];
-  for (const m of code.matchAll(/\bdisabled\s*=\s*\{/g)) {
-    out.push({ rule: "S1", line: lineOf(code, m.index), why: "a raw `disabled=` — use GatedButton, which renders what it is waiting for" });
-  }
-  for (const m of code.matchAll(/(^|[\s;{(])void\s+[A-Za-z_$][\w$.]*\s*\(/gm)) {
-    out.push({ rule: "S2", line: lineOf(code, m.index), why: "a promise launched with `void` — its failure would write nothing" });
-  }
-  for (const m of code.matchAll(/\.then\(/g)) {
-    // the rest of this expression: up to the next statement end at the same nesting
-    const rest = code.slice(m.index, m.index + 600);
-    let depth = 0, end = rest.length;
-    for (let i = 0; i < rest.length; i++) {
-      const c = rest[i];
-      if (c === "(" || c === "{" || c === "[") depth++;
-      else if (c === ")" || c === "}" || c === "]") { depth--; if (depth < 0) { end = i; break; } }
-      else if ((c === ";" || c === "\n") && depth === 0) { end = i; break; }
+  const sf = ts.createSourceFile("surface.tsx", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const at = (n) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+  const visit = (n) => {
+    if (ts.isJsxAttribute(n) && n.name.getText(sf) === "disabled") {
+      out.push({ rule: "S1", line: at(n), why: "a raw `disabled=` — use GatedButton, which renders what it is waiting for" });
     }
-    if (!rest.slice(0, end).includes(".catch(")) out.push({ rule: "S2", line: lineOf(code, m.index), why: "a `.then(` with no `.catch(` — a rejection would write nothing" });
-  }
+    if (ts.isVoidExpression(n) && ts.isCallExpression(n.expression)) {
+      out.push({ rule: "S2", line: at(n), why: "a promise launched with `void` — its failure would write nothing" });
+    }
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "then" && n.arguments.length < 2) {
+      let top = n, caught = false;   // up the chain: x.then(…).then(…).catch(…)
+      while (ts.isPropertyAccessExpression(top.parent) && ts.isCallExpression(top.parent.parent) && top.parent.parent.expression === top.parent) {
+        const name = top.parent.name.text;
+        top = top.parent.parent;
+        if (name === "catch" || (name === "then" && top.arguments.length >= 2)) caught = true;
+      }
+      let up = top.parent;
+      while (up && ts.isParenthesizedExpression(up)) up = up.parent;
+      const intoObserve = up && ts.isCallExpression(up) && ts.isIdentifier(up.expression) && up.expression.text === "observe";   // lib/outcome
+      if (!caught && !intoObserve && !(up && ts.isAwaitExpression(up))) {
+        out.push({ rule: "S2", line: at(n), why: "a `.then(` with no `.catch(` — a rejection would write nothing" });
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  const code = strip(src);
   for (const m of code.matchAll(/\.length\s*===\s*0\s*\?[^:]{0,120}?Nothing[^:]{0,40}?yet/g)) {
     out.push({ rule: "S3", line: lineOf(code, m.index), why: "\"Nothing … yet\" rendered from an empty list — say it from an explicit not-yet-started state" });
+  }
+  return out;
+}
+
+/** Sasha 347 · S2, the half a syntax tree can't see: a promise left FLOATING — `prepare()` as a statement, `onClick={() => send(t)}` —
+ *  found with TypeScript's type checker (the expression's type has a `then`). Observed = awaited, `void`ed (S2 above names that), or a
+ *  chain ending in `.catch(` / `.then(ok, failed)`; anything else is a failure nobody would hear. @returns {Map<string, Array<{rule, line, why}>>} */
+export function floatingPromises(files, options = null) {
+  let opts = options;
+  if (!opts) {
+    const cfg = ts.getParsedCommandLineOfConfigFile(join(ROOT, "tsconfig.json"), {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} });
+    opts = cfg.options;
+  }
+  const prog = ts.createProgram(files.map((f) => (f.startsWith("/") ? f : join(ROOT, f))), { ...opts, noEmit: true });
+  const tc = prog.getTypeChecker();
+  const isPromise = (n) => {
+    const t = tc.getTypeAtLocation(n);
+    return !!t && !(t.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) && !!tc.getPropertyOfType(tc.getApparentType(t), "then");
+  };
+  const observed = (e) => {   // from the outside in: a .catch (or .then(ok, failed)) before any one-armed .then; .finally passes through
+    for (;;) {
+      while (ts.isParenthesizedExpression(e)) e = e.expression;
+      if (!(ts.isCallExpression(e) && ts.isPropertyAccessExpression(e.expression))) return false;
+      const name = e.expression.name.text;
+      if (name === "catch" || (name === "then" && e.arguments.length >= 2)) return true;
+      if (name !== "finally") return false;
+      e = e.expression.expression;
+    }
+  };
+  const returnsPromise = (n) => {
+    const sigs = tc.getTypeAtLocation(n).getCallSignatures();
+    return sigs.length > 0 && sigs.every((g) => { const r = g.getReturnType(); return !(r.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) && !!tc.getPropertyOfType(tc.getApparentType(r), "then"); });
+  };
+  const voidSlot = (n) => {
+    const p = n.parent;
+    const inSlot = (ts.isJsxExpression(p) && ts.isJsxAttribute(p.parent)) || ((ts.isCallExpression(p) || ts.isNewExpression(p)) && (p.arguments || []).includes(n))
+      || (ts.isPropertyAssignment(p) && p.initializer === n) || ts.isShorthandPropertyAssignment(p);
+    if (!inSlot) return false;
+    const ctx = tc.getContextualType(n);
+    if (!ctx) return false;
+    const sigs = ctx.getNonNullableType().getCallSignatures();
+    return sigs.length > 0 && sigs.every((g) => !!(g.getReturnType().flags & ts.TypeFlags.Void));
+  };
+  const out = new Map();
+  for (const f of files) {
+    const sf = prog.getSourceFile(f.startsWith("/") ? f : join(ROOT, f));
+    const found = [];
+    const visit = (x) => {
+      let hit = null;
+      if (ts.isExpressionStatement(x) && !ts.isVoidExpression(x.expression) && !ts.isAwaitExpression(x.expression) && isPromise(x.expression) && !observed(x.expression)) hit = x.expression;
+      if (ts.isArrowFunction(x) && !ts.isBlock(x.body) && ts.isJsxExpression(x.parent) && ts.isJsxAttribute(x.parent.parent) && isPromise(x.body) && !observed(x.body)) hit = x.body;
+      if (hit) found.push({ rule: "S2", line: sf.getLineAndCharacterOfPosition(hit.getStart(sf)).line + 1,
+        why: `a floating promise (${hit.getText(sf).slice(0, 40).replace(/\s+/g, " ")}…) — observe() it (lib/outcome): its failure is told` });
+      // …and a promise-returning function handed where a `void` callback goes (`send={send}` into `send: (t: string) => void`): every
+      // call of it there floats, out of sight of the line that makes it
+      if ((ts.isIdentifier(x) || ts.isPropertyAccessExpression(x)) && returnsPromise(x) && voidSlot(x)) {   // an arrow's own body is read above
+        found.push({ rule: "S2", line: sf.getLineAndCharacterOfPosition(x.getStart(sf)).line + 1,
+          why: `a promise-returning function (${x.getText(sf).slice(0, 40).replace(/\s+/g, " ")}…) given where a void callback goes — its failures float` });
+      }
+      ts.forEachChild(x, visit);
+    };
+    if (sf) visit(sf);
+    out.set(f, found);
   }
   return out;
 }
@@ -91,6 +180,10 @@ const FIXTURES = [
   { name: "a raw disabled button", src: `<button disabled={busy || !paired} onClick={pair}>Pair</button>`, want: ["S1"] },
   { name: "a void-launched relay", src: `if (m.type === 'REPORT') { void relayReport(m) }`, want: ["S2"] },
   { name: "a .then with no .catch", src: `call('/x').then((r) => setHealth(r))\n`, want: ["S2"] },
+  { name: "a \"/*\" inside a string hides no code (Sasha 347)", src: `<input accept="image/*" />\n<button disabled={busy}>x</button>\n{/* a note */}`, want: ["S1"] },
+  { name: "a bare disabled (Sasha 347)", src: `<button disabled onClick={go}>Go</button>`, want: ["S1"] },
+  { name: "a long chain that ends in .catch passes (Sasha 347)", src: `fetch('/x').then((r) => r.json()).then((j) => {\n${"  set(j);\n".repeat(80)}}).catch(() => setFailed(true))`, want: [] },
+  { name: "an awaited .then is its caller's (Sasha 347)", src: `const j = await fetch('/x').then((r) => r.json())`, want: [] },
   { name: "Nothing yet from an empty list", src: `{log.length === 0 ? <p className="x">Nothing yet.</p> : null}`, want: ["S3"] },
   { name: "the clean forms pass", src: `<GatedButton label="Pair" needs={[!connected && 'Connect, first']} onClick={pair} />\nrelayReport(m).catch((e) => note(String(e), 'stop'))\ncall('/x').then((r) => set(r)).catch(() => set({ unreachable: true }))\n{!started ? <p>Nothing attempted yet.</p> : null}\ntype F = (m: Msg) => void`, want: [] },
 ];
@@ -117,15 +210,24 @@ function main() {
     console.error(`\ncheck-outcome-surfaces: the checker itself is broken (${failed} fixture(s)) — refusing to vouch for anything.`);
     process.exit(1);
   }
-  const problems = [];
-  // Sasha 346 · a page that ACTS (calls bookingReq) is an outcome surface: every one is checked unless it is named NOT_YET_CLEAN
-  const surfaces = [...new Set([...OUTCOME_SURFACES, ...actingPages().filter((f) => !(f in NOT_YET_CLEAN))])];
-  for (const f of Object.keys(NOT_YET_CLEAN)) {
-    if (!actingPages().includes(f)) problems.push(`${f}  NOT_YET_CLEAN names a page that no longer acts — take it off the list`);
-    else if (!findSilences(readFileSync(join(ROOT, f), "utf8")).length) problems.push(`${f}  is clean now — take it off NOT_YET_CLEAN so it stays checked`);
+  {   // Sasha 347 · the floating-promise half runs on fixtures too: caught, and the clean forms pass
+    const dir = mkdtempSync(join(tmpdir(), "outcome-"));
+    const bad = join(dir, "bad.tsx"), good = join(dir, "good.tsx");
+    const head = "declare function go(): Promise<void>\ndeclare function observe(p: Promise<unknown>, n: string, t: (s: string) => void): void\ndeclare const tell: (s: string) => void\n";
+    writeFileSync(bad, head + "declare function Kid(p: { act: () => void }): any\nexport function A() { go(); return <><button onClick={() => go()}>x</button><Kid act={go} /></> }\n");
+    writeFileSync(good, head + "export async function B() { await go(); go().catch(() => tell('no')); go().catch(() => tell('no')).finally(() => tell('done')); observe(go(), 'Go', tell); return <button onClick={() => observe(go(), 'Go', tell)}>x</button> }\n");
+    const fl = floatingPromises([bad, good], { jsx: ts.JsxEmit.Preserve, lib: ["lib.es2020.d.ts", "lib.dom.d.ts"], strict: true, skipLibCheck: true });
+    if (fl.get(bad).length !== 3 || fl.get(good).length !== 0) {
+      console.error(`check-outcome-surfaces: the floating-promise checker is broken (caught ${fl.get(bad).length} of 3, ${fl.get(good).length} false) — refusing to vouch for anything.`);
+      process.exit(1);
+    }
   }
+  const problems = [];
+  // Sasha 346/347 · a page that ACTS (calls bookingReq) is an outcome surface: every one is checked, with no exceptions
+  const surfaces = [...new Set([...OUTCOME_SURFACES, ...actingPages()])];
+  const floating = floatingPromises(surfaces);
   for (const rel of surfaces) {
-    for (const p of findSilences(readFileSync(join(ROOT, rel), "utf8"))) problems.push(`${rel}:${p.line}  ${p.rule}  ${p.why}`);
+    for (const p of [...findSilences(readFileSync(join(ROOT, rel), "utf8")), ...(floating.get(rel) || [])]) problems.push(`${rel}:${p.line}  ${p.rule}  ${p.why}`);
   }
   for (const p of gatedButtonProblems(readFileSync(join(ROOT, GATED_BUTTON), "utf8"))) problems.push(`${GATED_BUTTON}  S1  ${p}`);
   if (problems.length) {
@@ -172,7 +274,7 @@ function main() {
     console.error("check-outcome-surfaces: onboarding Go Live can show success for a refused save — run python3 frontend/scripts/stage_b_onboarding_honesty.py (CLAUDE.md, Stage B).");
     process.exit(1);
   }
-  console.log(`check-outcome-surfaces: ${FIXTURES.length} fixtures caught as expected; ${surfaces.length} outcome surface(s) clean (every page that acts, but the ${Object.keys(NOT_YET_CLEAN).length} named NOT_YET_CLEAN); onboarding save is signed-in only and Go Live is honest.`);
+  console.log(`check-outcome-surfaces: ${FIXTURES.length} fixtures caught as expected; ${surfaces.length} outcome surface(s) clean (every page that acts — no exceptions); onboarding save is signed-in only and Go Live is honest.`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

@@ -8,6 +8,7 @@ import { bookingReq } from '@/lib/booking-client'
 import type { RichItinerary } from '../ItineraryDays'
 import { termHead, type Term } from '../cards/S2Cards'   // Sasha 301 · the fine print: one way to say a term
 import TrainLine, { type Train } from './TrainLine'   // Sasha 327 · trains are trains
+import { observe, toConsole } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 // Sasha 301 · a day's booking line says the cancellation deadline the venue stated (their sentence is on its card) — nothing if none
 const cancelBy = (ts?: Term[]) => { const t = (ts || []).find((x) => x.kinds.includes('cancellation') && x.by_words); return t ? ` · cancel by ${t.by_words}` : '' }
 
@@ -85,8 +86,8 @@ function useJourneys(): Journeys | null {
       const r = await bookingReq('/api/booking/journeys').catch(() => null)
       if (!off && r?.ok) setJ(untagDeep(r.json) as unknown as Journeys)   // Sasha 218 · no visible TEST label
     }
-    pull()
-    const t = setInterval(pull, 6000)
+    observe(pull(), 'Reading the trip', toConsole)
+    const t = setInterval(() => observe(pull(), 'Reading the trip', toConsole), 6000)
     window.addEventListener('sasha-plan-refresh', pull)   // Sasha 205 · /next's agent changed the trip: show it now, not in 6 s
     return () => { off = true; clearInterval(t); window.removeEventListener('sasha-plan-refresh', pull) }
   }, [])
@@ -162,8 +163,8 @@ function useServerPlan(tripId: string | null, onPlans?: (p: PlanRef[]) => void):
         onPlans?.((r.json.plans ?? []) as PlanRef[])   // Sasha 175 · every trip on the account, for the picker
       }
     }
-    pull()
-    const t = setInterval(pull, 6000)
+    observe(pull(), 'Reading the trip', toConsole)
+    const t = setInterval(() => observe(pull(), 'Reading the trip', toConsole), 6000)
     window.addEventListener('sasha-plan-refresh', pull)   // Sasha 205 · /next's agent changed the trip: show it now, not in 6 s
     return () => { off = true; clearInterval(t); window.removeEventListener('sasha-plan-refresh', pull) }
   }, [tripId])  // eslint-disable-line react-hooks/exhaustive-deps

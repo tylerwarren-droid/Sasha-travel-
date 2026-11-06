@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { bookingReq, contactReq, refusal } from '@/lib/booking-client'
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { untag } from '@/lib/no-test-label.mjs'   // Sasha 219 · the name as shown: no stand-in or TEST label (sent as it is)
+import { needs, observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 /** Sasha 186 · the card's answers look and act like buttons on every panel (they read as plain text in the chat) */
 const YES_BTN = { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' } as const
@@ -37,6 +38,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
   const [d, setD] = useState({ date: at.slice(0, 10), time: at.slice(11, 16), party: draft?.how_many?.count ?? 2, name: '', phone: '',
     want: what, dates: '' })
   const [p, setP] = useState<Phase>({ k: 'details' })
+  const stopWith = (t: string) => setP({ k: 'stopped', say: t })   // Sasha 347 · a failure the outcome path tells, on this card
   const [ready, setReady] = useState(false)
   const [named0, setNamed0] = useState(false)   // a saved name: never asked again
   const [phoned0, setPhoned0] = useState(false)  // a saved mobile: never asked again (their form needs one)
@@ -53,9 +55,16 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
     return () => { off = true }
   }, [])
   const needPhone = route === 'form' && !phoned0
-  const complete = !!d.name.trim() && (!needPhone || /^\+?\d[\d\s().-]{6,}$/.test(d.phone.trim())) && (quote ? d.want.trim().length >= 3 : !!(d.date && d.time && d.party))
+  // Sasha 347 · what Continue still needs, by the field's own words — pressed without it, it SAYS so (never greyed out)
+  const missing = [
+    ...(quote ? (d.want.trim().length >= 3 ? [] : ['what you would like']) : [...(d.date ? [] : ['the date']), ...(d.time ? [] : ['the time']), ...(d.party ? [] : ['how many people'])]),
+    ...(d.name.trim() ? [] : ['the name it goes under']),
+    ...(!needPhone || /^\+?\d[\d\s().-]{6,}$/.test(d.phone.trim()) ? [] : ['a mobile number they can reach you on']),
+  ]
+  const complete = missing.length === 0
+  const [need, setNeed] = useState<string | null>(null)
   // everything known already: no form to fill — straight to the read-back
-  useEffect(() => { if (ready && complete && p.k === 'details' && (quote ? false : !!at)) prepare() }, [ready])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ready && complete && p.k === 'details' && (quote ? false : !!at)) observe(prepare(), 'Preparing the booking', stopWith) }, [ready])  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function prepare() {
     setP({ k: 'preparing' })
@@ -104,11 +113,11 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
   }
 
   // Sasha 195 · chosen on the ladder (Email / Book directly): the choice is the yes — acted on at once, nothing read out again
-  useEffect(() => { if (auto && p.k === 'readback') yes() }, [p.k])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (auto && p.k === 'readback') observe(yes(), 'Booking', stopWith) }, [p.k])  // eslint-disable-line react-hooks/exhaustive-deps
   // a typed "yes" in the chat answers the read-back, as the button does
   useEffect(() => {
     if (p.k !== 'readback') { return }
-    setPendingYes((said) => { yes(said) })
+    setPendingYes((said) => { observe(yes(said), 'Booking', stopWith) })
     return () => setPendingYes(null)
   }, [p.k])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -130,7 +139,8 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
       {!named0 && <input placeholder="Your name" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} style={{ ...input, marginTop: 6 }} />}
       {needPhone && <div style={{ marginTop: 6 }}>And a mobile number they can reach you on?</div>}
       {needPhone && <input placeholder="+34 600 000 000" type="tel" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} style={{ ...input, marginTop: 4 }} />}
-      <div style={{ marginTop: 8 }}><button className="price" style={YES_BTN} disabled={!complete} onClick={() => { prepare() }}>Continue</button></div>
+      <div style={{ marginTop: 8 }}><button className="price" style={YES_BTN} onClick={() => { if (!complete) { setNeed(needs('Continue', missing)); return } setNeed(null); observe(prepare(), 'Preparing the booking', stopWith) }}>Continue</button></div>
+      {need && <div role="status" data-needs style={{ marginTop: 6 }}>{need}</div>}
     </div>
   )
   // Sasha 169 · the founder's demo stand-in (his access record: demo = founder_rehearsal): said first, every time — the place picked is never contacted
@@ -139,7 +149,7 @@ export function ChatBookingDo({ route, readId, venue, what, openAt, draft, line,
       <div>{line || p.sentence}</div>
       {line ? <div style={{ fontSize: 12.5, opacity: 0.75 }}>{quote ? d.want : `${d.party} people · ${dayWords(d.date)} at ${d.time}`}</div> : null}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button className="price" style={YES_BTN} onClick={() => { yes() }}>{route === 'form' ? 'Book it' : 'Yes'}</button>
+        <button className="price" style={YES_BTN} onClick={() => { observe(yes(), 'Booking', stopWith) }}>{route === 'form' ? 'Book it' : 'Yes'}</button>
         <button className="viewlink" style={NO_BTN} onClick={() => setP({ k: 'stopped', say: 'OK — nothing was sent.' })}>No</button>
       </div>
     </div>

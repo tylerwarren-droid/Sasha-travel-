@@ -66,8 +66,8 @@ class MicAgrees(unittest.TestCase):
 
     def test_tap_starts_listening(self):
         app = _front(self, "app/s2/S2App.tsx")
-        self.assertIn("<button onClick={() => { listenOnTap(); void newChat() }}", app)
-        self.assertIn("speaker.unlock(); listenOnTap(); send(c)", app)
+        self.assertIn("<button onClick={() => { listenOnTap(); if (busy || clearing)", app)   # Sasha 347 · busy: told; else observe(newChat())
+        self.assertIn("speaker.unlock(); listenOnTap(); sendNow(c)", app)                      # Sasha 347 · sendNow: the ONE observed send
         self.assertIn("if (voiceCtl.current?.granted()) { micUsed.current = true; voiceCtl.current.tap() }", app)
         self.assertIn("data-cue={!vo.live && !asleep && !!micNote ? '1' : '0'}", app)
         self.assertIn("granted: () => permRef.current === 'granted'", _front(self, "app/components/VoiceButton.tsx"))

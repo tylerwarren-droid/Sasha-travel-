@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 export function InviteGuest() {
   const [email, setEmail] = useState('')
@@ -23,7 +24,7 @@ export function InviteGuest() {
       <h2 className="font-semibold">Invite a guest</h2>
       <p className="opacity-75">Anyone can sign in with their email; this sends them an invitation from Sasha's own address (the link works once, for 24 hours).</p>
       <input className="w-full rounded border px-2 py-1" placeholder="their email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <GatedButton label="Send the invitation" onClick={() => { send() }} needs={[!ok && 'an email address', busy && 'the last step to finish']} />
+      <GatedButton label="Send the invitation" onClick={() => { observe(send(), 'Send the invitation', setWords) }} needs={[!ok && 'an email address', busy && 'the last step to finish']} />
       {words && <p>{words}</p>}
     </section>
   )

@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 export function DemoControls() {
   const [words, setWords] = useState<string | null>(null)
@@ -26,10 +27,10 @@ export function DemoControls() {
     <section className="space-y-2 rounded border p-3">
       <h2 className="font-semibold">Investor demo</h2>
       <div className="flex flex-wrap gap-2">
-        <GatedButton label="Reset the demo" onClick={() => { run('/api/booking/ops/demo/reset', 'Reset') }} needs={needs} />
-        <GatedButton label="Pre-warm (night before, ≈1 min)" onClick={() => { run('/api/booking/ops/demo/prewarm', 'Pre-warm') }} needs={needs} />
-        <GatedButton label="E · Send “time to leave” now" onClick={() => { run('/api/booking/ops/demo/leave-now', 'Time to leave') }} needs={needs} />
-        <GatedButton label="G · Gmail find (≈1 min)" onClick={() => { run('/api/booking/ops/demo/gmail-seed', 'Gmail find') }} needs={needs} />
+        <GatedButton label="Reset the demo" onClick={() => { observe(run('/api/booking/ops/demo/reset', 'Reset'), 'Reset', setWords) }} needs={needs} />
+        <GatedButton label="Pre-warm (night before, ≈1 min)" onClick={() => { observe(run('/api/booking/ops/demo/prewarm', 'Pre-warm'), 'Pre-warm', setWords) }} needs={needs} />
+        <GatedButton label="E · Send “time to leave” now" onClick={() => { observe(run('/api/booking/ops/demo/leave-now', 'Time to leave'), 'Time to leave', setWords) }} needs={needs} />
+        <GatedButton label="G · Gmail find (≈1 min)" onClick={() => { observe(run('/api/booking/ops/demo/gmail-seed', 'Gmail find'), 'Gmail find', setWords) }} needs={needs} />
         {/* Sasha 254 · the demo shop and the demo spa are retired (Tyler row 817) — their login buttons with them */}
       </div>
       {words && <p>{words}</p>}

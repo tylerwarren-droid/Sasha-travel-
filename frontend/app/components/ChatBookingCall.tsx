@@ -14,6 +14,7 @@ import { approveCall, bookingReq, getCall, prepareCall, guestRefusal as refusal,
 import { setPendingYes } from '@/lib/chat-booking-bus'
 import { GatedButton } from '../booking-helper/GatedButton'
 import ReceiptCard from './ReceiptCard'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 type Draft = { parts?: { what?: { activity: string; activity_venue_lang: string; category: string }; when?: { mode: string; at?: string };
   how_many?: { count: number; unit: string }; flow?: string; who?: { name: string } } } | null
@@ -61,7 +62,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
   }, [phase.p])
   useEffect(() => {
     let off = false
-    ;(async () => {
+    ;observe((async () => {
       try {
         const r = await contactReq('GET')
         if (off) return
@@ -72,7 +73,7 @@ export default function ChatBookingCall({ readId, country, phone, venue, draft, 
       } catch (e) {
         if (!off) setSaved({ why: (e as Error).message })
       }
-    })()
+    })(), 'Reading your saved details', setNote)
     return () => { off = true }
   }, [])
 

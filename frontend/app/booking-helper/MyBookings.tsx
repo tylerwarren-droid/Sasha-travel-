@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import TrainLine, { type Train } from '../components/workspace/TrainLine'   // Sasha 327 · trains are trains
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 type R = { id: string; venue: string; date: string | null; time: string | null; party?: number | null; status: string; status_words?: string
   booking_reference?: string | null; type?: string; train?: Train }
@@ -38,8 +39,8 @@ export function MyBookings() {
         setWords(null)
       } else setWords(refusal(r.json, r.status))
     }).catch((e) => { if (!off) setWords((e as Error).message) })
-    load()
-    const t = setInterval(load, 8000)   // Sasha 121 · live: a booking made on the phone appears here within seconds
+    observe(load(), 'Reading your bookings', setWords)
+    const t = setInterval(() => observe(load(), 'Reading your bookings', setWords), 8000)   // Sasha 121 · live: a booking made on the phone appears here within seconds
     return () => { off = true; clearInterval(t) }
   }, [])
   return (

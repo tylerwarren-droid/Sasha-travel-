@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { bookingReq, guestRefusal as refusal } from '@/lib/booking-client'
 import { GatedButton } from './GatedButton'
+import { observe } from '@/lib/outcome'   // Sasha 347 · the ONE outcome path: no promise floats
 
 type Hotel = { n: number; name: string; engine: string; url?: string; answer?: string | null }
 const ANSWERS = ['filled', 'not filled', 'wrong page'] as const
@@ -39,10 +40,10 @@ export function FounderWords() {
     <section className="space-y-2 rounded border p-3">
       <h2 className="font-semibold">Founder tools (were WhatsApp words)</h2>
       <div className="flex flex-wrap gap-2">
-        <GatedButton label="Send me the CAPTCHA test" onClick={() => { run('/api/booking/ops/demo/captcha-test', 'CAPTCHA test', {}) }} needs={needs} />
-        <GatedButton label="TEST deposit page to my WhatsApp" onClick={() => { run('/api/booking/ops/demo/test-deposit', 'TEST deposit', {}) }} needs={needs} />
-        <GatedButton label="Which space am I in?" onClick={() => { run('/api/booking/ops/demo/space', 'Space') }} needs={needs} />
-        <GatedButton label="Hotel engine check" onClick={() => { loadCheck() }} needs={needs} />
+        <GatedButton label="Send me the CAPTCHA test" onClick={() => { observe(run('/api/booking/ops/demo/captcha-test', 'CAPTCHA test', {}), 'CAPTCHA test', setWords) }} needs={needs} />
+        <GatedButton label="TEST deposit page to my WhatsApp" onClick={() => { observe(run('/api/booking/ops/demo/test-deposit', 'TEST deposit', {}), 'TEST deposit', setWords) }} needs={needs} />
+        <GatedButton label="Which space am I in?" onClick={() => { observe(run('/api/booking/ops/demo/space', 'Space'), 'Space', setWords) }} needs={needs} />
+        <GatedButton label="Hotel engine check" onClick={() => { observe(loadCheck(), 'The hotel engine check', setWords) }} needs={needs} />
       </div>
       {words && <p>{words}</p>}
       {hotels && hotels.length > 0 && (
@@ -52,7 +53,7 @@ export function FounderWords() {
               <span>{h.n}. {h.name} ({h.engine}){h.url && <> — <a className="underline" href={h.url} target="_blank" rel="noopener noreferrer">open the link</a></>}:</span>
               {h.answer
                 ? <strong>{h.answer}</strong>
-                : ANSWERS.map(a => <GatedButton key={a} label={a} onClick={() => { answer(h.n, a) }} needs={needs} />)}
+                : ANSWERS.map(a => <GatedButton key={a} label={a} onClick={() => { observe(answer(h.n, a), 'Your answer', setWords) }} needs={needs} />)}
             </li>
           ))}
         </ul>

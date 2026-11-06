@@ -151,6 +151,15 @@ class TheModelIsToldTheRoster(unittest.TestCase):
         self.assertIn("group_person_add", d["group_upload"])
         self.assertIn("group_choose", d["group_person_add"])
 
+    def test_every_group_tool_of_the_registry_is_on_s2_and_drawn(self):
+        from agapi import v0 as API
+        from app.agent import s2 as S2, sasha as SA
+        family = [t["name"] for t in API.TOOLS if t["name"].startswith("group_")]
+        self.assertIn("group_person_add", family)
+        for n in family:
+            self.assertIn(n, S2.S2_TOOLS, n)                                             # /s2 and WhatsApp offer the whole family
+            self.assertIn(n, SA.RENDER, n)
+
 
 PG, _SERVER = os.getenv("BOOKING_TEST_DATABASE_URL", ""), None
 if not PG:

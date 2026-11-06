@@ -79,8 +79,18 @@ S2_TOOLS = ("search_venues", "read_booking_route", "hold_venue", "book_venue", "
             "booking_fine_print", "keep_note",
             "booking_outcomes", "start_count",
             "remove_saved_card",   # Sasha 327 · "remove my saved card"
-            "group_start", "group_upload", "group_limits", "group_plan", "group_list", "group_invite_vault",
-            "group_book", "group_swap", "group_cancel", "group_invoice")   # Sasha 334   # Sasha 332 · group movement v1   # Sasha 324 · the founder's count: read-only, and its start   # Sasha 301 · the fine print on each booking; his cards and loyalty numbers, told
+            )   # Sasha 324 · the founder's count: read-only, and its start   # Sasha 301 · the fine print on each booking; his cards and loyalty numbers, told
+
+
+def _group_family() -> tuple:
+    """Sasha 351 · the GROUP family (Sasha 332–351) as the ONE tool registry has it — every `group_*` tool, never a hand copy of their names
+    (found live, 6 Nov: group_person_add / group_choose were in the registry but not in this list, so on /s2 the model couldn't see them
+    and sent one named person down the list path)."""
+    from agapi import v0 as API
+    return tuple(t["name"] for t in API.TOOLS if t["name"].startswith("group_"))
+
+
+S2_TOOLS = S2_TOOLS + _group_family()
 
 
 # Sasha 241 · S1 PARITY: /next keeps its own "Who she is" and gains S2's capability lines — taken from S2_WHO itself, so the two

@@ -891,7 +891,7 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     if not mv:
         empty = "There's no group movement yet."
     elif not rows:
-        empty = "Nobody is on the list yet — send me the list of people."
+        empty = "Nobody is on this trip yet — name who's going, or tick them on the People list."   # Sasha 351 · chosen from the roster
     elif not planned:
         empty = f"Nobody is planned yet — {len(rows)} on the list, not planned."
     else:

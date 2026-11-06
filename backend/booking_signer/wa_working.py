@@ -19,6 +19,14 @@ from typing import Any, Dict, Optional
 
 log = logging.getLogger("booking_signer.wa_working")
 
+
+def _trail(msg: str, *a) -> None:
+    """Every call, said where production shows it (the service's log prints warnings and print lines only — found closing Sasha 350:
+    the info lines never reached Railway's log); and to the logger, for tests."""
+    line = msg % a if a else msg
+    print(line, flush=True)
+    log.info(line)
+
 REFRESH_S = 20.0                       # Twilio's dots last 25 s: refreshed before they lapse
 FIRST_TRIES = (0.0, 0.3, 0.6, 1.0, 2.0, 3.5)   # until AgAPI's inbound op has recorded the message (it does so first thing)
 CAP_S = 300.0                          # a reply that never comes: the dots stop anyway
@@ -39,7 +47,7 @@ async def _typing(sid: str) -> Dict[str, Any]:
     except Exception as e:
         r = {"ok": False, "error": {"code": type(e).__name__}}
     err = r.get("error") or {}
-    log.info("[wa_working] typing on …%s → %s%s", sid[-8:], r.get("status") if r.get("ok") else "refused",
+    _trail("[wa_working] typing on …%s → %s%s", sid[-8:], r.get("status") if r.get("ok") else "refused",
              f" ({err.get('code')}: {str(err.get('message') or '')[:120]})" if err else "")
     return r
 
@@ -57,14 +65,14 @@ async def _hold(sid: str) -> None:
         if (r.get("error") or {}).get("code") != "not_found":
             break
     if not shown:
-        log.info("[wa_working] …%s: no dots (AgAPI never saw this message, or refused it)", sid[-8:])
+        _trail("[wa_working] …%s: no dots (AgAPI never saw this message, or refused it)", sid[-8:])
         return
     while time.monotonic() - t0 < CAP_S:
         await asyncio.sleep(REFRESH_S)
         if sid not in _HOLDS:
             return
         await _typing(sid)
-    log.info("[wa_working] …%s: no reply after %ds — the dots stop", sid[-8:], int(CAP_S))
+    _trail("[wa_working] …%s: no reply after %ds — the dots stop", sid[-8:], int(CAP_S))
 
 
 def start(key: str, sid: str) -> bool:
@@ -107,7 +115,7 @@ def _end(sid: str, why: str) -> None:
     h = _HOLDS.pop(sid, None)
     if h:
         h["task"].cancel()
-        log.info("[wa_working] …%s: dots stopped (%s, after %.1fs)", sid[-8:], why, time.monotonic() - h["at"])
+        _trail("[wa_working] …%s: dots stopped (%s, after %.1fs)", sid[-8:], why, time.monotonic() - h["at"])
 
 
 def holding(key: Optional[str] = None) -> int:

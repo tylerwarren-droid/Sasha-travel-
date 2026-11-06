@@ -99,7 +99,9 @@ async def main() -> int:
             await VS.probe("5 ·", int(os.getenv("SASHA_GATE_LOOP5_RUNS", "6")))
         except Exception as e:
             print(f"loop 5 probe: ⚠ {type(e).__name__}: {e}")
-    if not bad:   # Sasha 321 · after the verdict, never part of it: one voice-avatar booking at the test venue on the REAL sandbox
+    if not bad and os.environ.get("SASHA_MODEL_REPLAY") == "replay":   # Sasha 353 · the deploy's ONE live call is the preflight's; the voice
+        print("voice proof: skipped — the gate replays recorded replies (it runs when the gate records: SASHA_GATE_RECORD=1)")   # proof
+    elif not bad:   # Sasha 321 · after the verdict, never part of it: one voice-avatar booking at the test venue on the REAL sandbox
         from scripts import voice_proof
         try:
             await voice_proof.run(real_call, real_engine)

@@ -3317,7 +3317,7 @@ TEMPLATES = {"tap_to_finish": ("HX12e6eec86092c1d454b65b2d589c92f2", "HX4bcb4ead
              "booking_reminder": ("HX393eb8f7cf23d412f9ae1dc591d20588", "HXcb573c6fb66ef00606343dfa44923085")}
 
 
-async def _tell(ch: dict, text: str, template: Optional[tuple] = None) -> str:
+async def _tell(ch: dict, text: str, template: Optional[tuple] = None, buttons: Optional[List[Tuple[str, str]]] = None) -> str:
     """Inside the 24-hour window: the text. Outside it: the approved template (name, variables), when one is given."""
     st = await STORE.get_state(ch["wa_id_sha256"])
     last = st.get("last_inbound_at")
@@ -3332,7 +3332,8 @@ async def _tell(ch: dict, text: str, template: Optional[tuple] = None) -> str:
         log.info("[guest_whatsapp] %s template outside the window: %s", name, str(r)[:80])
         await _record_out(ch, text, "sasha")   # Sasha 349 · Sasha's own word (travel), in the one record
         return f"{r} (template)" 
-    return ", ".join(await deliver(ch, sender_for(st), Out().text(text), last))
+    # Sasha 352 · inside the window, its next action(s) as taps when given (a tap says the words — the same path as typing them)
+    return ", ".join(await deliver(ch, sender_for(st), Out().ask(text, buttons) if buttons else Out().text(text), last))
 
 
 def _draft_of(b: dict) -> dict:

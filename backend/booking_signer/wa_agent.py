@@ -226,7 +226,9 @@ def _card(ev: dict, out, title: str) -> None:
             lines.append(f"About {ev['total']} a month. To cancel one, say which.")
     lines = [_cut(l, 300) for l in lines if str(l or "").strip()]
     if lines:
-        out.text("\n".join([f"*{title}*"] + lines + [f"See the card: {s2_link()}"]))
+        body = "\n".join([f"*{title}*"] + lines + [f"See the card: {s2_link()}"])
+        taps = next_taps(ev)   # Sasha 352 · the card's next action(s) as taps (a tap says the words)
+        out.ask(body[:1000], taps) if taps else out.text(body)
 
 
 def _capabilities(ev: dict, out) -> None:
@@ -270,11 +272,19 @@ def _wa_open(ev: dict, out) -> None:
         out.text("\n".join(x for x in (ev.get("text"), ev.get("open")) if x))
 
 
+def next_taps(ev: dict) -> list:
+    """Sasha 352 · THE NEXT ACTION on WhatsApp: the card's actions (booking_signer/next_actions — the ONE table) as reply buttons, each
+    saying its words (say:…) — the same words, the same path, as typing them. A view (the Trip tab) is a link, not a tap. At most three."""
+    return [(_cut(a.get("label"), 20), "say:" + str(a["say"])[:190]) for a in ev.get("actions") or [] if isinstance(a, dict) and a.get("say")][:3]
+
+
 def _line(ev: dict, out) -> None:
-    """flight_chosen / total: one line."""
+    """flight_chosen / total: one line — and the trip's next action as its button (Sasha 352: "Book it")."""
     t = ev.get("total") or {}
     eur = t.get("total_eur") if isinstance(t, dict) else None
-    out.text(f"Chosen. The total, all in: €{eur:,.2f}" if isinstance(eur, (int, float)) else "Chosen — it's in your trip.")
+    body = f"Chosen. The total, all in: €{eur:,.2f}" if isinstance(eur, (int, float)) else "Chosen — it's in your trip."
+    taps = next_taps(ev)
+    out.ask(body, taps) if taps else out.text(body)
 
 
 def _nothing(ev: dict, out) -> None:

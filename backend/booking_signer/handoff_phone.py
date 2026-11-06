@@ -47,7 +47,10 @@ async def send(account: Optional[str]) -> str:
     s = await summary(account)
     if not s:
         return "There's nothing open to pick up yet — plan a trip or ask me to book something first."
-    out = await GW._tell(ch, f"Picking up: {s}. Reply to carry on — or ask “show me my itinerary”.")
+    from agapi import v0 as API   # Sasha 352 · the trip's next action rides with it ("Book it"), from its state — the ONE table
+    from . import wa_agent as WA
+    taps = WA.next_taps({"actions": (await API.trip_next(account))["actions"]})
+    out = await GW._tell(ch, f"Picking up: {s}. Reply to carry on — or ask “show me my itinerary”.", buttons=taps or None)
     if out.startswith("not"):
         return "I couldn't reach your WhatsApp just now (it needs a message from you in the last 24 hours) — say hi to Sasha there first."
     return "Sent to your phone — reply there to carry on."

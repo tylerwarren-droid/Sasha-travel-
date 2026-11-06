@@ -57,7 +57,8 @@ class TheTripCardIsTheTrip(unittest.TestCase):
         # Sasha 283b · the page's half (S2App reads r.json.card, never the event's kind) is frontend/scripts/presence-rule.test.mjs
         # "283 · item 1" — npm test; the backend gate never reads frontend source (Railway's image has none)
         src = inspect.getsource(__import__("booking_signer.ladder_routes", fromlist=["x"]).plan_view)
-        self.assertIn('"card": PS.card(view, tt)', src)
+        self.assertIn('card = PS.card(view, tt)', src)
+        self.assertIn('"card": card}', src)   # Sasha 352 · with its next actions (the latest trip's)
 
 
 class NoGateTestReachesIntoTheFrontend(unittest.TestCase):

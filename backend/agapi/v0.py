@@ -843,6 +843,59 @@ def book_only(said: Optional[str]) -> bool:
     return bool(t) and len(t.split()) <= 8 and bool(_BOOK_WORDS.search(t)) and not _CHANGE_ASK.search(t)
 
 
+async def trip_next(account: str) -> Dict[str, Any]:
+    """Sasha 352 · the trip's STATE as its record has it now, and its buttons (booking_signer/next_actions — the ONE table): its basket
+    rows, a read-back waiting for their yes, a trip being prepared, a search's offers. → {state, actions} (state None: no trip)."""
+    from booking_signer import basket as BK, next_actions as NA, plan_store as PS
+    rows: List[dict] = []
+    try:
+        p = await PS.latest(account) if account else None
+        if p and p.get("trip_id") and BK.on():
+            rows = await BK.items(account, p["trip_id"], BK.LIVE)
+    except Exception as e:   # the record not answering: no buttons (never a guessed one)
+        log.info("[agapi] trip_next: the record didn't answer (%s)", type(e).__name__)
+        return {"state": None, "actions": []}
+    h = _HELD.get(account)
+    state = NA.trip_state(held=bool(h and not stale(h.get("at"))), rows=rows, prepared=account in _PREP and not rows,
+                          offers=account in _OFFERS and not rows)
+    return {"state": state, "actions": NA.for_trip(state)}
+
+
+async def next_uses(account: str, act: str, said: str) -> List[tuple]:
+    """Sasha 352 · THE WORDS ARE THE ACTION: "Book it" (typed, spoken, or its button) → the calls its trip's state gives it, by code —
+    never the model, which may plan instead (VOICE LOOP 5: hold_booking!no_trip, then propose_trip in the booking turn). → [(tool, args)];
+    [] when the state has no such action (the conversation runs as before and says what's there)."""
+    from booking_signer import next_actions as NA
+    if act in ("book_all", "invoice", "invite_all"):
+        from booking_signer import groups as G
+        try:
+            mv = await G.store().movement(account)
+        except Exception:
+            mv = None
+        return [(NA.ACTIONS[act]["tool"], {})] if mv else []
+    st = (await trip_next(account))["state"]
+    if act not in [a["id"] for a in NA.for_trip(st)] and not (act == "book" and st in ("held", "prepared")):
+        return []
+    if act == "pay":
+        return [("book", {"approval": {"said": said}})]
+    if act in ("book", "see") and st == "prepared":   # the trip she's been preparing: ITS proposal (the prepared work, used as it is), then
+        prep = _PREP.get(account) or {}             # for "book it" its read-back — the first plan on the record, never a second
+        args = dict(prep.get("args") or {})
+        origin = str(args.get("origin") or next(iter(reversed(list((prep.get("flights") or {}).keys()))), "") or "").strip()
+        if origin:
+            args.update({"origin": args.get("origin") or origin.title(), "flights": True})
+        elif args.get("flights") is not False:   # where they fly from isn't known yet: never assumed (283) — the conversation asks
+            return []
+        if not args.get("start_date") or not args.get("destination"):
+            return []
+        return [("propose_trip", args)] + ([("hold_booking", {})] if act == "book" else [])
+    if act == "book" and st == "held":   # "Book it" AFTER the read-back they heard IS their yes — the yes's own path (book, their words)
+        return [("book", {"approval": {"said": said}})] if yes_to_book(said) else []
+    if act == "book":   # chosen: its read-back
+        return [("hold_booking", {})]
+    return []
+
+
 async def _never_replan(ctx: Ctx) -> None:
     """Refused: a plan already on the account and words that only ask to book it — or a bare yes answering its read-back."""
     said = ctx.user_said or ""

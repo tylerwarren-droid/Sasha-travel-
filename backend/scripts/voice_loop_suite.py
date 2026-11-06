@@ -97,7 +97,9 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, country:
                 pick = next((o for o in (card or {}).get("options") or [] if not o.get("chosen")), None)
                 said = pick["pick"] if pick else "the other flight out, please"
             sent_before = len(captured[GW.wa_key(number)])
-            t = {"user": said, "spoken": [], "tools": [], "renders": [], "text": "", "guard": [], "first_sound": None}
+            from booking_signer import plan_store as _PS   # Sasha 352 · was a trip on the record BEFORE this turn (a re-plan needs one)
+            t = {"user": said, "spoken": [], "tools": [], "renders": [], "text": "", "guard": [], "first_sound": None,
+                 "had_trip": bool(await _PS.latest(a))}
             t0 = time.perf_counter()
             async for ev in AG.turn_with_quiver(a, said, history, session):
                 if ev["type"] in ("say", "filler"):
@@ -197,10 +199,16 @@ def judge(name: str, turns: list, ends_paid: bool) -> dict:
     # Sasha 215 (f) · "book it" never re-plans: a turn that only asks to book plans nothing (run 20, Portugal: a new route and
     # a second total in the booking turn)
     from agapi.v0 import book_only
-    replans = [t for t in turns if book_only(t["user"]) and any(x.split("!")[0] in ("propose_trip", "prepare_trip") and "!" not in x
-                                                               for x in t["tools"])]
+    # Sasha 352 · a RE-plan needs a plan: a trip already on the record before the turn. "Book it." on the trip she has been preparing
+    # (nothing proposed yet) is that trip's next action — its proposal, then its read-back, by code (next_actions) — never a stumble:
+    # a book-only turn whose hold found no trip fails on its own line (VOICE LOOP 5, 6 Nov: hold_booking!no_trip, then the model planned)
+    replans = [t for t in turns if book_only(t["user"]) and t.get("had_trip", True)
+               and any(x.split("!")[0] in ("propose_trip", "prepare_trip") and "!" not in x for x in t["tools"])]
     if replans:
         fail.append(f"'{replans[0]['user'][:30]}' re-planned the trip: {replans[0]['tools']}")
+    stumbles = [t for t in turns if book_only(t["user"]) and "hold_booking!no_trip" in t["tools"]]
+    if stumbles:
+        fail.append(f"'{stumbles[0]['user'][:30]}' didn't reach the trip: {stumbles[0]['tools']}")
     claims = [t["text"] for t in turns if AG._claims(t["text"] or "")]
     if claims:
         fail.append(f"claimed booked with nothing paid: {claims[:1]}")

@@ -254,6 +254,10 @@ def _fine_print_tools() -> tuple:
     return FP.TOOL_NAMES + ("find_subscriptions", "cancel_subscription")   # CR 84 · the subscriptions list card; Sasha 243 · its cancel page
 
 
+#: Sasha 352 · the tools whose card IS the trip (its chosen flight, its total, its proposal): each card carries the trip's next action
+TRIP_CARD_TOOLS = ("choose_offer", "get_total", "propose_trip", "swap_stay")
+
+
 class _TapUse:
     """Sasha 299 · (4) a Book tap's call (agapi.venues.tap_plan) standing in the first model step's place — the shape the turn's loop
     reads from a step (type, id, name, input; model_dump for the messages), so the SAME loop runs it: every gate, render and line."""
@@ -470,7 +474,9 @@ async def booked_event(account: Optional[str]) -> Optional[dict]:
     except Exception as e:
         log.info("[agent] booked status not read: %s", type(e).__name__)
         return None
-    return {"type": "booked", "status": st} if st.get("state") in ("booked", "partly_booked") else None
+    if st.get("state") not in ("booked", "partly_booked"):
+        return None
+    return {"type": "booked", "status": st, "actions": (await API.trip_next(account or ""))["actions"]}   # Sasha 352 · Change / Cancel
 
 
 async def _anything_booked(ctx: API.Ctx) -> bool:
@@ -1052,6 +1058,15 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         elif _cy and _cy.get("number_confirmed_at") and _yes_y(message):   # Sasha 314 · a cancel waiting on the number: its yes sends it
             tap_uses = [_TapUse(f"toolu_yes_{turn_key}", "cancel_venue", {"act_id": _cy.get("act_id"), "venue": _cy.get("venue"),
                                                                             "approval": {"said": message}})]
+    # Sasha 352 · THE NEXT ACTION, by code: words that only ask for an item's next action ("Book it." · "Pay here" · "Book all" — typed,
+    # spoken, or its button, which says them) run the calls that action is (agapi.v0.next_uses, from booking_signer/next_actions — the
+    # ONE table); the model then only says it. Every surface: the S2 tap, S1's voice, WhatsApp's say: tap — one path.
+    if not tap_uses and account:
+        from booking_signer import next_actions as _NA
+        _act = _NA.heard(message)
+        if _act and _act != "yes":
+            _uses = [(n, a) for n, a in await API.next_uses(account, _act, message) if any(t["name"] == n for t in tools)]
+            tap_uses = [_TapUse(f"toolu_next_{turn_key}_{i}", n, a) for i, (n, a) in enumerate(_uses)]
     must = _V.manage_tool(message) if honest and surface == "s2" and not tap_uses else None
     if must and any(t["name"] == must for t in tools):
         got = await quote_args(client, next(t for t in tools if t["name"] == must), msgs)
@@ -1172,6 +1187,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 _names_in(r["result"], tstate["tool_names"])
                 tstate["allowed"] |= tstate["tool_names"]
                 ev = render(u.name, r["result"], args)
+                if ev and u.name in TRIP_CARD_TOOLS:   # Sasha 352 · a trip's card carries its NEXT action(s), from its state now (one table)
+                    ev = {**ev, "actions": (await API.trip_next(account))["actions"]}
                 if ev and ev.get("focus") and ev["focus"] in {c.get("place_id") for c in tstate["cards"]}:
                     # a PICK from the cards on screen: the cards stay, the picked one is highlighted (never the others removed)
                     tstate["focus"] = ev["focus"]

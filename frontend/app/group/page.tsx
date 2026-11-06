@@ -17,9 +17,12 @@ import People from './People'   // Sasha 351 · the company's one roster
 
 type Row = { member_id: string; person_id?: string; name: string; grade?: string | null; home_city?: string | null; home_airport?: string | null; out?: string | null; back?: string | null
   transport?: string | null; hotel?: string | null; price_eur?: number | null; flight_eur?: number | null; hotel_eur_per_night?: number | null
-  limit: { flight_return_eur?: number; hotel_night_eur?: number }; status: string; vault?: { passport: boolean; loyalty: string[] } }
+  limit: { flight_return_eur?: number; hotel_night_eur?: number }; status: string; vault?: { passport: boolean; loyalty: string[] }; actions?: NextAct[] }
+// Sasha 352 · THE NEXT ACTION: each row's and the list's buttons come from the server (booking_signer/next_actions — the ONE table, from
+// each status); a button calls the SAME outcome its words reach in the chat (group_outcome via these routes)
+type NextAct = { id: string; label: string; say?: string; tool?: string; args?: { who?: string[]; over_limit_ok?: boolean } }
 type View = { movement?: { company?: string; destination?: string; starts_on?: string; ends_on?: string; hotel_area?: string }
-  rows: Row[]; counts?: Record<string, number>; why?: string }
+  rows: Row[]; counts?: Record<string, number>; why?: string; actions?: NextAct[] }
 
 const eur = (n?: number | null) => (typeof n === 'number' ? `€${Math.round(n)}` : '—')
 
@@ -155,6 +158,13 @@ export default function GroupPage() {
     if (l.ok) setV(l.json as unknown as View)
     await pullTrips()
   }
+  const doNext = (a: NextAct) => {   // the action behind the button — the same outcome the chat's tool reaches
+    if (a.tool === 'group_book') return act('book', a.args?.who || null, undefined, a.args?.over_limit_ok ? { over_ok: true } : {})
+    if (a.tool === 'group_cancel') return act('cancel', a.args?.who || null)
+    if (a.tool === 'group_invite_vault') return invite(a.args?.who || null)
+    if (a.tool === 'group_invoice') return invoice()
+    return Promise.resolve(setSaid(`${a.label}: this page can't do that yet — ask Sasha in the chat.`))
+  }
   const onFile = (f: File | undefined) => {
     if (!f) return
     const rd = new FileReader()
@@ -190,9 +200,7 @@ export default function GroupPage() {
               : t.invite ? <button type="button" style={btn2} onClick={press('Invite', () => invite(t.invite!))}>{t.label}</button> : null}</span>)}
         </div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-          <button type="button" onClick={press('Invite everyone', () => invite(null))} style={btn2}>Invite everyone to the vault</button>
-          <button type="button" onClick={press('Book all', () => act('book', null))} style={btn}>Book all planned</button>
-          <button type="button" onClick={press('The invoice', invoice)} style={btn2}>The invoice</button>
+          {(v?.actions || []).map(a => <button key={a.id} type="button" data-next={a.id} onClick={press(a.label, () => doNext(a))} style={a.id === 'book_all' ? btn : btn2}>{a.label}</button>)}
         </div>
         <div data-swap style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
           <input value={swapOut} onChange={e => setSwapOut(e.target.value)} placeholder="Swap… (who leaves)" aria-label="who leaves" style={mark('who leaves')} />
@@ -226,9 +234,7 @@ export default function GroupPage() {
                 <td style={{ padding: '6px 8px' }}>{[r.limit.flight_return_eur && `flight ≤ ${eur(r.limit.flight_return_eur)}`,
                   r.limit.hotel_night_eur && `hotel ≤ ${eur(r.limit.hotel_night_eur)}/night`].filter(Boolean).join(' · ') || '—'}</td>
                 <td style={{ padding: '6px 8px' }} data-vault>{r.vault?.passport ? 'Passport ✓' : 'Passport missing'}{r.vault?.loyalty?.length ? ` · ${r.vault.loyalty.map(x => `${x} ✓`).join(' · ')}` : ''}
-                  {!r.vault?.passport && <button type="button" onClick={press('Invite', () => invite([r.member_id]))} style={{ ...small, marginLeft: 6 }}>Invite</button>}
-                  {r.vault?.passport && r.status !== 'booked' && r.status !== 'cancelled' && <button type="button" onClick={press('Book', () => act('book', [r.name]))} style={{ ...small, marginLeft: 6 }}>Book</button>}
-                  {r.status === 'booked' && <button type="button" onClick={press('Cancel', () => act('cancel', [r.name]))} style={{ ...small, marginLeft: 6 }}>Cancel</button>}</td>
+                  {(r.actions || []).map(a => <button key={a.id} type="button" data-next={a.id} onClick={press(a.label, () => doNext(a))} style={{ ...small, marginLeft: 6 }}>{a.label}</button>)}</td>
                 <td style={{ padding: '6px 8px', color: TONE[r.status] || T.text, fontWeight: 600 }}>{r.status}</td>
               </tr>))}</tbody>
           </table>

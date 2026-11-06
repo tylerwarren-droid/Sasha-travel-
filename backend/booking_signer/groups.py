@@ -715,9 +715,12 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
                     **({"price_eur": booked_rec[m["id"]]["price_eur"], "references": booked_rec[m["id"]]["references"],
                         "transport": _transport(rows) or "Booked · " + " · ".join(booked_rec[m["id"]]["references"])}
                        if m["id"] in booked_rec else {})})
+    from . import next_actions as NA   # Sasha 352 · each person's next action, and the list's own: the ONE table, from each status
+    for r in out:
+        r["actions"] = NA.for_group_row(r)
     counts = {s: sum(1 for r in out if r["status"] == s) for s in STATUSES if any(r["status"] == s for r in out)}
     return {"movement": {k: mv.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on", "hotel_area")},
-            "limits": (mv.get("rules") or {}).get("limits") or {}, "rows": out, "counts": counts}
+            "limits": (mv.get("rules") or {}).get("limits") or {}, "rows": out, "counts": counts, "actions": NA.for_group(out)}
 
 
 def summary(v: Dict[str, Any], top: int = 25) -> str:
@@ -956,7 +959,7 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
         empty = None
     title = f"{mv.get('company')} → {mv.get('destination')}" if mv else "Group movement"
     counts = ", ".join(f"{n} {s}" for s, n in (v.get("counts") or {}).items())
-    return {"title": title, "rows": rows, "counts": counts, "link": "/group", "empty": empty,
+    return {"title": title, "rows": rows, "counts": counts, "link": "/group", "empty": empty, "actions": v.get("actions") or [],   # Sasha 352
             "say": empty or f"The master list: {counts}. It's on the card, and the full list is on the Group page."}
 
 

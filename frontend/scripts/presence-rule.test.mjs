@@ -203,9 +203,10 @@ test('281 · the page asks for the camera line only while her live face is up', 
 
 test('283 · item 1 · the trip card reads the Trip view\'s own record — never the event\'s kind (moved from backend T63, 283b)', () => {
   const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
-  assert.ok(!app.includes("'Flights to choose from'"))
-  assert.ok(app.includes("bookingReq('/api/booking/plan')"))
-  assert.ok(app.includes('r.json.card'))
+  const cards = readFileSync(new URL('../app/components/cards/S2Cards.tsx', import.meta.url), 'utf8')   // Sasha 352 · the ONE trip card, shared
+  assert.ok(!app.includes("'Flights to choose from'") && !cards.includes("'Flights to choose from'"))
+  assert.ok(cards.includes("bookingReq('/api/booking/plan')"))
+  assert.ok(cards.includes('r.json.card'))
 })
 
 test('283 · item 4c · his plain answer to "Did it go through?" — and only a plain one', () => {

@@ -5,10 +5,12 @@
  * wa_open, activities) through SharedCard. One look, one place.
  */
 import { PlaceCard } from './PlaceCard'   // Sasha 252 · activities are places
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { untag } from '@/lib/no-test-label.mjs'
 import { subsHeading, subsFooter } from '@/lib/subscriptions-heading.mjs'   // Sasha 246
 import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { bookingReq } from '@/lib/booking-client'   // Sasha 352 · the trip card reads the Trip view's own record
+import { eur as euros } from '@/lib/money'
 import { again, announce, failed, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -306,10 +308,46 @@ export function PreparedCard({ ev }: { ev: Ev }) {
 }
 
 /** Sasha 241 · the render kinds these cards draw (sasha.py's former KINDS_S2_ONLY): one render event → its card, for /next. */
-export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities', 'subscriptions', 'prepared', 'group_list']   // Sasha 243 · + CR 84's list · Sasha 345 · the master list
+export const SHARED_KINDS = ['keep_capture', 'capabilities', 'plans', 'notice', 'counter_card', 'my_cards', 'accident', 'claim_status', 'wa_open', 'activities', 'subscriptions', 'prepared', 'group_list', 'flight_chosen', 'trip']   // Sasha 243 · + CR 84's list · Sasha 345 · the master list
 
 /** Sasha 345 · THE MASTER LIST's card (/s2 and /next): its rows from the record, the Group page — or, with nobody planned, that, plainly. */
-export function GroupListCard({ c }: { c: Ev }) {
+/** Sasha 352 · THE NEXT ACTION: a card's buttons, exactly as the server gives them (booking_signer/next_actions — the ONE table, from the
+ *  item's state). A button IS its words: a tap says `say` (the same path as typing it); `open: 'trip'` opens the Trip tab (a view). */
+export type NextAction = { id: string; label: string; say?: string; open?: string }
+export function NextButtons({ actions, send }: { actions?: NextAction[] | null; send: (t: string) => void }) {
+  const xs = (actions || []).filter(a => a && a.label && (a.say || a.open))
+  if (!xs.length) return null
+  return (
+    <div data-next-actions style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+      {xs.map((a, i) => (
+        <button key={a.id} type="button" data-next={a.id}
+          onClick={() => (a.open ? window.dispatchEvent(new Event('s2-open-trip')) : send(String(a.say)))}
+          style={{ padding: '8px 14px', borderRadius: 999, border: i === 0 && !a.open ? 0 : `1px solid ${C.gold}`, fontWeight: 700,
+            background: i === 0 && !a.open ? C.gold : 'transparent', color: i === 0 && !a.open ? '#111' : C.gold }}>{untag(a.label)}</button>))}
+    </div>)
+}
+
+/** Sasha 283 · item 1 · THE TRIP CARD: what the trip IS — read from the Trip view's own record (/api/booking/plan → plan_store.card).
+ *  Sasha 352 · its buttons are its NEXT action(s) from the trip's state (the server's `actions`), on /s2 and S1 alike. */
+type TripSay = { title: string; lines: string[]; total_eur: number | null; actions?: NextAction[] }
+export function TripCard({ send }: { send: (t: string) => void }) {
+  const [t, setT] = useState<TripSay | null | undefined>(undefined)
+  useEffect(() => {
+    let off = false
+    const pull = () => { observe(bookingReq('/api/booking/plan').then(r => { if (!off && r.ok) setT((r.json.card ?? null) as TripSay | null) }), 'Reading the trip card', () => undefined) }
+    pull()
+    window.addEventListener('sasha-plan-refresh', pull)
+    return () => { off = true; window.removeEventListener('sasha-plan-refresh', pull) }
+  }, [])
+  return (
+    <Box k="Your trip" h={t ? untag(t.title) : t === null ? 'Your trip' : '…'}>
+      {(t?.lines || []).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
+      {t && t.total_eur !== null ? <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{euros(t.total_eur)} all in</div> : null}
+      <NextButtons actions={t?.actions} send={send} />
+    </Box>)
+}
+
+export function GroupListCard({ c, send }: { c: Ev; send?: (t: string) => void }) {
   const rows: Ev[] = Array.isArray(c.rows) ? c.rows : []
   return (
     <Box k="The group's list" h={String(c.title || 'Group movement')}>
@@ -322,6 +360,7 @@ export function GroupListCard({ c }: { c: Ev }) {
           </div>))}
           {rows.length > 25 && <div style={{ fontSize: 13, color: C.dim }}>…and {rows.length - 25} more on the Group page.</div>}
         </div>)}
+      {send ? <NextButtons actions={c.actions as NextAction[]} send={send} /> : null}
       <a href={String(c.link || '/group')} style={{ display: 'inline-block', marginTop: 10, color: C.gold, fontWeight: 600 }}>Open the master list</a>
     </Box>)
 }
@@ -341,7 +380,8 @@ export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) 
     {(ev.unread || []).length ? <div style={{ fontSize: 13, color: C.dim, margin: '4px 2px' }}>Couldn&apos;t check on their official sites: {ev.unread.map(untag).join(', ')}</div> : null}</>)
   if (ev.kind === 'prepared' && typeof ev.url === 'string' && /^https:\/\//.test(ev.url)) return <PreparedCard ev={ev} />   // Sasha 248
   if (ev.kind === 'subscriptions' && Array.isArray(ev.items)) return <SubscriptionsCard items={ev.items} total={ev.total} source={ev.source} send={send} />
-  if (ev.kind === 'group_list' && ev.title) return <GroupListCard c={ev} />   // Sasha 345
+  if (ev.kind === 'group_list' && ev.title) return <GroupListCard c={ev} send={send} />   // Sasha 345 · 352: its next actions
+  if (ev.kind === 'flight_chosen' || ev.kind === 'trip') return <TripCard send={send} />   // Sasha 352 · S1 too: the ONE trip card
   if (ev.kind === 'notice' && ev.title) return (
     <Box k={ev.status ? untag(ev.status) : 'Update'} h={untag(ev.title)}>
       {(ev.lines || []).map((l: string, i: number) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}

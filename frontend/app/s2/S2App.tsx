@@ -19,7 +19,7 @@ import S2Hello, { type HelloCtl } from './S2Hello'
 import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
 import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
-import { OptionsCard, TotalCard, PayLink, type Opt } from '@/app/components/cards/S2Cards'   // Sasha 349
+import { OptionsCard, TotalCard, PayLink, TripCard, NextButtons, type NextAction, type Opt } from '@/app/components/cards/S2Cards'   // Sasha 349 · 352
 import { C, Box, shrink, KeepCapture, GroupListCard, WaOpen, Plans, type CalUpdate, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
@@ -47,7 +47,7 @@ type Card =
       ask?: string; choices?: { title: string; route: string }[]; read_back_id?: string }   // Sasha 265 · item 4: the call's card IS the question
   | { k: 'calendar'; title?: string; links: Record<string, string>; update?: 'cancel' | 'change' }
   | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
-  | { k: 'booked'; line: string }
+  | { k: 'booked'; line: string; actions?: NextAction[] }
   | { k: 'keep_capture'; what: 'passport' | 'loyalty' }
   | { k: 'wa_open'; to: { name?: string | null; number?: string }; text: string; open: string; why: string }   // Sasha 230
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
@@ -542,28 +542,6 @@ function NoAnswerCard({ c, tap }: { c: Extract<Card, { k: 'no_answer' }>; tap: (
     </Box>)
 }
 
-/** Sasha 283 · item 1 · THE TRIP CARD: what the trip IS — read from the Trip view's own record (/api/booking/plan → plan_store.card:
- *  the place and nights, where they stay, the flights if any, the one total she said). Its header is its own title; one button. */
-type TripSay = { title: string; lines: string[]; total_eur: number | null }
-function TripCard() {
-  const [t, setT] = useState<TripSay | null | undefined>(undefined)
-  useEffect(() => {
-    let off = false
-    const pull = () => { bookingReq('/api/booking/plan').then(r => { if (!off && r.ok) setT((untagDeep(r.json.card ?? null) as TripSay | null)) }).catch(noted('Reading the trip card')) }
-    pull()
-    window.addEventListener('sasha-plan-refresh', pull)
-    return () => { off = true; window.removeEventListener('sasha-plan-refresh', pull) }
-  }, [])
-  const eur = euros   // Sasha 349 · one way to say money (this card rounded €58.55 to €59)
-  return (
-    <Box k="Your trip" h={t ? untag(t.title) : t === null ? 'Your trip' : '…'}>
-      {(t?.lines || []).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
-      {t && t.total_eur !== null ? <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{eur(t.total_eur)} all in</div> : null}
-      <button type="button" onClick={() => window.dispatchEvent(new Event('s2-open-trip'))}
-        style={{ marginTop: 6, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 600 }}>See the whole trip</button>
-    </Box>)
-}
-
 function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void
   tap: (title: string, readBackId: string, route: string) => void }) {
   if (c.k === 'read_back' && c.choices && c.choices.length && c.read_back_id) return <CallCard c={c} tap={tap} />
@@ -602,7 +580,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
     </Box>)
   if (c.k === 'reconnect') return (   /* Sasha 323 · the mailbox link died: told once, one tap to /you */
     <a href={c.url} data-reconnect style={{ display: 'inline-block', marginTop: 6, padding: '10px 18px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>{c.label}</a>)
-  if (c.k === 'trip') return <TripCard />
+  if (c.k === 'trip') return <TripCard send={send} />   // Sasha 352 · its next action, from the shared card
   if (c.k === 'options') return <OptionsCard kind={c.kind} title={c.title} options={c.options} choose={send} />   // Sasha 349 · a tap says which one
   if (c.k === 'total') return <TotalCard total={c.total} />
   if (c.k === 'paylink') return <PayLink url={c.url} label={c.label} />
@@ -615,7 +593,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
       </div>}
     </Box>)
   if (c.k === 'plans') return <Plans items={c.items} on={c.on} updates={c.updates} />
-  if (c.k === 'group_list') return <GroupListCard c={c} />   // Sasha 345 · the master list goes out WITH the list (S2Cards: the one card)
+  if (c.k === 'group_list') return <GroupListCard c={c} send={send} />   // Sasha 345 · the master list goes out WITH the list (S2Cards: the one card)
   if (c.k === 'notice') return (
     <Box k={c.status ? untag(c.status) : 'Update'} h={untag(c.title)}>
       {c.lines.map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
@@ -631,7 +609,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
   if (c.k === 'kind_ask') return <KindAsk choices={c.choices} send={send} />   // Sasha 297 · a tap IS the answer (or their own words)
   if (c.k === 'discover') return <DiscoverCards c={c} choose={pick} />   // Sasha 276 · AgAPI's groups, its pick, through the ONE place card
   if (c.k === 'venues') return <VenueCards cards={c.cards} choose={pick} />   // Sasha 231 · the tap carries the card's place_id
-  if (c.k === 'booked') return <><Box k={/^Partly booked/i.test(c.line) ? 'Partly booked' : 'Booked'} h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^(Partly )?Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)" /><After k="booked" /></>
+  if (c.k === 'booked') return <><Box k={/^Partly booked/i.test(c.line) ? 'Partly booked' : 'Booked'} h={firstSentences(untag(c.line.replace(/^✅\s*/, '').replace(/^(Partly )?Booked:\s*/i, '')), 2)} tone="rgba(126,226,168,.5)"><NextButtons actions={c.actions} send={send} /></Box><After k="booked" /></>
   if (c.k === 'calendar') return (
     <><Box k={c.update === 'cancel' ? 'Remove from your calendar' : c.update === 'change' ? 'Update your calendar' : 'Add to your calendar'} h={untag(c.title || 'Your booking')}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -873,7 +851,8 @@ export default function S2App() {
       if (ev.type !== 'booked' && ev.type !== 'booking_failed') return
       const line = ev.type === 'booked' ? bookedLine(ev) : null   // Sasha 249 · the card from the `booked` event, the server's one status
       setMsgs(ms => [...ms.map(x => ({ ...x, cards: x.cards.map(c => (c.k === 'pay' ? { ...c, already_paid: ev.type === 'booked' } : c)) })),
-                     { role: 'sasha', text: untag(String(ev.text || ev.say || '')), cards: line ? [{ k: 'booked', line }] : [] }])
+                     { role: 'sasha', text: untag(String(ev.text || ev.say || '')), cards: line ? [{ k: 'booked', line, actions: Array.isArray(ev.actions) ? ev.actions : undefined }] : [] }])
+      window.dispatchEvent(new Event('sasha-plan-refresh'))   // Sasha 352 · the trip card's buttons follow its state (booked → Change / Cancel)
       // Sasha 279 · B · SHE SAYS SO FIRST: here now → spoken at once (it was only written — Tyler, 21 Oct, had to ask); away → her
       // return leads with it (rule 4's news, held above)
       if (!held && said) speaker.say(String(ev.spoken || said))
@@ -968,7 +947,7 @@ export default function S2App() {
           // Sasha 249 · ONE STATUS: the "Booked" card was made here by a regex on her reply (/^✅ Booked/) — deleted. It comes only
           // from the `booked` event, its line from the server's one status (agapi/s2_status.py — get_status's own)
           else if (ev.type === 'done') { reply = ev.text || reply; if (ev.dormant) setDormant(true); patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(noted('Closing the reply stream')) }
-          else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line }] })) }
+          else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line, actions: Array.isArray(ev.actions) ? ev.actions : undefined }] })) }
           else if (ev.type === 'render') {
             const add0 = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k || (c.k === 'options' && x.k === 'options' && x.title !== c.title)), c] }))
             // Sasha 274 · rows 1063/1064: a booking tried as a GUEST offers sign-in, in the conversation, under its card

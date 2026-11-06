@@ -502,9 +502,14 @@ async def plan_view(request: Request):
     rows = PS.truthful(IT.with_terms((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account))   # 301
     view = await PS.view(account, p, JN.for_journey(rows, p.get("trip_id")))
     tt = await trip_total(account, p.get("trip_id"), p)
+    card = PS.card(view, tt)   # Sasha 283 · item 1 · the conversation's trip card: THIS view, said as what the trip is
+    if card is not None and not tid:   # Sasha 352 · its buttons: the trip's NEXT action from its state (next_actions — the ONE table)
+        from agapi import v0 as API
+        nxt = await API.trip_next(account)
+        card = {**card, "state": nxt["state"], "actions": nxt["actions"]}
     return {"plan": view, "plans": await PS.plans(account), **({"trip_total": tt} if tt else {}),
             **({"trip_status": ts} if (ts := await trip_status(account, p.get("trip_id"))) else {}),
-            "card": PS.card(view, tt)}   # Sasha 283 · item 1 · the conversation's trip card: THIS view, said as what the trip is
+            "card": card}
 
 
 @router.get("/handover/word")

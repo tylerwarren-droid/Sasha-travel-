@@ -266,9 +266,24 @@ class PgStore:
     async def movement(self, owner: str, movement_id: Optional[str] = None) -> Optional[dict]:
         async def go(c):
             q = ("select m.*, g.name as company, g.owner_id from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
-                 + ("and m.id = $2 " if movement_id else "") + "order by m.created_at desc limit 1")
+                 + ("and m.id = $2 " if movement_id else "") + "order by m.opened_at desc, m.created_at desc limit 1")   # Sasha 351 · the OPEN trip
             r = await c.fetchrow(q, uuid.UUID(owner), *([uuid.UUID(movement_id)] if movement_id else []))
             return _row(r) if r else None
+        return await self._run(go)
+
+    async def open(self, owner: str, movement_id: str) -> bool:
+        """Sasha 351 · the organiser's CURRENT trip is the one they opened last (sql/056 opened_at) — never just the newest made."""
+        r = await self._run(lambda c: c.execute("update group_movements m set opened_at = now() from groups g where g.id = m.group_id "
+                                                "and g.owner_id = $1 and m.id = $2", uuid.UUID(owner), uuid.UUID(movement_id)))
+        return str(r).split()[-1] != "0"
+
+    async def trips(self, owner: str) -> List[dict]:
+        async def go(c):
+            rows = await c.fetch("select m.id, g.name as company, m.destination, m.starts_on, m.ends_on, m.opened_at, "
+                                 "(select count(*) from group_members gm where gm.movement_id = m.id) as people from group_movements m "
+                                 "join groups g on g.id = m.group_id where g.owner_id = $1 order by m.opened_at desc, m.created_at desc limit 50",
+                                 uuid.UUID(owner))
+            return [_row(r) for r in rows]
         return await self._run(go)
 
     async def set_rules(self, owner: str, movement_id: str, rules: dict) -> None:
@@ -280,7 +295,7 @@ class PgStore:
 
     # ── the company and its roster ──
     async def company(self, owner: str, name: Optional[str] = None, create: bool = False) -> Optional[dict]:
-        """The organiser's company by its name (made when `create`), else the one of their latest trip, else their latest company."""
+        """The organiser's company by its name (made when `create`), else the one of their OPEN trip, else their latest company."""
         async def go(c):
             if name:
                 r = await c.fetchrow("select * from groups where owner_id = $1 and lower(name) = lower($2) order by created_at desc limit 1",
@@ -289,7 +304,7 @@ class PgStore:
                     r = await c.fetchrow("insert into groups (owner_id, name) values ($1,$2) returning *", uuid.UUID(owner), name[:200])
                 return _row(r) if r else None
             r = await c.fetchrow("select g.* from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
-                                 "order by m.created_at desc limit 1", uuid.UUID(owner))
+                                 "order by m.opened_at desc, m.created_at desc limit 1", uuid.UUID(owner))   # the OPEN trip's company
             r = r or await c.fetchrow("select * from groups where owner_id = $1 order by created_at desc limit 1", uuid.UUID(owner))
             return _row(r) if r else None
         return await self._run(go)
@@ -380,14 +395,28 @@ class MemStore:
     async def new_movement(self, owner, company, destination, starts_on, ends_on, hotel_area):
         g = self._group(owner, company)
         mid = str(uuid.uuid4())
+        self._opened = getattr(self, "_opened", 0) + 1
         self.movements[mid] = {"id": mid, "owner_id": owner, "company": company, "group_id": g["id"], "destination": destination,
-                               "starts_on": starts_on, "ends_on": ends_on, "hotel_area": hotel_area, "rules": {}}
+                               "starts_on": starts_on, "ends_on": ends_on, "hotel_area": hotel_area, "rules": {}, "opened": self._opened}
         self.rows[mid] = []
         return mid
 
     async def movement(self, owner, movement_id=None):
-        ms = [m for m in self.movements.values() if m["owner_id"] == owner and (not movement_id or m["id"] == movement_id)]
+        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and (not movement_id or m["id"] == movement_id)),
+                    key=lambda m: m["opened"])
         return dict(ms[-1]) if ms else None
+
+    async def open(self, owner, movement_id):
+        m = self.movements.get(movement_id)
+        if not m or m["owner_id"] != owner:
+            return False
+        self._opened += 1
+        m["opened"] = self._opened
+        return True
+
+    async def trips(self, owner):
+        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner), key=lambda m: -m["opened"])
+        return [{k: m.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on")} | {"people": len(self.rows[m["id"]])} for m in ms]
 
     async def set_rules(self, owner, movement_id, rules):
         self.movements[movement_id]["rules"] = json.loads(json.dumps(rules))
@@ -396,7 +425,7 @@ class MemStore:
         if name:
             g = self._group(owner, name, create)
             return dict(g) if g else None
-        ms = [m for m in self.movements.values() if m["owner_id"] == owner]
+        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner), key=lambda m: m["opened"])
         if ms:
             return dict(self.groups[ms[-1]["group_id"]])
         gs = [g for g in self.groups.values() if g["owner_id"] == owner]
@@ -706,6 +735,11 @@ async def start(account: str, company: str, destination: str, starts_on: Optiona
     if last and str(last.get("company") or "").strip().lower() == company.strip().lower() and same(last.get("destination"), destination) \
             and same(last.get("starts_on"), starts_on) and same(last.get("ends_on"), ends_on):
         return {"movement_id": last["id"], "reused": True}
+    for t in await store().trips(account):   # Sasha 351 · the same trip, made before and not the open one → THAT one, opened again
+        if str(t.get("company") or "").strip().lower() == company.strip().lower() and same(t.get("destination"), destination) \
+                and same(t.get("starts_on"), starts_on) and same(t.get("ends_on"), ends_on):
+            await store().open(account, t["id"])
+            return {"movement_id": t["id"], "reused": True}
     mid = await store().new_movement(account, company.strip()[:200], destination.strip()[:120], starts_on, ends_on, (hotel_area or "").strip()[:200] or None)
     return {"movement_id": mid}
 
@@ -844,6 +878,24 @@ async def choose(account: str, who: List[str], movement_id: Optional[str] = None
     n = await st.select(mv["id"], ids)
     links = [m["id"] for m in await st.members(mv["id"]) if m["person_id"] in ids]
     return {"selected": n, "on_trip": len(links), "links": links, "unknown": unknown, "twice": twice, "movement_id": mv["id"]}
+
+
+async def trips(account: str) -> Dict[str, Any]:
+    """Sasha 351 · the organiser's trips (newest opened first) — the first is the OPEN one: everything on /group and in the chat is about it."""
+    ts = await store().trips(account)
+    return {"trips": [{**t, "open": i == 0} for i, t in enumerate(ts)]}
+
+
+async def open_trip(account: str, which: str) -> Dict[str, Any]:
+    """Open a trip by its id, or by its destination as the organiser says it ("Lisbon") — two trips there: asked, never guessed."""
+    w = str(which or "").strip()
+    ts = await store().trips(account)
+    hit = [t for t in ts if t["id"] == w] or [t for t in ts if str(t.get("destination") or "").strip().lower() == w.lower()]
+    if len(hit) != 1:
+        return {"why": (f"Which {w} trip? " + "; ".join(f"{t['destination']} {str(t.get('starts_on') or '')[:10]}" for t in hit)) if hit
+                else f"There's no {w} trip — your trips: " + (", ".join(t["destination"] for t in ts) or "none yet"), "trips": ts}
+    await store().open(account, hit[0]["id"])
+    return {"trip": hit[0]}
 
 
 async def set_limits(account: str, by_grade: Optional[dict] = None, by_member: Optional[dict] = None, movement_id: Optional[str] = None) -> dict:

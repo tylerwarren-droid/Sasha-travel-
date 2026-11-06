@@ -1585,6 +1585,11 @@ async def group_choose(ctx: Ctx, a: dict) -> dict:
     return _outcome(await _GO().run(ctx.account, "choose", {"who": who or None}))
 
 
+async def group_open(ctx: Ctx, a: dict) -> dict:
+    """Sasha 351 · open one of the organiser's trips ("the Lisbon trip") — every group action after it is about that trip."""
+    return _outcome(await _GO().run(ctx.account, "open", {"trip": a.get("trip")}))
+
+
 async def group_limits(ctx: Ctx, a: dict) -> dict:
     """Price limits per grade ({grade: {flight_return_eur, hotel_night_eur}}) or per person (by name) — on the movement's ONE rules."""
     from booking_signer import groups as G
@@ -1963,6 +1968,10 @@ TOOLS: List[dict] = [
        "everyone=true). Each is linked to the trip (their profile and passport are the roster's — never re-entered) and planned from their "
        "home airport. A name not on the roster: say so (add it first with group_person_add). Say its `say`.",
        {"who": {"type": "array", "items": {"type": "string"}}, "everyone": {"type": "boolean"}}, [], {"type": "object"}, ["missing", "not_done"]),
+    _t("group_open", "Magellan", group_open, "Open one of the organiser's group trips — by its destination as they say it (\"the Lisbon "
+       "trip\") — when they talk about a trip that isn't the open one. Every group action after it (the list, booking, the invoice) is about "
+       "that trip. Say its `say`.",
+       {"trip": {"type": "string"}}, ["trip"], {"type": "object"}, ["missing", "not_done"]),
     _t("group_limits", "Magellan", group_limits, "The group's price limits, per grade ({\"worker\": {\"flight_return_eur\": 600, "
        "\"hotel_night_eur\": 110}}) or per person by name. Only the numbers they said, in EUR. Say its `say` word for word: it is what was "
        "SAVED, read back, and the planning it started.",

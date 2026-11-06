@@ -146,7 +146,7 @@ class NeverSilent(unittest.TestCase):
         with World():
             args = {"swap": {"who": ["A"], "to": "B"}, "cancel": {"who": ["A"]}, "add": {"rows": [{"name": "A"}]}}
             for a in GO.ACTIONS:
-                if a in ("person_add", "person_edit", "documents"):   # Sasha 351 · the roster's actions need a company, not a trip
+                if a in ("person_add", "person_edit", "documents", "open"):   # Sasha 351 · the roster's actions need a company, not a trip; open: its own words
                     continue
                 out = run(GO.run(NOBODY, a, {**args, "choose": {"who": ["A"]}}.get(a, {})))
                 want = "There's no trip yet — tell me where, when and the hotel area first." if a == "choose" else GO.NO_MOVEMENT

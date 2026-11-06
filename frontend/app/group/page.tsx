@@ -42,12 +42,19 @@ export default function GroupPage() {
   // Sasha 336 · "Book all" with nothing bookable: a short list with taps (book anyway / invite)
   const [taps, setTaps] = useState<{ label?: string; say?: string; act?: { action: 'book' | 'swap'; who: string[]; to?: string; over_ok: boolean }; invite?: string[] }[]>([])
 
+  // Sasha 351 · the organiser's trips (each a selection from the one roster): the OPEN one first — the page is about it
+  const [trips, setTrips] = useState<{ id: string; destination: string; starts_on?: string | null; ends_on?: string | null; people?: number; open?: boolean }[]>([])
+  const pullTrips = async () => {
+    const r = await bookingReq('/api/booking/group/trips')
+    if (r.ok) setTrips(((r.json as { trips?: typeof trips }).trips) || [])
+  }
   useEffect(() => {
     let off = false
     const pull = async () => {
       const r = await bookingReq('/api/booking/group/list').catch(() => null)
       if (!off && r?.ok) setV(r.json as unknown as View)
     }
+    observe(pullTrips(), 'Reading your trips', toConsole)
     observe(pull(), 'Reading the master list', toConsole)
     bookingReq('/api/booking/group/waiting').then(r => {   // Sasha 340 · a moved fare's card survives a reload
       const re = ((r?.json || {}) as { reasked?: NonNullable<typeof card>[] }).reasked || []
@@ -138,6 +145,16 @@ export default function GroupPage() {
     const link = (heard('The invoice', r) as { link?: string }).link
     setInvoiceLink(link || null)
   }
+  const openTrip = async (id: string) => {
+    setBusy('Open this trip'); setSaid('Opening…')
+    const r = await bookingReq('/api/booking/group/open', { trip: id }).catch(() => null)
+    setBusy(false)
+    heard('Open this trip', r)
+    setCard(null); setQueue([]); setTaps([]); setLinks([])
+    const l = await bookingReq('/api/booking/group/list')
+    if (l.ok) setV(l.json as unknown as View)
+    await pullTrips()
+  }
   const onFile = (f: File | undefined) => {
     if (!f) return
     const rd = new FileReader()
@@ -151,6 +168,12 @@ export default function GroupPage() {
     <main style={{ ...page, maxWidth: 1100, margin: '0 auto', padding: '24px 16px' }}>
       <h1 style={{ fontSize: 22, margin: '0 0 4px' }}>{mv?.company ? `${mv.company} → ${mv.destination}` : 'Group movement'}</h1>
       {mv && <p style={{ margin: '0 0 16px', color: T.muted }}>{[mv.starts_on, mv.ends_on].filter(Boolean).join(' – ')}{mv.hotel_area ? ` · hotel ${mv.hotel_area}` : ''}</p>}
+      {trips.length > 1 && <p data-trips style={{ margin: '0 0 12px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        <span style={{ color: T.muted }}>Your trips:</span>
+        {trips.map(t => t.open
+          ? <span key={t.id} data-trip-open={t.id} style={{ ...small, fontWeight: 700 }}>{t.destination} {String(t.starts_on || '').slice(0, 10)} · {t.people ?? 0} · open</span>
+          : <button key={t.id} type="button" data-trip={t.id} onClick={press('Open this trip', () => openTrip(t.id))} style={small}>{t.destination} {String(t.starts_on || '').slice(0, 10)} · {t.people ?? 0}</button>)}
+      </p>}
       {v?.counts && <p data-counts style={{ margin: '0 0 16px' }}>{Object.entries(v.counts).map(([s, n]) => `${n} ${s}`).join(' · ')}</p>}
       <section style={{ ...cardS, marginBottom: 16 }}>
         <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Add the list — a spreadsheet, a photo of it, or paste it</label>

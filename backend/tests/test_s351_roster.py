@@ -92,6 +92,33 @@ class OneVaultPerPerson(unittest.TestCase):
             self.assertIsNone(run(TV.person_link(OWNER, str(uuid.uuid4()))))           # not theirs → no link
 
 
+class TheOpenTrip(unittest.TestCase):
+    """Found live (6 Nov): starting a Porto trip left the Lisbon trip's booking and invoice unreachable — "the trip" was the newest made."""
+
+    def test_the_open_trip_is_the_one_every_action_is_about(self):
+        with V.World() as w:
+            lisbon = w.mid
+            names = [p["name"] for p in _roster(w)][:3]
+            porto = run(G.start(OWNER, COMPANY, "Porto", "2026-12-01", "2026-12-03", "Ribeira"))["movement_id"]
+            run(G.choose(OWNER, names))
+            self.assertEqual(run(G.view(OWNER))["movement"]["id"], porto)
+            t = run(G.trips(OWNER))["trips"]
+            self.assertEqual([x["id"] for x in t][:2], [porto, lisbon])
+            self.assertTrue(t[0]["open"])
+            r = run(GO.run(OWNER, "open", {"trip": lisbon}))
+            self.assertTrue(r["done"], r)
+            self.assertIn("20 people", r["say"])
+            self.assertEqual(run(G.view(OWNER))["movement"]["id"], lisbon)          # the list, booking, the invoice: Lisbon's
+            self.assertEqual(len(run(G.view(OWNER))["rows"]), 20)
+            self.assertTrue(run(GO.run(OWNER, "open", {"trip": "porto"}))["done"])  # by its name, as they say it
+            self.assertEqual(run(G.view(OWNER))["movement"]["id"], porto)
+            self.assertFalse(run(GO.run(OWNER, "open", {"trip": "Faro"}))["done"])
+            self.assertIn("which trip", run(GO.run(OWNER, "open", {}))["say"])
+            again = run(G.start(OWNER, COMPANY, "Madrid", "2026-12-01", "2026-12-19", "Getafe"))   # the same trip said again: THAT one, opened
+            self.assertEqual((again["movement_id"], again.get("reused")), (lisbon, True))
+            self.assertEqual(run(G.view(OWNER))["movement"]["id"], lisbon)
+
+
 class OneVaultFold(unittest.TestCase):
     def test_a_second_copy_folds_into_the_person_newest_per_kind(self):
         with V.World() as w:
@@ -262,6 +289,15 @@ class MigrationOnPostgres(unittest.TestCase):
                 self.assertEqual(go(c.fetchval("select count(*) from keep_keys where account_id = any($1::uuid[])", [ids[0], ids[2]])), 0)
                 self.assertEqual(go(c.fetchval("select count(*) from information_schema.columns where table_name = 'keep_owners' "
                                                "and column_name = 'member_id'")), 0)
+            # ── 056 · the OPEN trip, on the real store ──
+            go(c.execute(blk("056_group_open_trip.sql")))
+            go(c.execute(blk("056_group_open_trip.sql")))                                    # idempotent
+            st = G.PgStore(runc)
+            self.assertEqual(go(st.movement(str(org)))["id"], str(m2))                    # the newest made is open, as before
+            self.assertTrue(go(st.open(str(org), str(m1))))
+            self.assertEqual(go(st.movement(str(org)))["id"], str(m1))                    # opened → THE trip
+            self.assertEqual([t["id"] for t in go(st.trips(str(org)))], [str(m1), str(m2)])
+            self.assertFalse(go(st.open(str(uuid.uuid4()), str(m2))))                     # another organiser's trip: never opened
             link = go(c.fetchval("select id from public.group_members where person_id = $1 and id <> $1 limit 1", luis_person))
             with mock.patch.object(KEEP, "STORE", KEEP.PostgresKeepStore(runc)), mock.patch("booking_signer.vault.kms.kek", lambda: kms), \
                     mock.patch("agapi.s2_records.RUN", None), self.assertRaises(KEEP.KeepError) as e:

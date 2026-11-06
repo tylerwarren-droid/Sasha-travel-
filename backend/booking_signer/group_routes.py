@@ -89,6 +89,20 @@ async def choose(request: Request):
     return await GO.run(account_for(request), "choose", {"who": who or None, "movement": body.get("movement")})
 
 
+@router.get("/trips")
+async def trips(request: Request):
+    """Sasha 351 · the organiser's trips, the OPEN one first (each a selection from the one roster)."""
+    return await G.trips(account_for(request))
+
+
+@router.post("/open")
+async def open_trip(request: Request):
+    """{trip: id or destination} → that trip is the open one: the list, booking and the invoice are about it."""
+    from . import group_outcome as GO
+    body = await request.json()
+    return await GO.run(account_for(request), "open", {"trip": body.get("trip")})
+
+
 # ── Sasha 333 · the traveller vault ──────────────────────────────────────────────────────────────────────────────────────
 
 @router.post("/invite")

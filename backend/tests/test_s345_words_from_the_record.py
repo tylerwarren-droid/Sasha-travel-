@@ -110,6 +110,7 @@ class RulesAreAnObjectOnPostgres(unittest.TestCase):
                 go(c.execute(f"do $$ begin create role {role}; exception when duplicate_object then null; end $$"))
             go(c.execute("create schema if not exists auth; create table auth.users (id uuid primary key); create table public.trips (id uuid primary key)"))
             go(c.execute(_block("048_group_movement.sql")))
+            go(c.execute(_block("056_group_open_trip.sql")))   # Sasha 351 · the open trip (the store orders by it)
             owner = uuid.uuid4()
             go(c.execute("insert into auth.users values ($1)", owner))
 

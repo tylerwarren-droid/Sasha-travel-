@@ -21,9 +21,10 @@ from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("booking_signer.group_outcome")
 
-ACTIONS = ("book", "swap", "cancel", "invite", "invoice", "add", "person_add", "person_edit", "documents", "choose")
+ACTIONS = ("book", "swap", "cancel", "invite", "invoice", "add", "person_add", "person_edit", "documents", "choose", "open")
 VERB = {"book": "Book", "swap": "Swap", "cancel": "Cancel", "invite": "Invite", "invoice": "The invoice", "add": "Add these",
-        "person_add": "Add to the roster", "person_edit": "Save", "documents": "Documents", "choose": "Choose travellers"}
+        "person_add": "Add to the roster", "person_edit": "Save", "documents": "Documents", "choose": "Choose travellers",
+        "open": "Open this trip"}
 #: what each action needs from the organiser, by the field's name ON THE PAGE (the same words in the chat)
 NEEDS = {
     "swap": (("who", "who leaves"), ("to", "who comes")),
@@ -34,6 +35,7 @@ NEEDS = {
     "person_edit": (("person_id", "who to change"),),
     "documents": (("person_id", "whose documents"),),
     "choose": (("who", "who travels — tick them on the list"),),
+    "open": (("trip", "which trip"),),
 }
 NO_MOVEMENT = "There's no group movement yet — tell Sasha the company, where, when and the hotel area first."
 PLAN_ONE_S = 75.0   # a swapped-in newcomer is planned while the organiser waits (one person); longer → the row fills in on its own
@@ -350,7 +352,19 @@ async def _choose(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
                                       f"their limits; the list fills in as I go. Nothing is booked yet." + (f" ({'; '.join(notes)})" if notes else "")}
 
 
+async def _open_trip(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
+    """Sasha 351 · the organiser's trips are many (each a selection from one roster): the one they OPEN is the one every action is about."""
+    from . import groups as G
+    r = await G.open_trip(account, str(a["trip"]))
+    if r.get("why"):
+        return _no(r["why"])
+    t = r["trip"]
+    when = " – ".join(x for x in (str(t.get("starts_on") or "")[:10], str(t.get("ends_on") or "")[:10]) if x)
+    return {"done": True, "trip": t, "say": f"Opened the {t['destination']} trip" + (f" ({when})" if when else "")
+            + f", {_people(int(t.get('people') or 0))} on it — the list, booking and the invoice are about this trip now."}
+
+
 _HOW = {"book": _book, "swap": _swap, "cancel": _cancel, "invite": _invite, "invoice": _invoice, "add": _add,
-        "person_add": _person_add, "person_edit": _person_edit, "documents": _documents, "choose": _choose}
+        "person_add": _person_add, "person_edit": _person_edit, "documents": _documents, "choose": _choose, "open": _open_trip}
 
 __all__ = ["run", "answered", "missing", "held", "NEEDS", "ACTIONS"]

@@ -25,7 +25,7 @@ One contract for every client.
 
 | Agent | Role | Tools |
 |---|---|---|
-| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_start`, `group_upload`, `group_person_add`, `group_choose`, `group_limits`, `group_plan`, `group_invite_vault`, `group_list` |
+| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_start`, `group_upload`, `group_person_add`, `group_choose`, `group_open`, `group_limits`, `group_plan`, `group_invite_vault`, `group_list` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
 | **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `group_book`, `group_swap`, `group_cancel`, `send_email`, `send_whatsapp` |
 | **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `group_invoice`, `remove_saved_card`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
@@ -650,6 +650,37 @@ Choose who travels on the current trip FROM THE ROSTER, by the names the organis
   }
  },
  "required": [],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object"
+}
+```
+
+### `group_open`
+
+Open one of the organiser's group trips — by its destination as they say it ("the Lisbon trip") — when they talk about a trip that isn't the open one. Every group action after it (the list, booking, the invoice) is about that trip. Say its `say`.
+
+**Errors:** `missing`, `not_done`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "trip": {
+   "type": "string"
+  }
+ },
+ "required": [
+  "trip"
+ ],
  "additionalProperties": false
 }
 ```

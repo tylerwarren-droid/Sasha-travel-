@@ -318,7 +318,7 @@ SHOWS = {
     "find_subscriptions": "Looking for your subscriptions", "plan_cancel_subscription": "The cancellation",
     "cancel_subscription": "The cancellation",
 }
-SAYS = ("group_person_add", "group_choose", "prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_list", "keep_use", "note_not_yet", "note_rental",
+SAYS = ("group_person_add", "group_choose", "group_open", "prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_list", "keep_use", "note_not_yet", "note_rental",
         "remember_name", "save_contact", "file_confirmation", "time_between", "add_to_trip", "save_for_later",   # Sasha 253 · said, no card
         "call_again",   # Sasha 269 · the act's own `say`
         "booking_outcomes", "start_count",   # Sasha 324 · the founder's count, said (its `say`), no card

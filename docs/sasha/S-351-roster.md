@@ -75,6 +75,25 @@ All of them go through the one outcome path (`group_outcome.run`: `person_add`, 
 
 Both now say: choose from the roster (`group_choose`), and a person named alone is `group_person_add`.
 
+## Found by the live proof, and fixed at their one source
+
+- **/s2 offered a hand copy of the group tools' names.** `group_person_add` and `group_choose` were in the registry but never offered on /s2. `S2_TOOLS` now takes the whole `group_*` family from the registry.
+- **"The trip" meant the newest one made.** Starting Porto left Lisbon unreachable. The OPEN trip is now the organiser's own choice, stored once (`056_group_open_trip.sql`, `group_movements.opened_at`).
+  - `store.movement(account)`, the one read every action uses, returns it.
+  - /group shows Your trips with an Open button for each; the chat has `group_open`.
+- **Where a person flies from had two answers.** Planning read the roster airport; booking read the city ("no flight None → Lisbon"). Now `groups.origin` is the one answer, used by planning, AgAPI's booking search and the invoice.
+
+**Not this class (said, not patched):** `_quote` hard-codes the hotel country as Spain, and "Porto" resolved to BPT (Beaumont, Texas). The Porto card was left untapped.
+
+## Live proof (6 Nov, project.kanoe.ai, the test organiser, fictional people, no emails or phones)
+
+- 25 on the roster of "Lusa Obras Demo (fictional)": 24 added through People, 1 through the chat ("add Ana García, Madrid, supervisor, home airport MAD").
+- Lisbon 17–21 Nov: 11 ticked plus Ana from the chat makes 12, each planned from their own airport (MAD, BCN, SVQ, VLC, BIO, AGP).
+- 12 fictional passports were saved on each person's own vault page.
+- Book all, then Yes (Duffel TEST via AgAPI's sandbox): 12 booked.
+- Invoice KAN-844FE183-TEST: €8,104.18, one line per person with their own airport and references.
+- Porto 1–3 Dec, chosen in the chat ("Ana García, Luis Pérez and Marta Ruiz"): all 3 show Passport ✓, with nothing typed again.
+
 ## Tests
 
 - `backend/tests/test_s351_roster.py` covers:

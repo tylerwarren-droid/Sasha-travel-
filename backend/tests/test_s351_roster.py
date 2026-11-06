@@ -92,6 +92,24 @@ class OneVaultPerPerson(unittest.TestCase):
             self.assertIsNone(run(TV.person_link(OWNER, str(uuid.uuid4()))))           # not theirs → no link
 
 
+class OneVaultFold(unittest.TestCase):
+    def test_a_second_copy_folds_into_the_person_newest_per_kind(self):
+        with V.World() as w:
+            m = w.members()[0]
+            copy = str(uuid.uuid4())
+            P = lambda n: {"number": n, "country": "ES", "expires_on": "2031-05-01", "name": "TEST", "born_on": "1990-01-01"}
+            run(KEEP.put(copy, "passport", P("CPOLD0001")))
+            run(KEEP.put(copy, "loyalty", {"program": "Iberia Plus", "number": "IB00351"}))
+            run(KEEP.put(m["person_id"], "passport", P("PSNEW0002")))
+            w.keep.copies = {copy: m["person_id"]}
+            r = run(KEEP.fold_second_copies())
+            self.assertEqual((r["copies"], r["moved"], r["left"]), (1, 1, 0))
+            kinds = sorted(i["type"] for i in run(KEEP.list_(m["person_id"])))
+            self.assertEqual(kinds, ["loyalty", "passport"])                                # one per kind
+            self.assertEqual(run(KEEP.list_(copy)), [])                                     # the copy shredded, key and all
+            self.assertIsNone(run(w.keep.key(copy)))
+
+
 class AChangeIsWhatEveryTripReads(unittest.TestCase):
     def test_a_new_home_airport_is_what_the_next_plan_searches_from(self):
         with V.World() as w:
@@ -121,15 +139,37 @@ class AChangeIsWhatEveryTripReads(unittest.TestCase):
             self.assertEqual(len(_roster(w)), 21)
 
 
-@unittest.skipUnless(V.__name__ and __import__("tests.test_s336_keep_owners", fromlist=["PG"]).PG,
-                     "no real Postgres (BOOKING_TEST_DATABASE_URL / pgserver) — the migration proof did NOT run")
+class TheModelIsToldTheRoster(unittest.TestCase):
+    """Found live (6 Nov): "Then ask for the list" made the model ask for every person's details again, and one named person went
+    through the LIST path (which asked for her dates). The tool registry is the one source of what the model is told."""
+
+    def test_the_tools_say_roster_never_re_type(self):
+        from agapi import v0 as API
+        d = {t["name"]: t["description"] for t in API.TOOLS}
+        self.assertNotIn("ask for the list", d["group_start"])
+        self.assertIn("ROSTER", d["group_start"])
+        self.assertIn("group_person_add", d["group_upload"])
+        self.assertIn("group_choose", d["group_person_add"])
+
+
+PG, _SERVER = os.getenv("BOOKING_TEST_DATABASE_URL", ""), None
+if not PG:
+    try:
+        import pgserver   # a real Postgres, local and throwaway — this module's own
+        _SERVER = pgserver.get_server(tempfile.mkdtemp(prefix="s351pg"), cleanup_mode="stop")
+        PG = _SERVER.get_uri()
+    except Exception:
+        PG = ""
+
+
+@unittest.skipUnless(PG, "no real Postgres (BOOKING_TEST_DATABASE_URL / pgserver) — the migration proof did NOT run")
 class MigrationOnPostgres(unittest.TestCase):
     """053 on real Postgres: duplicated per-trip rows → one person each, the vault moved to the person, every row archived."""
 
     def test_053_dedupes_moves_the_vault_and_loses_nothing(self):
         import asyncpg
         from tests import test_s336_keep_owners as KO
-        PG, blk = KO.PG, KO._block
+        blk = KO._block
         loop = asyncio.new_event_loop()
         go = loop.run_until_complete
         db = "s351_" + uuid.uuid4().hex[:8]
@@ -167,12 +207,68 @@ class MigrationOnPostgres(unittest.TestCase):
             self.assertEqual(go(c.fetchval("select count(*) from public.group_members where name is not null or email is not null")), 0)
             luis = go(c.fetchval("select email from public.group_people where name = 'Luis Pérez'"))
             self.assertEqual(luis, "luis@example.test")
+
+            # ── ONE vault per person: the second copies (vaults still owned by old trip rows) → 054 archive → the fold → 055 ──
+            from agapi import keep as K
+            kms = K.LocalKms(b"\x05" * 32)
+
+            async def runc(fn):
+                return await fn(c)
+
+            async def no_owner_row(self, account):   # the copies' owner rows are made by hand below, as 050 made them before 053
+                return None
+            luis_person = go(c.fetchval("select id from public.group_people where name = 'Luis Pérez'"))
+            P = lambda n: {"number": n, "country": "ES", "expires_on": "2031-05-01", "name": "TEST", "born_on": "1990-01-01"}
+            with mock.patch.object(KEEP, "STORE", KEEP.PostgresKeepStore(runc)), mock.patch("booking_signer.vault.kms.kek", lambda: kms), \
+                    mock.patch.object(KEEP.PostgresKeepStore, "ensure_owner", no_owner_row), mock.patch("agapi.s2_records.RUN", None):
+                for copy in (ids[0], ids[2]):
+                    go(c.execute("insert into public.keep_owners (id, member_id) values ($1, $1)", copy))
+                go(c.execute("insert into public.keep_owners (id, person_id) values ($1, $1) on conflict do nothing", luis_person))
+                go(KEEP.put(str(ids[0]), "passport", P("AAOLD0001")))                       # Ana's copy: OLDER than her own
+                go(KEEP.put(str(ids[0]), "loyalty", {"program": "Iberia Plus", "number": "IB00351"}))   # a kind only the copy has
+                go(KEEP.put(str(ids[1]), "passport", P("AANEW0002")))                       # Ana's own: newer → kept
+                go(KEEP.put(str(luis_person), "passport", P("LUOLD0003")))                  # Luis's own: older
+                go(KEEP.put(str(ids[2]), "passport", P("LUNEW0004")))                       # Luis's copy: NEWER → moved to him
+                items_before = go(c.fetchval("select count(*) from keep_items"))
+                with self.assertRaises(Exception):
+                    go(c.execute(blk("055_keep_owners_no_member.sql")))                     # refuses while copies remain
+                go(c.execute("rollback"))
+                go(c.execute(blk("054_vault_copies_archive.sql")))
+                self.assertEqual(go(c.fetchval("select count(*) from keep_items_archive_351b")), items_before)   # archived FIRST, all of it
+                r = go(KEEP.fold_second_copies())
+                self.assertEqual((r["copies"], r["moved"], r["left"]), (2, 2, 0))
+                self.assertEqual(go(KEEP.fold_second_copies())["copies"], 0)                # idempotent
+                go(c.execute(blk("055_keep_owners_no_member.sql")))
+                go(c.execute(blk("055_keep_owners_no_member.sql")))                          # idempotent
+
+                def opened(owner):
+                    out = {}
+                    for it in go(KEEP._store().items_of(str(owner))):
+                        dek = go(KEEP._dek(str(owner), create=False))
+                        out[it["type"]] = K.open_(dek, K.item_aad(str(owner), str(owner), str(it["id"]), it["type"]), bytes(it["nonce"]),
+                                                  bytes(it["ciphertext"]))["number"]
+                    return out
+                self.assertEqual(opened(ids[1]), {"passport": "AANEW0002", "loyalty": "IB00351"})   # one per kind, the newest
+                self.assertEqual(opened(luis_person), {"passport": "LUNEW0004"})
+                self.assertEqual(go(c.fetchval("select count(*) from keep_keys where account_id = any($1::uuid[])", [ids[0], ids[2]])), 0)
+                self.assertEqual(go(c.fetchval("select count(*) from information_schema.columns where table_name = 'keep_owners' "
+                                               "and column_name = 'member_id'")), 0)
+            link = go(c.fetchval("select id from public.group_members where person_id = $1 and id <> $1 limit 1", luis_person))
+            with mock.patch.object(KEEP, "STORE", KEEP.PostgresKeepStore(runc)), mock.patch("booking_signer.vault.kms.kek", lambda: kms), \
+                    mock.patch("agapi.s2_records.RUN", None), self.assertRaises(KEEP.KeepError) as e:
+                go(KEEP.put(str(link), "passport", P("ZZ0000001")))                         # a trip's row never owns a vault again
+            self.assertEqual(e.exception.rule, "keep_owner_unknown")
         finally:
             go(c.close())
             admin = go(asyncpg.connect(PG))
             go(admin.execute(f"drop database if exists {db}"))
             go(admin.close())
             loop.close()
+
+
+def tearDownModule():
+    if _SERVER is not None:
+        _SERVER.cleanup()
 
 
 if __name__ == "__main__":

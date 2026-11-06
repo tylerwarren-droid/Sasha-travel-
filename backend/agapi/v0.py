@@ -1943,15 +1943,19 @@ TOOLS: List[dict] = [
        "aren't counted and aren't changed. Only when the founder says to start it.", {"from": {"type": "string"}}, [],
        {"type": "object", "properties": {"from": {"type": "string"}, "say": {"type": "string"}}}, ["founder_only", "invalid_input"]),
     _t("group_start", "Magellan", group_start, "Start a GROUP MOVEMENT for an organiser: their company moving people somewhere (e.g. 20 workers to "
-       "Madrid), with the dates and ONE hotel area (e.g. \"near the factory in Getafe\"). Then ask for the list.",
+       "Madrid), with the dates (starts_on / ends_on, YYYY-MM-DD) and ONE hotel area (e.g. \"near the factory in Getafe\"). Say its `say` as "
+       "it is: who's going is chosen FROM THE COMPANY'S ROSTER (group_choose) — never ask them to type people's details again.",
        {"company": {"type": "string"}, "destination": {"type": "string"}, "starts_on": {"type": "string"}, "ends_on": {"type": "string"},
         "hotel_area": {"type": "string"}}, ["company", "destination"], {"type": "object", "properties": {"say": {"type": "string"}}}, []),
-    _t("group_upload", "Magellan", group_upload, "The organiser's list of people, pasted or typed (one person per line: name, home city, out "
-       "date, back date, grade). Pass their text EXACTLY. Say its `say` as it is — it asks ONE question for every unclear row.",
+    _t("group_upload", "Magellan", group_upload, "A whole LIST pasted for the current trip (several lines: name, home city, out date, "
+       "back date, grade): its people become the roster's (each once) and travel on this trip. Pass their text EXACTLY. Say its `say` as it "
+       "is — it asks ONE question for every unclear row. ONE person named (\"add Ana García, Madrid, worker\") is group_person_add, never this; "
+       "people already on the roster named for a trip is group_choose.",
        {"text": {"type": "string"}}, ["text"], {"type": "object", "properties": {"added": {"type": "integer"}, "say": {"type": "string"}}}, ["no_movement"]),
     _t("group_person_add", "Magellan", group_person_add, "Add workers to the company's ROSTER (each ONCE — their profile and their own vault "
        "serve every trip): name, grade, home airport (3 letters, e.g. MAD) or home city, email, phone. Company: the one they named, else "
-       "their current one. NEVER ask for a passport here. Say its `say`.",
+       "their current one. NEVER ask for a passport or dates here (a trip's dates are the trip's). If they also said this person is going on "
+       "the current trip, then call group_choose with their name. Say its `say`.",
        {"people": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "grade": {"type": "string"},
                    "home_airport": {"type": "string"}, "home_city": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}}}},
         "company": {"type": "string"}}, ["people"], {"type": "object", "properties": {"say": {"type": "string"}}}, ["missing", "not_done"]),

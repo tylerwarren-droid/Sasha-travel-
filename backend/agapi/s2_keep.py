@@ -94,6 +94,13 @@ class MemoryKeepStore:
     async def set_fill(self, fill_id, **kw):
         self.fills[fill_id].update(kw)
 
+    # Sasha 351 · a second copy of a person's vault (an old trip row's) → its person; tests set `copies` {copy id: person id}
+    async def second_copies(self):
+        return list(getattr(self, "copies", {}).items())
+
+    async def drop_owner(self, owner):
+        return 1 if getattr(self, "copies", {}).pop(owner, None) else 0
+
 
 class PostgresKeepStore:
     """037_keep.sql. The ONLY module that reads a ciphertext (a test holds that)."""
@@ -171,6 +178,23 @@ class PostgresKeepStore:
     async def set_fill(self, fill_id, **kw):
         cols = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(kw))
         await self._q(lambda c: c.execute(f"update keep_fills set {cols} where id = $1", uuid.UUID(str(fill_id)), *kw.values()))
+
+    async def second_copies(self):
+        """Sasha 351 · vaults still owned by a trip's row (before 053 every trip row had its own) → [(that owner, its person)]."""
+        try:
+            rows = await self._q(lambda c: c.fetch(
+                "select o.id::text as owner, gm.person_id::text as person from keep_owners o join group_members gm on gm.id = o.member_id "
+                "where o.member_id is not null and gm.person_id is not null order by o.created_at"))
+        except Exception as e:
+            if type(e).__name__ == "UndefinedColumnError":   # 055 applied: keep_owners has no trip rows any more — none can exist
+                return []
+            raise
+        return [(r["owner"], r["person"]) for r in rows]
+
+    async def drop_owner(self, owner):
+        """Only a second copy's owner row (member_id) — never an account's or a person's."""
+        r = await self._q(lambda c: c.execute("delete from keep_owners where id = $1::uuid and member_id is not null", owner))
+        return int(str(r).split()[-1])
 
 
 def _store():
@@ -365,6 +389,46 @@ async def delete(account: str, item_id: Optional[str] = None) -> dict:
     gone = await st.drop_key(account)
     await _activity(account, "keep_delete", {"masked": f"Everything in your Keep ({n})"}, {"reference": "keep:all", "items": n})
     return {"deleted": n, "key_destroyed": bool(gone)}
+
+
+# ── Sasha 351 · ONE vault per person ──────────────────────────────────────────────────────────────────────────────────────────
+
+async def fold_into(copy: str, person: str) -> dict:
+    """A second copy of a person's vault (an old trip row's, from before the roster) folded into the person's OWN vault: for each kind, the
+    newest item of the two is the one kept (re-sealed under the person's key when it was the copy's); every other item of that kind and
+    the whole copy — its items and its key — are shredded. sql/054 archived the copy first. Values are opened here only, never returned."""
+    st = _store()
+    src, dst = await st.items_of(copy), await st.items_of(person)
+    busy = {str(f["item_id"]) for f in await st.fills_of(person, ("bound", "approved"))}
+    moved = dropped = 0
+    for kind in sorted({i["type"] for i in src + dst}):
+        newest = max((i for i in src + dst if i["type"] == kind), key=lambda i: i["created_at"])
+        if str(newest["account_id"]) == copy:
+            dek = await _dek(copy, create=False)
+            values = K.open_(dek, K.item_aad(copy, copy, str(newest["id"]), kind), bytes(newest["nonce"]), bytes(newest["ciphertext"]))
+            keep_id = (await put(person, kind, values))["item_id"]
+            values = None
+            moved += 1
+        else:
+            keep_id = str(newest["id"])
+        for i in await st.items_of(person):
+            if i["type"] == kind and str(i["id"]) != keep_id:
+                if str(i["id"]) in busy:
+                    raise KeepError("in_use", "An item in this person's vault is bound to a booking that hasn't finished — nothing more was changed.")
+                dropped += await st.drop_item(person, i["id"])
+    dropped += await st.drop_all(copy)
+    await st.drop_key(copy)
+    await st.drop_owner(copy)
+    return {"moved": moved, "dropped": dropped}
+
+
+async def fold_second_copies() -> dict:
+    """Every second copy → its person (fold_into). Idempotent: none left → nothing done."""
+    n = moved = dropped = 0
+    for copy, person in await _store().second_copies():
+        r = await fold_into(copy, person)
+        n, moved, dropped = n + 1, moved + r["moved"], dropped + r["dropped"]
+    return {"copies": n, "moved": moved, "dropped": dropped, "left": len(await _store().second_copies())}
 
 
 # ── the booking: bind (the tool) → the read-back names it (hold_booking) → the yes (book) → the fill (after payment) ─────────

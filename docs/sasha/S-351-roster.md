@@ -60,7 +60,20 @@ All of them go through the one outcome path (`group_outcome.run`: `person_add`, 
 4. **Refuses rather than guesses:** it rolls back if any row is left without a person.
 5. **Idempotent.**
 
-**Older duplicate vaults** (the same person's second passport from another trip) stay as they were, owned by that old row. Nothing is lost. They can be cleared once the organiser confirms.
+****ONE vault per person (Tyler, 6 Nov 11:40).** After 053, 38 vaults were still owned by old trip rows (`member_id`). These are SECOND COPIES of a person's vault: 50 items for 20 people, all on the test organiser's company. They are resolved in three steps:
+
+1. `054_vault_copies_archive.sql` (SQL FOR CHAT) archives first. It copies each copy's owner row, key and items, and each of their persons' too, so an archived item can still be opened by the key service.
+2. **The product** folds each copy into its person: `python -m booking_signer.vault_fold`, run once in the Sasha service, calls `s2_keep.fold_into`.
+   - For each kind, the newest item of the two is kept. It is re-sealed under the person's own key if it was the copy's.
+   - Every other item of that kind, and the whole copy (its items and its key), is shredded.
+   - It prints counts only, and running it again does nothing.
+3. `055_keep_owners_no_member.sql` (SQL FOR CHAT) removes `member_id` from keep_owners. A vault is then an account's or a person's, exactly one. It refuses while any copy is left.
+
+**Two places where the model was told the old copy model, found live** (the tool registry, the one source):
+- `group_start` said "Then ask for the list", so the model asked for every person's details and dates again.
+- One person named in the chat went through the list path.
+
+Both now say: choose from the roster (`group_choose`), and a person named alone is `group_person_add`.
 
 ## Tests
 
@@ -71,5 +84,7 @@ All of them go through the one outcome path (`group_outcome.run`: `person_add`, 
   - ambiguous names asked about;
   - one vault per person serving the next trip;
   - a new home airport being what the next search reads;
-  - the 053 migration on real Postgres.
+  - the 053 migration on real Postgres;
+  - one vault per person: 054 archive → the fold → 055, on real Postgres (newest per kind, the copies' keys shredded, 055 refusing while a copy is left);
+  - the tool descriptions.
 - 333, 334, 336 and 346 are updated to the person-owned vault.

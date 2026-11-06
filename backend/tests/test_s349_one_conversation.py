@@ -211,3 +211,25 @@ class CarryOnIsAnsweredByTheToolThatSpoke(T128.Base):
         self.say("investigate Lehman Brothers")
         self.say("what did you find?")
         self.assertEqual(self.sent_to_ad()[-1], ("what did you find?", "diligence", True))
+
+
+class FoundByTheLiveProof(unittest.TestCase):
+    """The S2 flow proof (6 Nov) showed "€59 all in" beside "€58.55", "— pending_payment" in the Trip tab, and "Days 0" for a flight."""
+
+    def test_every_basket_state_has_its_words(self):
+        from booking_signer import basket as BK
+        tf = (FE / "lib/trip-flights.mjs").read_text()
+        words = tf[tf.index("export const WORDS = {"):tf.index("}", tf.index("export const WORDS = {"))]
+        for state in set(BK.LIVE) | {"failed", "cancelled"}:
+            self.assertIn(f"{state}:", words, state)
+
+    def test_one_way_to_say_money(self):
+        self.assertIn("export const eur = ", (FE / "lib/money.ts").read_text())
+        for rel in ("app/s2/S2App.tsx", "app/components/cards/S2Cards.tsx", "app/components/PayHere.tsx", "app/components/workspace/TripPanel.tsx"):
+            src = (FE / rel).read_text()
+            self.assertIn("from '@/lib/money'", src, rel)
+            self.assertNotRegex(src, r"€\$\{Math\.round|maximumFractionDigits: 0", rel)
+
+    def test_a_flight_on_its_own_has_no_days(self):
+        self.assertIn("{dayCount > 0 && <div className=\"lw-sumcell\"><span className=\"k\">Days</span>",
+                      (FE / "app/components/workspace/TripPanel.tsx").read_text())

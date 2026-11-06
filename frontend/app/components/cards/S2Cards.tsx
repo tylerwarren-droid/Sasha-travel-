@@ -318,7 +318,7 @@ export function GroupListCard({ c }: { c: Ev }) {
         <div style={{ marginTop: 8 }}>{rows.slice(0, 25).map((r, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', fontSize: 14 }}>
             <span>{String(r.name)}{r.grade ? <span style={{ color: C.dim }}> · {String(r.grade)}</span> : null}</span>
-            <span style={{ color: C.dim }}>{String(r.status)}{typeof r.price_eur === 'number' ? ` · €${Math.round(r.price_eur).toLocaleString('en')}` : ''}</span>
+            <span style={{ color: C.dim }}>{String(r.status)}{typeof r.price_eur === 'number' ? ` · ${euro(r.price_eur)}` : ''}</span>
           </div>))}
           {rows.length > 25 && <div style={{ fontSize: 13, color: C.dim }}>…and {rows.length - 25} more on the Group page.</div>}
         </div>)}
@@ -385,7 +385,7 @@ export function OptionsCard({ kind, title, options, choose }: { kind: 'flight' |
     </Box>)
 }
 
-const euro = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? `€${n.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—')
+import { eur as euro } from '@/lib/money'   // Sasha 349 · one way to say money
 
 /** Sasha 349 · ONE TOTAL with its parts (basket.breakdown), in the record's own currency (€) */
 export function TotalCard({ total }: { total: Ev }) {

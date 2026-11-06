@@ -3,8 +3,10 @@
  * flights were chosen — the tab decided from the plan's arrival city alone). The flights on the trip and their state come from the
  * server's trip_figures lines (basket.trip_figures — the same record as the total, get_status and the chat); never guessed here.
  */
-const WORDS = { suggested: 'suggested — not booked yet', chosen: 'chosen — not booked yet', held: 'held — not booked yet',
-  awaiting_payment: 'waiting for payment', paid: 'paid — being booked', booked: 'booked ✅', cancelled: 'cancelled' }
+// Sasha 349 · keyed by the record's OWN states (basket.py: suggested → chosen → pending_payment → booked | failed | cancelled) — a
+// state with no words showed raw ("— pending_payment", found live); a test holds every basket state worded
+export const WORDS = { suggested: 'suggested — not booked yet', chosen: 'chosen — not booked yet', pending_payment: 'waiting for your payment',
+  booked: 'booked ✅', failed: 'not booked — it didn’t go through', cancelled: 'cancelled' }
 
 /** [{what, day, words}] for the trip's flights, outbound first; [] when the trip has none (then the tab may offer to find them). */
 export function tripFlights(tt) {

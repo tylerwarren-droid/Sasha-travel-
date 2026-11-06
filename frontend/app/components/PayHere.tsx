@@ -6,6 +6,7 @@
  * the page hears it from Pacioli once Stripe's confirmation is recorded (the 'booked' event).
  */
 import { useEffect, useRef, useState } from 'react'
+import { eur as euros } from '@/lib/money'   // Sasha 349 · one way to say money
 
 const PK = (process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '').trim()
 
@@ -46,7 +47,7 @@ export function PayHere({ clientSecret, url, totalEur, alreadyPaid }: { clientSe
   const head = (k: string, h: string) => (
     <div className="lw-cardHd"><span className="lw-ci gold">💳</span><div className="lw-meta"><div className="lw-k">{k}</div><div className="lw-h">{h}</div></div></div>)
   if (alreadyPaid) return <div className="lw-card">{head('Paid', 'Nothing more to pay')}</div>
-  const total = typeof totalEur === 'number' ? `€${Math.round(totalEur).toLocaleString()} all in` : 'Your trip'
+  const total = typeof totalEur === 'number' ? `${euros(totalEur)} all in` : 'Your trip'
   return (
     <div className="lw-card">
       {head(phase === 'done' ? 'Payment received' : 'Pay here', phase === 'done' ? 'Confirming with Stripe — it shows as booked here when it’s recorded' : total)}

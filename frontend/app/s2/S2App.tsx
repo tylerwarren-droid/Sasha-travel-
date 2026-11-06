@@ -39,6 +39,7 @@ import { actingOf } from '@/lib/acting-rule.mjs'   // Sasha 249 · whoami's acti
 import { NO_SOUND, STARTERS, cueOf, returned } from '@/lib/opening-rule.mjs'   // Sasha 295 · THE OPENING: its starters, her one cue, her no-sound line · 296: a return
 import { arrivalLine } from '@/lib/first-line'   // Sasha 295 · the empty conversation's line is her hello's own words
 import { events, reach, request } from '@/lib/request'   // Sasha 348 · the ONE request client
+import { eur as euros } from '@/lib/money'   // Sasha 349 · one way to say money
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -506,7 +507,7 @@ function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (titl
   const [tapped, setTapped] = useState<string | null>(null)
   const [twice, setTwice] = useState<string | null>(null)   // Sasha 347 · a second press is TOLD (nothing is sent twice), never greyed out
   const head = c.act === 'cancel' ? 'Ready to cancel · one tap'
-    : c.total ? `Ready to book · €${Math.round(c.total).toLocaleString()} all in` : 'Your booking · one tap'
+    : c.total ? `Ready to book · ${euros(c.total)} all in` : 'Your booking · one tap'
   return (
     <Box k={head} h={untag(c.ask || '')}>
       {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
@@ -553,7 +554,7 @@ function TripCard() {
     window.addEventListener('sasha-plan-refresh', pull)
     return () => { off = true; window.removeEventListener('sasha-plan-refresh', pull) }
   }, [])
-  const eur = (n: number) => `€${n.toLocaleString('en-GB', { maximumFractionDigits: 0 })}`
+  const eur = euros   // Sasha 349 · one way to say money (this card rounded €58.55 to €59)
   return (
     <Box k="Your trip" h={t ? untag(t.title) : t === null ? 'Your trip' : '…'}>
       {(t?.lines || []).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
@@ -643,7 +644,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
   if (c.k === 'pay') return <><div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} /></div>{!c.already_paid && <After k="pay" />}</>
   const ACT_HEAD: Record<string, string> = { late: 'Ready to call · on your yes', change: 'Ready to change · on your yes', cancel: 'Ready to cancel · on your yes' }   // Sasha 226
   const head = c.act && ACT_HEAD[c.act] ? ACT_HEAD[c.act] : c.what ? (c.status === 'sent' ? 'Sent' : c.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes')
-    : (c.total ? `Ready to book · €${Math.round(c.total).toLocaleString()} all in` : 'Ready to book · on your yes')
+    : (c.total ? `Ready to book · ${euros(c.total)} all in` : 'Ready to book · on your yes')
   return (
     <><Box k={head} h={c.what === 'email' ? (c.live ? "From Sasha's own address" : 'Kept here · not sent') : c.what === 'whatsapp' ? "From Sasha's own number" : undefined}>
       {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}

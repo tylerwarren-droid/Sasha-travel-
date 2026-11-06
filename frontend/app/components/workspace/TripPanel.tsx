@@ -68,7 +68,7 @@ const ON_IT = ['booked', 'partly_booked', 'awaiting_payment']
 // Sasha 249 · it is the server's trip_figures: + the trip's party (TRAVELLERS) and the lines priced as estimates
 type TripTotal = { total_eur: number; flights_eur: number; stays_eur: number; stays_are: string; trip_id: string; party?: number | null;
   to_pay_eur?: number; estimate_lines?: { what: string; eur: number | null }[]; lines?: { kind: string; state: string; what: string; day?: string | null }[] }
-const eur = (n: number) => `€${Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+import { eur } from '@/lib/money'   // Sasha 349 · one way to say money
 type JRow = { id: string; venue: string; date: string | null; time: string | null; status: string; status_words?: string; booking_reference?: string | null; trip_id?: string
   route_words?: string; venue_words?: string | null; terms?: Term[]; type?: string; train?: Train }   // Sasha 327 · a train: every field   // Sasha 300 · the way it was made; the venue's own words (data) · 301: their terms
 /** CR 45 · a RelocateMe form on the Move tab: its state, its PDF one tap away (if there is one), where it goes next */
@@ -308,7 +308,7 @@ export default function TripPanel({
       {formsHere}
       {alsoHere}
       <div className="lw-summary">
-        <div className="lw-sumcell"><span className="k">Days</span><span className="v">{dayCount}</span></div>
+        {dayCount > 0 && <div className="lw-sumcell"><span className="k">Days</span><span className="v">{dayCount}</span></div>}{/* Sasha 349 · a flight on its own has no days */}
         <div className="lw-sumcell"><span className="k">Travellers</span><span className="v" title={pax ? undefined : 'Sasha will ask how many are going'}>{pax ?? '—'}</span></div>
         {stayCount > 0 && (
           <div className="lw-sumcell"><span className="k">Stays</span><span className="v">{stayCount}</span></div>

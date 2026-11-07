@@ -216,7 +216,7 @@ export default function GroupView() {
     <td style={td}>{p.home_airport || p.home_city || '—'}</td>
     <td style={td} data-passport={p.vault?.passport ? '1' : '0'}>{p.vault?.passport ? 'Passport ✓' : 'Passport missing'}</td>
     <td style={{ ...td, whiteSpace: 'nowrap' }}>
-      <button type="button" data-edit={p.id} onClick={press('Edit', async () => { setEdit(p.id); setEd({}) })} style={small}>Edit</button>{' '}
+      <button type="button" data-edit={p.id} onClick={press('Edit', async () => { setEdit(p.id); setEd({}); setSaid(`Editing ${p.name} — change what’s needed, then Save.`) })} style={small}>Edit</button>{' '}
       <button type="button" data-documents={p.id} onClick={press('Documents', () => documents(p.id))} style={small}>Documents</button></td></>
 
   const head = (cols: string[]) => <thead><tr>{cols.map(h => <th key={h} style={{ textAlign: 'left', borderBottom: `1px solid ${T.border}`, padding: '6px 8px', color: T.muted }}>{h}</th>)}</tr></thead>
@@ -236,7 +236,7 @@ export default function GroupView() {
         {(st?.trips || []).map(t => t.open && !fresh
           ? <span key={t.id} data-trip-open={t.id} style={{ ...small, fontWeight: 700 }}>{t.destination} {String(t.starts_on || '').slice(0, 10)} · {t.people ?? 0} · open</span>
           : <button key={t.id} type="button" data-trip={t.id} onClick={press('Open this trip', () => openTrip(t.id))} style={small}>{t.destination} {String(t.starts_on || '').slice(0, 10)} · {t.people ?? 0}</button>)}
-        <button type="button" data-new-trip onClick={press('New trip', async () => { setFresh(true); setTicked([]) })} style={small}>New trip</button>
+        <button type="button" data-new-trip onClick={press('New trip', async () => { setFresh(true); setTicked([]); setSaid('A new trip: where and when, then tick who’s going (or add them) and press Go. Nothing is made until Go.') })} style={small}>New trip</button>
       </p>
       {said && <p data-said role="status" aria-live="polite" style={{ whiteSpace: 'pre-line', margin: '6px 0 12px' }}>{said}</p>}
       {offers.length > 0 && <p data-offers style={{ display: 'flex', gap: 8 }}>{offers.map(a => <button key={a.id} type="button" onClick={press(a.label, () => doNext(a))} style={btn2}>{a.label}</button>)}</p>}

@@ -219,6 +219,10 @@ class OneSource(unittest.TestCase):
         self.assertIn("/api/booking/group/create", comp)
         self.assertIn('role="switch"', comp)
         self.assertNotIn("✓ on it", comp)                                                  # a switch, never a label
+        # every press answers in words: a press that only changes the page (New trip, Edit) says what it did — never a bare "Edit…"
+        for name in re.findall(r"press\('([^']+)', async \(\) => \{(.*?) \}\)\}", comp):
+            self.assertIn("setSaid(", name[1], f"{name[0]}: a press that says nothing")
+        self.assertEqual(sorted(n for n, _ in re.findall(r"press\('([^']+)', async \(\) => \{(.*?) \}\)\}", comp)), ["Edit", "New trip"])
 
 
 PG, _SERVER = __import__("os").getenv("BOOKING_TEST_DATABASE_URL", ""), None

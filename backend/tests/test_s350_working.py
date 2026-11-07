@@ -180,9 +180,10 @@ class TheAcknowledgementIsNotTheReply(unittest.TestCase):
                 WK.start("kB", "SMy"); WK.keep("kB")
                 await GW._turn(ch, "f", {})
             return WK.holding("kB")
-        with self.assertLogs("booking_signer.guest_whatsapp", "ERROR"):
+        from booking_signer import inbound_outcome as OC
+        with self.assertLogs("booking_signer.inbound_outcome", "ERROR"):                 # Sasha 357 · the ONE outcome names it, and
             left = go(run_())
-        self.assertEqual(sent, [GW.NO_REPLY])
+        self.assertEqual(sent, [OC.FAILED["en"]])                                        # tells it (their language)
         self.assertEqual(left, 0)
 
     def test_the_holding_line_is_sent_as_progress(self):
@@ -201,7 +202,8 @@ class OnePlace(unittest.TestCase):
     def test_the_reply_ends_it(self):
         self.assertIn('_WK.stop_for(ch.get("wa_id_sha256") or "")', inspect.getsource(GW.deliver))
         turn = inspect.getsource(GW._turn)
-        self.assertIn('_WK.stop_for(ch["wa_id_sha256"])', turn[turn.index("finally:"):])
+        self.assertIn("await _told(", turn[turn.index("finally:"):])                     # Sasha 357 · no reply: told through deliver,
+        self.assertIn('_WK.stop_for(ch["wa_id_sha256"])', inspect.getsource(GW._told))   # and the dots end even if that can't be sent
         disp = inspect.getsource(GW.dispatch)
         self.assertLess(disp.index("_WK.keep(key)"), disp.index("_spawn(_turn(ch, to, p))"))
 

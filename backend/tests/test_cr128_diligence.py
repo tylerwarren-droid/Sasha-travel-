@@ -98,8 +98,10 @@ class WhatAgAPISays(Base):
     def test_b_agapi_down_never_silent(self):
         self.answer = {"matched": False, "why": "upstream_unreachable"}
         self.say("diligence")
-        self.say("investigate Lehman Brothers")
-        self.assertTrue(self.bodies()[-1].endswith(DG.DOWN))
+        logs = _through_the_turn(self, "investigate Lehman Brothers")
+        from booking_signer import inbound_outcome as _OC
+        self.assertEqual(self.bodies()[-1], _OC.FAILED["en"])                          # Sasha 357 · AgAPI down: TOLD, the ONE line
+        self.assertTrue(any("upstream_unreachable" in l for l in logs), logs)          # its cause named
 
 
 class OutsideNothingGoesToAD(Base):
@@ -127,3 +129,11 @@ class RootTest(TG.unittest.TestCase):
         self.assertIn("diligence", SPC.SPACES)
         self.assertEqual((SPC.normalize("diligence"), SPC.NAME["diligence"]), ("diligence", "🔍 Due diligence"))
         self.assertEqual(PW.typo_keyword("diligense"), "diligence")
+
+def _through_the_turn(case, body):   # Sasha 357 · the real background turn (guest_whatsapp._turn): its ONE outcome tells a failure
+    from booking_signer import guest_whatsapp as _GW
+    ch = TG.run(_GW.STORE.channel_for(_GW.wa_key(TG.GUEST)))
+    with case.assertLogs("booking_signer.inbound_outcome", "ERROR") as logs:
+        TG.run(_GW._turn(ch, TG.SANDBOX, {"From": f"whatsapp:{TG.GUEST}", "To": f"whatsapp:{TG.SANDBOX}", "Body": body}))
+    return logs.output
+

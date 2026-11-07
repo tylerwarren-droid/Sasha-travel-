@@ -243,6 +243,18 @@ async def sms(request: Request):
         held = sid if WK.start(_GWk.wa_key(sender), sid) else None
     try:
         return await _sms(p, channel, sender, body, sid)
+    except Exception as e:   # Sasha 357 · THE webhook's boundary: a WhatsApp message that failed is TOLD, never dropped (inbound_outcome)
+        if channel != "whatsapp" or not sender:
+            raise
+        from . import guest_whatsapp as _GWo, inbound_outcome as OC
+        line = OC.words_for(e, body, where="the webhook")
+        ch = None
+        try:
+            ch = await _GWo.STORE.channel_for(_GWo.wa_key(sender)) if _GWo.STORE is not None else None
+        except Exception:
+            pass   # the record is what failed: the line is still said (its cause is already named)
+        await OC.record((ch or {}).get("account_id"), line)
+        return _twiml(_GWo._twiml_message(line))
     finally:
         if held:
             WK.settle(held)   # the webhook's answer has left (a background turn's hold stays until its reply leaves: deliver)
@@ -276,11 +288,8 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         # provider Sasha's WhatsApp actually arrives through): its sender and message id may sign the person's yes to a read-back
         # (approvals.in_app_tap, session kind "whatsapp"). Set for this message's handling only.
         wa_tok = VS.WA.set({"wa_id": sender, "message_id": sid})
-        try:
+        try:   # Sasha 357 · a failure here (the database) reaches the webhook's ONE outcome above: told, never an empty answer
             inner = await GW.dispatch(p, lambda n: STORE.call_for_number(n, NOW() - MATCH_WINDOW))
-        except StorageUnavailable as e:
-            log.error("[inbound_phone] a guest's WhatsApp %s was not handled: %s", sid, e.detail)
-            return _twiml()   # a guest number: never filed as a venue's message
         finally:
             VS.WA.reset(wa_tok)
         if inner is not None:

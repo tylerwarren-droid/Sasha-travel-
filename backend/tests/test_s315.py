@@ -141,8 +141,10 @@ class InTravelTheCaseQuestionGoesToAD(Base):
 
     def test_f_ad_down_is_said(self):
         self.answer = {"matched": False, "why": "upstream_unreachable"}
-        self.say("what's the status of the Prada case?")
-        self.assertTrue(self.bodies()[-1].endswith(DG.DOWN))
+        logs = _through_the_turn(self, "what's the status of the Prada case?")
+        from booking_signer import inbound_outcome as _OC
+        self.assertEqual(self.bodies()[-1], _OC.FAILED["en"])                          # Sasha 357 · AgAPI down: TOLD, the ONE line
+        self.assertTrue(any("upstream_unreachable" in l for l in logs), logs)          # its cause named
 
     def test_g_the_named_case_is_asked_of_ads_list(self):
         self.say("what's the status of Prada?")
@@ -174,6 +176,14 @@ class OneRouter(TG.unittest.TestCase):
         self.assertIn("VS.ad_cases(", src)
         self.assertNotRegex(src, r"put_kind|STORE\.put|s2_memory")
 
+
+
+def _through_the_turn(case, body):   # Sasha 357 · the real background turn (guest_whatsapp._turn): its ONE outcome tells a failure
+    from booking_signer import guest_whatsapp as _GW
+    ch = TG.run(_GW.STORE.channel_for(_GW.wa_key(TG.GUEST)))
+    with case.assertLogs("booking_signer.inbound_outcome", "ERROR") as logs:
+        TG.run(_GW._turn(ch, TG.SANDBOX, {"From": f"whatsapp:{TG.GUEST}", "To": f"whatsapp:{TG.SANDBOX}", "Body": body}))
+    return logs.output
 
 if __name__ == "__main__":
     TG.unittest.main()

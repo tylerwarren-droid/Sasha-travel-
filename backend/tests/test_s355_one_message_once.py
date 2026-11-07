@@ -40,10 +40,14 @@ class TheSteps(unittest.TestCase):
     def test_a_database_error_fails_closed_and_is_named(self):
         async def broken(fn):
             raise ConnectionError("the database is away")
-        with mock.patch.object(GW, "STORE", mock.Mock(_run=broken)), self.assertLogs("booking_signer.guest_whatsapp", "ERROR") as logs:
-            self.assertFalse(run(GW.first_step(SID, "agapi_in")))                       # never handed on again
-            self.assertFalse(run(GW.step_done(SID, "agapi_took")))
-        self.assertTrue(any("NOT recorded (ConnectionError" in l and "fails closed" in l for l in logs.output))
+        from booking_signer.inbound_outcome import Failed
+        with mock.patch.object(GW, "STORE", mock.Mock(_run=broken)):
+            with self.assertRaises(Failed) as e:                                         # never handed on — and (Sasha 357) TOLD:
+                run(GW.first_step(SID, "agapi_in"))                                      # the cause goes to the ONE outcome
+            self.assertIn("not recorded in guest_message_steps (ConnectionError", e.exception.cause)
+            self.assertIn("fails closed", e.exception.cause)
+            with self.assertRaises(Failed):
+                run(GW.step_done(SID, "agapi_took"))
 
 
 class ThroughTheWebhook(unittest.TestCase):
@@ -132,8 +136,9 @@ class TheSqlOnPostgres(unittest.TestCase):
                 self.assertFalse(go(GW.first_step(SID, "agapi_in")))
                 self.assertTrue(go(GW.first_step(SID, "agapi_took")))
                 self.assertTrue(go(GW.step_done(SID, "agapi_took")))
-                with self.assertLogs("booking_signer.guest_whatsapp", "ERROR"):
-                    self.assertFalse(go(GW.first_step("agapi-in:" + SID, "agapi_in")))     # a derived key: refused, and closed
+                from booking_signer.inbound_outcome import Failed
+                with self.assertRaises(Failed):
+                    go(GW.first_step("agapi-in:" + SID, "agapi_in"))                       # a derived key: refused, closed, told (357)
             self.assertEqual(go(c.fetchval("select count(*) from guest_message_steps")), 2)
             self.assertFalse(go(c.fetchval("select has_table_privilege('anon', 'public.guest_message_steps', 'select')")))
         finally:

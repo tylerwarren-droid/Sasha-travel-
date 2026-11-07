@@ -246,7 +246,6 @@ RESUME_ASKS = True   # Sasha 356 · its word said again (or after another space)
 EVERY_MESSAGE = True   # CR 142 · in the space every message is AD's, routed by its meaning — no resume shortcut answers for it
 CLOSED = ("Applied Diligence on WhatsApp is in a private beta, and this number isn't in it yet — nothing was sent to Applied Diligence. "
           "Tap Menu for Kanoe's other tools.")
-DOWN = "Applied Diligence couldn't be reached just now — nothing was sent. Try again in a minute."
 WHATSAPP_ONLY = "Applied Diligence works on WhatsApp: send “diligence” there."
 _WORD = re.compile(r"(?i)^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])[\s:,-]*")
 
@@ -290,11 +289,13 @@ async def hand_over(ctx: dict, t: str, media: list) -> bool:
         # Sasha 349 · AgAPI answers from Kanoe's number itself: AD spoke last — in the ONE record, so a reply goes back to AD
         from agapi import s2_memory as MEM
         await MEM.record(ctx["account"], MEM.message("out", "wa", "[Applied Diligence answered on Kanoe's number]", "diligence"))
+    if r.get("ad") and r.get("ad") != "closed":
+        out.answered_by = "agapi"                  # Sasha 357 · AgAPI sent AD's reply from Kanoe's number: that IS this message's reply
     if r.get("ad") == "closed":
         out.text(CLOSED)                           # AgAPI never writes to a number outside the beta: said here
-    elif not r.get("ad"):
-        log.error("[diligence] AgAPI didn't take a message in AD's space: %s", r.get("why"))
-        out.text(DOWN)
+    elif not r.get("ad"):   # Sasha 357 · the cause, raised to the turn's ONE outcome (inbound_outcome): told in their language
+        from booking_signer.inbound_outcome import Failed
+        raise Failed(f"AgAPI didn't take a message in AD's space: {r.get('why') or 'no answer'}")
     return True                                    # AgAPI sent AD's reply (or its own line) from Kanoe's number
 
 

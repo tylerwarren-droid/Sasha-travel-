@@ -448,6 +448,7 @@ class Out:
         # Sasha 356 · the message's HEADER, declared — never written into its text: ("space", product, entering) or ("now", label).
         # switching.compose renders it ONCE, at the top, when the message leaves (_send — every outbound message)
         self.header: Optional[tuple] = None
+        self.answered_by: Optional[str] = None   # Sasha 357 · words, or ANOTHER's answer ("agapi": AD replied from Kanoe's number) — else no reply
 
     def text(self, s: str) -> "Out":
         self.items.append(("text", s))
@@ -480,7 +481,14 @@ async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[dateti
             return await _send(ch, frm, out, last_inbound_at)
         finally:
             _WK.again(ch.get("wa_id_sha256") or "")
+    from . import switching as _SWd
+    _SWd.compose(out)   # Sasha 356 · its header first (idempotent): a header that IS the message is words
+    if not out.items and not getattr(out, "answered_by", None):   # Sasha 357 · nothing to say is NOT a reply: the turn's ONE outcome tells
+        log.info("[guest_whatsapp] a delivery with no words and no other answer — not the reply")   # its failure (_turn), never silence
+        return []
     _WK.stop_for(ch.get("wa_id_sha256") or "")   # the reply leaves (or can't): this message's dots end here
+    from . import inbound_outcome as _OC
+    _OC.replied(ch.get("wa_id_sha256") or "")     # Sasha 357 · the turn's ONE outcome knows its reply left (not the dots: they may be none)
     return await _send(ch, frm, out, last_inbound_at)
 
 
@@ -687,10 +695,10 @@ async def first_step(sid: str, step: str) -> bool:
             new = await run(lambda c: c.fetchval("insert into guest_message_steps (message_sid, step) values ($1, $2) on conflict do nothing "
                                                  "returning step", sid, step))
             return new is not None
-        except Exception as e:
-            log.error("[guest_whatsapp] step %s of message …%s NOT recorded (%s: %s) — not done again: the check fails closed", step,
-                      str(sid)[-8:], type(e).__name__, str(e)[:160])
-            return False
+        except Exception as e:   # Sasha 357 · fails CLOSED (never handed on) — and the person is TOLD (inbound_outcome), never dropped
+            from .inbound_outcome import Failed
+            raise Failed(f"step {step} of message …{str(sid)[-8:]} not recorded in guest_message_steps ({type(e).__name__}: "
+                         f"{str(e)[:160]}) — not handed on: the check fails closed") from e
     import time as _t
     if (sid, step) in _SEEN_STEPS:
         return False
@@ -705,9 +713,9 @@ async def step_done(sid: str, step: str) -> bool:
     if run is not None:
         try:
             return bool(await run(lambda c: c.fetchval("select 1 from guest_message_steps where message_sid = $1 and step = $2", sid, step)))
-        except Exception as e:
-            log.error("[guest_whatsapp] step %s of message …%s NOT read (%s)", step, str(sid)[-8:], type(e).__name__)
-            return False
+        except Exception as e:   # Sasha 357 · unreadable: never guessed either way — the person is told (inbound_outcome)
+            from .inbound_outcome import Failed
+            raise Failed(f"step {step} of message …{str(sid)[-8:]} not read from guest_message_steps ({type(e).__name__})") from e
     return (sid, step) in _SEEN_STEPS
 
 
@@ -872,29 +880,32 @@ def _dt(s: str) -> datetime:
 
 # ── one guest turn ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-NO_REPLY = "Sorry — I couldn't finish that one on my side, and nothing was sent to anyone. Could you ask me again?"   # Sasha 350 (close)
-
-
 async def _turn(ch: dict, frm: str, p: Dict[str, str]) -> None:
+    """Sasha 357 · THE background turn's boundary: it ends in ONE outcome (inbound_outcome) — its reply, a reason, or the failed line in
+    their language, sent through deliver (which records it on the conversation record). The person JUST wrote: the 24-hour window is open
+    (never re-read from a store that may be what failed)."""
+    from . import inbound_outcome as OC, wa_working as _WK
     lock = _TURN_LOCKS.setdefault(ch["wa_id_sha256"], asyncio.Lock())
+    body = p.get("Body") or ""
     async with lock:
+        before = OC.replies(ch["wa_id_sha256"])
         try:
             await turn(ch, frm, p)
-        except Exception as e:   # every failure is logged, and the guest is told plainly
-            log.exception("[guest_whatsapp] a turn failed: %s", type(e).__name__)
-            st = await STORE.get_state(ch["wa_id_sha256"])
-            await deliver(ch, frm, Out().text("Something went wrong on my side — nothing was sent to any venue. Please try "
-                                              "again in a minute."), st.get("last_inbound_at"))
-        finally:   # Sasha 350 (close) · the turn is over: its reply left (deliver ended the hold) — or it didn't, and that is a failure,
-            from . import wa_working as _WK   # TOLD (never a silent end after "Let me see what I can do")
-            if _WK.unanswered(ch["wa_id_sha256"]):
-                log.error("[guest_whatsapp] a turn ended without its reply — its failure told")
-                try:
-                    st = await STORE.get_state(ch["wa_id_sha256"])
-                    await deliver(ch, frm, Out().text(NO_REPLY), st.get("last_inbound_at"))
-                except Exception as e:
-                    log.error("[guest_whatsapp] the failure couldn't be told either: %s", type(e).__name__)
-                    _WK.stop_for(ch["wa_id_sha256"])
+        except Exception as e:   # a failure point's cause (the database, AgAPI, the model, a tool): named once, TOLD
+            log.debug("[guest_whatsapp] the turn's failure", exc_info=True)
+            await _told(ch, frm, OC.words_for(e, body, where="the turn"))
+        finally:   # Sasha 350 (close) / 357 · the turn is over: its reply left — or it didn't (no words, no other answer): TOLD
+            if OC.replies(ch["wa_id_sha256"]) == before:
+                await _told(ch, frm, OC.words_for(None, body, where="a turn ended without its reply"))
+
+
+async def _told(ch: dict, frm: str, line: str) -> None:
+    try:
+        await deliver(ch, frm, Out().text(line), NOW())
+    except Exception as e:   # the sender itself is down: nothing more can reach them — named, and the dots end
+        log.error("[guest_whatsapp] the outcome couldn't be sent either: %s", type(e).__name__)
+        from . import wa_working as _WK
+        _WK.stop_for(ch["wa_id_sha256"])
 
 
 async def _follow_last_tool(ch: dict, st: dict, account: str, body: str, payload: str) -> None:

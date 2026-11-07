@@ -1487,9 +1487,10 @@ async def turn_with_quiver(account: str, message: str, history: List[dict], sess
             if MH.is_credit(e):   # Sasha 257 · the model's credit exhausted: said plainly (never empty, never "say it again"), founder told
                 await MH.alert(f"a {surface} turn")
                 await q.put({"type": "error", "message": MH.PLAIN, "rule": "model_credit"})
-            else:
-                await q.put({"type": "error", "message": what_happened((voice.get("ctx") or API.Ctx(account=account)).calls,
-                                                                       "Sorry — something went wrong on my side before I finished.")})
+            else:   # Sasha 357 · the ONE outcome's words (inbound_outcome): their language; after an act, what was done — never "again"
+                from booking_signer import inbound_outcome as OC
+                await q.put({"type": "error", "message": OC.words_for(e, message, where=f"a {surface} turn",
+                                                                      calls=(voice.get("ctx") or API.Ctx(account=account)).calls)})
         await q.put(None)
     task = asyncio.create_task(produce())
     t0 = time.perf_counter()

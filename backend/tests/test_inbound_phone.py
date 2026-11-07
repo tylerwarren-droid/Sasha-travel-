@@ -45,11 +45,17 @@ class InboundPhone(unittest.TestCase):
                                      "created_at": now - timedelta(hours=1), "brief": {"venue_ids": ["places:x"], "followup": {"request": O}}}
         self.saved = (IP.STORE, S.STOP_STORE)
         IP.STORE = IP.MemoryInboundStore(self.calls)
+        from booking_signer import guest_whatsapp as _GW   # Sasha 357 · the message's steps in memory (no database here): a step that
+        self.gw_store = _GW.STORE                         # can't be recorded now fails CLOSED and is told — never the venue path
+        if getattr(_GW.STORE, "_run", None) is not None:
+            _GW.STORE = _GW.MemoryGuestStore()
         app = FastAPI()
         app.include_router(routes.router)
         self.c = TestClient(app)
 
     def tearDown(self):
+        from booking_signer import guest_whatsapp as _GW
+        _GW.STORE = self.gw_store
         IP.STORE, S.STOP_STORE = self.saved
         self.env.stop()
 

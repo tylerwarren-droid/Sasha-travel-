@@ -445,6 +445,9 @@ class Out:
         self.items: List[tuple] = []
         self.menu: Optional[List[Tuple[str, str, str]]] = None   # CR 165 · this turn's Menu rows, set by the turn (products/tools.py)
         self.space: Any = None                                   # CR 165 · → the tool the turn ended in (its Menu), read at delivery
+        # Sasha 356 · the message's HEADER, declared — never written into its text: ("space", product, entering) or ("now", label).
+        # switching.compose renders it ONCE, at the top, when the message leaves (_send — every outbound message)
+        self.header: Optional[tuple] = None
 
     def text(self, s: str) -> "Out":
         self.items.append(("text", s))
@@ -488,6 +491,8 @@ async def _send(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime
     if not last_inbound_at or NOW() - last_inbound_at > SESSION_WINDOW:
         log.info("[guest_whatsapp] not sent: outside the 24-hour window and no template is approved (sandbox)")
         return ["not sent: outside the 24-hour window"]
+    from . import switching as _SWc
+    _SWc.compose(out)   # Sasha 356 · the ONE place a message's header is written
     _with_menu(out)
     results = []
     for it in out.items:
@@ -1081,7 +1086,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         if (st.get("pending") or {}).get("kind") == "product":
             await PW._set_aside(st, ch)
         out.text(f"↩ Back to {SW._short(bk[1])} — what next?")
-        SW.label_first(out.items, {"k": "j", "label": bk[1]})
+        SW.label_first(out, {"k": "j", "label": bk[1]})
         st["history"] = ((st.get("history") or []) + [{"role": "user", "content": body or "back"},
                                                      {"role": "assistant", "content": out.said()}])[-HISTORY_KEEP:]
         await STORE.put_state(key, st)
@@ -1108,7 +1113,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
                 await PW._set_aside(st, ch)
             out.ask(amb[0], amb[1])
             st["pending"] = {"kind": "amb", "nonce": amb[1][0][1].split(":")[1], "body": body, "at": now.isoformat()}
-            SW.label_first(out.items, mode0)
+            SW.label_first(out, mode0)
             await STORE.put_state(key, st)
             await deliver(ch, frm, out, now)
             return out
@@ -1125,7 +1130,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     if _in_product:
         _pp = st.get("pending") or {}
         if sw:   # Sasha 194 · the space, always said (the founder's account; guests next, with their tests)
-            SW.label_space(out.items, _pp.get("product") if _pp.get("kind") == "product" else None,
+            SW.label_space(out, _pp.get("product") if _pp.get("kind") == "product" else None,
                            entering=_SPC.from_pending(st.get("pending")) != _space_before)   # Sasha 343 · the switch: its one question
         await STORE.put_state(key, st)   # never into Sasha's history: a product's answers (passport facts) aren't hers
         await deliver(ch, frm, out, now)

@@ -141,6 +141,8 @@ async def web_turn(user_id: Optional[str], message: str, mode: Optional[str] = N
             await SPC.set_space(user_id, SPC.from_pending(st.get("pending")), "web")
     except Exception as e:
         log.warning("[products.web] space not kept: %s", type(e).__name__)
+    from booking_signer import switching as _SWc
+    _SWc.compose(out, plain=True)   # Sasha 356 · the ONE composer writes the header here too (plain: the web chat has no WhatsApp italics)
     texts = list(early)
     replies, media = [], []
     for it in out.items:

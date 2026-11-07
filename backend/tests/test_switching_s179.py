@@ -11,7 +11,10 @@ class Switching(unittest.TestCase):
     def test_a_new_place_is_one_line_with_back_first_and_the_label(self):
         items = [("text", "🎙 I heard: “a spa in Paris”"), ("text", "Here are the best-rated spas in Paris."), ("ask", "Which one?", [])]
         cur = SW.announce(items, {"k": "j", "label": "✈️ Vietnam, Nov"}, {"k": "j", "label": "📍 Paris"}, 1)
-        SW.label_first(items, cur)
+        from booking_signer import guest_whatsapp as GW   # Sasha 356 · the label is DECLARED on the message, written by the one composer
+        out = GW.Out(); out.items = items
+        SW.label_first(out, cur)
+        SW.compose(out)
         self.assertEqual(items[1][0], "ask")
         self.assertIn("↪ Switching to Paris.", items[1][1])
         self.assertEqual(items[1][2], [("Back to Vietnam, Nov", "mback:j:✈️ Vietnam, Nov")])

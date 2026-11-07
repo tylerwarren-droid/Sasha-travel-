@@ -449,14 +449,14 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         await _store_put(ch, asked_last, {**st["pending"], "touched": now.isoformat()})
         await _set_aside(st, ch)
         _t = _TL.BY_PRODUCT.get(asked_last)   # Sasha 343 · never a word to type — the Menu, in the registry's own words
-        out.text("Kept — everything you've given me stays" + (f"; {_TL.go(_t['id'])} when you want to carry on." if _t else ".")
-                 + f"\n{_TL.space_line(None, entering=True)}")
+        out.text("Kept — everything you've given me stays" + (f"; {_TL.go(_t['id'])} when you want to carry on." if _t else "."))
+        out.header = ("space", None, True)   # Sasha 356 · the header is declared; the ONE composer writes it (switching.compose)
         return True
     if asked_last and _EXIT.match(body) and not payload:
         st["pending"] = {**st["pending"], "touched": now.isoformat(), "parked": True}
         await _set_aside(st, ch)                                # CR 40 · kept, parked: only its word brings it back
         st["pending"] = None
-        out.text(_TL.space_line(None, entering=True))   # Sasha 343 · "Sasha · ✈️ Travel — where would you like to go?"   # CR 15 · "sasha" returns
+        out.header = ("space", None, True)   # Sasha 343 / 356 · "Sasha · ✈️ Travel — where would you like to go?", written by the ONE composer
         return True
     plan_for = None
     if payload.startswith("tp:go:") and payload[6:] in ("relocation", "campus"):   # CR 50 · "Getting there": the product's

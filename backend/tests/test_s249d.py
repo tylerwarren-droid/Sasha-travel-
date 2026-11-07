@@ -301,7 +301,7 @@ class OneSpace(M15.Base):
         self.assertEqual(sp, "relocation")                            # inside sasha.turn: its Ctx …
         self.assertIn("Their space now: 🏠 Relocation", context)         # … and its context
         self.say("sasha")
-        self.assertEqual(self.bodies()[-1], "Sasha · ✈️ Travel — where would you like to go?")
+        self.assertEqual(self.bodies()[-1], "_Sasha · ✈️ Travel — where would you like to go?_")   # Sasha 356: the ONE composer writes the header
         self.assertEqual(self.space(), "sasha")
         sp, context = self.brain("hello")
         self.assertEqual(sp, "sasha")

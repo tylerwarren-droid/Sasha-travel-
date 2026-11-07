@@ -46,14 +46,33 @@ def space_label(product: Optional[str], entering: bool = False) -> str:
     return TL.space_line(product, entering)
 
 
-def label_space(out_items: list, product: Optional[str], entering: bool = False) -> None:
+def label_space(out, product: Optional[str], entering: bool = False) -> None:
+    """The space this message is in, DECLARED on it (Sasha 356): compose() writes it, once, when the message leaves."""
     import os
     if os.getenv("SASHA_SPACE_LABEL", "1") == "0":
         return
-    for i, it in enumerate(out_items):
-        if it[0] in ("text", "ask") and not it[1].startswith("🎙"):
-            out_items[i] = (it[0], f"_{space_label(product, entering)}_\n{strip_label(it[1])}", *it[2:])
-            return
+    out.header = ("space", product, entering)
+
+
+def compose(out, plain: bool = False) -> None:
+    """Sasha 356 · THE ONE COMPOSER of a message's header (Tyler, 7 Nov 06:57: "Sasha · ✈️ Travel — where would you like to go?" came TWICE
+    in one message, italic + plain — a product wrote it as its text and the label wrote it again). The header is the registry's line
+    (products/tools.space_line — Sasha 343) or the journey's ("Now: …"), declared on the message (out.header) and written HERE, once, in
+    italics at the top of its first text (a message with no text gets it as its own line). Every outbound message passes here
+    (guest_whatsapp._send, and the web chat's products — products/web.web_turn — with `plain`: no WhatsApp italics there). Idempotent:
+    a message composed twice still carries one header."""
+    h = getattr(out, "header", None)
+    if not h or getattr(out, "_composed", False):
+        return
+    line = space_label(h[1], bool(h[2]) if len(h) > 2 else False) if h[0] == "space" else f"Now: {h[1]}"
+    for i, it in enumerate(out.items):
+        if it[0] in ("text", "ask") and not str(it[1]).startswith("🎙"):
+            head = line if plain else f"_{line}_"
+            out.items[i] = (it[0], f"{head}\n{strip_label(it[1])}".rstrip("\n"), *it[2:])
+            break
+    else:
+        out.items.insert(0, ("text", line if plain else f"_{line}_"))
+    out._composed = True
 
 
 def label_of(text: str) -> Optional[str]:
@@ -137,14 +156,11 @@ def announce(out_items: List[tuple], old: Optional[dict], new: Optional[dict], l
     return cur
 
 
-def label_first(out_items: List[tuple], mode: Optional[dict]) -> None:
-    """(3) The small label on the reply's first text."""
+def label_first(out, mode: Optional[dict]) -> None:
+    """(3) The journey's label on the reply, DECLARED (Sasha 356): compose() writes it, once."""
     if not mode:
         return
-    for i, it in enumerate(out_items):
-        if it[0] in ("text", "ask") and not it[1].startswith("🎙"):
-            out_items[i] = (it[0], f"_Now: {mode['label']}_\n{strip_label(it[1])}", *it[2:])
-            return
+    out.header = ("now", mode["label"])
 
 
 def back_to(payload: str) -> Optional[Tuple[str, str]]:

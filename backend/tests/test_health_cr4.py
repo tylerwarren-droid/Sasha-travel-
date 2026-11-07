@@ -234,4 +234,4 @@ class NewInMadrid(Base):
         self.assertEqual(self.bodies()[-1], "agent: hello")
         self.say("salud")
         self.say("exit")
-        self.assertEqual(self.bodies()[-1], "Sasha · ✈️ Travel — where would you like to go?")
+        self.assertEqual(self.bodies()[-1], "_Sasha · ✈️ Travel — where would you like to go?_")   # Sasha 356: the ONE composer writes the header

@@ -79,7 +79,7 @@ class Leaving(Base):
         TG.stand_in_brain(self)
         self.say("diligence")
         self.say("sasha")
-        self.assertEqual(self.bodies()[-1].split("\n")[-1], "Sasha · ✈️ Travel — where would you like to go?")
+        self.assertEqual(self.bodies()[-1].split("\n")[-1], "_Sasha · ✈️ Travel — where would you like to go?_")   # Sasha 356: the ONE composer writes the header
         self.say("book a table for two tonight")
         self.assertEqual(self.sent_to_ad(), [])   # Sasha 315 MOVED: after "sasha", travel is Sasha's; an AD question goes by meaning
         self.assertEqual(self.brain_saw, ["book a table for two tonight"])

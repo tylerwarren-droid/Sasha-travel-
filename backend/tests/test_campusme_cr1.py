@@ -303,7 +303,7 @@ class OnWhatsApp(Fixtures):
         self.say("campus")
         self.assertIn("I read each university's own visit calendar", self.bodies()[-1])
         self.say("exit")
-        self.assertEqual(self.bodies()[-1], "Sasha · ✈️ Travel — where would you like to go?")
+        self.assertEqual(self.bodies()[-1], "_Sasha · ✈️ Travel — where would you like to go?_")   # Sasha 356: the ONE composer writes the header
         self.say("hello")
         self.assertEqual(self.bodies()[-1], "agent: hello")
         self.assertEqual(self.brain_saw, ["hello", "hello"])                 # the space's words never reached her

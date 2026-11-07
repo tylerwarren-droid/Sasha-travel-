@@ -67,7 +67,7 @@ class Words(Base):
         self.say("relocate")
         self.assertIn("I never file anything", self.said())
         self.say("sasha")
-        self.assertEqual(self.bodies()[-1], "Sasha · ✈️ Travel — where would you like to go?")
+        self.assertEqual(self.bodies()[-1], "_Sasha · ✈️ Travel — where would you like to go?_")   # Sasha 356: the ONE composer writes the header
         self.say("campus")
         self.assertIn("I read each university's own visit calendar", self.said())
 

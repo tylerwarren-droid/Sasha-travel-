@@ -382,7 +382,7 @@ async def _create(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     r = await G.create_trip(account, a.get("company"), str(a["destination"]), a.get("starts_on"), a.get("ends_on"), a.get("hotel_area"),
                             [str(x) for x in a["who"]])
     if r.get("why"):
-        return _no(r["why"].capitalize() + ".")
+        return _no(r["why"][0].upper() + r["why"][1:] + ".", missing=r.get("missing"))
     notes = ([f"not on your roster: {_and(r['unknown'])}"] if r["unknown"] else []) + \
             ([f"more than one person called {_and(r['twice'])} — tick the one you mean"] if r["twice"] else [])
     if not r["on_trip"]:

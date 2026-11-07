@@ -99,22 +99,33 @@ class Engine(unittest.TestCase):
                 self.assertTrue(next(p for p in (await G.state(OWNER))["roster"] if p["id"] == ids[0])["on"])
         _in_world(go)
 
-    def test_a_trip_with_nobody_is_not_kept(self):
+    def test_no_door_can_make_a_trip_with_nobody_on_it(self):
+        """The ONE trip writer refuses a trip with nobody on it — [Go] with nobody ticked, names not on the roster, the chat without who,
+        an upload in a new trip: nothing is made. The last one switched off ends the trip (said). Nothing is ever deleted on a read."""
+        from agapi import v0 as API
+
         async def go(w):
             if True:
                 await GO.run(OWNER, "person_add", {"rows": _people(2), "company": COMPANY})
                 ids = [p["id"] for p in (await G.state(OWNER))["roster"]]
+                before = len(w.store.movements)
+                for who in ([], ["Nobody Atall"], None):
+                    r = await G.create_trip(OWNER, COMPANY, "London", "2026-11-17", "2026-11-21", None, who)
+                    self.assertIn("who's going", r["why"])
+                r = await GO.run(OWNER, "create", {"destination": "London", "starts_on": "2026-11-17", "ends_on": "2026-11-21", "who": ["Nobody Atall"]})
+                self.assertFalse(r["done"])
+                self.assertIn("not on your roster: Nobody Atall", r["say"])
+                await API.group_start(API.Ctx(account=OWNER), {"company": COMPANY, "destination": "London"})
+                await GO.run(OWNER, "add", {"rows": G.read_text("Cy Example, Lisbon"), "on_trip": False})
+                self.assertEqual(len(w.store.movements), before)                          # not one trip made by any of them
+                for _ in range(3):
+                    await G.state(OWNER); await G.trips(OWNER)
+                self.assertEqual(len(w.store.movements), before)                          # and none deleted by reading (World's own is there)
                 await GO.run(OWNER, "create", {"destination": "Lisbon", "starts_on": "2026-11-17", "ends_on": "2026-11-21", "who": [ids[0]]})
                 await G.planned(OWNER)
-                r = await GO.run(OWNER, "switch", {"person": ids[0], "on": False})     # the last one off
+                r = await GO.run(OWNER, "switch", {"person": ids[0], "on": False})       # the last one off: the trip ends, said
                 self.assertIn("isn't kept", r["say"])
                 self.assertNotIn("Lisbon", [t["destination"] for t in (await G.trips(OWNER))["trips"]])
-                # the empty trips made before (World's own Madrid trip, never given anyone): tidied through the product when read
-                for _ in range(3):
-                    await G.create_trip(OWNER, COMPANY, "London", "2026-11-17", "2026-11-21", None)
-                await GO.run(OWNER, "create", {"destination": "Porto", "starts_on": "2026-12-01", "ends_on": "2026-12-03", "who": [ids[1]]})
-                ts = (await G.state(OWNER))["trips"]
-                self.assertEqual([t["destination"] for t in ts], ["Porto"])
         _in_world(go)
 
     def test_go_needs_who_and_where(self):
@@ -184,7 +195,7 @@ class TheChatUsesTheEngine(unittest.TestCase):
 class OneSource(unittest.TestCase):
     def test_only_the_engine_changes_the_selection_or_makes_a_trip(self):
         """Whole class: the group store's writers of a trip and its selection (select / remove_member / new_movement / delete_movement)
-        are called ONLY by the engine's own functions (create_trip, set_on_trip, tidy) — every door goes through them."""
+        are called ONLY by the engine's own functions (create_trip, set_on_trip) — every door goes through them."""
         hits = []
         for d in ("booking_signer", "agapi", "products", "app"):
             for f in sorted((ROOT / d).rglob("*.py")):
@@ -192,7 +203,7 @@ class OneSource(unittest.TestCase):
                 for m in re.finditer(r"\b(?:st|store\(\)|self\.store|G\.store\(\))\.(select|remove_member|new_movement|delete_movement)\(", s):
                     fn = re.findall(r"\n(?:    )?(?:async )?def (\w+)", s[:m.start()])
                     owner = fn[-1] if fn else "?"
-                    if f.name == "groups.py" and owner in ("create_trip", "set_on_trip", "tidy"):
+                    if f.name == "groups.py" and owner in ("create_trip", "set_on_trip"):
                         continue
                     hits.append(f"{f.relative_to(ROOT)}:{owner} .{m.group(1)}(")
         self.assertEqual(hits, [])

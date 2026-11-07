@@ -758,8 +758,8 @@ def summary(v: Dict[str, Any], top: int = 25) -> str:
 # ── the organiser's steps (the agent's tools and the S2 page call these) ──────────────────────────────────────────────────────
 
 # ── Sasha 358 · THE GROUP ENGINE: the roster + each trip's selection, changed ONLY here ────────────────────────────────────────
-# create_trip (the ONE way a trip is made), set_on_trip (the ONE way a person goes on or comes off one), tidy (a trip with nobody on it is
-# not kept). The /group page, its upload, [Go], and the chat's group tools all call these; state() is what every view renders.
+# create_trip (the ONE way a trip is made — never with nobody on it), set_on_trip (the ONE way a person goes on or comes off one: the
+# last one off ends the trip, said). The /group page, its upload, [Go], and the chat's group tools all call these; state() is the view.
 
 _PLANS: Dict[str, Any] = {}   # account → the planning running now (this process): the people just put on a trip, each from their home
 
@@ -812,6 +812,13 @@ async def create_trip(account: str, company: Optional[str], destination: str, st
         company = (grp or {}).get("name")
         if not company:
             return {"why": "add your people first (the roster), and the trip chooses from them"}
+    grp = await st.company(account, company)
+    ids, unknown, twice = _resolve(await st.people(grp["id"]) if grp else [], who or [])
+    if not ids:   # Sasha 358 · THE ONE TRIP WRITER refuses a trip with nobody on it — from every door (/group, S2, /next, the chat, WhatsApp)
+        return {"why": "who's going? — " + ("; ".join(x for x in (f"not on your roster: {', '.join(unknown)}" if unknown else "",
+                                                                  f"more than one person called {', '.join(twice)}" if twice else "") if x)
+                                            or "tick them (or name them) first; nothing was made"),
+                "missing": ["who's going"], "unknown": unknown, "twice": twice}
     same = lambda a, b: str(a or "").strip().lower()[:10] == str(b or "").strip().lower()[:10]
     mid, reused = None, False
     for t in await st.trips(account):
@@ -824,7 +831,6 @@ async def create_trip(account: str, company: Optional[str], destination: str, st
         mid = await st.new_movement(account, company.strip()[:200], destination.strip()[:120], starts_on, ends_on,
                                     (hotel_area or "").strip()[:200] or None)
     mv = await st.movement(account, mid)
-    ids, unknown, twice = _resolve(await st.people(mv["group_id"]), who or [])
     links = []
     for pid in ids:
         r = await set_on_trip(account, pid, mid, True, plan_now=False)
@@ -885,24 +891,10 @@ async def set_on_trip(account: str, person: str, trip: Optional[str] = None, on:
     return {"done": True, "on": False, "say": said}
 
 
-async def tidy(account: str) -> int:
-    """A trip with nobody on it (so nothing booked) is not kept — any but the open one (being set up now) is deleted when the trips are
-    read. → how many."""
-    st = store()
-    n = 0
-    for t in (await st.trips(account))[1:]:
-        if not int(t.get("people") or 0) and await st.delete_movement(account, t["id"]):
-            n += 1
-    if n:
-        log.info("[groups] %d empty trip(s) not kept", n)
-    return n
-
-
 async def state(account: str, trip: Optional[str] = None) -> Dict[str, Any]:
     """THE view every door renders (the /group page — and, next, S2's and /next's group tab): the roster, each person's switch (on the open
     trip or not — the record itself), the open trip and its list (status, price, passport), and the trips."""
     st = store()
-    await tidy(account)
     ts = (await trips(account))["trips"]
     mv = await st.movement(account, trip) if ts else None
     lst = await view(account, mv["id"]) if mv else {"rows": []}
@@ -1055,8 +1047,7 @@ async def choose(account: str, who: List[str], movement_id: Optional[str] = None
 
 async def trips(account: str) -> Dict[str, Any]:
     """Sasha 351 · the organiser's trips (newest opened first) — the first is the OPEN one: everything on /group and in the chat is about it.
-    Sasha 358 · a trip with nobody on it is not kept (tidy) — never listed, never hidden: gone."""
-    await tidy(account)
+    Sasha 358 · no trip with nobody on it can be made (create_trip refuses it), and the last one switched off ends it (set_on_trip)."""
     ts = await store().trips(account)
     return {"trips": [{**t, "open": i == 0} for i, t in enumerate(ts)]}
 
@@ -1130,4 +1121,4 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
 
 
 __all__ = ["read_text", "read_csv", "read_xlsx", "read_photo", "members_from", "batch_question", "limit_for", "with_limits", "plan", "view",
-           "summary", "create_trip", "set_on_trip", "tidy", "state", "planned", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]
+           "summary", "create_trip", "set_on_trip", "state", "planned", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]

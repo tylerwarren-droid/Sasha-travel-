@@ -86,8 +86,10 @@ class TheGuard(unittest.TestCase):
 class OneMovementPerTrip(unittest.TestCase):
     def test_six_starts_one_movement(self):
         with W.World() as w:
-            ids = {run(G.create_trip(OWNER, "Jean Incorporated", "London", "2026-11-17", "2026-11-21", "near Canary Wharf"))["movement_id"] for _ in range(6)}
-            other = run(G.create_trip(OWNER, "Jean Incorporated", "London", "2026-12-01", "2026-12-05", "near Canary Wharf"))["movement_id"]
+            run(G.add_people(OWNER, [{"name": "Jo Example", "home_city": "London"}], "Jean Incorporated"))   # Sasha 358 · never a trip with nobody
+            go = lambda a, b: run(G.create_trip(OWNER, "Jean Incorporated", "London", a, b, "near Canary Wharf", ["Jo Example"]))["movement_id"]
+            ids = {go("2026-11-17", "2026-11-21") for _ in range(6)}
+            other = go("2026-12-01", "2026-12-05")
         self.assertEqual(len(ids), 1)
         self.assertNotIn(other, ids)                                                             # another trip: its own movement
 

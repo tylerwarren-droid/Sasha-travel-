@@ -53,7 +53,8 @@ class World:
                   mock.patch("booking_signer.basket.suggest", suggest)]
         for x in self.p:
             x.start()
-        run(G.create_trip(OWNER, "Acme Components (fictional)", "Madrid", "2026-12-01", "2026-12-19", "near the factory in Getafe"))
+        # an open trip already there (data, as a fixture: the product's own create_trip never makes one with nobody on it — Sasha 358)
+        run(self.store.new_movement(OWNER, "Acme Components (fictional)", "Madrid", "2026-12-01", "2026-12-19", "near the factory in Getafe"))
         return self
 
     def __exit__(self, *a):

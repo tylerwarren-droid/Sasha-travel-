@@ -104,7 +104,7 @@ class FakeApi:
 
 class Base(unittest.TestCase):
     def setUp(self):
-        GW._SEEN_SIDS.clear()   # Sasha 206 · each test's MessageSids are its own
+        GW._SEEN_SIDS.clear(); GW._SEEN_STEPS.clear()   # Sasha 355 · a message's steps: their own record   # Sasha 206 · each test's MessageSids are its own
         from products import space as _SPC   # Sasha 256 · each test starts with no space set (the one record's process copy)
         _SPC._SPACE.clear()
         self.addCleanup(_SPC._SPACE.clear)
@@ -399,7 +399,7 @@ class OnPostgresStore(unittest.TestCase):
                 try:
                     sid = "SM" + "c" * 32
                     self.assertTrue(await GW.first_time(sid))
-                    GW._SEEN_SIDS.clear()                                         # a restart: memory is gone, the table is not
+                    GW._SEEN_SIDS.clear(); GW._SEEN_STEPS.clear()   # Sasha 355 · a message's steps: their own record                                         # a restart: memory is gone, the table is not
                     self.assertFalse(await GW.first_time(sid))
                     self.assertTrue(await GW.first_time("SM" + "d" * 32))
                 finally:

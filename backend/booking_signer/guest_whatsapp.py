@@ -664,6 +664,48 @@ async def first_time(sid: str) -> bool:
     return True
 
 
+# ── Sasha 355 · ONE INBOUND MESSAGE IS HANDLED EXACTLY ONCE: each message's processing steps, keyed as written (sql/058) ──────────
+
+STEPS = ("agapi_in", "agapi_took")
+_SEEN_STEPS: Dict[Tuple[str, str], float] = {}   # the memory store's (tests); the Postgres store uses guest_message_steps (058)
+
+
+async def first_step(sid: str, step: str) -> bool:
+    """True the first time this message reaches this step; False for a repeat (a Twilio retry) — and False, NAMED in the log, when the
+    record can't be written: it fails CLOSED (found live, Sasha 350's log: Sasha 294's derived keys were refused by guest_inbound_sids'
+    check, the check failed OPEN, and every retry was handed to AgAPI again)."""
+    if step not in STEPS:
+        raise ValueError(f"unknown step {step!r}")
+    run = getattr(STORE, "_run", None)
+    if run is not None:
+        try:
+            new = await run(lambda c: c.fetchval("insert into guest_message_steps (message_sid, step) values ($1, $2) on conflict do nothing "
+                                                 "returning step", sid, step))
+            return new is not None
+        except Exception as e:
+            log.error("[guest_whatsapp] step %s of message …%s NOT recorded (%s: %s) — not done again: the check fails closed", step,
+                      str(sid)[-8:], type(e).__name__, str(e)[:160])
+            return False
+    import time as _t
+    if (sid, step) in _SEEN_STEPS:
+        return False
+    _SEEN_STEPS[(sid, step)] = _t.time()
+    return True
+
+
+async def step_done(sid: str, step: str) -> bool:
+    """Read only: did this message reach this step before? A record that can't be read is NAMED and answers False — the message then
+    goes Sasha's own way, never to AgAPI again (first_step already refused that)."""
+    run = getattr(STORE, "_run", None)
+    if run is not None:
+        try:
+            return bool(await run(lambda c: c.fetchval("select 1 from guest_message_steps where message_sid = $1 and step = $2", sid, step)))
+        except Exception as e:
+            log.error("[guest_whatsapp] step %s of message …%s NOT read (%s)", step, str(sid)[-8:], type(e).__name__)
+            return False
+    return (sid, step) in _SEEN_STEPS
+
+
 async def seen(sid: str) -> bool:
     """Sasha 294 · was this key marked before? (read only — first_time() marks). The same store as first_time."""
     if not sid:

@@ -19,7 +19,7 @@ def run(c):
 
 class EveryWhatsAppGoesToAgAPIFirst(unittest.TestCase):
     def setUp(self):
-        GW._SEEN_SIDS.clear()
+        GW._SEEN_SIDS.clear(); GW._SEEN_STEPS.clear()   # Sasha 355 · a message's steps: their own record
 
     def deliver(self, body, *, matched, linked=True, sid="SM294"):
         p = {"From": f"whatsapp:{TYLER}", "To": "whatsapp:+447700900000", "Body": body, "MessageSid": sid}

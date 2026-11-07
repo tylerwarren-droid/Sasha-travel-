@@ -62,7 +62,7 @@ class ThroughTheWebhook(TIP.InboundPhone):
         async def call(op, body, approval=None, account=None):
             sent.append((op, body))
             return {"ok": True, "result": {"matched": True, "kept": True, "ad": "interview"}}
-        with mock.patch.object(VS, "CALL", call), mock.patch.object(GW, "first_time", mock.AsyncMock(return_value=True)), \
+        with mock.patch.object(VS, "CALL", call), mock.patch.object(GW, "first_time", mock.AsyncMock(return_value=True)), mock.patch.object(GW, "first_step", mock.AsyncMock(return_value=True)), \
                 mock.patch.object(GW, "linked", mock.AsyncMock(return_value=False)):
             r = self.post("sms", form)
         self.assertEqual(r.status_code, 200)

@@ -254,17 +254,17 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         # record there. Sasha 294 · for EVERY sender, guests too (Tyler is one: his "investigate …" must reach AgAPI's classifier, CR 127's
         # door to Applied Diligence), with Twilio's MessageSid. Matched → AgAPI has it; nothing here answers it. Unmatched → the guest flow
         # and the paths below, exactly as before. A Twilio retry is decided ONCE: AgAPI is asked on the first delivery only, and its
-        # verdict is kept (agapi-took:<sid>) — a retry of a message AgAPI took stops here; any other retry goes on as before.
+        # verdict is kept (guest_message_steps: agapi_took, Sasha 355) — a retry of a message AgAPI took stops here; any other retry goes on.
         from . import guest_whatsapp as GW
         from agapi import venue_submit as VS
         from products import tools as TL
         if TL.switch_tap(p) is not None:   # Sasha 344 · the ONE switch BEFORE any tool's door: "← Everything I can do" / a tool's row
             pass                           # is Sasha's own (the guest flow below answers it) — never AgAPI's door, never AD as text
-        elif await GW.first_time(f"agapi-in:{sid}"):
+        elif await GW.first_step(sid, "agapi_in"):   # Sasha 355 · each step of THIS message once, in its own record (sql/058)
             if (await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p)).get("matched"):
-                await GW.first_time(f"agapi-took:{sid}")
+                await GW.first_step(sid, "agapi_took")
                 return _twiml()
-        elif await GW.seen(f"agapi-took:{sid}"):
+        elif await GW.step_done(sid, "agapi_took"):   # a retry of a message AgAPI took: it stops here, nothing else answers it
             return _twiml()
     if channel == "whatsapp":
         # S-75 · a GUEST on a guest number (the sandbox's, SASHA_GUEST_WHATSAPP_TO): linked → their booking turn; "LINK

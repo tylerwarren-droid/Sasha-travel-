@@ -97,7 +97,7 @@ class VenueRepliesLandOnAgAPIsRecord(unittest.TestCase):
                 return True
         with mock.patch.object(IP, "_verified", mock.AsyncMock(return_value=p)), mock.patch.object(IP, "STORE", Store()), \
                 mock.patch.object(VS, "whatsapp_inbound", inbound), mock.patch.object(GW, "linked", mock.AsyncMock(return_value=linked)), \
-                mock.patch.object(GW, "first_time", mock.AsyncMock(return_value=True)), \
+                mock.patch.object(GW, "first_time", mock.AsyncMock(return_value=True)), mock.patch.object(GW, "first_step", mock.AsyncMock(return_value=True)), \
                 mock.patch.object(GW, "dispatch", mock.AsyncMock(return_value=None)):
             r = run(IP.sms(None))
         return r, handed, called

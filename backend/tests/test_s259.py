@@ -136,9 +136,11 @@ class TheTripTabReadsTheOneBookingRecord(unittest.TestCase):
     def test_an_agapi_table_is_in_booked_and_everything_a_request_in_waiting(self):
         from agapi import venue_submit as VS
         from booking_signer import journeys as JN
-        acts = [{"trip_item_id": None, "act_id": "act_tv1", "venue": "Sasha Test Venue", "date": "2026-11-06", "time": "20:30", "party": 2,
+        from datetime import date as _date, timedelta as _td   # dates ahead of TODAY (hard-coded days fell into the past on 7 Nov)
+        d1, d2 = (_date.today() + _td(days=3)).isoformat(), (_date.today() + _td(days=4)).isoformat()
+        acts = [{"trip_item_id": None, "act_id": "act_tv1", "venue": "Sasha Test Venue", "date": d1, "time": "20:30", "party": 2,
                  "status": "confirmed", "type": "venue", "reference": "TV-CCFD94-87"},
-                {"trip_item_id": None, "act_id": "act_tc1", "venue": "Taverna Correo", "date": "2026-11-07", "time": "21:00", "party": 2,
+                {"trip_item_id": None, "act_id": "act_tc1", "venue": "Taverna Correo", "date": d2, "time": "21:00", "party": 2,
                  "status": "requested", "type": "venue"}]
         # Sasha 323 · re-pointed: these are a TEST person's bookings at Kanoe's test venues (how a test person books) — shown to them;
         # a person whose record is live never sees them (journeys.shown_to)

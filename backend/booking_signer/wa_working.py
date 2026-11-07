@@ -5,8 +5,9 @@ sender (CR 174: messages.typing {message_id}, Twilio's Typing Indicators; only o
 last until a reply or 25 s, and AgAPI keeps no timer). The hold refreshes every REFRESH_S, tied to THAT message, and ends when its reply
 leaves:
   · the webhook's own answer (a TwiML reply, AgAPI having answered in its op, nothing to say) → settle(sid) as the webhook returns;
-  · a guest's turn running in the background → keep(key) marks it, and its reply leaving (guest_whatsapp.deliver — every reply, its failure
-    told too) → stop_for(key);
+  · a guest's turn running in the background → keep(key) marks it, and its REPLY leaving (guest_whatsapp.deliver — its result, or its
+    told failure) → stop_for(key). An acknowledgement / progress line is not a reply: the dots come back at once after it (again);
+    a turn that ends with its hold still open sent no reply — its failure is told, never silence;
   · never longer than CAP_S (a lost reply never leaves dots forever).
 No typing call anywhere else, no second sender, no "working on it…" text. Every call is logged with Twilio's status.
 """
@@ -103,6 +104,22 @@ def settle(sid: str) -> None:
     h = _HOLDS.get(sid)
     if h and not h["kept"]:
         _end(sid, "answered")
+
+
+def again(key: str) -> None:
+    """Sasha 350 (close) · a holding line went out ("Let me see what I can do") — WhatsApp clears the dots on ANY message, but the work goes
+    on: the dots are shown again at once, on the same message, until its reply (stop_for) or its told failure."""
+    for sid, h in list(_HOLDS.items()):
+        if h["key"] == key:
+            try:
+                asyncio.get_running_loop().create_task(_typing(sid))
+            except RuntimeError:
+                pass
+
+
+def unanswered(key: str) -> bool:
+    """A turn ended with its hold still open: no reply left for this message (stop_for never ran) — its failure is told, never silence."""
+    return holding(key) > 0
 
 
 def stop_for(key: str) -> None:

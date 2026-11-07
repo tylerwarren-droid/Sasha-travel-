@@ -130,6 +130,66 @@ class TheHold(unittest.TestCase):
         self.assertEqual(left, 0)
 
 
+class TheAcknowledgementIsNotTheReply(unittest.TestCase):
+    """Sasha 350 (close) · Tyler, 7 Nov 06:10: "find me a dinner in Madrid tonight for two" → "Let me see what I can do", and no dots —
+    the holding line went through the same deliver() as a reply and ended the hold 0.6 s in (Twilio's log), before its retry showed them."""
+
+    def setUp(self):
+        WK._HOLDS.clear()
+        self.p = [mock.patch.object(WK, "REFRESH_S", 5), mock.patch.object(WK, "FIRST_TRIES", (0.0,)), mock.patch.object(WK, "CAP_S", 10)]
+        for x in self.p:
+            x.start()
+
+    def tearDown(self):
+        for x in self.p:
+            x.stop()
+        WK._HOLDS.clear()
+        WK.CALL = None
+
+    def test_a_holding_line_keeps_the_dots_and_shows_them_again_the_result_ends_them(self):
+        c = WK.CALL = Calls()
+        ch = {"wa_id_sha256": "kA", "number_e164": "+15005550100"}
+
+        async def run_():
+            with mock.patch.object(GW, "_send", mock.AsyncMock(return_value=["ok"])):
+                WK.start("kA", "SMx"); WK.keep("kA")
+                await asyncio.sleep(0.01)
+                await GW.deliver(ch, "f", GW.Out().text("Let me see what I can do."), None, progress=True)
+                await asyncio.sleep(0.01)
+                held = WK.holding("kA")
+                n = len(c.calls)
+                await GW.deliver(ch, "f", GW.Out().text("Here are three places for tonight…"), None)
+                return held, n, WK.holding("kA")
+        held, n, after = go(run_())
+        self.assertEqual(held, 1)                                                       # the acknowledgement is not the reply
+        self.assertEqual(n, 2)                                                          # shown at once, and again right after it
+        self.assertEqual(after, 0)                                                      # the result ends them
+
+    def test_a_turn_that_never_replies_is_told_as_a_failure(self):
+        sent = []
+        ch = {"wa_id_sha256": "kB", "number_e164": "+15005550101", "account_id": "a"}
+
+        async def silent_turn(ch_, frm, p):
+            return None                                                                 # its work ended, no reply ever left
+
+        async def run_():
+            WK.CALL = Calls()
+            store = mock.Mock(get_state=mock.AsyncMock(return_value={"last_inbound_at": None}))
+            with mock.patch.object(GW, "turn", silent_turn), mock.patch.object(GW, "STORE", store), \
+                    mock.patch.object(GW, "_send", mock.AsyncMock(side_effect=lambda ch_, frm, out, last: sent.append(out.said()) or ["ok"])):
+                WK.start("kB", "SMy"); WK.keep("kB")
+                await GW._turn(ch, "f", {})
+            return WK.holding("kB")
+        with self.assertLogs("booking_signer.guest_whatsapp", "ERROR"):
+            left = go(run_())
+        self.assertEqual(sent, [GW.NO_REPLY])
+        self.assertEqual(left, 0)
+
+    def test_the_holding_line_is_sent_as_progress(self):
+        src = inspect.getsource(GW)
+        self.assertIn("await deliver(ch, frm, hold, now, progress=True)", src)
+
+
 class OnePlace(unittest.TestCase):
     def test_every_whatsapp_message_starts_its_hold_where_it_arrives(self):
         src = inspect.getsource(IP.sms)

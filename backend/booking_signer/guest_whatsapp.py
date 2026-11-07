@@ -467,11 +467,21 @@ class Out:
         return "\n".join(i[1] for i in self.items)
 
 
-async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime]) -> List[str]:
+async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime], progress: bool = False) -> List[str]:
     """Sends a turn's messages — or nothing, with the reason logged: opted out, or outside the 24-hour window (the sandbox
-    has no templates; the email receipt still goes)."""
-    from . import wa_working as _WK   # Sasha 350 · a reply to this person leaves (or can't): their "working" dots end here
-    _WK.stop_for(ch.get("wa_id_sha256") or "")
+    has no templates; the email receipt still goes). Sasha 350 (close) · `progress`: an acknowledgement / progress line while the work
+    goes on — not the reply: the "working" dots come back right after it; any other delivery IS the reply (its result, or its failure)."""
+    from . import wa_working as _WK
+    if progress:
+        try:
+            return await _send(ch, frm, out, last_inbound_at)
+        finally:
+            _WK.again(ch.get("wa_id_sha256") or "")
+    _WK.stop_for(ch.get("wa_id_sha256") or "")   # the reply leaves (or can't): this message's dots end here
+    return await _send(ch, frm, out, last_inbound_at)
+
+
+async def _send(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime]) -> List[str]:
     if ch.get("opted_out_at"):
         log.info("[guest_whatsapp] not sent: the guest has opted out (STOP)")
         return ["not sent: opted out"]
@@ -815,6 +825,9 @@ def _dt(s: str) -> datetime:
 
 # ── one guest turn ──────────────────────────────────────────────────────────────────────────────────────────────────
 
+NO_REPLY = "Sorry — I couldn't finish that one on my side, and nothing was sent to anyone. Could you ask me again?"   # Sasha 350 (close)
+
+
 async def _turn(ch: dict, frm: str, p: Dict[str, str]) -> None:
     lock = _TURN_LOCKS.setdefault(ch["wa_id_sha256"], asyncio.Lock())
     async with lock:
@@ -825,9 +838,16 @@ async def _turn(ch: dict, frm: str, p: Dict[str, str]) -> None:
             st = await STORE.get_state(ch["wa_id_sha256"])
             await deliver(ch, frm, Out().text("Something went wrong on my side — nothing was sent to any venue. Please try "
                                               "again in a minute."), st.get("last_inbound_at"))
-        finally:   # Sasha 350 · the turn is over: its reply has left (deliver), or it had none to send — the dots end either way
-            from . import wa_working as _WK
-            _WK.stop_for(ch["wa_id_sha256"])
+        finally:   # Sasha 350 (close) · the turn is over: its reply left (deliver ended the hold) — or it didn't, and that is a failure,
+            from . import wa_working as _WK   # TOLD (never a silent end after "Let me see what I can do")
+            if _WK.unanswered(ch["wa_id_sha256"]):
+                log.error("[guest_whatsapp] a turn ended without its reply — its failure told")
+                try:
+                    st = await STORE.get_state(ch["wa_id_sha256"])
+                    await deliver(ch, frm, Out().text(NO_REPLY), st.get("last_inbound_at"))
+                except Exception as e:
+                    log.error("[guest_whatsapp] the failure couldn't be told either: %s", type(e).__name__)
+                    _WK.stop_for(ch["wa_id_sha256"])
 
 
 async def _follow_last_tool(ch: dict, st: dict, account: str, body: str, payload: str) -> None:
@@ -1169,7 +1189,7 @@ async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: 
         hold.text((at_once or V.holding_line(ch.get("account_id") or "")) if not said else V.progress_line(steps.now, ch.get("account_id") or ""))
         said += 1
         try:
-            await deliver(ch, frm, hold, now)
+            await deliver(ch, frm, hold, now, progress=True)   # Sasha 350 (close) · not the reply: the dots go on until it
         except Exception as e:
             log.warning("[guest_whatsapp] holding line not sent: %s", type(e).__name__)
         if V.progress_due(said, V.LONG_WAIT_S):

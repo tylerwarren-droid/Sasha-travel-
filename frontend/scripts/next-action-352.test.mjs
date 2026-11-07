@@ -34,3 +34,7 @@ test('352 · the trip card reads its state again when the turn ends (found live:
   const chat = read('../app/components/SashaChat.tsx')
   for (const src of [s2, chat]) assert.match(src, /ev\.type === 'done'\) \{[\s\S]{0,40}window\.dispatchEvent\(new Event\('sasha-plan-refresh'\)\)/)
 })
+
+test('354 · a pending item draws the trip\'s ONE card on /s2 (a trip render with no proposal cards)', () => {
+  assert.ok(s2.includes("if (k === 'trip' && !(Array.isArray(ev.cards) && ev.cards.length) && !ev.total) return [{ k: 'trip' }]"))
+})

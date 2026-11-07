@@ -195,6 +195,7 @@ function cardsOf(ev: Ev): Card[] {
     ? [{ k: 'options', kind, title: String(c.title || ''), leg: c.leg, options: c.options as Opt[] }] : [])
   if (k === 'flights') return opts(ev.card, 'flight')
   if (k === 'stays') return opts(ev.card, 'hotel')
+  if (k === 'trip' && !(Array.isArray(ev.cards) && ev.cards.length) && !ev.total) return [{ k: 'trip' }]   // Sasha 354 · what is pending now: the trip's ONE card (its next actions: Pay · Keep it / Switch)
   if (k === 'trip') return [...(Array.isArray(ev.cards) ? ev.cards.flatMap((c: Ev) => opts(c, 'flight')) : []), ...(ev.total ? [{ k: 'total' as const, total: ev.total }] : [])]
   if (k === 'total' && ev.total) return [{ k: 'total', total: ev.total }]
   if (k === 'flight_chosen') return [...(ev.total ? [{ k: 'total' as const, total: ev.total }] : []), { k: 'trip' }]   // the trip exists now: its card

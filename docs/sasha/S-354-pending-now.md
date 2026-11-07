@@ -56,3 +56,31 @@ S2 and S1 show the trip card; WhatsApp shows the same as taps.
 ## Tests
 
 `backend/tests/test_s354_pending_now.py`: the record (the latest turn decides); the reading; the pick (card, question, switch, the same flight); the turn ("yes" with nothing pending is said by code, with no model and no search; with a payment its card; to a read-back, `book` by code; to her question, the conversation).
+
+## Found while proving it, and fixed
+
+1. **A turn run outside the web routes** (the voice pathway, the gate's loops) wrote nothing pending, so a read-back's "Yes." met "nothing is waiting". The turn itself now notes what's pending (`s2_memory.note_pending`, the same step the routes' fold uses).
+2. **A pending item's card drew nothing on /s2.** A trip render with no proposal cards is now the trip's ONE card.
+3. **The keep-or-switch question carries each choice's own figure.** Without the figures, her words gave the waiting payment's total ("about €29") for a €65.19 flight.
+
+**Also:** `test_s259`'s fixture dates fell into the past on 7 Nov (failing the gate's T41). They are now relative to today.
+
+## Live proof (7 Nov, project.kanoe.ai, the test organiser, phone; no card entered)
+
+**"yes" with a payment open:**
+- "Nothing is waiting for a yes — your payment €28.71 for Transavia France MAD → ORY is still open. Tap Pay to finish it."
+- The trip card shows [Pay] · [See the whole trip].
+
+**A new pick over that payment:**
+- "Your earlier pick, American Airlines Madrid to Orly at 18:34 on 25 November (€65.19), is still waiting for payment. Do you want to keep it, or switch to Transavia France at 19:55 (€28.71)?"
+- [Keep it] · [Switch].
+- Keep it → "Kept — your payment … is still open" + [Pay].
+- Switch (the earlier run) → the new flight chosen; the earlier payment closed.
+
+**"yes" with nothing waiting** (a new chat, a Rome flight chosen and nothing read back): "Nothing is waiting for a yes right now — what would you like to do?". No search.
+
+**Book it → Yes, book it → the Pay card** (Stripe TEST embedded), as in Sasha 352.
+
+**The gate** (deploy 4269282c, on recorded replies): PASS; the voice loops' read-back "Yes." books by code.
+
+**WhatsApp:** the same turn, and the same card as taps ([Pay] · [Keep it] · [Switch]), are held by the unit tests. The test organiser has no WhatsApp linked, so nothing was sent.

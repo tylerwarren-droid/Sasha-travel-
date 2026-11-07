@@ -82,16 +82,16 @@ class TheReading(unittest.TestCase):
         fresh = datetime.now(timezone.utc).isoformat()
         st = self._now({"kind": "pick"}, kinds={PEND.PICK_KIND: {"offer_id": "off_2", "old": "Air Europa 07:30", "new": "Iberia 17:48", "at": fresh}})
         r = PEND.resolve_yes(st)
-        self.assertEqual(r["line"], "Your earlier pick (Air Europa 07:30) is waiting for payment. Keep it, or switch to Iberia 17:48?")
+        self.assertEqual(r["line"], "Your earlier pick, Air Europa 07:30, is waiting for payment. Keep it, or switch to Iberia 17:48?")
         old = "2026-01-01T00:00:00+00:00"
         self.assertIsNone(self._now({"kind": "pick"}, kinds={PEND.PICK_KIND: {"offer_id": "off_2", "at": old}})["now"])
 
 
 class ThePick(unittest.TestCase):
     """A new pick against a payment under way — never a second choice written over it (AlreadyRecorded)."""
-    ROW = {"id": "r2", "kind": "flight", "state": "suggested", "slice_key": "out:Madrid→London 2026-11-24", "provider_ref": "off_2",
+    ROW = {"id": "r2", "kind": "flight", "state": "suggested", "slice_key": "out:Madrid→London 2026-11-24", "provider_ref": "off_2", "price_amount": "72.35",
            "snapshot": {"owner": "Iberia", "from": "MAD", "to": "LHR", "departs": "2026-11-24T17:48"}}
-    PAID = {"id": "r1", "kind": "flight", "state": "pending_payment", "slice_key": "out:Madrid→London 2026-11-24",
+    PAID = {"id": "r1", "kind": "flight", "state": "pending_payment", "slice_key": "out:Madrid→London 2026-11-24", "price_amount": "55.08",
             "snapshot": {"owner": "Air Europa", "from": "MAD", "to": "LGW", "departs": "2026-11-24T07:30"}}
 
     def _run(self, row, a):
@@ -110,8 +110,8 @@ class ThePick(unittest.TestCase):
     def test_the_pending_card_and_one_question(self):
         out, held, sup = self._run(dict(self.ROW), {})
         self.assertEqual(out["status"], "pending_pick")
-        self.assertEqual(out["ask"], "Your earlier pick (Air Europa MAD → LGW 2026-11-24 07:30) is waiting for payment. Keep it, or switch to "
-                                     "Iberia MAD → LHR 2026-11-24 17:48?")
+        self.assertEqual(out["ask"], "Your earlier pick, Air Europa MAD → LGW 2026-11-24 07:30 (€55.08), is waiting for payment. Keep it, "
+                                     "or switch to Iberia MAD → LHR 2026-11-24 17:48 (€72.35)?")   # each choice with ITS figure
         self.assertEqual(held[0]["offer_id"], "off_2")
         sup.assert_not_awaited()                                                       # nothing closed, nothing chosen
 

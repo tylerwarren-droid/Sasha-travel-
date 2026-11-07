@@ -96,7 +96,10 @@ def payment_line(pay: Dict[str, Any]) -> str:
 
 
 def pick_line(pick: Dict[str, Any]) -> str:
-    return (f"Your earlier pick ({pick.get('old') or 'that flight'}) is waiting for payment. Keep it, or switch to {pick.get('new') or 'the new one'}?")
+    """Both choices WITH their own figures (found live: without them, her words added the waiting payment's total to the new pick)."""
+    eur = lambda v: f" (€{float(v):,.2f})" if isinstance(v, (int, float)) and v else ""
+    return (f"Your earlier pick, {pick.get('old') or 'that flight'}{eur(pick.get('old_eur'))}, is waiting for payment. Keep it, or switch to "
+            f"{pick.get('new') or 'the new one'}{eur(pick.get('new_eur'))}?")
 
 
 def resolve_yes(state: Dict[str, Any]) -> Dict[str, Any]:

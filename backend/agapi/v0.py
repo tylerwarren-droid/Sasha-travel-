@@ -1264,11 +1264,14 @@ async def _pick_against_payment(ctx: Ctx, p: dict, row: dict, a: dict) -> Option
             raise ToolError("not_switched", out["why"])
         await PEND.drop_pick(ctx.account)
         return None
+    num = lambda v: round(float(v), 2) if v not in (None, "") else None
     pick = {"offer_id": row.get("provider_ref") or a.get("offer_id"), "trip_id": p["trip_id"], "new": _flight_words(row),
-            "old": _flight_words(waiting[0]), "sid": (pay or {}).get("sid")}
+            "old": _flight_words(waiting[0]), "sid": (pay or {}).get("sid"),
+            "new_eur": num(row.get("price_amount")), "old_eur": num(waiting[0].get("price_amount"))}
     await PEND.hold_pick(ctx.account, pick)
     return {"status": "pending_pick", "pending": pick, "ask": PEND.pick_line(pick),
-            "say": "Say its ask word for word and wait: their answer keeps the earlier flight, or switches to this one."}
+            "say": "Say its ask word for word — its two figures are the only prices — and wait: their answer keeps the earlier flight, "
+                   "or switches to this one. Say no total."}
 
 
 async def _trip_from_offers(ctx: Ctx, p: Optional[dict], a: dict) -> Optional[tuple]:

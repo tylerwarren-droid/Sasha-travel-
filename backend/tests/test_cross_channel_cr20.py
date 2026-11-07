@@ -13,6 +13,10 @@ from products import store as ST, web as PWEB
 from tests import test_campusme_cr1 as TC
 from tests import test_guest_whatsapp_s75 as TG
 from tests import test_relocation_m3_cr1 as TR
+def _no_header(b: str) -> str:   # Sasha 356 · the switch's header is the ONE composer's (tests/test_s356_one_header); the tool's words follow it
+    import re as _re
+    return _re.sub(r"^_?Sasha · [^\n]*\n", "", b or "", count=1)
+
 
 run = TG.run
 
@@ -33,7 +37,7 @@ class Relocation(TR.Flow):
         self.assertIn("• Passport number: AB1234567 ✓", "\n".join(self.bodies() + [b for b, _ in GW.SENDER.contents]))
         # the laptop: the SAME application, at the same question — the read-back, with its own buttons
         r = web(self, mode="relocation")
-        self.assertTrue(r["response"].startswith("Back to your EX-01."))
+        self.assertTrue(_no_header(r["response"]).startswith("Back to your EX-01."))
         self.assertIn("AB1234567", r["response"])
         self.assertEqual([q["payload"] for q in r["quick_replies"]][:1], ["rx:doc:yes"])
         r = web(self, payload="rx:doc:yes")                                  # one step finished on the laptop
@@ -91,7 +95,7 @@ class Espana(TG.Base):
         self.say("1")
         self.assertIn("never why you need a doctor", GW.SENDER.contents[-1][0])
         r = web(self, mode="espana")                                          # the laptop: the same consent question
-        self.assertTrue(r["response"].startswith("Back to your health appointment."))
+        self.assertTrue(_no_header(r["response"]).startswith("Back to your health appointment."))
         self.assertEqual([q["payload"] for q in r["quick_replies"]], ["hx:consent:yes", "hx:consent:no", "hx:more:area"])   # CR 52
         r = web(self, payload="hx:consent:yes")
         self.assertIn("A private clinic", r["response"])
@@ -130,7 +134,7 @@ class BookingInsideAProduct(TR.Flow):
         # Sasha's turn (the one brain), handed the request WITH the product's context
         self.assertEqual(self.brain_saw, ["book me a 60-minute massage in Madrid near Calle de Ejemplo 12 on 2027-03-01"])
         self.say("relocation")
-        self.assertTrue((self.bodies() + [c for c, _ in GW.SENDER.contents])[-1].startswith("Back to your EX-01.")
+        self.assertTrue(_no_header((self.bodies() + [c for c, _ in GW.SENDER.contents])[-1]).startswith("Back to your EX-01.")
                         or GW.SENDER.contents[-1][0].startswith("Back to your EX-01."))   # CR 52 · the say-back carries its buttons
 
     # Sasha 206 · strict spaces (194): on the web the products' hook answers nothing for a request that is Sasha's — the conductor

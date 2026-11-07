@@ -9,6 +9,10 @@ from products import web as PWEB
 from products.relocation import docread as DR
 from tests import test_guest_whatsapp_s75 as TG
 from tests import test_relocation_m3_cr1 as TR
+def _no_header(b: str) -> str:   # Sasha 356 · the switch's header is the ONE composer's (tests/test_s356_one_header); the tool's words follow it
+    import re as _re
+    return _re.sub(r"^_?Sasha · [^\n]*\n", "", b or "", count=1)
+
 
 run = TG.run
 JPEG = b"\xff\xd8\xff\xe0 specimen passport photo page"
@@ -91,7 +95,7 @@ class NeverAskTwice(TR.Flow):
         self.assertIn("Kept", self.bodies()[-1])
         self.assertIn("tap Menu → 🏠 Relocation", self.bodies()[-1])
         self.say("relocation")
-        self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
+        self.assertTrue(_no_header(self.bodies()[-1]).startswith("Back to your EX-01."))
 
     def test_held_never_says_a_health_identifier(self):
         from products import whatsapp as PW

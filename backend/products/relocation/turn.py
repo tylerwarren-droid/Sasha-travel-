@@ -75,7 +75,7 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> None:
         from .. import steps as STP                   # CR 52 · one short opening, the rest behind "More"
         STP.stash(pend, "intro", [INTRO])
         if not body:
-            out.ask("🏠 Relocation — I fill Spain's residence forms with you; you sign and lodge them — I never file anything.\n"
+            out.ask("I fill Spain's residence forms with you; you sign and lodge them — I never file anything.\n"
                     "Is this your *first* application, or a renewal?", [("First application", "rx:route:first"), ("Renewal", "rx:route:renewal"),
                                                     STP.more("rx:", "intro")])
             return

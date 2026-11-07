@@ -12,6 +12,10 @@ import json
 from booking_signer import guest_whatsapp as GW
 from products import store as ST, whatsapp as PW
 from tests import test_guest_whatsapp_s75 as TG
+def _no_header(b: str) -> str:   # Sasha 356 · the switch's header is the ONE composer's (tests/test_s356_one_header); the tool's words follow it
+    import re as _re
+    return _re.sub(r"^_?Sasha · [^\n]*\n", "", b or "", count=1)
+
 
 run = TG.run
 
@@ -62,7 +66,7 @@ class OneSasha(TG.Base):
         self.say("sasha")
         self.say("I need a flight from London to Madrid on 1 March")
         self.say("relocation")
-        last = [b for b in self.bodies() + [c for c, _ in GW.SENDER.contents] if b.startswith("Back to your EX-01.")]
+        last = [b for b in self.bodies() + [c for c, _ in GW.SENDER.contents] if _no_header(b).startswith("Back to your EX-01.")]
         self.assertTrue(last and last[-1].endswith("Your passport number?"), last[-1:] or self.bodies()[-3:])
 
     def test_sashas_own_question_keeps_its_answers(self):
@@ -73,7 +77,7 @@ class OneSasha(TG.Base):
         self.assertEqual(self.brain_saw[-2:], ["dinner for 2 in Chamberí on Saturday at 21:00", "1"])
         self.assertNotIn("first surname", self.bodies()[-1])
         self.say("relocation")                                                # and relocation is exactly where it was
-        last = [b for b in self.bodies() + [c for c, _ in GW.SENDER.contents] if b.startswith("Back to your EX-01.")]
+        last = [b for b in self.bodies() + [c for c, _ in GW.SENDER.contents] if _no_header(b).startswith("Back to your EX-01.")]
         self.assertTrue(last and last[-1].endswith("Your passport number?"), last[-1:])
 
     def test_a_product_answer_is_never_taken_by_sasha(self):

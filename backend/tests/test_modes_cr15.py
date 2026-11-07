@@ -76,7 +76,7 @@ class Words(Base):
             GW.SENDER.contents.clear()
             self.say(word)
             menu, buttons = GW.SENDER.contents[-1]
-            self.assertIn("🇪🇸 España — Spain's public processes", menu)
+            self.assertIn("Sasha · 🇪🇸 España — what do you need done in Spain?", menu)
             for area in ("1. *Salud*", "2. *Padrón*", "3. *Identity and access*", "4. *Social security and tax*", "5. *DGT*", "6. *Education*"):
                 self.assertIn(area, menu)
             self.assertNotRegex(menu, r"(?i)movistar")

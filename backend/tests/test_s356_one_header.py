@@ -30,13 +30,26 @@ class TheComposer(unittest.TestCase):
         SW.compose(out); SW.compose(out)                                                  # composed twice: still one header
         self.assertEqual(out.items[0][1], "_Sasha · ✈️ Travel — where would you like to go?_\nKept — everything you've given me stays.")
         bare = GW.Out()
-        bare.header = ("space", None, True)
-        SW.compose(bare)                                                                  # a message with no text: its own line
+        bare.header = ("space", None, True, True)
+        SW.compose(bare)                                                                  # the header IS the message (the tool asks)
         self.assertEqual(bare.items, [("text", "_Sasha · ✈️ Travel — where would you like to go?_")])
+        quiet = GW.Out()
+        quiet.header = ("space", "diligence", False)
+        SW.compose(quiet)                                                                 # nothing of its own (AgAPI answers): no message
+        self.assertEqual(quiet.items, [])
         old = GW.Out().text("_Sasha · 🎓 Campus visits_\nWhich universities?")              # a header already on the text (an older reply)
         old.header = ("space", "campus", False)
         SW.compose(old)
         self.assertEqual(headers(old.items[0][1]), 1)
+
+
+class Bodies(ListSender):
+    """Every message's words as the person reads them — a list's, AND a message with buttons (quick_reply), whose words go in its content."""
+
+    async def send(self, frm, to, *, body="", media=None, content_sid=None, **kw):
+        if content_sid and content_sid.startswith("HX") and not content_sid.startswith("HXlist"):
+            body = self.contents[int(content_sid[2:]) - 1][0]
+        return await super().send(frm, to, body=body, media=media, content_sid=content_sid)
 
 
 class OnWhatsAppEveryTool(Base):
@@ -44,7 +57,7 @@ class OnWhatsAppEveryTool(Base):
 
     def setUp(self):
         super().setUp()
-        GW.SENDER = ListSender()
+        GW.SENDER = Bodies()
         self.p = [mock.patch.dict("os.environ", {"SASHA_SWITCHING": "all"}),
                   mock.patch("agapi.venue_submit.whatsapp_inbound", mock.AsyncMock(return_value={"matched": True, "ad": "not_linked", "replied": True}))]
         for x in self.p:
@@ -67,6 +80,13 @@ class OnWhatsAppEveryTool(Base):
         self.assertTrue(sent)
         twice = [b for b in sent if headers(b) > 1]
         self.assertEqual(twice, [], "a message carried two headers")
+        again = []                                                                         # one level in (Tyler, 7 Nov 08:03): the body under
+        for b in sent:                                                                     # the header never re-states its tool or question
+            head, _, rest = b.partition("\n")
+            for t in TL.TOOLS:
+                if f"Sasha · {TL.title(t)}" in head and (TL.title(t) in rest or t["ask"] in rest):
+                    again.append(b[:120])
+        self.assertEqual(again, [], "a tool's body re-stated the header's tool or question")
         travel = [b for b in sent if "Sasha · ✈️ Travel" in b]
         self.assertTrue(travel)                                                            # the Travel switch says its header…
         for b in sent:
@@ -86,6 +106,21 @@ class NoOtherWriter(unittest.TestCase):
                 for i, line in enumerate(f.read_text().splitlines(), 1):
                     code = line.split("#", 1)[0]
                     if re.search(r"\.(text|ask|pick)\([^)]*(space_line|space_label|Sasha · |_Now: )", code):
+                        hits.append(f"{f.relative_to(ROOT)}:{i}: {line.strip()[:110]}")
+        self.assertEqual(hits, [])
+
+    def test_no_tool_writes_its_own_identity_or_question(self):
+        """One level in (Tyler, 7 Nov 08:03): a tool's greeting never re-states the registry's identity ("🇪🇸 España — …") or question."""
+        names = "|".join(re.escape(TL.title(t)) + r"\s+—" for t in TL.TOOLS)            # a string that opens with a tool's identity
+        asks = "|".join(re.escape(t["ask"]) for t in TL.TOOLS)                             # or carries a tool's question anywhere
+        said = re.compile(r"""["'](?:%s)|["'][^"'\n]*(?:%s)""" % (names, asks))
+        hits = []
+        for d in ("products", "booking_signer"):
+            for f in sorted((ROOT / d).rglob("*.py")):
+                if f.name in ("switching.py", "tools.py"):                                  # the composer and the ONE registry
+                    continue
+                for i, line in enumerate(f.read_text().splitlines(), 1):
+                    if said.search(line.split("#", 1)[0]):
                         hits.append(f"{f.relative_to(ROOT)}:{i}: {line.strip()[:110]}")
         self.assertEqual(hits, [])
 

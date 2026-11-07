@@ -456,7 +456,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         st["pending"] = {**st["pending"], "touched": now.isoformat(), "parked": True}
         await _set_aside(st, ch)                                # CR 40 · kept, parked: only its word brings it back
         st["pending"] = None
-        out.header = ("space", None, True)   # Sasha 343 / 356 · "Sasha · ✈️ Travel — where would you like to go?", written by the ONE composer
+        out.header = ("space", None, True, True)   # Sasha 343 / 356 · "Sasha · ✈️ Travel — where would you like to go?", written by the ONE composer
         return True
     plan_for = None
     if payload.startswith("tp:go:") and payload[6:] in ("relocation", "campus"):   # CR 50 · "Getting there": the product's
@@ -658,6 +658,9 @@ async def _store_put(ch: dict, product: str, pend: dict) -> None:
 def _say_back(out, product: str, saved: dict) -> None:
     """Where we were, said again — with the last question's own buttons when it had some (CR 20: the other channel can
     press them too)."""
+    if getattr(_module(product), "RESUME_ASKS", False):   # Sasha 356 · AD: its say-back IS the registry's question, composed
+        _module(product).asks(out)
+        return
     text = _welcome_back(product, saved)
     if saved.get("last_ask"):
         out.ask(text, [tuple(b) for b in saved["last_ask"]])
@@ -687,9 +690,6 @@ def _last_said(parts: List[str], cap: int = 1500) -> str:
 
 def _welcome_back(product: str, saved: dict) -> str:
     """Resuming: where we were, in one line — the product's last question, said again."""
-    line = getattr(_module(product), "RESUME_LINE", None)
-    if line:                                   # CR 128 · AD's space: its ONE line, every time its word is said
-        return line
     last = (saved.get("last_said") or "").strip()
     return f"{_RESUME_Q[product]} {last}" if last else _RESUME_Q[product]
 

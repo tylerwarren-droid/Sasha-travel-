@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from products import diligence as DG
 from tests import test_cr128_diligence as T128
+from products import tools as _TL356
+AD_ASKS = "_" + _TL356.space_line("diligence", True) + "_"   # Sasha 356 · AD's greeting IS the registry's question, composed once
 
 ASKS = ("What is the status of the Prada case?", "what's the status of Prada", "status of Lehman", "what's next on Prada",
         "next steps", "what now", "where was I", "do 2", "send the questionnaire", "interview Jon Tester",
@@ -38,7 +40,7 @@ class EveryMessageByItsMeaning(T128.Base):
         self.say("diligence")
         self.say("what's the status of Prada")
         self.say("diligence")
-        self.assertTrue(self.bodies()[-1].endswith(DG.LINE))
+        self.assertTrue(self.bodies()[-1].endswith(AD_ASKS))
         self.assertEqual(len(self.sent_to_ad()), 1)
 
     def test_d_the_word_with_a_status_question_goes_straight_in(self):

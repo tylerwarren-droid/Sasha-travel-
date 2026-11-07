@@ -1128,10 +1128,7 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     except Exception as e:
         log.warning("[guest_whatsapp] space not kept: %s", type(e).__name__)
     if _in_product:
-        _pp = st.get("pending") or {}
-        if sw:   # Sasha 194 · the space, always said (the founder's account; guests next, with their tests)
-            SW.label_space(out, _pp.get("product") if _pp.get("kind") == "product" else None,
-                           entering=_SPC.from_pending(st.get("pending")) != _space_before)   # Sasha 343 · the switch: its one question
+        SW.declare_space(out, st, _space_before, every=sw)   # Sasha 194 / 356 · the switch for everyone; every message's label for `sw`
         await STORE.put_state(key, st)   # never into Sasha's history: a product's answers (passport facts) aren't hers
         await deliver(ch, frm, out, now)
         return out

@@ -242,8 +242,7 @@ async def lookup(country: str, name: Optional[str], number: Optional[str]) -> st
 
 # ── the space (CR 128): the word's ONE line, then every message to AgAPI's door ────────────────────────────────────────────
 
-LINE = "Applied Diligence — who should I investigate?"   # CR 165 · an unlinked number is linked by a tap (AgAPI), never "send link"
-RESUME_LINE = LINE   # its word said again (or after another space): the same one line
+RESUME_ASKS = True   # Sasha 356 · its word said again (or after another space): the registry's question, by the ONE composer
 EVERY_MESSAGE = True   # CR 142 · in the space every message is AD's, routed by its meaning — no resume shortcut answers for it
 CLOSED = ("Applied Diligence on WhatsApp is in a private beta, and this number isn't in it yet — nothing was sent to Applied Diligence. "
           "Tap Menu for Kanoe's other tools.")
@@ -252,13 +251,19 @@ WHATSAPP_ONLY = "Applied Diligence works on WhatsApp: send “diligence” there
 _WORD = re.compile(r"(?i)^\s*(applied\s+diligence|diligence|ad)(?![\w'’-])[\s:,-]*")
 
 
+def asks(out) -> None:
+    """Sasha 356 · AD's greeting is the tool's identity and its question — the registry's ("Sasha · 🔍 Due diligence — who should I
+    investigate?"), DECLARED here and written once by the ONE composer (booking_signer/switching.compose); the body adds nothing."""
+    out.header = ("space", "diligence", True, True)   # (space, tool, its question, it asks: the header alone is the message)
+
+
 async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optional[bool]:
     pend, out = ctx["st"]["pending"], ctx["out"]
     pend["step"] = "ask"                           # in the space until its word or another one leaves it (never "done" by itself)
     t = _WORD.sub("", body or "", count=1).strip() if entering else (body or "").strip()
     media = [m for m in (ctx.get("media") or []) if isinstance(m, dict) and str(m.get("url") or "").startswith("http")]
     if not t and not media:   # CR 136 · a file or a voice note with no words is evidence for a case, never "who should I investigate?"
-        out.text(LINE)
+        asks(out)
         return True
     return await hand_over(ctx, t, media)
 

@@ -11,6 +11,10 @@ import unittest
 from products import store as ST, whatsapp as PW
 from tests import test_guest_whatsapp_s75 as TG
 from tests import test_relocation_m3_cr1 as TR
+def _no_header(b: str) -> str:   # Sasha 356 · the switch's header is the ONE composer's (tests/test_s356_one_header); the tool's words follow it
+    import re as _re
+    return _re.sub(r"^_?Sasha · [^\n]*\n", "", b or "", count=1)
+
 
 run = TG.run
 
@@ -23,7 +27,7 @@ class Restart(TR.Flow):
         self.assertIn("Start 🏠 Relocation from the beginning? Your old file is kept, not deleted.", "\n".join(
             [b for b, _ in TG.GW.SENDER.contents] + self.bodies()))
         self.say("", payload="so:no:relocation")
-        self.assertTrue(self.bodies()[-1].startswith("Back to your EX-01."))
+        self.assertTrue(_no_header(self.bodies()[-1]).startswith("Back to your EX-01."))
         self.say("reset relocation")
         self.say("", payload="so:yes:relocation")
         self.assertIn("first* application", "\n".join(self.bodies()[-3:] + [c for c, _ in TG.GW.SENDER.contents[-2:]]))   # its first question again

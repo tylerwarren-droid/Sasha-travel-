@@ -13,6 +13,8 @@ from unittest import mock
 from agapi import venue_submit as VS
 from products import diligence as DG, space as SPC, store as ST, whatsapp as PW
 from tests import test_guest_whatsapp_s75 as TG
+from products import tools as _TL356
+AD_ASKS = "_" + _TL356.space_line("diligence", True) + "_"   # Sasha 356 · AD's greeting IS the registry's question, composed once
 
 run = TG.run
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -45,7 +47,7 @@ class TheWord(Base):
             n = len(self.bodies())
             self.say(w)
             self.assertEqual(len(self.bodies()), n + 1, w)
-            self.assertTrue(self.bodies()[-1].endswith(DG.LINE), (w, self.bodies()[-1]))
+            self.assertTrue(self.bodies()[-1].endswith(AD_ASKS), (w, self.bodies()[-1]))
             self.assertEqual(self.space(), "diligence", w)
         self.assertEqual(self.sent_to_ad(), [])                                   # entering says the line; nothing reaches AD
 
@@ -68,9 +70,9 @@ class Leaving(Base):
         self.say("diligence")
         self.say("campus")
         self.assertEqual(self.space(), "campus")
-        self.assertNotIn(DG.LINE, self.bodies()[-1])
+        self.assertNotIn(AD_ASKS, self.bodies()[-1])
         self.say("diligence")
-        self.assertTrue(self.bodies()[-1].endswith(DG.LINE))
+        self.assertTrue(self.bodies()[-1].endswith(AD_ASKS))
         self.assertEqual(self.space(), "diligence")
         self.say("investigate Lehman Brothers")
         self.assertEqual(self.sent_to_ad(), [("investigate Lehman Brothers", "diligence", True)])

@@ -51,7 +51,21 @@ def label_space(out, product: Optional[str], entering: bool = False) -> None:
     import os
     if os.getenv("SASHA_SPACE_LABEL", "1") == "0":
         return
-    out.header = ("space", product, entering)
+    prev = getattr(out, "header", None)   # a tool that asks its registry question (diligence.asks) keeps it asked
+    asks = bool(prev and prev[0] == "space" and len(prev) > 3 and prev[3])
+    out.header = ("space", product, entering or asks, asks)
+
+
+def declare_space(out, st: dict, space_before, every: bool = False) -> None:
+    """Sasha 356 · the header of a product's message. The SWITCH into a tool (its identity and its question, the registry's) is declared
+    for EVERYONE, WhatsApp and the web chat alike — so a tool's body never carries them; the label on every message inside a tool stays
+    the switching accounts' (`every`, Sasha 194)."""
+    from products import space as _SPC
+    pp = st.get("pending") or {}
+    entering = _SPC.from_pending(st.get("pending")) != space_before
+    prev = getattr(out, "header", None)
+    if entering or every or (prev and len(prev) > 3 and prev[3]):   # a tool that asks its question (diligence.asks): said for everyone
+        label_space(out, pp.get("product") if pp.get("kind") == "product" else None, entering=entering)   # Sasha 343 · its one question
 
 
 def compose(out, plain: bool = False) -> None:
@@ -70,8 +84,9 @@ def compose(out, plain: bool = False) -> None:
             head = line if plain else f"_{line}_"
             out.items[i] = (it[0], f"{head}\n{strip_label(it[1])}".rstrip("\n"), *it[2:])
             break
-    else:
-        out.items.insert(0, ("text", line if plain else f"_{line}_"))
+    else:   # no words of its own: the header alone is a message only when it IS the tool's question (diligence.asks) — never an empty label
+        if len(h) > 3 and h[3]:
+            out.items.insert(0, ("text", line if plain else f"_{line}_"))
     out._composed = True
 
 

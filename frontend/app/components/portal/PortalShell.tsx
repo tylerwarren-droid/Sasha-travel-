@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { DM_Sans, DM_Serif_Display } from 'next/font/google'
+import { dmSans, dmSerif } from '../../fonts/fonts'   // Sasha 358 · the fonts are in the repo
 import PortalNav from './PortalNav'
 import ArchiveBanner from './ArchiveBanner'
 import './portal.css'
@@ -10,8 +10,6 @@ import './portal.css'
 // The portal CSS asks for 'DM Sans' / 'DM Serif Display' by family name. Serving them through
 // next/font instead of the original <link> to Google keeps them self-hosted and drops a
 // render-blocking third-party request.
-const dmSans = DM_Sans({ subsets: ['latin'], weight: ['300', '400', '500'], display: 'swap' })
-const dmSerif = DM_Serif_Display({ subsets: ['latin'], weight: '400', style: ['normal', 'italic'], display: 'swap' })
 
 /**
  * Chrome shared by every investor-portal route: the stylesheet, the nav, and the one body

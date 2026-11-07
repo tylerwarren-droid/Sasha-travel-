@@ -1,17 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { geistSans, geistMono } from './fonts/fonts'   // Sasha 358 · the fonts are in the repo (no build fetches them)
 import "./globals.css";
 import { WhoBadge } from './components/SignedInLine'   // Sasha 158 · "Signed in as Tyler" or "Guest", on every page
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 // Sasha 104 · the link preview (WhatsApp, iMessage, Slack) for every page without its own: no Vietnam
 const PREVIEW = { title: "Sasha by Kanoe: AI concierge",

@@ -1,18 +1,7 @@
 import type { ReactNode } from 'react'
-import { DM_Sans, DM_Serif_Display } from 'next/font/google'
+import { dmSans, dmSerif as dmSerifDisplay } from '../fonts/fonts'   // Sasha 358 · the fonts are in the repo
 
-const dmSans = DM_Sans({
-  subsets: ['latin'],
-  variable: '--font-dm-sans',
-  display: 'swap',
-})
 
-const dmSerifDisplay = DM_Serif_Display({
-  weight: ['400'],
-  subsets: ['latin'],
-  variable: '--font-dm-serif',
-  display: 'swap',
-})
 
 export default function OnboardingLayout({
   children,

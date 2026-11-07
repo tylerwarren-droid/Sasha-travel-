@@ -1,11 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { DM_Sans, DM_Serif_Display } from 'next/font/google'
+import { siteBody as body, siteHead as head } from '../fonts/fonts'   // Sasha 358 · the fonts are in the repo
 import s from '../components/site/site.module.css'
 import Hub from './Hub'
 
-const body = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'], display: 'swap', variable: '--site-body' })
-const head = DM_Serif_Display({ subsets: ['latin'], weight: '400', display: 'swap', variable: '--site-head' })
 
 /**
  * Sasha 142 · THE HUB, project.kanoe.ai/agapi — the founder's structure (4 Oct 2026): the root is the Sasha Vietnam

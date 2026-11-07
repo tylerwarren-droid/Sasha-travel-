@@ -1,11 +1,9 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { DM_Sans, DM_Serif_Display } from 'next/font/google'
+import { siteBody as body, siteHead as head } from '../../fonts/fonts'   // Sasha 358 · the fonts are in the repo
 import { SiteNav } from './SiteNav'
 import s from './site.module.css'
 
-const body = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'], display: 'swap', variable: '--site-body' })
-const head = DM_Serif_Display({ subsets: ['latin'], weight: '400', display: 'swap', variable: '--site-head' })
 
 /** Sasha 123 · the new project.kanoe.ai: header (logo → /), the six tabs, the page, and the legal footer (§9.3, §11). */
 export function SiteShell({ children }: { children: ReactNode }) {

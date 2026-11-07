@@ -40,7 +40,7 @@ class OnePersonOneRecord(unittest.TestCase):
 
     def test_a_second_trip_selects_the_same_people_never_copies(self):
         with V.World() as w:
-            run(G.start(OWNER, COMPANY, "Lisbon", "2026-11-17", "2026-11-21", "near the client in Oeiras"))
+            run(G.create_trip(OWNER, COMPANY, "Lisbon", "2026-11-17", "2026-11-21", "near the client in Oeiras"))
             names = [p["name"] for p in _roster(w)][:3]
             r = run(G.choose(OWNER, names))
             self.assertEqual((r["selected"], r["on_trip"], r["unknown"], r["twice"]), (3, 3, [], []))
@@ -73,7 +73,7 @@ class OneVaultPerPerson(unittest.TestCase):
             for m in ms:                                                                 # the vault is the PERSON's
                 self.assertTrue(run(KEEP.list_(m["person_id"])))
                 self.assertFalse(run(KEEP.list_(m["id"])) if m["id"] != m["person_id"] else False)
-            run(G.start(OWNER, COMPANY, "Lisbon", "2026-11-17", "2026-11-21", "Oeiras"))
+            run(G.create_trip(OWNER, COMPANY, "Lisbon", "2026-11-17", "2026-11-21", "Oeiras"))
             run(G.choose(OWNER, [m["person_id"] for m in ms]))
             v = run(G.view(OWNER))
             self.assertEqual(len(v["rows"]), 3)
@@ -99,7 +99,7 @@ class TheOpenTrip(unittest.TestCase):
         with V.World() as w:
             lisbon = w.mid
             names = [p["name"] for p in _roster(w)][:3]
-            porto = run(G.start(OWNER, COMPANY, "Porto", "2026-12-01", "2026-12-03", "Ribeira"))["movement_id"]
+            porto = run(G.create_trip(OWNER, COMPANY, "Porto", "2026-12-01", "2026-12-03", "Ribeira"))["movement_id"]
             run(G.choose(OWNER, names))
             self.assertEqual(run(G.view(OWNER))["movement"]["id"], porto)
             t = run(G.trips(OWNER))["trips"]
@@ -114,7 +114,7 @@ class TheOpenTrip(unittest.TestCase):
             self.assertEqual(run(G.view(OWNER))["movement"]["id"], porto)
             self.assertFalse(run(GO.run(OWNER, "open", {"trip": "Faro"}))["done"])
             self.assertIn("which trip", run(GO.run(OWNER, "open", {}))["say"])
-            again = run(G.start(OWNER, COMPANY, "Madrid", "2026-12-01", "2026-12-19", "Getafe"))   # the same trip said again: THAT one, opened
+            again = run(G.create_trip(OWNER, COMPANY, "Madrid", "2026-12-01", "2026-12-19", "Getafe"))   # the same trip said again: THAT one, opened
             self.assertEqual((again["movement_id"], again.get("reused")), (lisbon, True))
             self.assertEqual(run(G.view(OWNER))["movement"]["id"], lisbon)
 

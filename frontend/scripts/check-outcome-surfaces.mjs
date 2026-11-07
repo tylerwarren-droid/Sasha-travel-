@@ -38,6 +38,8 @@ OUTCOME_SURFACES.push("app/keep/page.tsx");
 // Sasha 346 · the group pages (/group: Tyler's Swap and Book all were greyed and said nothing, 5 Nov) — and EVERY page that acts through
 // bookingReq is an outcome surface whether or not someone remembered to list it (actingPages() below finds them; an unlisted one fails)
 OUTCOME_SURFACES.push("app/group/page.tsx", "app/vault/page.tsx");
+// Sasha 358 · THE GROUP VIEW: one component over the group engine (/group now; S2's and /next's group tab next)
+OUTCOME_SURFACES.push("app/components/group/GroupView.tsx");
 /** The one component allowed to set `disabled=` — because it derives it from rendered needs. */
 export const GATED_BUTTON = "app/booking-helper/GatedButton.tsx";
 

@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 import uuid
 
 from agapi import v0 as API
@@ -48,7 +49,14 @@ class TylersWords(unittest.TestCase):
     def test_show_me_the_list_is_the_card_or_says_nobody_is_planned(self):
         with W.World():
             ctx = API.Ctx(account=OWNER, mode="test")
-            run(API.group_upload(ctx, {"text": FIVE}))
+
+            async def none_found(m, mv):   # Sasha 358 · on the trip = planned at once (the engine): here planning finds nothing yet
+                return {"why": "no fares yet"}
+            with mock.patch.object(G, "QUOTE", none_found):
+                async def put_on():
+                    await API.group_upload(ctx, {"text": FIVE})
+                    await G.planned(OWNER)
+                run(put_on())
             before = run(API.group_list(ctx, {}))
             ev_before = S.render("group_list", before, {})
             run(G.plan(OWNER))
@@ -78,8 +86,8 @@ class TheGuard(unittest.TestCase):
 class OneMovementPerTrip(unittest.TestCase):
     def test_six_starts_one_movement(self):
         with W.World() as w:
-            ids = {run(G.start(OWNER, "Jean Incorporated", "London", "2026-11-17", "2026-11-21", "near Canary Wharf"))["movement_id"] for _ in range(6)}
-            other = run(G.start(OWNER, "Jean Incorporated", "London", "2026-12-01", "2026-12-05", "near Canary Wharf"))["movement_id"]
+            ids = {run(G.create_trip(OWNER, "Jean Incorporated", "London", "2026-11-17", "2026-11-21", "near Canary Wharf"))["movement_id"] for _ in range(6)}
+            other = run(G.create_trip(OWNER, "Jean Incorporated", "London", "2026-12-01", "2026-12-05", "near Canary Wharf"))["movement_id"]
         self.assertEqual(len(ids), 1)
         self.assertNotIn(other, ids)                                                             # another trip: its own movement
 

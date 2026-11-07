@@ -53,7 +53,7 @@ class World:
                   mock.patch("booking_signer.basket.suggest", suggest)]
         for x in self.p:
             x.start()
-        run(G.start(OWNER, "Acme Components (fictional)", "Madrid", "2026-12-01", "2026-12-19", "near the factory in Getafe"))
+        run(G.create_trip(OWNER, "Acme Components (fictional)", "Madrid", "2026-12-01", "2026-12-19", "near the factory in Getafe"))
         return self
 
     def __exit__(self, *a):

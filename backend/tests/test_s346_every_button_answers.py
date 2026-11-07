@@ -146,10 +146,10 @@ class NeverSilent(unittest.TestCase):
         with World():
             args = {"swap": {"who": ["A"], "to": "B"}, "cancel": {"who": ["A"]}, "add": {"rows": [{"name": "A"}]}}
             for a in GO.ACTIONS:
-                if a in ("person_add", "person_edit", "documents", "open"):   # Sasha 351 · the roster's actions need a company, not a trip; open: its own words
+                if a in ("person_add", "person_edit", "documents", "open", "create"):   # Sasha 351 · the roster's actions need a company, not a trip; open: its own words; Sasha 358 · create MAKES the trip
                     continue
-                out = run(GO.run(NOBODY, a, {**args, "choose": {"who": ["A"]}}.get(a, {})))
-                want = "There's no trip yet — tell me where, when and the hotel area first." if a == "choose" else GO.NO_MOVEMENT
+                out = run(GO.run(NOBODY, a, {**args, "choose": {"who": ["A"]}, "switch": {"person": "A"}}.get(a, {})))
+                want = "There's no trip yet — tell me where, when and the hotel area first." if a in ("choose", "switch") else GO.NO_MOVEMENT
                 self.assertEqual((out["done"], out["say"]), (False, want), a)
 
     def test_the_one_exit_never_answers_empty(self):
@@ -187,12 +187,14 @@ class OnePlace(unittest.TestCase):
                 self.assertNotIn(direct, body, f"{tool} decides on its own: {direct}")
 
     def test_the_page_holds_no_press_back(self):
-        page = (ROOT / "frontend/app/group/page.tsx").read_text()
+        page = (ROOT / "frontend/app/components/group/GroupView.tsx").read_text()   # Sasha 358 · the page renders the ONE group view
         code = re.sub(r"/\*[\s\S]*?\*/|(^|[^:])//[^\n]*", r"\1", page)
         self.assertNotIn("disabled=", code)                                                    # a grey button says nothing
         self.assertNotIn("window.open", code)                                                  # a pop-up after a wait is blocked: nothing
-        self.assertEqual(len(re.findall(r"<button\b", code)), len(re.findall(r"<button\b[^>]*onClick=\{press\(", code)))   # each press, told
-        for name in ("send", "invite", "invoice", "act", "answer"):
+        # each press, told: every button's onClick is press(…) — the switch's own button takes onPress, and every switch is given press(…)
+        self.assertEqual(len(re.findall(r"<button\b", code)), len(re.findall(r"<button\b[^>]*onClick=\{(?:press\(|onPress\})", code)))
+        self.assertEqual(len(re.findall(r"<Switch\b", code)), len(re.findall(r"<Switch\b[^>]*onPress=\{press\(", code)))
+        for name in ("post", "invoice", "act", "answer"):
             fn = code[code.index(f"const {name} = async"):]
             fn = fn[:fn.index("\n  }\n")]
             self.assertIn("heard(", fn, f"{name}: an answer not read by the ONE reader")

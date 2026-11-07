@@ -15,6 +15,7 @@ stored. The group's rules (price limits) live in ONE place: group_movements.rule
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import json
@@ -38,7 +39,8 @@ COLUMNS = {
     "home_city": ("home city", "home", "city", "from", "origin", "ciudad", "ciudad de origen", "origen", "lives in"),
     "out_date": ("out", "out date", "outbound", "arrive", "arrival", "start", "ida", "fecha ida", "llegada", "departure"),
     "back_date": ("back", "back date", "return", "return date", "end", "vuelta", "fecha vuelta", "regreso"),
-    "grade": ("grade", "role", "level", "category", "categoria", "categoría", "puesto", "rank"),
+    "grade": ("grade", "level", "category", "categoria", "categoría", "rank", "band"),
+    "role": ("role", "department", "dept", "job", "job title", "position", "team", "puesto", "departamento", "cargo"),   # Sasha 358
     "email": ("email", "e-mail", "mail", "correo", "email address"),   # Sasha 333 · where their vault invite goes
     "phone": ("phone", "mobile", "whatsapp", "teléfono", "telefono", "móvil", "movil"),
     "home_airport": ("home airport", "airport", "aeropuerto", "iata"),   # Sasha 351 · where they fly from (a city's word stays home_city)
@@ -182,7 +184,8 @@ def _date(v: str, year: int) -> Optional[str]:
     return None
 
 
-def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: Optional[List[str]] = None) -> Tuple[List[dict], List[dict]]:
+def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: Optional[List[str]] = None,
+                 dates_needed: bool = True) -> Tuple[List[dict], List[dict]]:
     """Rows → (members, unclear). A row is unclear — never guessed — when its name, home city, out or back date can't be read, back comes
     before out, or its grade isn't one the group's limits know (when they're set). A missing date takes the movement's own date."""
     year = int(str(movement.get("starts_on") or date.today().isoformat())[:4])
@@ -206,9 +209,9 @@ def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: O
             why.append(f"the out date (“{r['out_date']}”)")
         if r.get("back_date") and not back:
             why.append(f"the back date (“{r['back_date']}”)")
-        if not out or not back:
+        if dates_needed and (not out or not back):   # Sasha 358 · onto the ROSTER only: a person has no dates — the trip does
             why.append("the dates") if "the dates" not in why and not any(w.startswith("the out") or w.startswith("the back") for w in why) else None
-        elif back < out:
+        elif out and back and back < out:
             why.append("the dates (back is before out)")
         grade = _norm(r.get("grade")).lower() or None
         if known and (not grade or grade not in known):
@@ -221,7 +224,9 @@ def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: O
         seen.add(name.lower())
         email = _norm(r.get("email")).lower() or None
         phone = re.sub(r"[^\d+]", "", _norm(r.get("phone"))) or None
+        role = _norm(r.get("role")).lower()[:80] or None   # Sasha 358 · role / department beside grade
         good.append({"name": name, "home_city": city or None, "out_date": out, "back_date": back, "grade": grade,
+                     **({"role": role} if role else {}),
                      **({"home_airport": airport} if airport else {}),
                      **({"email": email} if email and re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", email) else {}),
                      **({"phone": phone} if phone and re.fullmatch(r"\+\d{8,15}", phone) else {})})
@@ -241,9 +246,9 @@ def batch_question(unclear: List[dict]) -> Optional[str]:
 # ── 2 · the store (Postgres; tests use MemStore) ──────────────────────────────────────────────────────────────────────────────
 
 #: Sasha 351 · THE ROSTER (053): a person's own details, kept ONCE under the company — every trip reads them from here
-PERSON = ("name", "grade", "home_airport", "home_city", "email", "phone")
+PERSON = ("name", "grade", "role", "home_airport", "home_city", "email", "phone")   # Sasha 358 · ROLE / department beside grade (059)
 _MEMBER_Q = ("select gm.id, gm.movement_id, gm.person_id, gm.out_date, gm.back_date, gm.trip_id, gm.created_at, "
-             "p.name, p.grade, p.home_airport, p.home_city, p.email, p.phone "
+             "p.name, p.grade, p.role, p.home_airport, p.home_city, p.email, p.phone "
              "from group_members gm join group_people p on p.id = gm.person_id ")
 
 
@@ -317,9 +322,9 @@ class PgStore:
     async def add_person(self, group_id: str, person: dict) -> str:
         async def go(c):
             return str(await c.fetchval(
-                "insert into group_people (group_id, name, grade, home_airport, home_city, email, phone) values ($1,$2,$3,$4,$5,$6,$7) returning id",
-                uuid.UUID(group_id), person["name"], person.get("grade"), person.get("home_airport"), person.get("home_city"),
-                person.get("email"), person.get("phone")))
+                "insert into group_people (group_id, name, grade, role, home_airport, home_city, email, phone) values ($1,$2,$3,$4,$5,$6,$7,$8) "
+                "returning id", uuid.UUID(group_id), person["name"], person.get("grade"), person.get("role"), person.get("home_airport"),
+                person.get("home_city"), person.get("email"), person.get("phone")))
         return await self._run(go)
 
     async def update_person(self, group_id: str, person_id: str, fields: dict) -> Optional[dict]:
@@ -352,6 +357,14 @@ class PgStore:
         async def go(c):
             await c.execute("delete from group_members where movement_id = $1 and id = $2", uuid.UUID(movement_id), uuid.UUID(member_id))
         await self._run(go)
+
+    async def delete_movement(self, owner: str, movement_id: str) -> bool:
+        """Sasha 358 · a trip with NOBODY on it is not kept — refused by the statement itself while anyone is linked (nothing booked can be
+        on a trip with no links: bookings live on each person's own trip)."""
+        r = await self._run(lambda c: c.execute(
+            "delete from group_movements m using groups g where g.id = m.group_id and g.owner_id = $1 and m.id = $2 "
+            "and not exists (select 1 from group_members gm where gm.movement_id = m.id)", uuid.UUID(owner), uuid.UUID(movement_id)))
+        return str(r).split()[-1] != "0"
 
     async def members(self, movement_id: str) -> List[dict]:
         async def go(c):
@@ -459,6 +472,14 @@ class MemStore:
 
     async def remove_member(self, movement_id, member_id):
         self.rows[movement_id] = [x for x in self.rows[movement_id] if x["id"] != member_id]
+
+    async def delete_movement(self, owner, movement_id):
+        m = self.movements.get(movement_id)
+        if not m or m["owner_id"] != owner or self.rows.get(movement_id):
+            return False
+        del self.movements[movement_id]
+        self.rows.pop(movement_id, None)
+        return True
 
     def _joined(self, link):
         p = self.persons[link["person_id"]]
@@ -705,7 +726,7 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
         f_eur = round(sum(float(r.get("price_amount") or 0) for r in fl), 2) if fl else None
         h_eur = (stay.get("snapshot") or {}).get("eur_per_night") if stay else None
         price = round((f_eur or 0) + float((stay or {}).get("price_amount") or 0), 2) if (fl or stay) else None
-        out.append({"member_id": m["id"], "person_id": m.get("person_id"), "name": m["name"], "grade": m.get("grade"),
+        out.append({"member_id": m["id"], "person_id": m.get("person_id"), "name": m["name"], "grade": m.get("grade"), "role": m.get("role"),
                     "home_city": m.get("home_city"), "home_airport": m.get("home_airport"),
                     "out": m.get("out_date"), "back": m.get("back_date"), "trip_id": m.get("trip_id"),
                     "transport": _transport(rows), "hotel": (stay.get("snapshot") or {}).get("name") if stay else None,
@@ -736,38 +757,185 @@ def summary(v: Dict[str, Any], top: int = 25) -> str:
 
 # ── the organiser's steps (the agent's tools and the S2 page call these) ──────────────────────────────────────────────────────
 
-async def start(account: str, company: str, destination: str, starts_on: Optional[str], ends_on: Optional[str], hotel_area: Optional[str]) -> dict:
-    """Sasha 345 · ONE movement per trip: the same company, destination and dates as their latest movement → THAT one (found live, 5 Nov:
-    six "Jean Incorporated → London" movements in four minutes — the limits were set on one, the list read from another)."""
-    last = await store().movement(account)
+# ── Sasha 358 · THE GROUP ENGINE: the roster + each trip's selection, changed ONLY here ────────────────────────────────────────
+# create_trip (the ONE way a trip is made), set_on_trip (the ONE way a person goes on or comes off one), tidy (a trip with nobody on it is
+# not kept). The /group page, its upload, [Go], and the chat's group tools all call these; state() is what every view renders.
+
+_PLANS: Dict[str, Any] = {}   # account → the planning running now (this process): the people just put on a trip, each from their home
+
+
+def _plan_later(account: str, movement_id: str, links: List[str]) -> None:
+    """Each person just put on a trip is planned from their own home airport, within their limit — after any planning already running."""
+    if not links:
+        return
+    before = _PLANS.get(account)
+
+    async def go() -> None:
+        if before is not None and not before.done():
+            try:
+                await asyncio.shield(before)
+            except Exception as e:
+                log.warning("[groups] the planning before these ended: %s", type(e).__name__)
+        await plan(account, movement_id, only=links)
+    _PLANS[account] = asyncio.ensure_future(go())
+
+
+async def planned(account: str) -> None:
+    """Wait for the planning running now (tests and the proof)."""
+    while _PLANS.get(account) is not None and not _PLANS[account].done():
+        await asyncio.shield(_PLANS[account])
+
+
+def _resolve(roster: List[dict], who: List[str]) -> Tuple[List[str], List[str], List[str]]:
+    """Roster people by id, or by the name the organiser calls them → (ids, unknown, more than one with that name)."""
+    ids, unknown, twice = [], [], []
+    for w in who or []:
+        w = str(w).strip()
+        p = [x for x in roster if x["id"] == w] or [x for x in roster if x["name"].strip().lower() == w.lower()]
+        if len(p) == 1:
+            ids.append(p[0]["id"]) if p[0]["id"] not in ids else None
+        elif p:
+            twice.append(w)
+        elif w:
+            unknown.append(w)
+    return ids, unknown, twice
+
+
+async def create_trip(account: str, company: Optional[str], destination: str, starts_on: Optional[str], ends_on: Optional[str],
+                      hotel_area: Optional[str], who: Optional[List[str]] = None) -> Dict[str, Any]:
+    """THE ONE way a trip is made: where, when, the hotel area — and who's going (roster people by id or name), each put on it by
+    set_on_trip and planned from their own home airport. The same company, place and dates as a trip they have → THAT trip, opened again
+    (Sasha 345: never six of the same). Company: the one named, else the roster's."""
+    st = store()
+    if not company:
+        grp = await st.company(account)
+        company = (grp or {}).get("name")
+        if not company:
+            return {"why": "add your people first (the roster), and the trip chooses from them"}
     same = lambda a, b: str(a or "").strip().lower()[:10] == str(b or "").strip().lower()[:10]
-    if last and str(last.get("company") or "").strip().lower() == company.strip().lower() and same(last.get("destination"), destination) \
-            and same(last.get("starts_on"), starts_on) and same(last.get("ends_on"), ends_on):
-        return {"movement_id": last["id"], "reused": True}
-    for t in await store().trips(account):   # Sasha 351 · the same trip, made before and not the open one → THAT one, opened again
+    mid, reused = None, False
+    for t in await st.trips(account):
         if str(t.get("company") or "").strip().lower() == company.strip().lower() and same(t.get("destination"), destination) \
                 and same(t.get("starts_on"), starts_on) and same(t.get("ends_on"), ends_on):
-            await store().open(account, t["id"])
-            return {"movement_id": t["id"], "reused": True}
-    mid = await store().new_movement(account, company.strip()[:200], destination.strip()[:120], starts_on, ends_on, (hotel_area or "").strip()[:200] or None)
-    return {"movement_id": mid}
+            mid, reused = t["id"], True
+            await st.open(account, mid)
+            break
+    if mid is None:
+        mid = await st.new_movement(account, company.strip()[:200], destination.strip()[:120], starts_on, ends_on,
+                                    (hotel_area or "").strip()[:200] or None)
+    mv = await st.movement(account, mid)
+    ids, unknown, twice = _resolve(await st.people(mv["group_id"]), who or [])
+    links = []
+    for pid in ids:
+        r = await set_on_trip(account, pid, mid, True, plan_now=False)
+        if r.get("link"):
+            links.append(r["link"])
+    _plan_later(account, mid, links)
+    return {"movement_id": mid, "reused": reused, "selected": len(links), "on_trip": len(await st.members(mid)), "links": links,
+            "unknown": unknown, "twice": twice, "destination": mv["destination"]}
 
 
-async def upload(account: str, rows: List[Dict[str, str]], movement_id: Optional[str] = None) -> Dict[str, Any]:
-    """The list read → members added (or updated by name) → ONE batch question for every row that wasn't clear."""
+#: a person on one of these can come off (nothing booked for them); any other status (booked, a booking under way, cancelled) cannot
+OFF_OK = ("not planned", "planned", "needs vault", "over limit")
+
+
+async def set_on_trip(account: str, person: str, trip: Optional[str] = None, on: bool = True, plan_now: bool = True,
+                      out_date=None, back_date=None) -> Dict[str, Any]:
+    """THE ONE way a person goes on a trip or comes off it — every switch, tick, upload and chat tool comes here.
+    on  → a link (nothing copied), then planned from their own home airport.
+    off → only when nothing is booked for them (their plan is dropped, said); booked → they stay, and Cancel is offered (352).
+    The last one off a trip that has nothing booked: the trip isn't kept (said)."""
     st = store()
-    mv = await st.movement(account, movement_id)
+    mv = await st.movement(account, trip)
     if not mv:
-        return {"why": "there's no group movement yet — tell me the company, where, when and the hotel area first"}
-    grades = list(((mv.get("rules") or {}).get("limits") or {}).get("by_grade") or {})
-    good, unclear = members_from(rows, mv, grades)
-    # Sasha 351 · the list's people are the company's ROSTER (each once, their vault theirs); this trip SELECTS them — nothing copied
-    found, new, unclear2 = await _on_roster(st, mv["group_id"], good)
+        return {"why": "there's no trip yet — tell me where, when and the hotel area first"}
+    ids, unknown, twice = _resolve(await st.people(mv["group_id"]), [person])
+    if not ids:
+        return {"why": f"{person} isn't on your roster" if unknown else f"more than one person on your roster is called {person} — pick one"}
+    pid = ids[0]
+    links = await st.members(mv["id"])
+    link = next((m for m in links if m["person_id"] == pid), None)
+    name = (link or {}).get("name") or next(p["name"] for p in await st.people(mv["group_id"]) if p["id"] == pid)
+    where = f"the {mv['destination']} trip"
+    if on:
+        if link:
+            return {"done": True, "already": True, "link": None, "say": f"{name} is already on {where}."}
+        await st.select(mv["id"], [pid], out_date, back_date)
+        link = next(m for m in await st.members(mv["id"]) if m["person_id"] == pid)
+        if plan_now:
+            _plan_later(account, mv["id"], [link["id"]])
+        return {"done": True, "on": True, "link": link["id"],
+                "say": f"{name} is on {where} — planning them from {origin(link) or 'their home'} now."}
+    if not link:
+        return {"done": True, "on": False, "say": f"{name} isn't on {where}."}
+    row = next((r for r in (await view(account, mv["id"]))["rows"] if r["member_id"] == link["id"]), {})
+    status = row.get("status") or "not planned"
+    if status not in OFF_OK:
+        return {"done": False, "on": True, "status": status,
+                "say": (f"{name}'s booking on {where} was cancelled — it stays on the invoice, so they stay on the list." if status == "cancelled"
+                        else f"{name} is {status} on {where} — they stay on it until their booking is cancelled. Cancel it?"),
+                "actions": [] if status == "cancelled" else
+                [{"id": "cancel", "label": f"Cancel {name}'s booking", "tool": "group_cancel", "args": {"who": [name]}}]}
+    await st.remove_member(mv["id"], link["id"])
+    said = f"{name} is off {where}" + (" — nothing was planned or booked for them." if status == "not planned"
+                                        else " — their plan is dropped; nothing was booked for them.")
+    if not await st.members(mv["id"]) and await st.delete_movement(account, mv["id"]):
+        said += f" Nobody is left on it, so {where} isn't kept."
+        return {"done": True, "on": False, "trip_gone": True, "say": said}
+    return {"done": True, "on": False, "say": said}
+
+
+async def tidy(account: str) -> int:
+    """A trip with nobody on it (so nothing booked) is not kept — any but the open one (being set up now) is deleted when the trips are
+    read. → how many."""
+    st = store()
     n = 0
-    for row, pid in found:
-        n += await st.select(mv["id"], [pid], row.get("out_date"), row.get("back_date"))
+    for t in (await st.trips(account))[1:]:
+        if not int(t.get("people") or 0) and await st.delete_movement(account, t["id"]):
+            n += 1
+    if n:
+        log.info("[groups] %d empty trip(s) not kept", n)
+    return n
+
+
+async def state(account: str, trip: Optional[str] = None) -> Dict[str, Any]:
+    """THE view every door renders (the /group page — and, next, S2's and /next's group tab): the roster, each person's switch (on the open
+    trip or not — the record itself), the open trip and its list (status, price, passport), and the trips."""
+    st = store()
+    await tidy(account)
+    ts = (await trips(account))["trips"]
+    mv = await st.movement(account, trip) if ts else None
+    lst = await view(account, mv["id"]) if mv else {"rows": []}
+    on = {r["person_id"]: r for r in lst.get("rows") or []}
+    ros = await roster(account)
+    people = [{**p, "on": p["id"] in on, "status": (on.get(p["id"]) or {}).get("status")} for p in ros.get("people") or []]
+    people.sort(key=lambda p: (not p["on"], p["name"].lower()))   # who's on it FIRST
+    return {"company": ros.get("company"), "roster": people, "trips": ts,
+            "trip": {k: mv.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on", "hotel_area")} if mv else None,
+            "list": lst}
+
+
+async def upload(account: str, rows: List[Dict[str, str]], movement_id: Optional[str] = None, on_trip: bool = True,
+                 company: Optional[str] = None) -> Dict[str, Any]:
+    """The list read → its people are the company's ROSTER (each once, by the organiser's own names) → ONE batch question for every unclear
+    row. `on_trip`: each is put on the open trip by set_on_trip (the chat's "the list for this trip"); else they're only on the roster and
+    their ids come back for the page to tick before [Go]."""
+    st = store()
+    mv = await st.movement(account, movement_id) if on_trip else None
+    if on_trip and not mv:
+        return {"why": "there's no group movement yet — tell me the company, where, when and the hotel area first"}
+    grp = {"id": mv["group_id"]} if mv else await st.company(account, company, create=bool(company))
+    if not grp:
+        return {"why": "tell me the company's name first, and I'll keep its people there"}
+    grades = list(((mv or {}).get("rules") or {}).get("limits", {}).get("by_grade") or {}) if mv else []
+    good, unclear = members_from(rows, mv or {}, grades, dates_needed=on_trip)
+    found, new, unclear2 = await _on_roster(st, grp["id"], good)
+    n = 0
+    for row, pid in found if on_trip else []:
+        n += 1 if (await set_on_trip(account, pid, mv["id"], True, out_date=row.get("out_date"), back_date=row.get("back_date"))).get("link") else 0
     unclear += unclear2
-    return {"added": n, "new_people": new, "unclear": unclear, "ask": batch_question(unclear), "movement_id": mv["id"]}
+    return {"added": n, "new_people": new, "people": [pid for _, pid in found], "unclear": unclear, "ask": batch_question(unclear),
+            "movement_id": (mv or {}).get("id")}
 
 
 async def _on_roster(st, group_id: str, rows: List[dict]) -> Tuple[List[tuple], int, List[dict]]:
@@ -826,8 +994,8 @@ def _person_fields(f: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
             v = re.sub(r"[^\d+]", "", v)
             if not re.fullmatch(r"\+\d{8,15}", v):
                 bad.append("the phone (with its country code, like +34…)"); continue
-        if k == "grade" and v:
-            v = v.lower()
+        if k in ("grade", "role") and v:   # Sasha 358 · read as words ("all engineers"): one case
+            v = v.lower()[:80]
         out[k] = v
     if "name" in out and (not out["name"] or len(out["name"]) < 2):
         bad.append("the name"); out.pop("name")
@@ -851,7 +1019,8 @@ async def add_people(account: str, rows: List[Dict[str, Any]], company: Optional
         good.append(f)
     found, new, more = await _on_roster(st, grp["id"], good)
     unclear += more
-    return {"company": grp["name"], "added": new, "updated": len(found) - new, "people": [pid for _, pid in found], "unclear": unclear,
+    return {"company": grp["name"], "added": new, "updated": len(found) - new, "people": [pid for _, pid in found],
+            "names": [r["name"] for r, _ in found], "unclear": unclear,
             "ask": batch_question(unclear)}
 
 
@@ -868,29 +1037,26 @@ async def edit_person(account: str, person_id: str, fields: Dict[str, Any]) -> D
 
 
 async def choose(account: str, who: List[str], movement_id: Optional[str] = None) -> Dict[str, Any]:
-    """Sasha 351 · THE TICK: roster people (by id, or the name the organiser calls them) onto a trip — a link each, nothing copied."""
+    """Sasha 351 · THE TICK (the chat's group_choose): roster people (by id, or the name the organiser calls them) onto a trip — each by
+    set_on_trip (Sasha 358: the ONE way), then planned."""
     st = store()
     mv = await st.movement(account, movement_id)
     if not mv:
         return {"why": "there's no trip yet — tell me where, when and the hotel area first"}
-    roster_ = await st.people(mv["group_id"])
-    ids, unknown, twice = [], [], []
-    for w in who or []:
-        w = str(w).strip()
-        p = [x for x in roster_ if x["id"] == w] or [x for x in roster_ if x["name"].strip().lower() == w.lower()]
-        if len(p) == 1:
-            ids.append(p[0]["id"])
-        elif p:
-            twice.append(w)
-        else:
-            unknown.append(w)
-    n = await st.select(mv["id"], ids)
-    links = [m["id"] for m in await st.members(mv["id"]) if m["person_id"] in ids]
-    return {"selected": n, "on_trip": len(links), "links": links, "unknown": unknown, "twice": twice, "movement_id": mv["id"]}
+    ids, unknown, twice = _resolve(await st.people(mv["group_id"]), who)
+    links = []
+    for pid in ids:
+        r = await set_on_trip(account, pid, mv["id"], True)
+        if r.get("link"):
+            links.append(r["link"])
+    return {"selected": len(links), "on_trip": len([m for m in await st.members(mv["id"]) if m["person_id"] in ids]), "links": links,
+            "unknown": unknown, "twice": twice, "movement_id": mv["id"]}
 
 
 async def trips(account: str) -> Dict[str, Any]:
-    """Sasha 351 · the organiser's trips (newest opened first) — the first is the OPEN one: everything on /group and in the chat is about it."""
+    """Sasha 351 · the organiser's trips (newest opened first) — the first is the OPEN one: everything on /group and in the chat is about it.
+    Sasha 358 · a trip with nobody on it is not kept (tidy) — never listed, never hidden: gone."""
+    await tidy(account)
     ts = await store().trips(account)
     return {"trips": [{**t, "open": i == 0} for i, t in enumerate(ts)]}
 
@@ -964,4 +1130,4 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
 
 
 __all__ = ["read_text", "read_csv", "read_xlsx", "read_photo", "members_from", "batch_question", "limit_for", "with_limits", "plan", "view",
-           "summary", "start", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]
+           "summary", "create_trip", "set_on_trip", "tidy", "state", "planned", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]

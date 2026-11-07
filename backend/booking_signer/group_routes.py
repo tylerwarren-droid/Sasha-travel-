@@ -46,7 +46,8 @@ async def upload(request: Request):
             rows = await G.read_photo(data, mt)
         else:
             raise HTTPException(400, {"ok": False, "rule": "file_type", "message": "send a .csv or .xlsx file, a photo of the list, or paste it"})
-    return await GO.run(account, "add", {"rows": rows, "movement": body.get("movement") or None})
+    return await GO.run(account, "add", {"rows": rows, "movement": body.get("movement") or None,
+                                         "on_trip": body.get("on_trip") is not False, "company": body.get("company")})   # Sasha 358
 
 
 # ── Sasha 351 · THE ROSTER: the company's people (each once — their profile and their own vault); a trip chooses from it ─────────
@@ -63,7 +64,8 @@ async def people_add(request: Request):
     from . import group_outcome as GO
     body = await request.json()
     rows = body.get("rows") if isinstance(body.get("rows"), list) else (G.read_text(str(body.get("text"))[:200_000]) if body.get("text") else None)
-    return await GO.run(account_for(request), "person_add", {"rows": rows or None, "company": body.get("company")})
+    return await GO.run(account_for(request), "person_add", {"rows": rows or None, "company": body.get("company"),
+                                                             "on_trip": bool(body.get("on_trip")), "trip": body.get("trip")})   # Sasha 358
 
 
 @router.post("/people/{person_id}")
@@ -87,6 +89,32 @@ async def choose(request: Request):
     body = await request.json()
     who = body.get("who") if isinstance(body.get("who"), list) else None
     return await GO.run(account_for(request), "choose", {"who": who or None, "movement": body.get("movement")})
+
+
+# ── Sasha 358 · THE GROUP ENGINE's doors: the one view, [Go], and one person's switch ───────────────────────────────────────────
+
+@router.get("/state")
+async def state(request: Request):
+    """THE view (groups.state): the roster with each person's switch (the record itself), the open trip and its list, the trips."""
+    return await G.state(account_for(request), request.query_params.get("trip") or None)
+
+
+@router.post("/create")
+async def create(request: Request):
+    """[Go]: {destination, starts_on, ends_on, hotel_area, who: [person ids], company?} → the trip made, who's going on it, each planned."""
+    from . import group_outcome as GO
+    body = await request.json()
+    who = body.get("who") if isinstance(body.get("who"), list) else None
+    return await GO.run(account_for(request), "create", {k: body.get(k) for k in ("destination", "starts_on", "ends_on", "hotel_area", "company")}
+                        | {"who": who})
+
+
+@router.post("/switch")
+async def switch(request: Request):
+    """{person, on, trip?} → that person on the trip or off it (the engine's set_on_trip): said; booked → Cancel offered."""
+    from . import group_outcome as GO
+    body = await request.json()
+    return await GO.run(account_for(request), "switch", {"person": body.get("person"), "on": body.get("on") is not False, "trip": body.get("trip")})
 
 
 @router.get("/trips")

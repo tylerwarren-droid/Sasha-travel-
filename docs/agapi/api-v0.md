@@ -479,9 +479,9 @@ Change where they stay in one city of the trip (take a name from search_stays). 
 
 ### `group_start`
 
-Start a GROUP MOVEMENT for an organiser: their company moving people somewhere (e.g. 20 workers to Madrid), with the dates (starts_on / ends_on, YYYY-MM-DD) and ONE hotel area (e.g. "near the factory in Getafe"). Say its `say` as it is: who's going is chosen FROM THE COMPANY'S ROSTER (group_choose) — never ask them to type people's details again.
+Make a NEW GROUP TRIP for an organiser: their company moving people somewhere (e.g. 20 workers to Madrid), with the dates (starts_on / ends_on, YYYY-MM-DD), ONE hotel area (e.g. "near the factory in Getafe") and WHO'S GOING (`who`: the names they use for people on their roster, or everyone=true). Without who's going nothing is made — say its `say` (it asks), then call it again with `who`. Never ask them to type people's details again: who's going is chosen FROM THE ROSTER.
 
-**Errors:** `missing_input`, `internal`
+**Errors:** `missing`, `not_done`, `missing_input`, `internal`
 
 **Input**
 
@@ -503,10 +503,18 @@ Start a GROUP MOVEMENT for an organiser: their company moving people somewhere (
   },
   "hotel_area": {
    "type": "string"
+  },
+  "who": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "everyone": {
+   "type": "boolean"
   }
  },
  "required": [
-  "company",
   "destination"
  ],
  "additionalProperties": false

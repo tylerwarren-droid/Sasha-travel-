@@ -88,7 +88,7 @@ class OneJobOneCard(unittest.TestCase):
         self.assertEqual(first["state"], "preparing")                                        # answered at once (no 120 s request)
         self.assertRegex(mid["say"], r"^Preparing 20… \d+ ready\.$")
         self.assertEqual((done["state"], done["result"]["status"]), ("ready", "awaiting_yes"))
-        page = (ROOT / "frontend/app/group/page.tsx").read_text()
+        page = (ROOT / "frontend/app/components/group/GroupView.tsx").read_text()
         self.assertIn("bookingReq('/api/booking/group/job')", page)
         self.assertIn("from '@/lib/outcome'", page)                                              # Sasha 347 · heard() is lib/outcome's
         self.assertIn("Sasha’s server didn’t answer — nothing was changed. Try again.", (ROOT / "frontend/lib/outcome.ts").read_text())

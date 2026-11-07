@@ -21,10 +21,10 @@ from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("booking_signer.group_outcome")
 
-ACTIONS = ("book", "swap", "cancel", "invite", "invoice", "add", "person_add", "person_edit", "documents", "choose", "open")
+ACTIONS = ("book", "swap", "cancel", "invite", "invoice", "add", "person_add", "person_edit", "documents", "choose", "open", "create", "switch")
 VERB = {"book": "Book", "swap": "Swap", "cancel": "Cancel", "invite": "Invite", "invoice": "The invoice", "add": "Add these",
         "person_add": "Add to the roster", "person_edit": "Save", "documents": "Documents", "choose": "Choose travellers",
-        "open": "Open this trip"}
+        "open": "Open this trip", "create": "Go", "switch": "On this trip"}
 #: what each action needs from the organiser, by the field's name ON THE PAGE (the same words in the chat)
 NEEDS = {
     "swap": (("who", "who leaves"), ("to", "who comes")),
@@ -36,6 +36,9 @@ NEEDS = {
     "documents": (("person_id", "whose documents"),),
     "choose": (("who", "who travels — tick them on the list"),),
     "open": (("trip", "which trip"),),
+    # Sasha 358 · THE ENGINE's two writers: a new trip ([Go]) and one person's switch
+    "create": (("destination", "where"), ("who", "who's going — tick them")),
+    "switch": (("person", "who"),),
 }
 NO_MOVEMENT = "There's no group movement yet — tell Sasha the company, where, when and the hotel area first."
 PLAN_ONE_S = 75.0   # a swapped-in newcomer is planned while the organiser waits (one person); longer → the row fills in on its own
@@ -193,16 +196,18 @@ async def _swap(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     mv = await st.movement(account)
     line = ", ".join([in_name, city, str(leaver.get("out") or mv.get("starts_on") or ""), str(leaver.get("back") or mv.get("ends_on") or ""),
                       grade or str(leaver.get("grade") or "worker")])   # they take the leaver's dates, and grade unless one is given
-    up = await G.upload(account, G.read_text(line), mv["id"])
+    up = await G.upload(account, G.read_text(line), mv["id"])   # Sasha 358 · the roster, then ON the trip by the engine (set_on_trip)
     if not up.get("added"):
         return _no(f"{in_name} couldn't go on the list — {up.get('ask') or 'check the name and city'}. Nothing changed.")
-    await st.remove_member(mv["id"], leaver["member_id"])
+    off = await G.set_on_trip(account, leaver["person_id"] or leaver["name"], mv["id"], False)   # the engine's own switch: off
+    if not off.get("done"):
+        return _no(off["say"])
     new = next((m for m in await st.members(mv["id"]) if m["name"].lower() == in_name.lower()), None)
     planned = False
     if new:
         try:
-            p = await asyncio.wait_for(G.plan(account, mv["id"], only=[new["id"]]), PLAN_ONE_S)
-            planned = bool(p.get("planned"))
+            await asyncio.wait_for(G.planned(account), PLAN_ONE_S)
+            planned = True
         except asyncio.TimeoutError:
             pass
     row = next((r for r in (await _view(account))["rows"] if new and r["member_id"] == new["id"]), None)
@@ -284,9 +289,16 @@ async def _add(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     rows = a["rows"]
     if not rows:
         return _no("No one could be read from that — one person per line: Name, home city, out, back, grade.", missing=["the list"])
-    r = await G.upload(account, rows, a.get("movement") or None)
+    on_trip = a.get("on_trip") is not False   # Sasha 358 · the page's new trip: onto the ROSTER only, ticked for [Go] — never onto a trip
+    r = await G.upload(account, rows, a.get("movement") or None, on_trip=on_trip, company=a.get("company"))
     if r.get("why"):
-        return _no(NO_MOVEMENT)
+        return _no(NO_MOVEMENT if on_trip else r["why"])
+    if not on_trip:
+        n = len(r.get("people") or [])
+        if not n:
+            return _no("0 read. " + (r.get("ask") or "No row could be read — Name, home city, role, grade."), ask=r.get("ask"))
+        return {"done": True, **r, "say": f"{_people(n)} on your roster ({r['new_people']} new) and ticked for this trip — press Go when "
+                                          f"the trip's details are in." + (f" {r['ask']}" if r.get("ask") else "")}
     n = r.get("added") or 0
     if not n:
         return _no("0 added. " + (r.get("ask") or "No row could be read — Name, home city, out, back, grade."), ask=r.get("ask"))
@@ -294,9 +306,6 @@ async def _add(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ── Sasha 351 · the roster: each person once (their profile, their vault); a trip is the people chosen from it ─────────────────
-
-_PLANS: Dict[str, Any] = {}   # account → the planning of the people just chosen (this process; the master list fills in as it goes)
-
 
 async def _person_add(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     from . import groups as G
@@ -307,11 +316,23 @@ async def _person_add(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
         return _no("Nobody was added. " + (r.get("ask") or ""), unclear=r.get("unclear"))
     said = (f"Added {_people(r['added'])} to {r['company']}'s roster" if r["added"] else f"{r['company']}'s roster") + \
         (f"; {_people(r['updated'])} already on it, their details updated" if r["updated"] else "") + "."
+    if a.get("on_trip"):   # Sasha 358 · someone NEW for the open trip: onto the roster AND the trip — said as both
+        ons = [await G.set_on_trip(account, pid, a.get("trip"), True) for pid in r["people"]]
+        if any(o.get("why") for o in ons):
+            return _no(said + " " + next(o["why"] for o in ons if o.get("why")).capitalize() + ".", **r)
+        mv = await G.store().movement(account, a.get("trip"))
+        said = (f"Added {_and([p for p in r.get('names') or []]) or _people(len(r['people']))} to the roster and the {mv['destination']} trip — "
+                "planning from their home airport now.")
     return {"done": True, **r, "say": said + (f" {r['ask']}" if r.get("ask") else "")}
 
 
 async def _person_edit(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     from . import groups as G
+    if not {k: v for k, v in (a.get("fields") or {}).items() if k in G.PERSON}:   # Sasha 358 · Save with nothing changed: still answered
+        p = next((x for x in (await G.roster(account)).get("people") or [] if x["id"] == str(a["person_id"])), None)
+        if not p:
+            return _no("That person isn't on your roster.")
+        return {"done": True, "person": p, "say": f"Nothing changed — {p['name']}'s details are as they were."}
     r = await G.edit_person(account, str(a["person_id"]), a.get("fields") or {})
     if r.get("why"):
         return _no(r["why"].capitalize() + ".", missing=r.get("missing"))
@@ -338,16 +359,6 @@ async def _choose(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
             ([f"more than one person called {_and(r['twice'])} — tick the one you mean"] if r["twice"] else [])
     if not r["selected"]:
         return _no("Nobody new was chosen" + (f" — {'; '.join(notes)}" if notes else " — they're already on this trip") + ".", **r)
-    before = _PLANS.get(account)
-
-    async def plan_them() -> None:   # each planned from their own home airport, within their limit — after any planning already running
-        if before is not None and not before.done():
-            try:
-                await asyncio.shield(before)
-            except Exception as e:
-                log.warning("[group_outcome] the planning before these ended: %s", type(e).__name__)
-        await G.plan(account, r["movement_id"], only=r["links"])
-    _PLANS[account] = asyncio.ensure_future(plan_them())
     return {"done": True, **r, "say": f"{_people(r['selected'])} chosen for this trip — planning each from their own home airport now, within "
                                       f"their limits; the list fills in as I go. Nothing is booked yet." + (f" ({'; '.join(notes)})" if notes else "")}
 
@@ -364,7 +375,34 @@ async def _open_trip(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
             + f", {_people(int(t.get('people') or 0))} on it — the list, booking and the invoice are about this trip now."}
 
 
+# ── Sasha 358 · THE ENGINE's doors: [Go] (a new trip with who's going) and one person's switch ───────────────────────────────
+
+async def _create(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
+    from . import groups as G
+    r = await G.create_trip(account, a.get("company"), str(a["destination"]), a.get("starts_on"), a.get("ends_on"), a.get("hotel_area"),
+                            [str(x) for x in a["who"]])
+    if r.get("why"):
+        return _no(r["why"].capitalize() + ".")
+    notes = ([f"not on your roster: {_and(r['unknown'])}"] if r["unknown"] else []) + \
+            ([f"more than one person called {_and(r['twice'])} — tick the one you mean"] if r["twice"] else [])
+    if not r["on_trip"]:
+        return _no("Nobody could go on it" + (f" — {'; '.join(notes)}" if notes else "") + ".", **r)
+    when = " – ".join(x for x in (str(a.get("starts_on") or "")[:10], str(a.get("ends_on") or "")[:10]) if x)
+    return {"done": True, **r, "say": (f"The {r['destination']} trip" + (f" ({when})" if when else "") + (" was already there — opened, " if r["reused"] else ": ")
+                                      + f"{_people(r['on_trip'])} on it. Planning each from their own home airport now, within their limits; "
+                                        "the list fills in as I go. Nothing is booked yet." + (f" ({'; '.join(notes)})" if notes else ""))}
+
+
+async def _switch(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
+    from . import groups as G
+    r = await G.set_on_trip(account, str(a["person"]), a.get("trip"), a.get("on") is not False)
+    if r.get("why"):
+        return _no(r["why"][0].upper() + r["why"][1:] + ".")
+    return r
+
+
 _HOW = {"book": _book, "swap": _swap, "cancel": _cancel, "invite": _invite, "invoice": _invoice, "add": _add,
-        "person_add": _person_add, "person_edit": _person_edit, "documents": _documents, "choose": _choose, "open": _open_trip}
+        "person_add": _person_add, "person_edit": _person_edit, "documents": _documents, "choose": _choose, "open": _open_trip,
+        "create": _create, "switch": _switch}
 
 __all__ = ["run", "answered", "missing", "held", "NEEDS", "ACTIONS"]

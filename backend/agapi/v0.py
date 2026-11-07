@@ -1656,15 +1656,24 @@ def _group_err(r: dict) -> dict:
 
 
 async def group_start(ctx: Ctx, a: dict) -> dict:
+    """Sasha 358 · a new trip through THE ENGINE (groups.create_trip — the ONE way a trip is made, the /group page's [Go] too): where, when,
+    the hotel area AND who's going. Without who's going nothing is made (a trip with nobody isn't kept): she asks, from the roster."""
     from booking_signer import groups as G
-    r = await G.start(ctx.account, a["company"], a["destination"], a.get("starts_on"), a.get("ends_on"), a.get("hotel_area"))
-    # Sasha 351 · a trip is a SELECTION from the company's roster: who's going is asked from the people already there, never re-typed
-    grp = await G.store().company(ctx.account, a["company"])
-    n = len(await G.store().people(grp["id"])) if grp else 0
-    who = (f" Who's going? Name them, or tick them on the People list ({n} on your roster)." if n else
-           " Who's going? Add your people once — a spreadsheet, a photo of it, or paste it here — and every trip after picks from them.")
-    return {**r, "say": f"Got it — {a['company']} to {a['destination']}" + (f", hotel near {a['hotel_area']}" if a.get("hotel_area") else "")
-            + "." + who}
+    who = [str(x) for x in a.get("who") or []]
+    grp = await G.store().company(ctx.account, a.get("company")) if a.get("company") else await G.store().company(ctx.account)
+    roster = await G.store().people(grp["id"]) if grp else []
+    if a.get("everyone"):
+        who = [p["id"] for p in roster]
+    if not who:
+        n = len(roster)
+        return {"status": "needs_who", "say": f"Got it — {a.get('company') or (grp or {}).get('name') or 'your company'} to {a['destination']}"
+                + (f", hotel near {a['hotel_area']}" if a.get("hotel_area") else "") + "." + (
+                    f" Who's going? Name them, or tick them on the Group page ({n} on your roster) — I'll make the trip with them."
+                    if n else " Who's going? Add your people once — a spreadsheet, a photo of it, or paste it here — and every trip after "
+                              "picks from them.")}
+    r = await _GO().run(ctx.account, "create", {"company": a.get("company"), "destination": a["destination"], "starts_on": a.get("starts_on"),
+                                                "ends_on": a.get("ends_on"), "hotel_area": a.get("hotel_area"), "who": who})
+    return _outcome(r)
 
 
 async def group_upload(ctx: Ctx, a: dict) -> dict:
@@ -2053,11 +2062,13 @@ TOOLS: List[dict] = [
     _t("start_count", "Pacioli", start_count, "FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookings before it "
        "aren't counted and aren't changed. Only when the founder says to start it.", {"from": {"type": "string"}}, [],
        {"type": "object", "properties": {"from": {"type": "string"}, "say": {"type": "string"}}}, ["founder_only", "invalid_input"]),
-    _t("group_start", "Magellan", group_start, "Start a GROUP MOVEMENT for an organiser: their company moving people somewhere (e.g. 20 workers to "
-       "Madrid), with the dates (starts_on / ends_on, YYYY-MM-DD) and ONE hotel area (e.g. \"near the factory in Getafe\"). Say its `say` as "
-       "it is: who's going is chosen FROM THE COMPANY'S ROSTER (group_choose) — never ask them to type people's details again.",
+    _t("group_start", "Magellan", group_start, "Make a NEW GROUP TRIP for an organiser: their company moving people somewhere (e.g. 20 workers to "
+       "Madrid), with the dates (starts_on / ends_on, YYYY-MM-DD), ONE hotel area (e.g. \"near the factory in Getafe\") and WHO'S GOING "
+       "(`who`: the names they use for people on their roster, or everyone=true). Without who's going nothing is made — say its `say` (it "
+       "asks), then call it again with `who`. Never ask them to type people's details again: who's going is chosen FROM THE ROSTER.",
        {"company": {"type": "string"}, "destination": {"type": "string"}, "starts_on": {"type": "string"}, "ends_on": {"type": "string"},
-        "hotel_area": {"type": "string"}}, ["company", "destination"], {"type": "object", "properties": {"say": {"type": "string"}}}, []),
+        "hotel_area": {"type": "string"}, "who": {"type": "array", "items": {"type": "string"}}, "everyone": {"type": "boolean"}},
+       ["destination"], {"type": "object", "properties": {"say": {"type": "string"}}}, ["missing", "not_done"]),
     _t("group_upload", "Magellan", group_upload, "A whole LIST pasted for the current trip (several lines: name, home city, out date, "
        "back date, grade): its people become the roster's (each once) and travel on this trip. Pass their text EXACTLY. Say its `say` as it "
        "is — it asks ONE question for every unclear row. ONE person named (\"add Ana García, Madrid, worker\") is group_person_add, never this; "

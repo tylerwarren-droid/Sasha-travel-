@@ -44,7 +44,7 @@ class ReadableOnTheDarkTheme(unittest.TestCase):
             self.assertIn((tone, "bg"), pairs)
 
     def test_the_pages_draw_from_it_with_real_buttons(self):
-        for rel in ("frontend/app/group/page.tsx", next((ROOT / "frontend/app/vault").glob("*/page.tsx")).relative_to(ROOT).as_posix()):
+        for rel in ("frontend/app/components/group/GroupView.tsx", next((ROOT / "frontend/app/vault").glob("*/page.tsx")).relative_to(ROOT).as_posix()):
             src = (ROOT / rel).read_text()
             self.assertIn("from '@/lib/group-theme'", src, rel)
             self.assertEqual(re.findall(r"#[0-9a-fA-F]{6}\b", src), [], f"{rel}: a colour outside the palette")

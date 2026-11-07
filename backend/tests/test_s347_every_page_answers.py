@@ -67,7 +67,7 @@ class OneOutcomePath(unittest.TestCase):
         self.assertEqual(own, ["lib/outcome.ts"])
 
     def test_the_pages_use_it(self):
-        for rel in ("app/group/page.tsx", "app/s2/S2App.tsx", "app/components/ChatBookingDo.tsx", "app/components/TripBookTest.tsx",
+        for rel in ("app/components/group/GroupView.tsx", "app/s2/S2App.tsx", "app/components/ChatBookingDo.tsx", "app/components/TripBookTest.tsx",
                     "app/booking-helper/OutlookConnect.tsx", "app/booking-helper/MailboxConnect.tsx"):
             self.assertIn("from '@/lib/outcome'", (FE / rel).read_text(), rel)
 

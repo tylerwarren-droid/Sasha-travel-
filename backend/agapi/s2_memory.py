@@ -171,35 +171,63 @@ def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:
         m["thing"] = topic = f"{what} — it's ready, waiting for your yes" if held == "hold_venue" else what
         if held == "hold_venue" and seen.get("held"):
             m["decided"] = {"what": masked(str(seen["held"]))[:120], "state": "chosen and read back — waiting for their yes"}
-    # Sasha 354 · WHAT IS PENDING NOW — ONE record, written by the turn that made it: a trip's read-back waiting for the yes, a pick that
-    # waits for "keep or switch?" (an earlier choice of that flight is waiting for payment), else her question. The LATEST turn decides:
-    # a question asked after a read-back is what a "yes" answers (never the older read-back).
-    from agapi.s2_status import HELD as _HELD_ST
-    made = False
-    if any(c.get("tool") == "hold_booking" and c.get("ok") and c.get("status") == _HELD_ST for c in calls):
-        m["pending"] = {"kind": "yes", "scope": "trip", "what": m.get("thing") or "your trip", "at": NOW().isoformat()}
-        made = True
-    if any(c.get("tool") == "choose_offer" and c.get("ok") and c.get("status") == "pending_pick" for c in calls):
-        m["pending"] = {"kind": "pick", "scope": "trip", "at": NOW().isoformat()}
-        made = True
-    if held:
-        made = True
+    step_pending(m, calls, reply, made=bool(held))
     if any(status.get(t) in ("confirmed", "requested", "sent", "booked") for t in ("book_venue", "book", "send_email", "send_whatsapp")) \
             or re.search(r"✅\s*Booked", reply or ""):
         topic = topic or "done: " + (m.get("thing") or "your booking")
         m["thing"], m["pending"], m["decided"] = None, None, None
+    if topic and masked(topic) != REMOVED:
+        m["summary"] = ([s for s in m["summary"] if s != topic] + [topic])[-SUMMARY_MAX:]
+    m["updated_at"] = NOW().isoformat()
+    return m
+
+
+def step_pending(m: dict, calls: list, reply: str, made: bool = False) -> dict:
+    """Sasha 354 · WHAT IS PENDING NOW — ONE record, written by the turn that made it: a trip's read-back waiting for the yes, a pick that
+    waits for "keep or switch?" (an earlier choice of that flight is waiting for payment), else her question. The LATEST turn decides: a
+    question asked after a read-back is what a "yes" answers (never the older read-back); a yes given ends the read-back's wait (what
+    waits then is the payment — the basket's own state, read by agapi/pending). `made`: a venue's read-back this turn (fold's own)."""
+    from agapi.s2_status import HELD as _HELD_ST
+    calls = calls or []
+    done = lambda tool, st=None: any(c.get("tool") == tool and c.get("ok") and (st is None or c.get("status") == st) for c in calls)
+    if done("hold_booking", _HELD_ST):
+        m["pending"] = {"kind": "yes", "scope": "trip", "what": m.get("thing") or "your trip", "at": NOW().isoformat()}
         made = True
-    if any(c.get("tool") == "book" and c.get("ok") for c in calls) and (m.get("pending") or {}).get("kind") == "yes":
-        m["pending"] = None   # the yes was given: what waits now is the payment (the basket's own state — pending.now reads it)
+    if done("choose_offer", "pending_pick"):
+        m["pending"] = {"kind": "pick", "scope": "trip", "at": NOW().isoformat()}
+        made = True
+    if done("book") and (m.get("pending") or {}).get("kind") == "yes":
+        m["pending"] = None
     q = _question(reply)
     if (m.get("pending") or {}).get("kind") == "question":
         m["pending"] = None   # a question is only unfinished until her next reply
     if q and not made:
         m["pending"] = {"kind": "question", "asked": masked(q), "at": NOW().isoformat()}   # her latest question is what's pending
-    if topic and masked(topic) != REMOVED:
-        m["summary"] = ([s for s in m["summary"] if s != topic] + [topic])[-SUMMARY_MAX:]
-    m["updated_at"] = NOW().isoformat()
     return m
+
+
+async def note_pending(account: Optional[str], calls: list, reply: str) -> None:
+    """Sasha 354 · the turn itself writes what is pending now — wherever it runs (the web routes, the voice pathway, WhatsApp, the gate's
+    loops): found by the gate, a turn run outside the web routes left nothing pending, so its read-back's "Yes." met "nothing is waiting".
+    The routes' own fold (remember) writes the same; twice is the same record."""
+    if not account:
+        return
+    run = _run()
+    if run is None:
+        return
+    try:
+        m = (await _db_load(run, account)) or {}
+        before = dict(m.get("pending") or {}) or None
+        venue = any(c.get("tool") == "hold_venue" and c.get("ok") and c.get("status") == "awaiting_yes" for c in calls or [])
+        if venue:
+            from agapi import venues as VN
+            m["pending"] = {"kind": "hold", "tool": "hold_venue", "what": str((VN._HELD.get(account) or {}).get("venue") or "your booking")[:120],
+                            "at": NOW().isoformat()}
+        step_pending(m, calls, reply, made=venue)
+        if m.get("pending") != before:
+            await _db_save(run, account, m)
+    except Exception as e:
+        log.warning("[memory] what's pending not kept: %s", type(e).__name__)
 
 
 async def _db_load(run, account: str) -> Optional[dict]:

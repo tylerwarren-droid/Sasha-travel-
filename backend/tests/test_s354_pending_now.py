@@ -33,6 +33,29 @@ class TheRecord(unittest.TestCase):
         self.assertEqual(m4["pending"]["kind"], "pick")
 
 
+class TheTurnWritesIt(unittest.TestCase):
+    """Found by the gate: a turn run outside the web routes (the voice pathway, the gate's loops) wrote nothing pending, so its read-back's
+    "Yes." met "nothing is waiting". The turn itself notes it (s2_memory.note_pending) — every caller."""
+
+    def test_noted_by_the_turn_and_replaced_by_her_next_question(self):
+        rec = {}
+
+        async def load(run, account):
+            return dict(rec.get(account) or {})
+
+        async def save(run, account, m):
+            rec[account] = dict(m)
+        with mock.patch.object(MEM, "_run", lambda: object()), mock.patch.object(MEM, "_db_load", load), mock.patch.object(MEM, "_db_save", save):
+            run(MEM.note_pending(ACCT, [{"tool": "hold_booking", "ok": True, "status": HELD}], "Here it is. Shall I go ahead?"))
+            self.assertEqual(rec[ACCT]["pending"]["kind"], "yes")
+            run(MEM.note_pending(ACCT, [], "No problem — nothing's booked. Tell me when."))      # no question: the read-back still waits
+            self.assertEqual(rec[ACCT]["pending"]["kind"], "yes")
+            run(MEM.note_pending(ACCT, [], "One bag each is included. Want a second?"))
+            self.assertEqual(rec[ACCT]["pending"]["kind"], "question")
+        src = __import__("inspect").getsource(AG.turn)
+        self.assertIn("await _MEMp.note_pending(account, ctx.calls, text)", src)
+
+
 class TheReading(unittest.TestCase):
     def _now(self, pending, held=None, kinds=None, pay=None):
         with mock.patch.object(MEM, "_load", mock.AsyncMock(return_value={"pending": pending, "kinds": kinds or {}})), \

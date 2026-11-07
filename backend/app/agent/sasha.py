@@ -1375,6 +1375,11 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
           "ops": list((_MS.current() or {}).get("ops") or [])}   # Sasha 299 · each AgAPI call: when, how long (observation only)
     log.info("[agent] turn %s ms first-text=%s total=%s tools=%s guard=%s", session, ms["first_text"], ms["total"],
              [c["tool"] for c in ctx.calls], guard_log)
+    try:   # Sasha 354 · what is pending now, written by the turn itself (every surface, every caller)
+        from agapi import s2_memory as _MEMp
+        await _MEMp.note_pending(account, ctx.calls, text)
+    except Exception as e:
+        log.warning("[agent] what's pending not noted: %s", type(e).__name__)
     yield {"type": "done", "text": text, "guard": guard_log, "tools": ctx.calls, "ms": ms}
 
 

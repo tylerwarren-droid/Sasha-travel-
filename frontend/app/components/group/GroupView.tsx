@@ -45,7 +45,10 @@ function Switch({ on, name, onPress }: { on: boolean; name: string; onPress: () 
     </button>)
 }
 
-export default function GroupView() {
+type Pick = { proposal_id?: string; read_back?: string[]; ask?: string; say?: string }
+
+/** `embedded`: inside S2's and /next's Group tab (Sasha 359) — the same view, without the page's own frame */
+export default function GroupView({ embedded = false }: { embedded?: boolean } = {}) {
   const [st, setSt] = useState<State | null>(null)
   const [fresh, setFresh] = useState(false)   // "New trip" pressed while a trip is open
   const [said, setSaid] = useState<string | null>(null)
@@ -68,6 +71,9 @@ export default function GroupView() {
   const [invoiceLink, setInvoiceLink] = useState<string | null>(null)
   const [links, setLinks] = useState<{ name: string; link: string }[]>([])
   const [swap, setSwap] = useState({ out: '', in: '', city: '', grade: '' })
+  // Sasha 359 · WHO GOES, BY DESCRIPTION: the same resolver as the chat (POST /select) — a new trip ticks them; the open trip shows the list
+  const [describe, setDescribe] = useState('')
+  const [pick, setPick] = useState<Pick | null>(null)
 
   const pull = useCallback(async () => {
     const r = await bookingReq('/api/booking/group/state')
@@ -132,6 +138,31 @@ export default function GroupView() {
     await post('Open this trip', '/api/booking/group/open', { trip: id })
     setFresh(false); setCard(null); setQueue([]); setTaps([]); setLinks([])
   }
+  const find = async (mode: 'tick' | 'add' | 'drop') => {
+    const j = await post('Find', '/api/booking/group/select', { text: describe, mode }, 60000)
+    if (mode === 'tick') { tick(Array.isArray(j.people) ? (j.people as { id: string }[]).map(p => p.id) : []); return }
+    setPick(j.proposal_id ? (j as Pick) : null)
+  }
+  const yesPick = async () => {
+    if (!pick?.proposal_id) { setSaid('That list isn’t waiting any more — describe who again.'); return }
+    const j = await post('Yes, these people', '/api/booking/group/confirm-list', { proposal_id: pick.proposal_id }, 60000)
+    if (j.done) { setPick(null); setDescribe('') }
+  }
+  const finder = () => (
+    <div data-describe style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0' }}>
+      <input aria-label="describe who's going" placeholder="Describe who’s going — “all the executives minus Javier”" value={describe}
+        onChange={e => setDescribe(e.target.value)} style={{ ...field, flex: '1 1 280px' }} />
+      {newTrip ? <button type="button" data-find="tick" onClick={press('Find', () => find('tick'))} style={btn2}>Tick them</button> : <>
+        <button type="button" data-find="add" onClick={press('Find', () => find('add'))} style={btn2}>Add them</button>
+        <button type="button" data-find="drop" onClick={press('Find', () => find('drop'))} style={btn2}>Take them off</button></>}
+    </div>)
+  const pickCard = () => pick?.proposal_id ? (
+    <div data-pick style={{ ...cardS, background: T.bg, margin: '8px 0' }}>
+      {(pick.read_back || []).map((l, i) => <div key={i} style={{ fontSize: 14 }}>{l}</div>)}
+      <p style={{ fontWeight: 600 }}>{pick.ask}</p>
+      <button type="button" data-pick-yes onClick={press('Yes, these people', yesPick)} style={{ ...btn, marginRight: 8 }}>Yes, these people</button>
+      <button type="button" onClick={press('No', async () => { setPick(null); setSaid('Nothing changed — describe who again, or switch them one by one.') })} style={btn2}>No</button>
+    </div>) : null
   const readFile = (f: File) => new Promise<string>((ok, bad) => {
     const rd = new FileReader()
     rd.onerror = () => bad(new Error('that file couldn’t be read'))
@@ -228,7 +259,7 @@ export default function GroupView() {
     </div>)
 
   return (
-    <main style={{ ...page, maxWidth: 1100, margin: '0 auto', padding: '24px 16px' }}>
+    <main data-group-view style={{ ...page, maxWidth: 1100, margin: '0 auto', padding: embedded ? '8px 4px 16px' : '24px 16px', ...(embedded ? { background: 'transparent' } : {}) }}>
       <h1 style={{ fontSize: 22, margin: '0 0 4px' }}>{newTrip ? 'New trip' : `${st?.trip?.company || ''} → ${st?.trip?.destination}`}{st?.company ? ` · ${st.company.name}` : ''}</h1>
       {!newTrip && st?.trip && <p style={{ margin: '0 0 12px', color: T.muted }}>{[st.trip.starts_on, st.trip.ends_on].filter(Boolean).join(' – ')}{st.trip.hotel_area ? ` · hotel ${st.trip.hotel_area}` : ''}</p>}
       <p data-trips style={{ margin: '0 0 12px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -250,7 +281,8 @@ export default function GroupView() {
             <input aria-label="back" type="date" value={trip.ends_on} onChange={e => setTrip({ ...trip, ends_on: e.target.value })} style={field} />
             <input aria-label="hotel area" placeholder="Hotel area (near the client)" value={trip.hotel_area} onChange={e => setTrip({ ...trip, hotel_area: e.target.value })} style={{ ...field, width: 240 }} />
           </div>
-          <h2 style={{ fontSize: 16, margin: '14px 0 4px' }}>Who’s going — tick them ({ticked.length} ticked)</h2>
+          <h2 style={{ fontSize: 16, margin: '14px 0 4px' }}>Who’s going — tick them, or describe them ({ticked.length} ticked)</h2>
+          {finder()}
           <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             {head(['Going', 'Name', 'Role', 'Grade', 'From', 'Passport', ''])}
             <tbody>{st.roster.map(p => <tr key={p.id} data-person={p.id} style={{ borderBottom: `1px solid ${T.second}` }}>
@@ -306,6 +338,10 @@ export default function GroupView() {
             <input value={swap.grade} onChange={e => setSwap({ ...swap, grade: e.target.value })} placeholder="grade (if new)" aria-label="grade" style={{ ...field, width: 130 }} />
             <button type="button" onClick={press('Swap', () => act('swap', [swap.out.trim()], swap.in.trim(), { to_city: swap.city.trim(), to_grade: swap.grade.trim() }))} style={btn2}>Swap</button>
           </div>
+        </section>
+        <section data-describe-trip style={{ ...cardS, marginBottom: 16 }}>
+          <h2 style={{ fontSize: 16, margin: '0 0 4px' }}>Change who’s going, by description</h2>
+          {finder()}{pickCard()}
         </section>
         <section data-roster style={{ ...cardS, marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, margin: '0 0 4px' }}>Add from your roster ({others.length} not on this trip)</h2>

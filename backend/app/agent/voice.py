@@ -161,6 +161,7 @@ CANCEL_KEPT = "Kept — nothing changed."
 GROUP_CHOICES = {"book": ({"title": "Yes, book them", "route": "group_yes"}, {"title": "No", "route": "group_no"}),
                  "swap": ({"title": "Yes, swap them", "route": "group_yes"}, {"title": "No, keep it", "route": "group_no"}),
                  "cancel": ({"title": "Yes, cancel it", "route": "group_yes"}, {"title": "No, keep it", "route": "group_no"})}
+GROUP_PICK_CHOICES = ({"title": "Yes, these people", "route": "say:Yes, these people"}, {"title": "No", "route": "say:No"})   # Sasha 359
 CARD_ANSWERED = "That card's already answered."
 CANCEL_NOT_TAKEN = "Nothing was cancelled — say “yes, cancel it” and I'll do it."
 SEND_ON_WHATSAPP = "Send on WhatsApp"   # the hand-over button's label (AgAPI's), never said
@@ -301,6 +302,7 @@ SHOWS = {
     "get_total": "Adding it up", "get_trip": "Looking up your trip", "get_status": "Looking up your trip",
     "hold_venue": "Getting the booking ready", "book_venue": "The booking", "cancel_venue": "The cancellation",
     "group_list": "The group's list",   # Sasha 345 · it SHOWS: the master list's card
+    "group_select": "The list of who's going",   # Sasha 359 · it SHOWS: the list, for a yes
     "group_book": "Getting the group's booking ready", "group_swap": "Getting the swap ready", "group_cancel": "Getting the cancellation ready",
     "my_plans": "Looking up your plans", "running_late": "Getting that message ready", "change_booking": "Getting the change ready",
     "cancel_booking": "Getting the cancellation ready", "send_email": "Sending that", "send_whatsapp": "Sending that",
@@ -318,12 +320,12 @@ SHOWS = {
     "find_subscriptions": "Looking for your subscriptions", "plan_cancel_subscription": "The cancellation",
     "cancel_subscription": "The cancellation",
 }
-SAYS = ("group_person_add", "group_choose", "group_open", "prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_list", "keep_use", "note_not_yet", "note_rental",
+SAYS = ("group_person_add", "group_confirm", "group_open", "prepare_trip", "check_offer", "save_travellers", "get_activity", "keep_list", "keep_use", "note_not_yet", "note_rental",
         "remember_name", "save_contact", "file_confirmation", "time_between", "add_to_trip", "save_for_later",   # Sasha 253 · said, no card
         "call_again",   # Sasha 269 · the act's own `say`
         "booking_outcomes", "start_count",   # Sasha 324 · the founder's count, said (its `say`), no card
         "remove_saved_card",   # Sasha 327
-        "group_start", "group_upload", "group_limits", "group_plan", "group_invite_vault",
+        "group_upload", "group_limits", "group_plan", "group_invite_vault",
         "group_invoice")   # Sasha 334   # Sasha 332
 
 FAILED = "{what} didn't work{why}. Say the word and I'll try again."
@@ -1216,7 +1218,7 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "route_line", "is_route_line", "route_told", "ROUTE_LINES", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
-           "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
+           "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
            "wa_done_line", "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]
 
 

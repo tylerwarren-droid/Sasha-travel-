@@ -40,6 +40,7 @@ import { NO_SOUND, STARTERS, cueOf, returned } from '@/lib/opening-rule.mjs'   /
 import { arrivalLine } from '@/lib/first-line'   // Sasha 295 · the empty conversation's line is her hello's own words
 import { events, reach, request } from '@/lib/request'   // Sasha 348 · the ONE request client
 import { eur as euros } from '@/lib/money'   // Sasha 349 · one way to say money
+import GroupView from '../components/group/GroupView'   // Sasha 359 · the Group tab
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -429,12 +430,13 @@ function Clip({ busy, send, say, onGroup }: { busy: boolean; send: (t: string) =
       if (f.size > UPLOAD_MAX && !isImage) { say('That file is too large — 5 MB at most.'); return }
       const content = isImage ? await shrink(f) : await asBase64(f)
       const media = isImage ? 'image/jpeg' : isXlsx ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv'
-      const r = await bookingReq('/api/booking/group/upload', { name: f.name, media_type: media, content_base64: content }, 60000)
-      const j = r.json as { added?: number; ask?: string | null; why?: string; message?: string }
-      if (r.ok && typeof j.added === 'number') {
-        say(`Added ${j.added} to the group list.${j.ask ? ' ' + j.ask : ''} The master list is on the Group page (/group).`)
+      // Sasha 359 · a list goes onto the ROSTER (each once) — who goes on a trip is then chosen (described, or ticked) and confirmed
+      const r = await bookingReq('/api/booking/group/upload', { name: f.name, media_type: media, content_base64: content, on_trip: false }, 60000)
+      const j = r.json as { say?: string; done?: boolean; why?: string; message?: string }
+      if (r.ok && j.done) {
+        say(`${String(j.say || '').split(' — press Go')[0]}. Now tell me who's going (“all the engineers”), or tick them on the Group tab.`)
         onGroup?.()
-      } else say(untag(String(j.why || j.message || 'That list couldn’t be read — try again.')))
+      } else say(untag(String(j.say || j.why || j.message || 'That list couldn’t be read — try again.')))
     } catch { say('That list couldn’t be uploaded — try again?') }
     finally { setWorking(false) }
   }
@@ -654,10 +656,7 @@ function Activity() {
 
 export default function S2App() {
   const signedIn = useSignedIn()
-  const [hasGroup, setHasGroup] = useState(false)   // Sasha 336 · S2 links to /group once there is a movement
-  const checkGroup = useCallback(() => { bookingReq('/api/booking/group/list').then(r => setHasGroup(Boolean(r.ok && (r.json as { movement?: unknown }).movement))).catch(noted('Checking for a group')) }, [])
-  useEffect(() => { checkGroup() }, [checkGroup])
-  const [tab, setTab] = useState<'sasha' | 'activity' | 'keep' | 'trip'>('sasha')   // Sasha 235 · 'keep': My Keep · 236 · 'trip': the trip board
+  const [tab, setTab] = useState<'sasha' | 'activity' | 'keep' | 'trip' | 'group'>('sasha')   // Sasha 359 · 'group': the ONE group view   // Sasha 235 · 'keep': My Keep · 236 · 'trip': the trip board
   const [handover, setHandover] = useState<string | null>(null)   // Sasha 236 · Tap to finish, in a sheet over her
   useEffect(() => {
     const h = (e: Event) => setHandover(String((e as CustomEvent).detail || '') || null)
@@ -1172,11 +1171,14 @@ export default function S2App() {
           {(['sasha', 'trip', 'activity', 'keep'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === t ? C.gold : C.line}`, background: 'transparent', color: tab === t ? C.gold : C.dim, fontWeight: 600 }}>
               {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : t === 'trip' ? 'Trip' : 'Activity'}</button>))}
-          {hasGroup && <a href="/group" data-group-link style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${C.line}`, color: C.dim, fontWeight: 600, textDecoration: 'none' }}>Group</a>}
+          {/* Sasha 359 · the Group tab: the SAME GroupView as /group (one view, no copy) */}
+          <button data-group-tab onClick={() => setTab('group')} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === 'group' ? C.gold : C.line}`, background: 'transparent', color: tab === 'group' ? C.gold : C.dim, fontWeight: 600 }}>Group</button>
         </nav>
       </header>
       <AccountControl style={{ padding: '0 16px 8px', textAlign: 'right' }} onSignIn={() => putCarry(msgsRef.current, histRef.current, SIGN_IN_CARRY)} />{/* Sasha 274 · rows 1063/1064 */}{/* one quiet line, under the tabs — never over content */}
-      {tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
+      {tab === 'group' ? (
+        <section data-s2-group style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0 }}><GroupView embedded /></section>
+      ) : tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
         <section className="s2-trip" style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
           <style>{TRIP_BOARD_CSS}</style>
           <TripPanel richItinerary={null} openDays={openDays} travellerCount={0 /* Sasha 249 · no page default: the trip's own party, else "—" */}
@@ -1254,7 +1256,7 @@ export default function S2App() {
               <span data-voice-state={vo.live ? 'live' : asleep ? 'paused' : 'tap'} aria-live="polite"
                 style={{ fontSize: 10.5, lineHeight: '12px', fontWeight: 700, whiteSpace: 'nowrap', color: vo.live ? '#34d399' : asleep ? C.dim : C.gold }}>{cue.words}</span>{/* Sasha 295 · ONE cue: listening · thinking · speaking */}
             </div>) })()}
-            <Clip busy={busy} send={sendNow} say={tell} onGroup={checkGroup} />
+            <Clip busy={busy} send={sendNow} say={tell} onGroup={() => setTab('group')} />
             <form onSubmit={e => { e.preventDefault(); speaker.unlock(); if (!input.trim()) { tell(needs('Send', ['a message — type one, or tap the mic to talk'])); return } sendNow(input) }} style={{ flex: 1, display: 'flex', gap: 8 }}>
               <input ref={typeBox} value={input} onChange={e => { if (asleepRef.current) sleepEvent('typed'); setInput(e.target.value) }} placeholder="Ask Sasha anything…" aria-label="Message Sasha"
                 style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 999, border: `1px solid ${C.line}`, background: C.card, color: '#fff', fontSize: 16 }} />

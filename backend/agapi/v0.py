@@ -1655,47 +1655,46 @@ def _group_err(r: dict) -> dict:
     return r
 
 
-async def group_start(ctx: Ctx, a: dict) -> dict:
-    """Sasha 358 · a new trip through THE ENGINE (groups.create_trip — the ONE way a trip is made, the /group page's [Go] too): where, when,
-    the hotel area AND who's going. Without who's going nothing is made (a trip with nobody isn't kept): she asks, from the roster."""
+async def group_select(ctx: Ctx, a: dict) -> dict:
+    """Sasha 359 · WHO GOES, BY DESCRIPTION: the model passes the organiser's words as a structured filter (never people it picked); THE
+    ENGINE (groups.propose) applies it to the roster, names every word it couldn't match, and shows the list for their yes — nothing changes
+    until group_confirm. It asks only what's missing (where → which dates → who), one thing at a time."""
     from booking_signer import groups as G
-    who = [str(x) for x in a.get("who") or []]
-    grp = await G.store().company(ctx.account, a.get("company")) if a.get("company") else await G.store().company(ctx.account)
-    roster = await G.store().people(grp["id"]) if grp else []
-    if a.get("everyone"):
-        who = [p["id"] for p in roster]
-    if not who:
-        n = len(roster)
-        return {"status": "needs_who", "say": f"Got it — {a.get('company') or (grp or {}).get('name') or 'your company'} to {a['destination']}"
-                + (f", hotel near {a['hotel_area']}" if a.get("hotel_area") else "") + "." + (
-                    f" Who's going? Name them, or tick them on the Group page ({n} on your roster) — I'll make the trip with them."
-                    if n else " Who's going? Add your people once — a spreadsheet, a photo of it, or paste it here — and every trip after "
-                              "picks from them.")}
-    r = await _GO().run(ctx.account, "create", {"company": a.get("company"), "destination": a["destination"], "starts_on": a.get("starts_on"),
-                                                "ends_on": a.get("ends_on"), "hotel_area": a.get("hotel_area"), "who": who})
-    return _outcome(r)
+    f = {k: a.get(k) for k in G.FILTER_KEYS if a.get(k) not in (None, [], "")}
+    details = {k: a.get(k) for k in ("destination", "starts_on", "ends_on", "hotel_area") if a.get(k)}
+    return await G.propose(ctx.account, str(a.get("change") or "new"), f, details)
+
+
+async def group_confirm(ctx: Ctx, a: dict) -> dict:
+    """Sasha 359 · their YES to the list group_select showed — only on their own words (a yes): then the engine makes the trip / changes it."""
+    from booking_signer import groups as G
+    from booking_signer.yes import is_yes
+    if not is_yes(ctx.user_said or ""):
+        raise ToolError("not_their_yes", "the list waits for their yes — ask them, never confirm it for them")
+    r = await G.confirm(ctx.account, a.get("proposal_id") or None)
+    if not r.get("done"):
+        raise ToolError("not_done", r["say"])
+    return r
 
 
 async def group_upload(ctx: Ctx, a: dict) -> dict:
-    """The list as pasted / typed text (a file or a photo comes through the master list page's upload)."""
+    """A list pasted in the chat: its people onto the company's ROSTER (each once) — then, Sasha 359, the list for a yes on the open trip
+    (groups.propose → group_confirm), never straight onto a trip."""
     from booking_signer import groups as G
-    return _outcome(await _GO().run(ctx.account, "add", {"rows": G.read_text(a.get("text") or "") or None}))   # Sasha 346 · the ONE outcome
+    mv = await G.store().movement(ctx.account)   # a list for the open trip: its grades checked against the trip's limits
+    r = _outcome(await _GO().run(ctx.account, "add", {"rows": G.read_text(a.get("text") or "") or None, "on_trip": False,
+                                                      "movement": (mv or {}).get("id")}))
+    names = [p["name"] for p in (await G.roster(ctx.account)).get("people") or [] if p["id"] in set(r.get("people") or [])]
+    if not names or not await G.store().movement(ctx.account):
+        return {**r, "say": r["say"].split(" — press Go")[0] + ". Where to, and when? Then I'll show you the list to confirm."}
+    p = await G.propose(ctx.account, "add", {"names_in": names})
+    return {**p, "say": (r["ask"] + " " if r.get("ask") else "") + p["say"]}   # the rows it couldn't read: ONE question, then the list
 
 
 async def group_person_add(ctx: Ctx, a: dict) -> dict:
     """Sasha 351 · a worker onto the company's ROSTER — once: their name, grade, home airport (or city), contact. Every trip reads it."""
     rows = [{k: v for k, v in p.items() if v} for p in (a.get("people") or []) if isinstance(p, dict)]
     return _outcome(await _GO().run(ctx.account, "person_add", {"rows": rows or None, "company": a.get("company")}))
-
-
-async def group_choose(ctx: Ctx, a: dict) -> dict:
-    """Sasha 351 · who travels on this trip: roster people by the names the organiser uses (or "everyone") — a link each, then planned."""
-    from booking_signer import groups as G
-    who = [str(x) for x in a.get("who") or []]
-    if a.get("everyone"):
-        grp = await G.store().company(ctx.account)
-        who = [p["id"] for p in (await G.store().people(grp["id"]) if grp else [])]
-    return _outcome(await _GO().run(ctx.account, "choose", {"who": who or None}))
 
 
 async def group_open(ctx: Ctx, a: dict) -> dict:
@@ -2062,29 +2061,33 @@ TOOLS: List[dict] = [
     _t("start_count", "Pacioli", start_count, "FOUNDER ONLY: start the real-booking count (today, or `from` YYYY-MM-DD). Bookings before it "
        "aren't counted and aren't changed. Only when the founder says to start it.", {"from": {"type": "string"}}, [],
        {"type": "object", "properties": {"from": {"type": "string"}, "say": {"type": "string"}}}, ["founder_only", "invalid_input"]),
-    _t("group_start", "Magellan", group_start, "Make a NEW GROUP TRIP for an organiser: their company moving people somewhere (e.g. 20 workers to "
-       "Madrid), with the dates (starts_on / ends_on, YYYY-MM-DD), ONE hotel area (e.g. \"near the factory in Getafe\") and WHO'S GOING "
-       "(`who`: the names they use for people on their roster, or everyone=true). Without who's going nothing is made — say its `say` (it "
-       "asks), then call it again with `who`. Never ask them to type people's details again: who's going is chosen FROM THE ROSTER.",
-       {"company": {"type": "string"}, "destination": {"type": "string"}, "starts_on": {"type": "string"}, "ends_on": {"type": "string"},
-        "hotel_area": {"type": "string"}, "who": {"type": "array", "items": {"type": "string"}}, "everyone": {"type": "boolean"}},
-       ["destination"], {"type": "object", "properties": {"say": {"type": "string"}}}, ["missing", "not_done"]),
+    _t("group_select", "Magellan", group_select, "WHO GOES ON A GROUP TRIP, BY DESCRIPTION — a new trip (change=new: destination, starts_on / "
+       "ends_on YYYY-MM-DD, hotel_area if said) or a change to the open one (change=add / drop). Pass the organiser's OWN words as the filter: "
+       "roles or departments as said (\"executives\", \"engineers\", \"interns\"), grades, names_in / names_out (as said — \"Javier Prieto\"), "
+       "everyone, exclude_roles (\"everyone but the interns\"), last_trip (\"the same people as last time\"). NEVER pick people yourself and "
+       "never correct a name: the engine matches them and says what it couldn't. Say its `say`; if it returns only an `ask`, ask exactly "
+       "that (one short question) and nothing else. Nothing changes until they say yes (group_confirm).",
+       {"change": {"type": "string", "enum": ["new", "add", "drop"]}, "destination": {"type": "string"}, "starts_on": {"type": "string"},
+        "ends_on": {"type": "string"}, "hotel_area": {"type": "string"}, "everyone": {"type": "boolean"},
+        "roles": {"type": "array", "items": {"type": "string"}}, "grades": {"type": "array", "items": {"type": "string"}},
+        "exclude_roles": {"type": "boolean"}, "names_in": {"type": "array", "items": {"type": "string"}},
+        "names_out": {"type": "array", "items": {"type": "string"}}, "last_trip": {"type": "boolean"}},
+       ["change"], {"type": "object", "properties": {"say": {"type": "string"}, "ask": {"type": "string"}}}, []),
+    _t("group_confirm", "Magellan", group_confirm, "The organiser said YES to the list group_select showed (their own words, or the Yes button): "
+       "the engine makes the trip — or adds / takes off those people — and plans each. Never call it without their yes. Say its `say`.",
+       {"proposal_id": {"type": "string"}}, [], {"type": "object", "properties": {"say": {"type": "string"}}}, ["not_their_yes", "not_done"]),
     _t("group_upload", "Magellan", group_upload, "A whole LIST pasted for the current trip (several lines: name, home city, out date, "
-       "back date, grade): its people become the roster's (each once) and travel on this trip. Pass their text EXACTLY. Say its `say` as it "
+       "back date, grade): its people become the roster's (each once), then the list for a yes on the open trip (group_confirm). Pass their text EXACTLY. Say its `say` as it "
        "is — it asks ONE question for every unclear row. ONE person named (\"add Ana García, Madrid, worker\") is group_person_add, never this; "
-       "people already on the roster named for a trip is group_choose.",
+       "people described or named for a trip is group_select.",
        {"text": {"type": "string"}}, ["text"], {"type": "object", "properties": {"added": {"type": "integer"}, "say": {"type": "string"}}}, ["no_movement"]),
     _t("group_person_add", "Magellan", group_person_add, "Add workers to the company's ROSTER (each ONCE — their profile and their own vault "
        "serve every trip): name, grade, home airport (3 letters, e.g. MAD) or home city, email, phone. Company: the one they named, else "
        "their current one. NEVER ask for a passport or dates here (a trip's dates are the trip's). If they also said this person is going on "
-       "the current trip, then call group_choose with their name. Say its `say`.",
+       "the current trip, then call group_select (change=add, names_in) — the list for their yes. Say its `say`.",
        {"people": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "grade": {"type": "string"},
                    "home_airport": {"type": "string"}, "home_city": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}}}},
         "company": {"type": "string"}}, ["people"], {"type": "object", "properties": {"say": {"type": "string"}}}, ["missing", "not_done"]),
-    _t("group_choose", "Magellan", group_choose, "Choose who travels on the current trip FROM THE ROSTER, by the names the organiser uses (or "
-       "everyone=true). Each is linked to the trip (their profile and passport are the roster's — never re-entered) and planned from their "
-       "home airport. A name not on the roster: say so (add it first with group_person_add). Say its `say`.",
-       {"who": {"type": "array", "items": {"type": "string"}}, "everyone": {"type": "boolean"}}, [], {"type": "object"}, ["missing", "not_done"]),
     _t("group_open", "Magellan", group_open, "Open one of the organiser's group trips — by its destination as they say it (\"the Lisbon "
        "trip\") — when they talk about a trip that isn't the open one. Every group action after it (the list, booking, the invoice) is about "
        "that trip. Say its `say`.",

@@ -188,12 +188,14 @@ class TheWholeClass(unittest.TestCase):
 class TheTools(unittest.TestCase):
     def test_agent_tools(self):
         from agapi import v0 as API
-        self.assertTrue({"group_start", "group_upload", "group_limits", "group_plan", "group_list"} <= set(API.BY_NAME))
+        self.assertTrue({"group_select", "group_confirm", "group_upload", "group_limits", "group_plan", "group_list"} <= set(API.BY_NAME))
         with World() as w:
             ctx = API.Ctx(account=OWNER, mode="test")
             w.limits()
             r = run(API.group_upload(ctx, {"text": FIX.read_text()}))
-            self.assertTrue(r["say"].startswith("Added 20 people to the list. 2 rows I couldn't read for sure"), r["say"])   # Sasha 346 · the ONE outcome's words
+            self.assertTrue(r.get("proposal_id") and r["ask"].startswith("Add these 20"), r["say"])
+            self.assertIn("couldn't read for sure", r["say"])                                   # the unclear rows: ONE question, first   # Sasha 359 · onto the roster, then the list for a yes
+            run(API.group_confirm(API.Ctx(account=OWNER, mode="test", user_said="Yes, these people"), {"proposal_id": r["proposal_id"]}))
             run(G.plan(OWNER))
             s = run(API.group_list(ctx, {}))
         self.assertIn("19 needs vault, 1 over limit", s["say"])   # Rania's flight (no personal limit set here)

@@ -44,8 +44,9 @@ class OnePersonOneRecord(unittest.TestCase):
             r = run(G.create_trip(OWNER, COMPANY, "Lisbon", "2026-11-17", "2026-11-21", "near the client in Oeiras", names))   # Sasha 358 · with who's going
             self.assertEqual((r["selected"], r["on_trip"], r["unknown"], r["twice"]), (3, 3, [], []))
             self.assertEqual(len(_roster(w)), 20)                                        # the roster unchanged: no new people
-            again = run(G.choose(OWNER, names))                                          # ticking them again: still one link each
-            self.assertEqual((again["selected"], again["on_trip"]), (0, 3))
+            again = run(G.propose(OWNER, "add", {"names_in": names}))                     # chosen again: still one link each (Sasha 359)
+            self.assertIn("already", again["say"])
+            self.assertNotIn("proposal_id", again)
             # the list uploaded again onto this trip: the SAME people (by the organiser's own names), never new ones
             up = run(G.upload(OWNER, G.read_csv(V.W.FIX.read_bytes())[:5]))
             self.assertEqual(up["new_people"], 0)
@@ -56,8 +57,9 @@ class OnePersonOneRecord(unittest.TestCase):
             gid = next(iter(w.store.groups))
             twin = _roster(w)[0]["name"]
             run(w.store.add_person(gid, {"name": twin, "home_city": "Sevilla"}))
-            r = run(G.choose(OWNER, [twin, "Nobody Atall"]))
-            self.assertEqual((r["selected"], r["twice"], r["unknown"]), (0, [twin], ["Nobody Atall"]))
+            r = run(G.resolve(OWNER, {"names_in": [twin, "Nobody Atall"]}))               # Sasha 359 · the ONE resolver
+            self.assertEqual((r["people"], [m["word"] for m in r["unmatched"]]), ([], [twin, "Nobody Atall"]))
+            self.assertEqual(len(r["unmatched"][0]["did_you_mean"]), 2)                   # both offered, never one guessed
             row = next(r for r in G.read_csv(V.W.FIX.read_bytes()) if r["name"] == twin)
             up = run(G.upload(OWNER, [row]))
             self.assertTrue(up["unclear"] and "roster" in up["ask"])
@@ -159,7 +161,7 @@ class AChangeIsWhatEveryTripReads(unittest.TestCase):
         with V.World() as w:
             gid = next(iter(w.store.groups))
             pid = run(w.store.add_person(gid, {"name": "Irene Vidal", "home_airport": "VLC", "grade": "worker"}))
-            run(G.choose(OWNER, [pid]))
+            run(G.set_on_trip(OWNER, pid))
             m = next(x for x in w.members() if x["person_id"] == pid)
             self.assertEqual(G.origin(m), "VLC")
             asked = []
@@ -188,10 +190,10 @@ class TheModelIsToldTheRoster(unittest.TestCase):
     def test_the_tools_say_roster_never_re_type(self):
         from agapi import v0 as API
         d = {t["name"]: t["description"] for t in API.TOOLS}
-        self.assertNotIn("ask for the list", d["group_start"])
-        self.assertIn("ROSTER", d["group_start"])
+        self.assertIn("NEVER pick people yourself", d["group_select"])                  # Sasha 359 · by description, the engine matches
+        self.assertIn("ROSTER", d["group_person_add"])
         self.assertIn("group_person_add", d["group_upload"])
-        self.assertIn("group_choose", d["group_person_add"])
+        self.assertIn("group_select", d["group_person_add"])
 
     def test_every_group_tool_of_the_registry_is_on_s2_and_drawn(self):
         from agapi import v0 as API

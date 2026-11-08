@@ -25,7 +25,7 @@ One contract for every client.
 
 | Agent | Role | Tools |
 |---|---|---|
-| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_start`, `group_upload`, `group_person_add`, `group_choose`, `group_open`, `group_limits`, `group_plan`, `group_invite_vault`, `group_list` |
+| **Magellan** | finds | `search_flights`, `search_stays`, `search_venues`, `prepare_trip`, `propose_trip`, `swap_stay`, `group_select`, `group_confirm`, `group_upload`, `group_person_add`, `group_open`, `group_limits`, `group_plan`, `group_invite_vault`, `group_list` |
 | **Sherlock** | checks | `check_offer`, `read_booking_route` |
 | **Austen** | acts (idempotent; book needs a yes) | `choose_offer`, `save_travellers`, `hold_booking`, `book`, `hold_venue`, `book_venue`, `cancel_venue`, `group_book`, `group_swap`, `group_cancel`, `send_email`, `send_whatsapp` |
 | **Pacioli** | records — the only source of booked/paid | `get_status`, `booking_outcomes`, `start_count`, `group_invoice`, `remove_saved_card`, `get_trip`, `get_total`, `add_to_calendar`, `get_activity` |
@@ -477,11 +477,11 @@ Change where they stay in one city of the trip (take a name from search_stays). 
 }
 ```
 
-### `group_start`
+### `group_select`
 
-Make a NEW GROUP TRIP for an organiser: their company moving people somewhere (e.g. 20 workers to Madrid), with the dates (starts_on / ends_on, YYYY-MM-DD), ONE hotel area (e.g. "near the factory in Getafe") and WHO'S GOING (`who`: the names they use for people on their roster, or everyone=true). Without who's going nothing is made — say its `say` (it asks), then call it again with `who`. Never ask them to type people's details again: who's going is chosen FROM THE ROSTER.
+WHO GOES ON A GROUP TRIP, BY DESCRIPTION — a new trip (change=new: destination, starts_on / ends_on YYYY-MM-DD, hotel_area if said) or a change to the open one (change=add / drop). Pass the organiser's OWN words as the filter: roles or departments as said ("executives", "engineers", "interns"), grades, names_in / names_out (as said — "Javier Prieto"), everyone, exclude_roles ("everyone but the interns"), last_trip ("the same people as last time"). NEVER pick people yourself and never correct a name: the engine matches them and says what it couldn't. Say its `say`; if it returns only an `ask`, ask exactly that (one short question) and nothing else. Nothing changes until they say yes (group_confirm).
 
-**Errors:** `missing`, `not_done`, `missing_input`, `internal`
+**Errors:** `missing_input`, `internal`
 
 **Input**
 
@@ -489,8 +489,13 @@ Make a NEW GROUP TRIP for an organiser: their company moving people somewhere (e
 {
  "type": "object",
  "properties": {
-  "company": {
-   "type": "string"
+  "change": {
+   "type": "string",
+   "enum": [
+    "new",
+    "add",
+    "drop"
+   ]
   },
   "destination": {
    "type": "string"
@@ -504,19 +509,80 @@ Make a NEW GROUP TRIP for an organiser: their company moving people somewhere (e
   "hotel_area": {
    "type": "string"
   },
-  "who": {
+  "everyone": {
+   "type": "boolean"
+  },
+  "roles": {
    "type": "array",
    "items": {
     "type": "string"
    }
   },
-  "everyone": {
+  "grades": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "exclude_roles": {
+   "type": "boolean"
+  },
+  "names_in": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "names_out": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   }
+  },
+  "last_trip": {
    "type": "boolean"
   }
  },
  "required": [
-  "destination"
+  "change"
  ],
+ "additionalProperties": false
+}
+```
+
+**Output** (`result`)
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "say": {
+   "type": "string"
+  },
+  "ask": {
+   "type": "string"
+  }
+ }
+}
+```
+
+### `group_confirm`
+
+The organiser said YES to the list group_select showed (their own words, or the Yes button): the engine makes the trip — or adds / takes off those people — and plans each. Never call it without their yes. Say its `say`.
+
+**Errors:** `not_their_yes`, `not_done`, `missing_input`, `internal`
+
+**Input**
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "proposal_id": {
+   "type": "string"
+  }
+ },
+ "required": [],
  "additionalProperties": false
 }
 ```
@@ -536,7 +602,7 @@ Make a NEW GROUP TRIP for an organiser: their company moving people somewhere (e
 
 ### `group_upload`
 
-A whole LIST pasted for the current trip (several lines: name, home city, out date, back date, grade): its people become the roster's (each once) and travel on this trip. Pass their text EXACTLY. Say its `say` as it is — it asks ONE question for every unclear row. ONE person named ("add Ana García, Madrid, worker") is group_person_add, never this; people already on the roster named for a trip is group_choose.
+A whole LIST pasted for the current trip (several lines: name, home city, out date, back date, grade): its people become the roster's (each once), then the list for a yes on the open trip (group_confirm). Pass their text EXACTLY. Say its `say` as it is — it asks ONE question for every unclear row. ONE person named ("add Ana García, Madrid, worker") is group_person_add, never this; people described or named for a trip is group_select.
 
 **Errors:** `no_movement`, `missing_input`, `internal`
 
@@ -575,7 +641,7 @@ A whole LIST pasted for the current trip (several lines: name, home city, out da
 
 ### `group_person_add`
 
-Add workers to the company's ROSTER (each ONCE — their profile and their own vault serve every trip): name, grade, home airport (3 letters, e.g. MAD) or home city, email, phone. Company: the one they named, else their current one. NEVER ask for a passport or dates here (a trip's dates are the trip's). If they also said this person is going on the current trip, then call group_choose with their name. Say its `say`.
+Add workers to the company's ROSTER (each ONCE — their profile and their own vault serve every trip): name, grade, home airport (3 letters, e.g. MAD) or home city, email, phone. Company: the one they named, else their current one. NEVER ask for a passport or dates here (a trip's dates are the trip's). If they also said this person is going on the current trip, then call group_select (change=add, names_in) — the list for their yes. Say its `say`.
 
 **Errors:** `missing`, `not_done`, `missing_input`, `internal`
 
@@ -632,41 +698,6 @@ Add workers to the company's ROSTER (each ONCE — their profile and their own v
    "type": "string"
   }
  }
-}
-```
-
-### `group_choose`
-
-Choose who travels on the current trip FROM THE ROSTER, by the names the organiser uses (or everyone=true). Each is linked to the trip (their profile and passport are the roster's — never re-entered) and planned from their home airport. A name not on the roster: say so (add it first with group_person_add). Say its `say`.
-
-**Errors:** `missing`, `not_done`, `missing_input`, `internal`
-
-**Input**
-
-```json
-{
- "type": "object",
- "properties": {
-  "who": {
-   "type": "array",
-   "items": {
-    "type": "string"
-   }
-  },
-  "everyone": {
-   "type": "boolean"
-  }
- },
- "required": [],
- "additionalProperties": false
-}
-```
-
-**Output** (`result`)
-
-```json
-{
- "type": "object"
 }
 ```
 

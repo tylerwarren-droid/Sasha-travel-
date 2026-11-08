@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import { MicOff, MessageSquare, Sparkles, Map as MapIcon, User as UserIcon, Plus, Play, Mic, Send } from 'lucide-react'
+import { MicOff, MessageSquare, Sparkles, Map as MapIcon, User as UserIcon, Users, Plus, Play, Mic, Send } from 'lucide-react'
 import SashaAvatar, { prefetchAvatarSession } from '../components/SashaAvatar'
 import SashaChat, { WorkspaceTab } from '../components/SashaChat'
 import type { MicDevicesInfo } from '../components/VoiceButton'
@@ -955,6 +955,7 @@ export default function NextPage() {
     { id: 'ideas', label: 'Ideas', Ic: Sparkles },
     { id: 'trip', label: 'Trip', Ic: MapIcon },
     { id: 'you', label: 'You', Ic: UserIcon },
+    { id: 'group', label: 'Group', Ic: Users },   // Sasha 359 · the SAME GroupView as /group and S2
   ]
   // The Live Workspace subtitle — what Sasha is doing right now (carried over from the old
   // workspace head so the copy stays familiar).

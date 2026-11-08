@@ -34,7 +34,7 @@ FAMILIES: Dict[str, Iterable[str]] = {
                "money_claim_status", "claim_status"),
     "entry": ("entry_documents", "prepare_entry"),
     "subscriptions": ("find_subscriptions", "cancel_subscription", "plan_cancel_subscription"),
-    "group": ("group_start", "group_upload", "group_person_add", "group_choose", "group_open", "group_limits", "group_plan",
+    "group": ("group_select", "group_confirm", "group_upload", "group_person_add", "group_open", "group_limits", "group_plan",
               "group_invite_vault", "group_book", "group_swap", "group_cancel", "group_invoice", "group_list"),
     "founder": ("booking_outcomes", "start_count"),
 }

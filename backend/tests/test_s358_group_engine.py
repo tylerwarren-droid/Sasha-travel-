@@ -115,7 +115,7 @@ class Engine(unittest.TestCase):
                 r = await GO.run(OWNER, "create", {"destination": "London", "starts_on": "2026-11-17", "ends_on": "2026-11-21", "who": ["Nobody Atall"]})
                 self.assertFalse(r["done"])
                 self.assertIn("not on your roster: Nobody Atall", r["say"])
-                await API.group_start(API.Ctx(account=OWNER), {"company": COMPANY, "destination": "London"})
+                await API.group_select(API.Ctx(account=OWNER), {"change": "new", "destination": "London"})   # Sasha 359 · it asks, makes nothing
                 await GO.run(OWNER, "add", {"rows": G.read_text("Cy Example, Lisbon"), "on_trip": False})
                 self.assertEqual(len(w.store.movements), before)                          # not one trip made by any of them
                 for _ in range(3):
@@ -171,21 +171,21 @@ class Engine(unittest.TestCase):
 
 
 class TheChatUsesTheEngine(unittest.TestCase):
-    def test_start_without_who_makes_no_trip_with_who_it_does(self):
-        from agapi import v0 as API
+    def test_the_chat_makes_no_trip_until_the_yes_then_the_engine_does(self):
+        from agapi import v0 as API   # Sasha 359 · group_select → the list → group_confirm (the chat's ONE way; group_start is gone)
 
         async def go(w):
             if True:
                 n0 = len((await G.trips(OWNER))["trips"])
                 await GO.run(OWNER, "person_add", {"rows": _people(3), "company": COMPANY})
                 ctx = API.Ctx(account=OWNER)
-                r = await API.group_start(ctx, {"company": COMPANY, "destination": "Lisbon", "starts_on": "2026-11-17", "ends_on": "2026-11-21"})
-                self.assertIn("Who's going", r["say"])
-                self.assertEqual(len((await G.trips(OWNER))["trips"]), n0)                  # nothing made: who's going first
+                r = await API.group_select(ctx, {"change": "new", "destination": "Lisbon", "starts_on": "2026-11-17", "ends_on": "2026-11-21"})
+                self.assertEqual(r["ask"], "Who's going?")
                 names = [p["name"] for p in (await G.state(OWNER))["roster"]][:2]
-                r = await API.group_start(ctx, {"company": COMPANY, "destination": "Lisbon", "starts_on": "2026-11-17",
-                                                "ends_on": "2026-11-21", "who": names})
-                self.assertIn("2", r["say"])
+                r = await API.group_select(ctx, {"change": "new", "destination": "Lisbon", "starts_on": "2026-11-17", "ends_on": "2026-11-21",
+                                                 "names_in": names})
+                self.assertEqual(len((await G.trips(OWNER))["trips"]), n0)                  # nothing made before the yes
+                await API.group_confirm(API.Ctx(account=OWNER, user_said="yes"), {"proposal_id": r["proposal_id"]})
                 await G.planned(OWNER)
                 st = await G.state(OWNER)
                 self.assertEqual((st["trip"]["destination"], sum(p["on"] for p in st["roster"])), ("Lisbon", 2))
@@ -222,7 +222,7 @@ class OneSource(unittest.TestCase):
         # every press answers in words: a press that only changes the page (New trip, Edit) says what it did — never a bare "Edit…"
         for name in re.findall(r"press\('([^']+)', async \(\) => \{(.*?) \}\)\}", comp):
             self.assertIn("setSaid(", name[1], f"{name[0]}: a press that says nothing")
-        self.assertEqual(sorted(n for n, _ in re.findall(r"press\('([^']+)', async \(\) => \{(.*?) \}\)\}", comp)), ["Edit", "New trip"])
+        self.assertEqual(sorted(n for n, _ in re.findall(r"press\('([^']+)', async \(\) => \{(.*?) \}\)\}", comp)), ["Edit", "New trip", "No"])
 
 
 PG, _SERVER = __import__("os").getenv("BOOKING_TEST_DATABASE_URL", ""), None

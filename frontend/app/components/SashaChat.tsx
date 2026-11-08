@@ -27,6 +27,7 @@ import { accountUrl, guestAuth, refreshGuestAuth } from '@/lib/guest-auth'  // S
 import { axios, events, reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 import KeepHandoff from './KeepHandoff'   // Sasha 228 · "Add from your phone"
 import { again, announce, failed, needs, noted, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import GroupView from './group/GroupView'   // Sasha 359 · the Group tab (one view, no copy)
 
 // `description` is the photographer's free-text Unsplash caption ("Colors", "4:51pm") — never
 // use it as a place name. `location` is the actual destination, stamped on by the foto agent.
@@ -42,6 +43,7 @@ const TABS: { id: WorkspaceTab; label: string }[] = [
   { id: 'ideas', label: 'Ideas' },
   { id: 'trip', label: 'Trip' },
   { id: 'you', label: 'You' },
+  { id: 'group', label: 'Group' },   // Sasha 359 · the SAME GroupView as /group and S2
 ]
 
 interface SashaChatProps {
@@ -157,7 +159,7 @@ interface SashaChatProps {
   onWake?: (how: 'press_mic' | 'typed') => void
 }
 
-export type WorkspaceTab = 'chat' | 'ideas' | 'trip' | 'you'
+export type WorkspaceTab = 'chat' | 'ideas' | 'trip' | 'you' | 'group'   // Sasha 359 · 'group': the ONE group view
 
 // Context-driven interim speech. While a slow search/build runs, Sasha says what she is ACTUALLY
 // doing — chosen from the turn's classified intent — never a random filler. Only the slow,
@@ -909,6 +911,8 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             {tab === 'you' && (
               <YouPanel user={user} plannedThisSession={richItinerary ? 1 : 0} language={language} />
             )}
+
+            {tab === 'group' && <GroupView embedded />}
           </>
         )
         return panelPortal ? createPortal(panels, panelPortal) : panels

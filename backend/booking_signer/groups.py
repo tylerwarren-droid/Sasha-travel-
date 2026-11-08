@@ -891,6 +891,202 @@ async def set_on_trip(account: str, person: str, trip: Optional[str] = None, on:
     return {"done": True, "on": False, "say": said}
 
 
+# ── Sasha 359 · WHO GOES, BY DESCRIPTION: the model only PROPOSES a structured filter; the ENGINE applies it, names every miss, and shows
+# the list for a yes before anything changes (propose → confirm). Every door: the chat (S2, /next, WhatsApp — group_select / group_confirm)
+# and /group's own search box (FILTER_FROM_TEXT → resolve). ────────────────────────────────────────────────────────────────────────────
+
+FILTER_KEYS = ("everyone", "roles", "grades", "exclude_roles", "names_in", "names_out", "last_trip")
+PROPOSAL_FOR_S = 30 * 60
+_PROPOSALS: Dict[str, Dict[str, Any]] = {}   # account → the ONE list waiting for their yes (this process)
+
+
+def _singular(w: Any) -> str:
+    w = re.sub(r"^(?:the|all|our|my|every|all the)\s+", "", str(w or "").strip().lower())
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+        return w[:-1]
+    return w
+
+
+def _by_name(people: List[dict], said: str) -> Tuple[List[dict], List[str]]:
+    """A name as the organiser says it → the roster person: the full name; else ONE person with that first (or last) name. → (people,
+    did-you-mean) — two with that first name: both offered, never one guessed."""
+    import difflib
+    w = re.sub(r"\s+", " ", str(said or "")).strip().lower()
+    full = [p for p in people if p["name"].strip().lower() == w]
+    if len(full) == 1:
+        return full, []
+    if full:   # two people with that very name: both offered, never one picked
+        return [], [f"{p['name']} ({p.get('role') or p.get('grade') or p.get('home_airport') or p.get('home_city') or 'no role'})" for p in full]
+    parts = [p for p in people if w and (p["name"].lower().split()[0] == w or p["name"].lower().split()[-1] == w)]
+    if len(parts) == 1:
+        return parts, []
+    near = [p["name"] for p in parts] or difflib.get_close_matches(str(said), [p["name"] for p in people], n=3, cutoff=0.5) or \
+        [p["name"] for p in people if w.split() and p["name"].lower().split()[0] == w.split()[0]]
+    return [], near
+
+
+def _and_words(xs: List[str]) -> str:
+    xs = [x for x in xs if x]
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1] if xs else ""
+
+
+async def resolve(account: str, f: Dict[str, Any], trip: Optional[str] = None) -> Dict[str, Any]:
+    """THE RESOLVER: a structured filter → roster people, deterministically (the model never picks people). Keys: everyone; roles / grades
+    (words as said: "executives" = role executive; a grade word works too); exclude_roles ("everyone but the interns"); names_in;
+    names_out; last_trip ("the same people as last time": the latest trip's people, other than `trip`). → {people, unmatched, said}."""
+    import difflib
+    st = store()
+    grp = await st.company(account)
+    people = await st.people(grp["id"]) if grp else []
+    f = {k: f.get(k) for k in FILTER_KEYS if f.get(k) not in (None, [], "")}
+    chosen: Dict[str, dict] = {}
+    misses: List[Dict[str, Any]] = []
+    if f.get("everyone"):
+        chosen = {p["id"]: p for p in people}
+    if f.get("last_trip"):
+        last = next((t for t in await st.trips(account) if t["id"] != trip), None)
+        ids = {m["person_id"] for m in await st.members(last["id"])} if last else set()
+        chosen.update({p["id"]: p for p in people if p["id"] in ids})
+        if not last:
+            misses.append({"word": "last time", "kind": "trip", "did_you_mean": []})
+    words = [_singular(w) for w in list(f.get("roles") or []) + list(f.get("grades") or [])]
+    known = sorted({_singular(p.get("role")) for p in people if p.get("role")} | {_singular(p.get("grade")) for p in people if p.get("grade")})
+    for w in words:
+        hit = [p for p in people if w and (_singular(p.get("role")) == w or _singular(p.get("grade")) == w)]
+        if not hit:
+            misses.append({"word": w, "kind": "role", "did_you_mean": difflib.get_close_matches(w, known, n=2, cutoff=0.6), "known": known})
+        for p in hit:
+            if f.get("exclude_roles"):
+                chosen.pop(p["id"], None)
+            else:
+                chosen[p["id"]] = p
+    for w in f.get("names_in") or []:
+        hit, near = _by_name(people, w)
+        if hit:
+            chosen[hit[0]["id"]] = hit[0]
+        else:
+            misses.append({"word": str(w), "kind": "name", "did_you_mean": near})
+    for w in f.get("names_out") or []:
+        hit, near = _by_name(people, w)
+        if hit:
+            chosen.pop(hit[0]["id"], None)
+        else:
+            misses.append({"word": str(w), "kind": "name", "did_you_mean": near})
+    out = sorted(chosen.values(), key=lambda p: p["name"].lower())
+    notes = []
+    for m in misses:
+        if m["kind"] == "role":
+            notes.append(f"nobody on your roster is a{'n' if m['word'][:1] in 'aeiou' else ''} {m['word']}"
+                         + (f" — did you mean {_and_words(m['did_you_mean'])}?" if m["did_you_mean"] else
+                            f" (the roles there are: {_and_words(m['known'])})" if m.get("known") else ""))
+        elif m["kind"] == "name":
+            notes.append(f"no one called {m['word']}" + (f" — did you mean {_and_words(m['did_you_mean'])}?" if m["did_you_mean"] else " on your roster"))
+        else:
+            notes.append("there's no earlier trip to copy")
+    said = f"{len(out)} {'person' if len(out) == 1 else 'people'}" + (": " + ", ".join(p["name"] for p in out) if out else "") + "." + \
+        ("".join(f" Note: {n}." if not n.endswith("?") else f" Note: {n}" for n in notes))
+    return {"people": [{k: p.get(k) for k in ("id", "name", "role", "grade", "home_airport", "home_city")} for p in out], "unmatched": misses,
+            "said": said}
+
+
+def _dates(d: Dict[str, Any]) -> str:
+    return " – ".join(x for x in (str(d.get("starts_on") or "")[:10], str(d.get("ends_on") or "")[:10]) if x)
+
+
+async def propose(account: str, mode: str, f: Dict[str, Any], details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The list for a yes — nothing changes yet. mode: new (a trip: where, dates, hotel area in `details`), add / drop (the open trip).
+    Asks ONLY what's missing, one thing at a time: where → which dates → who. → {proposal_id, read_back, ask, say, people} or {ask, say}."""
+    details = {k: v for k, v in (details or {}).items() if v}
+    if mode not in ("new", "add", "drop"):
+        return {"say": "Is that a new trip, or a change to this one?", "ask": "Is that a new trip, or a change to this one?"}
+    ask = lambda q: {"ask": q, "say": q}
+    if mode == "new" and not details.get("destination"):
+        return ask("Where to?")
+    if mode == "new" and not (details.get("starts_on") and details.get("ends_on")):
+        return ask("Which dates?")
+    if not any(f.get(k) for k in FILTER_KEYS):
+        return ask("Who's going?" if mode == "new" else "Who?")
+    st = store()
+    mv = await st.movement(account) if mode != "new" else None
+    if mode != "new" and not mv:
+        return ask("There's no trip yet — where to, and when?")
+    r = await resolve(account, f, mv["id"] if mv else None)
+    ids = [p["id"] for p in r["people"]]
+    where = details.get("destination") if mode == "new" else mv["destination"]
+    if mv:
+        on = {m["person_id"] for m in await st.members(mv["id"])}
+        ids = [i for i in ids if (i not in on) == (mode == "add")]
+        if not ids:
+            q = ("They're all on the {w} trip already." if mode == "add" and r["people"] else
+                 "Nobody like that is on the {w} trip." if mode == "drop" else "Nobody matches that.").format(w=where)
+            notes = r["said"].split(" Note: ", 1)[1:] if " Note: " in r["said"] else []
+            return {"say": q + (" Note: " + notes[0] if notes else ""), "people": [], "unmatched": r["unmatched"]}
+    if not ids:
+        return {"ask": "Who's going?", "say": r["said"] + " Who's going?", "people": [], "unmatched": r["unmatched"]}
+    people = [p for p in r["people"] if p["id"] in ids]
+    pid = uuid.uuid4().hex[:12]
+    _PROPOSALS[account] = {"id": pid, "mode": mode, "ids": ids, "details": details, "trip": (mv or {}).get("id"),
+                           "at": datetime.now().timestamp()}
+    n = len(ids)
+    head = (f"{where} · {_dates(details)}" + (f" · hotel {details['hotel_area']}" if details.get("hotel_area") else "") if mode == "new"
+            else f"{'Add to' if mode == 'add' else 'Take off'} the {where} trip:")
+    lines = [head] + [f"• {p['name']}" + (f" — {p['role']}" if p.get("role") else "") + (f", from {p.get('home_airport') or p.get('home_city')}"
+                                                                                       if p.get("home_airport") or p.get("home_city") else "")
+                      for p in people]
+    notes = r["said"].split(" Note: ")[1:]
+    lines += [f"Note: {x}" for x in notes]
+    q = {"new": f"Make the {where} trip with these {n}?", "add": f"Add these {n} to the {where} trip?",
+         "drop": f"Take these {n} off the {where} trip?"}[mode]
+    return {"proposal_id": pid, "mode": mode, "people": people, "unmatched": r["unmatched"], "read_back": lines, "ask": q,
+            "say": f"{n} {'person' if n == 1 else 'people'}: " + ", ".join(p["name"] for p in people) + "." +
+                   "".join(f" Note: {x}" for x in notes) + " " + q}
+
+
+async def confirm(account: str, proposal_id: Optional[str] = None) -> Dict[str, Any]:
+    """The yes to the list waiting (once): a new trip → create_trip with exactly those; add / drop → set_on_trip for each. Nothing else."""
+    p = _PROPOSALS.get(account)
+    if not p or (proposal_id and p["id"] != proposal_id) or datetime.now().timestamp() - p["at"] > PROPOSAL_FOR_S:
+        return {"done": False, "say": "That list isn't waiting any more — tell me who's going again, and I'll show it."}
+    _PROPOSALS.pop(account, None)
+    if p["mode"] == "new":
+        d = p["details"]
+        r = await create_trip(account, None, d["destination"], d.get("starts_on"), d.get("ends_on"), d.get("hotel_area"), p["ids"])
+        if r.get("why"):
+            return {"done": False, "say": r["why"][0].upper() + r["why"][1:] + "."}
+        return {"done": True, "movement_id": r["movement_id"], "on_trip": r["on_trip"],
+                "say": f"The {r['destination']} trip ({_dates(d)}) is made: {r['on_trip']} people on it. I'm planning each from their own home "
+                       "airport now, within their limits — when they're planned, say “book them all” (or tap Book all on the Group tab). "
+                       "Nothing is booked yet."}
+    outs = [await set_on_trip(account, i, p["trip"], p["mode"] == "add") for i in p["ids"]]
+    done = [o for o in outs if o.get("done") and not o.get("already")]
+    held = [o["say"] for o in outs if not o.get("done")]
+    return {"done": bool(done), "say": " ".join([o["say"] for o in done] + held) or "Nothing changed."}
+
+
+async def _filter_from_text(text: str) -> Dict[str, Any]:
+    """/group's search box: the model PROPOSES the filter (one forced tool call, through the gateway) — the engine applies it."""
+    import os
+    import app.services.llm as LLM
+    props = {"everyone": {"type": "boolean"}, "roles": {"type": "array", "items": {"type": "string"}},
+             "grades": {"type": "array", "items": {"type": "string"}}, "exclude_roles": {"type": "boolean"},
+             "names_in": {"type": "array", "items": {"type": "string"}}, "names_out": {"type": "array", "items": {"type": "string"}},
+             "last_trip": {"type": "boolean"}}
+    r = await LLM.client.messages.create(
+        model=os.getenv("SASHA_GROUP_FILTER_MODEL", "claude-haiku-5-5"), max_tokens=400,
+        tools=[{"name": "who", "description": "Who the organiser means, as words from their sentence: roles or departments as said "
+                "(\"executives\"), names to add or leave out, everyone, or the same people as last time. Never invent a name.",
+                "input_schema": {"type": "object", "properties": props, "additionalProperties": False}}],
+        tool_choice={"type": "tool", "name": "who"},
+        messages=[{"role": "user", "content": f"The organiser describes who goes on a trip: {text!r}"}])
+    use = next((b for b in r.content if getattr(b, "type", "") == "tool_use"), None)
+    return {k: v for k, v in (dict(getattr(use, "input", {}) or {})).items() if k in FILTER_KEYS}
+
+
+FILTER_FROM_TEXT: Callable[[str], Awaitable[Dict[str, Any]]] = _filter_from_text   # tests replace it
+
+
 async def state(account: str, trip: Optional[str] = None) -> Dict[str, Any]:
     """THE view every door renders (the /group page — and, next, S2's and /next's group tab): the roster, each person's switch (on the open
     trip or not — the record itself), the open trip and its list (status, price, passport), and the trips."""
@@ -913,7 +1109,7 @@ async def upload(account: str, rows: List[Dict[str, str]], movement_id: Optional
     row. `on_trip`: each is put on the open trip by set_on_trip (the chat's "the list for this trip"); else they're only on the roster and
     their ids come back for the page to tick before [Go]."""
     st = store()
-    mv = await st.movement(account, movement_id) if on_trip else None
+    mv = await st.movement(account, movement_id) if (on_trip or movement_id) else None   # Sasha 359 · a list FOR a trip: its grades are checked
     if on_trip and not mv:
         return {"why": "there's no group movement yet — tell me the company, where, when and the hotel area first"}
     grp = {"id": mv["group_id"]} if mv else await st.company(account, company, create=bool(company))
@@ -923,7 +1119,7 @@ async def upload(account: str, rows: List[Dict[str, str]], movement_id: Optional
     good, unclear = members_from(rows, mv or {}, grades, dates_needed=on_trip)
     found, new, unclear2 = await _on_roster(st, grp["id"], good)
     n = 0
-    for row, pid in found if on_trip else []:
+    for row, pid in found if (on_trip and mv) else []:
         n += 1 if (await set_on_trip(account, pid, mv["id"], True, out_date=row.get("out_date"), back_date=row.get("back_date"))).get("link") else 0
     unclear += unclear2
     return {"added": n, "new_people": new, "people": [pid for _, pid in found], "unclear": unclear, "ask": batch_question(unclear),
@@ -1028,23 +1224,6 @@ async def edit_person(account: str, person_id: str, fields: Dict[str, Any]) -> D
     return {"person": p} if p else {"why": "that person isn't on your roster"}
 
 
-async def choose(account: str, who: List[str], movement_id: Optional[str] = None) -> Dict[str, Any]:
-    """Sasha 351 · THE TICK (the chat's group_choose): roster people (by id, or the name the organiser calls them) onto a trip — each by
-    set_on_trip (Sasha 358: the ONE way), then planned."""
-    st = store()
-    mv = await st.movement(account, movement_id)
-    if not mv:
-        return {"why": "there's no trip yet — tell me where, when and the hotel area first"}
-    ids, unknown, twice = _resolve(await st.people(mv["group_id"]), who)
-    links = []
-    for pid in ids:
-        r = await set_on_trip(account, pid, mv["id"], True)
-        if r.get("link"):
-            links.append(r["link"])
-    return {"selected": len(links), "on_trip": len([m for m in await st.members(mv["id"]) if m["person_id"] in ids]), "links": links,
-            "unknown": unknown, "twice": twice, "movement_id": mv["id"]}
-
-
 async def trips(account: str) -> Dict[str, Any]:
     """Sasha 351 · the organiser's trips (newest opened first) — the first is the OPEN one: everything on /group and in the chat is about it.
     Sasha 358 · no trip with nobody on it can be made (create_trip refuses it), and the last one switched off ends it (set_on_trip)."""
@@ -1121,4 +1300,4 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
 
 
 __all__ = ["read_text", "read_csv", "read_xlsx", "read_photo", "members_from", "batch_question", "limit_for", "with_limits", "plan", "view",
-           "summary", "create_trip", "set_on_trip", "state", "planned", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]
+           "summary", "create_trip", "set_on_trip", "state", "resolve", "propose", "confirm", "planned", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]

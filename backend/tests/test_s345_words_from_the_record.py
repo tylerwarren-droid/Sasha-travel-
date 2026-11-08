@@ -29,7 +29,7 @@ class TylersWords(unittest.TestCase):
     def test_limits_read_back_from_storage_then_planning_starts(self):
         with W.World() as w:
             ctx = API.Ctx(account=OWNER, mode="test")
-            run(API.group_upload(ctx, {"text": FIVE}))
+            run(G.upload(OWNER, G.read_text(FIVE)))   # Sasha 359 · on the trip by the engine
             r = run(API.group_limits(ctx, {"by_grade": {"executive": {"hotel_night_eur": 400}, "worker": {"hotel_night_eur": 250}}}))
             run(asyncio.sleep(0))
             mv = run(G.store().movement(OWNER))
@@ -42,7 +42,7 @@ class TylersWords(unittest.TestCase):
     def test_by_person_read_back_by_name(self):
         with W.World():
             ctx = API.Ctx(account=OWNER, mode="test")
-            run(API.group_upload(ctx, {"text": FIVE}))
+            run(G.upload(OWNER, G.read_text(FIVE)))   # Sasha 359 · on the trip by the engine
             r = run(API.group_limits(ctx, {"by_person": {"Dee Worker": {"hotel_night_eur": 250, "flight_return_eur": 300}}}))
         self.assertIn("Dee Worker: €250 a night and €300 for the return flight", r["say"])
 
@@ -54,7 +54,7 @@ class TylersWords(unittest.TestCase):
                 return {"why": "no fares yet"}
             with mock.patch.object(G, "QUOTE", none_found):
                 async def put_on():
-                    await API.group_upload(ctx, {"text": FIVE})
+                    await G.upload(OWNER, G.read_text(FIVE))
                     await G.planned(OWNER)
                 run(put_on())
             before = run(API.group_list(ctx, {}))

@@ -213,7 +213,7 @@ def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optiona
 # Sasha 205 · EVERY tool result has a renderer in the UI, by type (tests/test_agapi_guards.py holds it)
 RENDER = {"search_flights": "flights", "search_stays": "stays", "search_venues": "venues", "read_booking_route": "venues",
           "prepare_trip": "inline", "propose_trip": "flights", "swap_stay": "trip", "choose_offer": "flight_chosen", "check_offer": "inline",
-          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_start": "inline", "group_person_add": "inline", "group_choose": "inline", "group_open": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "group_list", "group_invite_vault": "inline", "group_invoice": "inline", "group_book": "read_back", "group_swap": "read_back", "group_cancel": "read_back", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
+          "save_travellers": "inline", "booking_outcomes": "inline", "start_count": "inline", "remove_saved_card": "inline", "group_select": "read_back", "group_confirm": "inline", "group_person_add": "inline", "group_open": "inline", "group_upload": "inline", "group_limits": "inline", "group_plan": "inline", "group_list": "group_list", "group_invite_vault": "inline", "group_invoice": "inline", "group_book": "read_back", "group_swap": "read_back", "group_cancel": "read_back", "hold_booking": "read_back", "book": "pay", "get_status": "trip", "get_trip": "trip",
           "get_total": "total", "hold_venue": "venues", "book_venue": "venues", "cancel_venue": "trip"}
 RENDER.update({"send_email": "read_back", "add_to_calendar": "calendar", "send_whatsapp": "read_back", "get_activity": "inline"})
 RENDER.update({"keep_list": "inline", "keep_use": "inline", "keep_add": "keep_capture"})
@@ -298,6 +298,8 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
                 **yes_buttons(tool, res)}   # Sasha 330 · from THE ONE PLACE
     if tool == "group_list" and isinstance(res.get("card"), dict):   # Sasha 345 · the master list goes out WITH the list
         return {"type": "render", "kind": "group_list", **res["card"]}
+    if tool in ("group_select", "group_upload") and res.get("read_back") and res.get("proposal_id"):   # Sasha 359 · who goes: the list, for a yes
+        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group_pick", **yes_buttons("group_select", res)}
     if tool in ("group_book", "group_swap", "group_cancel") and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 334
         return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group", **yes_buttons(tool, res)}
     if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 330 · "give me a button": the
@@ -416,6 +418,8 @@ def yes_buttons(tool: str, res: dict) -> dict:
                 "read_back_id": str(res["read_back_sha256"])[:40]}
     if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back_id"):
         return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.CANCEL_CHOICES], "read_back_id": res["read_back_id"]}
+    if tool == "group_select" and res.get("proposal_id"):   # Sasha 359 · who goes: the words are the yes (a tap SENDS them) → group_confirm
+        return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.GROUP_PICK_CHOICES], "read_back_id": res["proposal_id"]}
     if tool in ("group_book", "group_swap", "group_cancel") and res.get("status") == "awaiting_yes" and res.get("read_back_id"):
         # Sasha 334 · the master list's actions: AgAPI's read-backs for each worker, ONE card → card_tap → group_book.confirm
         return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.GROUP_CHOICES[tool[6:]]], "read_back_id": res["read_back_id"]}

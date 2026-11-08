@@ -111,7 +111,7 @@ class S2TakesTheList(unittest.TestCase):
         self.assertIn("bookingReq('/api/booking/group/upload'", clip)                         # the one reader (groups.read_csv / xlsx / photo)
         self.assertIn('accept=".csv,.xlsx,image/*"', s2)
         self.assertIn("A group list (csv, xlsx or a photo)", s2)
-        self.assertIn('<a href="/group" data-group-link', s2)
+        self.assertIn("<GroupView embedded />", s2)                                            # Sasha 359 · the Group tab: the one view
         self.assertNotIn("read_csv", s2)                                                       # no second reader in the page
 
 

@@ -184,6 +184,11 @@ def _date(v: str, year: int) -> Optional[str]:
     return None
 
 
+#: Sasha 360 · a LABEL is never part of a person's name: "(fictional)", "(test)"… lives on the demo organisation (its own marker — the
+#: test organiser's account, the company's own name), never in a name Sasha says ("Rui Novo (fictional)" was said aloud, 8 Nov)
+LABEL_IN_NAME = re.compile(r"\(\s*(?:fictional|fictitious|test|testing|demo|sample|example|fake|dummy|placeholder)\s*\)", re.I)
+
+
 def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: Optional[List[str]] = None,
                  dates_needed: bool = True) -> Tuple[List[dict], List[dict]]:
     """Rows → (members, unclear). A row is unclear — never guessed — when its name, home city, out or back date can't be read, back comes
@@ -196,6 +201,8 @@ def members_from(rows: List[Dict[str, str]], movement: Dict[str, Any], grades: O
         name = _norm(r.get("name"))
         if not name or len(name) < 3 or re.search(r"\d", name):
             why.append("the name")
+        elif LABEL_IN_NAME.search(name):
+            why.append("the name (a label like “(fictional)” belongs on the organisation, never in a person's name)")
         city = _norm(r.get("home_city"))
         airport = _norm(r.get("home_airport")).upper() or None
         if airport and not re.fullmatch(r"[A-Z]{3}", airport):
@@ -1187,6 +1194,8 @@ def _person_fields(f: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
         out[k] = v
     if "name" in out and (not out["name"] or len(out["name"]) < 2):
         bad.append("the name"); out.pop("name")
+    elif "name" in out and LABEL_IN_NAME.search(out["name"]):   # Sasha 360 · never a label in a name Sasha says
+        bad.append("the name (a label like “(fictional)” belongs on the organisation, never in a person's name)"); out.pop("name")
     return out, bad
 
 

@@ -151,6 +151,24 @@ class TheChatDoors(unittest.TestCase):
         self.assertNotIn("group_choose", tools)
 
 
+class NoLabelInAName(unittest.TestCase):
+    def test_a_label_lives_on_the_organisation_never_in_a_persons_name(self):
+        """Sasha 360 · "Rui Novo (fictional)" was said aloud: every way onto the roster (a person, a pasted list, an edit) refuses a label in
+        a name — and says why."""
+        async def go(w):
+            await _roster()
+            r = await GO.run(OWNER, "person_add", {"rows": [{"name": "Rui Novo (fictional)", "home_city": "Porto"}], "company": COMPANY})
+            self.assertFalse(r["done"])
+            self.assertIn("belongs on the organisation", r["say"])
+            r = await GO.run(OWNER, "add", {"rows": G.read_text("Name, Home city\nTess Example (test), Lisbon"), "on_trip": False})
+            self.assertFalse(r["done"])
+            pid = (await G.roster(OWNER))["people"][0]["id"]
+            r = await GO.run(OWNER, "person_edit", {"person_id": pid, "fields": {"name": "Ana Garcia (demo)"}})
+            self.assertFalse(r["done"])
+            self.assertFalse([p["name"] for p in (await G.roster(OWNER))["people"] if G.LABEL_IN_NAME.search(p["name"])])
+        _in_world(go)
+
+
 class TheModelSeesTheTools(unittest.TestCase):
     def test_an_organiser_is_offered_the_group_tools_whatever_words_they_use(self):
         """Found by the S2 proof: "plan a Lisbon retreat … for all the executives" offered no group tool (the words named no group word),

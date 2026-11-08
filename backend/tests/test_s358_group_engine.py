@@ -34,7 +34,7 @@ def _in_world(scenario):
 
 def _people(n=25):
     roles = ["engineer", "engineer", "executive", "technician", "sales"]
-    return [{"name": f"Person {i:02d} (fictional)", "home_city": CITIES[i % 18], "grade": "worker" if i % 4 else "supervisor",
+    return [{"name": f"Person {chr(65 + i % 26)}{chr(97 + i // 26)} Example", "home_city": CITIES[i % 18], "grade": "worker" if i % 4 else "supervisor",
              "role": roles[i % 5]} for i in range(n)]
 
 
@@ -70,7 +70,7 @@ class Engine(unittest.TestCase):
                 # one from the roster, one brand-new (onto the roster AND the trip, said)
                 on = await GO.run(OWNER, "switch", {"person": [p["id"] for p in st["roster"]][20], "on": True})
                 self.assertTrue(on["done"], on["say"])
-                new = await GO.run(OWNER, "person_add", {"rows": [{"name": "Nadia Newcomer (fictional)", "home_city": "Porto",
+                new = await GO.run(OWNER, "person_add", {"rows": [{"name": "Nadia Newcomer", "home_city": "Porto",
                                                                    "grade": "worker", "role": "engineer"}], "on_trip": True})
                 self.assertTrue(new["done"], new["say"])
                 self.assertIn("roster and the Lisbon trip", new["say"])

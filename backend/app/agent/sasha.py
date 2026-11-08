@@ -919,8 +919,15 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     else:
         _trip = (await API.trip_next(account))["state"] in ("prepared", "chosen", "held", "pending_payment", "booked") if account else None
         _places = bool((_SCREEN.get(session or "-") or {}).get("cards"))
+    _org = False
+    if account:   # Sasha 359 · an organiser (a company roster): the group tools are theirs on every turn — who goes is said in their words
+        try:
+            from booking_signer import groups as _GRP
+            _org = bool(await _GRP.store().company(account))
+        except Exception as e:
+            log.info("[agent] the roster wasn't read for the tools: %s", type(e).__name__)
     tools = _TN.select(tools, message, history, keep=(*_TN.FAMILIES["find"], *_TN.FAMILIES["reserve"]) if (surface == "s2" and API.TAP_PICK.get()) else (),
-                       trip=_trip, places=_places)
+                       trip=_trip, places=_places, organiser=_org)
     offered = {t["name"] for t in tools}
     tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     step_ms: List[dict] = []

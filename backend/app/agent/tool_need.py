@@ -75,9 +75,11 @@ def _text(c) -> str:
     return ""
 
 
-def families(message: str, history: Optional[List[dict]] = None, trip: Optional[bool] = None, places: Optional[bool] = None) -> Set[str]:
+def families(message: str, history: Optional[List[dict]] = None, trip: Optional[bool] = None, places: Optional[bool] = None,
+             organiser: bool = False) -> Set[str]:
     """trip: a trip on the record waiting for its next booking step (Sasha 352's state); places: places on their screen. Either None:
-    unknown — then a go-ahead may mean either booking."""
+    unknown — then a go-ahead may mean either booking. organiser (Sasha 359): the account has a company roster — who goes is said in their
+    own words ("the executives", "the interns"), any role, so the group tools are always offered to them (never a list of role words)."""
     text = " ".join([message or ""] + [_text(m.get("content")) for m in (history or [])[-HISTORY_LINES:] if isinstance(m, dict)])
     got = {f for f, w in WORDS.items() if w.search(text)}
     if GO_AHEAD.search(text):
@@ -85,14 +87,16 @@ def families(message: str, history: Optional[List[dict]] = None, trip: Optional[
             got.add("book")
         if places or (places is None and not trip):
             got.add("reserve")
+    if organiser:
+        got.add("group")
     if "reserve" in got:   # a place is booked once found: reserving brings finding (found by the gate: "a table for two at the Sasha
         got.add("find")    # Test Venue…" offered no search_venues, and she asked for travellers' details instead)
     return ({"core"} | got) if got else {"core", "find"}   # nothing named: a place, if it's a business (she tries first)
 
 
 def select(tools: List[dict], message: str, history: Optional[List[dict]] = None, keep: Iterable[str] = (),
-           trip: Optional[bool] = None, places: Optional[bool] = None) -> List[dict]:
-    fam = families(message, history, trip, places)
+           trip: Optional[bool] = None, places: Optional[bool] = None, organiser: bool = False) -> List[dict]:
+    fam = families(message, history, trip, places, organiser)
     member = {n: f for f, ns in FAMILIES.items() for n in ns}
     want = {n for f in fam for n in FAMILIES.get(f, ())} | set(keep)
     return [t for t in tools if t.get("name") not in member or t.get("name") in want]

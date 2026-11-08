@@ -151,6 +151,18 @@ class TheChatDoors(unittest.TestCase):
         self.assertNotIn("group_choose", tools)
 
 
+class TheModelSeesTheTools(unittest.TestCase):
+    def test_an_organiser_is_offered_the_group_tools_whatever_words_they_use(self):
+        """Found by the S2 proof: "plan a Lisbon retreat … for all the executives" offered no group tool (the words named no group word),
+        so she answered "I don't have your executive list". An organiser (a company roster) is offered them on every turn."""
+        from app.agent import tool_need as TN
+        said = "plan a Lisbon retreat 24–27 Nov for all the executives minus Javier Moreno"
+        self.assertNotIn("group", TN.families(said))
+        self.assertIn("group", TN.families(said, organiser=True))
+        src = (ROOT / "app" / "agent" / "sasha.py").read_text()
+        self.assertIn("organiser=_org", src)
+
+
 class OneSource(unittest.TestCase):
     def test_only_the_engine_puts_a_described_selection_on_a_trip(self):
         """Whole class: in the chat's tools (agapi/) and the routes, nothing calls the engine's writers directly — a selection goes through

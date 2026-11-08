@@ -82,6 +82,32 @@ async def people_documents(person_id: str, request: Request):
     return await GO.run(account_for(request), "documents", {"person_id": person_id})
 
 
+# ── Sasha 358 · THE GROUP ENGINE's doors: the one view, [Go], and one person's switch ───────────────────────────────────────────
+
+@router.get("/state")
+async def state(request: Request):
+    """THE view (groups.state): the roster with each person's switch (the record itself), the open trip and its list, the trips."""
+    return await G.state(account_for(request), request.query_params.get("trip") or None)
+
+
+@router.post("/create")
+async def create(request: Request):
+    """[Go]: {destination, starts_on, ends_on, hotel_area, who: [person ids], company?} → the trip made, who's going on it, each planned."""
+    from . import group_outcome as GO
+    body = await request.json()
+    who = body.get("who") if isinstance(body.get("who"), list) else None
+    return await GO.run(account_for(request), "create", {k: body.get(k) for k in ("destination", "starts_on", "ends_on", "hotel_area", "company")}
+                        | {"who": who})
+
+
+@router.post("/switch")
+async def switch(request: Request):
+    """{person, on, trip?} → that person on the trip or off it (the engine's set_on_trip): said; booked → Cancel offered."""
+    from . import group_outcome as GO
+    body = await request.json()
+    return await GO.run(account_for(request), "switch", {"person": body.get("person"), "on": body.get("on") is not False, "trip": body.get("trip")})
+
+
 @router.post("/select")
 async def select(request: Request):
     """Sasha 359 · {text, mode: tick|add|drop} → who they mean, by the ONE resolver (the chat's too): ticked, or the list for a yes."""

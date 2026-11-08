@@ -182,6 +182,18 @@ class OneSource(unittest.TestCase):
         self.assertIn("/api/booking/group/confirm-list", comp)
 
 
+class EveryRouteTheViewCallsIsMounted(unittest.TestCase):
+    def test_each_group_path_in_the_component_is_a_route(self):
+        """Found by the S2 proof: removing /choose took /state, /create and /switch with it — the Group tab read nothing (404). Every
+        /api/booking/group/<path> the ONE view calls must be a route."""
+        from booking_signer import group_routes as GR
+        comp = (ROOT.parent / "frontend" / "app" / "components" / "group" / "GroupView.tsx").read_text()
+        called = set(re.findall(r"/api/booking/group/([a-z-]+)", comp))
+        mounted = {r.path.split("/")[2] for r in GR.router.routes if r.path.startswith("/group/")}
+        self.assertTrue({"state", "create", "switch", "select", "confirm-list"} <= called)
+        self.assertEqual(called - mounted, set())
+
+
 class TheSearchBox(unittest.TestCase):
     def test_the_page_describes_through_the_same_resolver(self):
         async def go(w):

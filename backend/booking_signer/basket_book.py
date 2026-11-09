@@ -390,17 +390,29 @@ async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Di
     return {"move": {"rows": pend["rows"], "trip_id": pend["trip_id"], "amount": (st or {}).get("amount")}}
 
 
-async def mobile_needed(account: str) -> Optional[Dict[str, Any]]:
-    """Sasha 363 · the airline refuses a passenger without a real mobile (Duffel: "Field 'phone_number' is invalid" — found AFTER the money
-    had moved, Tyler's dry run 9 Nov). Asked BEFORE any hold: their saved travellers' or the booking contact's mobile, by the supplier's rule."""
+async def traveller_mobile(account: str) -> Optional[str]:
+    """Sasha 363 · THE traveller's mobile for a supplier: the first one a supplier ACCEPTS of — the booking contact's, a saved traveller's,
+    the WhatsApp number they write from (a mobile Sasha already knows is theirs). None: none on file is real."""
     from . import guest_whatsapp as GW, passengers as PX
     from .contacts import supplier_mobile
     _s, cj = await GW.api(account, "GET", "/api/booking/contact")
-    contact = (cj or {}).get("contact") or {}
-    people = await PX.saved(account)
-    if supplier_mobile(contact.get("mobile_e164")) or any(supplier_mobile(p.get("phone_e164")) for p in people or []):
+    nums = [((cj or {}).get("contact") or {}).get("mobile_e164")] + [p.get("phone_e164") for p in await PX.saved(account) or []]
+    try:
+        ch = await GW.STORE.channel_of_account(account) if GW.STORE is not None else None
+        nums.append((ch or {}).get("number_e164"))
+    except Exception as e:
+        log.info("[basket_book] their WhatsApp number wasn't read: %s", type(e).__name__)
+    return next((m for m in (supplier_mobile(n) for n in nums) if m), None)
+
+
+async def mobile_needed(account: str) -> Optional[Dict[str, Any]]:
+    """Sasha 363 · the airline refuses a passenger without a real mobile (Duffel: "Field 'phone_number' is invalid" — found AFTER the money
+    had moved, Tyler's dry run 9 Nov). Asked BEFORE any hold, when no mobile on file is one a supplier accepts."""
+    from . import guest_whatsapp as GW
+    if await traveller_mobile(account):
         return None
-    shown = contact.get("mobile_e164")
+    _s, cj = await GW.api(account, "GET", "/api/booking/contact")
+    shown = ((cj or {}).get("contact") or {}).get("mobile_e164")
     return {"why": "Before I take any payment: the airline needs the traveller's mobile number" +
                    (f", and {shown} isn't a real one it accepts" if shown else "") + ". What's the mobile to put on the booking? Nothing has been held.",
             "needs": ["mobile"]}
@@ -573,6 +585,7 @@ async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, p
     Sasha 235 · `cards`: the Keep's loyalty numbers (opened for this loop); each one used goes in `applied` (the lines she says)."""
     from . import hotel_test as HT, travel as T, trip_book as TB
     applied = applied if applied is not None else []
+    mobile = await traveller_mobile(account)   # Sasha 363 · THE traveller's mobile a supplier accepts (asked before the hold if none)
     for r in [r for r in rows if r["state"] == "pending_payment"]:
         s = r.get("snapshot") or {}
         if r["kind"] == "stay":
@@ -594,12 +607,12 @@ async def _book_rows(account: str, sid: str, rows: list, contact: dict, email, p
         elif r["kind"] == "flight":
             c = _card(r)
             loy, loy_cards = _loyalty_for_flight(cards, c)   # Sasha 235
-            o = await T.order(c, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}),
+            o = await T.order(c, contact.get("name") or "Guest Test", email or "", mobile, people, **({"documents": docs} if docs else {}),
                               **({"loyalty": loy} if loy else {}))
             if "why" in o:   # a TEST fare withdrawn between the quote and the payment: the same flight, priced again
                 again = await TB._same_or_cheaper(c, int(r.get("party") or 2))
                 if again is not None and again.get("flights") == c.get("flights"):
-                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", contact.get("mobile_e164"), people, **({"documents": docs} if docs else {}),
+                    o2 = await T.order(again, contact.get("name") or "Guest Test", email or "", mobile, people, **({"documents": docs} if docs else {}),
                                        **({"loyalty": loy} if loy else {}))
                     if "why" not in o2:
                         c, o = again, o2

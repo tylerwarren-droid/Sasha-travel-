@@ -71,7 +71,7 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, country:
     if not g:
         return {"name": name, "fail": [f"no scratch guest: {why}"], "turns": []}
     a = g["account_id"]
-    number = f"+44770090{n:04d}"[:13]
+    number = f"+3461{n:07d}"   # Sasha 363 · a mobile a supplier accepts (the airline refuses Ofcom's drama range); captured, never sent
     c = GW.consent()
     now = datetime.now(timezone.utc)
     await GW.STORE.link({"account_id": a, "wa_id_sha256": GW.wa_key(number), "number_e164": number, "linked_at": now, "consent_at": now,

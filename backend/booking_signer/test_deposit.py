@@ -108,6 +108,7 @@ async def checkout(amount: str, currency: str, label: str, ref: str, embedded: b
     save = await _save_fields(account)   # Sasha 327 · his Stripe customer; "save this card for next time" (default ON in beta)
     s, j = await HTTP("POST", "/checkout/sessions", {
         "mode": "payment", **shape, **save, "metadata[sasha_where]": where,
+        "payment_intent_data[capture_method]": "manual",   # Sasha 363 · AUTHORISE only: money moves on the supplier's confirmation (finish)
         "line_items[0][quantity]": 1, "line_items[0][price_data][currency]": currency.lower(),
         "line_items[0][price_data][unit_amount]": cents, "line_items[0][price_data][product_data][name]": (name or f"TEST payment — {label}")[:250],   # Sasha 222 · the pay card: its own name (Stripe's TEST MODE badge stays)
         "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100]})
@@ -129,7 +130,10 @@ async def session_state(session_id: str) -> Optional[dict]:
     s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
     if s != 200 or cs.get("livemode"):
         return None
-    return {"status": cs.get("status"), "paid": cs.get("payment_status") == "paid", "url": cs.get("url"),
+    pi = await _intent_state(cs["payment_intent"]) if cs.get("status") == "complete" and cs.get("payment_status") != "paid" \
+        and cs.get("payment_intent") else None   # Sasha 363 · a HOLD (manual capture) is paid-for: the booking decides capture / release
+    return {"status": cs.get("status"), "paid": cs.get("payment_status") == "paid" or bool(pi and pi["held"]), "held": bool(pi and pi["held"]),
+            "url": cs.get("url"),
             "client_secret": cs.get("client_secret"), "embedded": str(cs.get("ui_mode") or "").startswith("embedded"),
             "where": (cs.get("metadata") or {}).get("sasha_where") or ("here" if str(cs.get("ui_mode") or "").startswith("embedded") else "phone"),
             "amount": (cs.get("amount_total") or 0) / 100}
@@ -156,10 +160,56 @@ async def session_paid(session_id: str) -> Optional[dict]:
         st = await _intent_state(session_id)
         return {"amount": st["amount"], "currency": st["currency"], "payment": session_id, "created": st["created"]} if st and st["paid"] else None
     s, cs = await HTTP("GET", f"/checkout/sessions/{session_id}", {})
-    if s != 200 or cs.get("livemode") or cs.get("status") != "complete" or cs.get("payment_status") != "paid":
+    if s != 200 or cs.get("livemode") or cs.get("status") != "complete":
+        return None
+    pi = await _intent_state(cs["payment_intent"]) if cs.get("payment_intent") and cs.get("payment_status") != "paid" else None
+    if cs.get("payment_status") != "paid" and not (pi and pi["held"]):   # Sasha 363 · held (authorised, manual capture) counts
         return None
     return {"amount": (cs.get("amount_total") or 0) / 100, "currency": (cs.get("currency") or "eur").upper(), "payment": cs.get("payment_intent"),
-            "created": cs.get("created") or 0}
+            "created": cs.get("created") or 0, "held": bool(pi and pi["held"])}
+
+
+# ── Sasha 363 · MONEY MOVES ONLY ON A CONFIRMED BOOKING: every payment is a HOLD (authorised, capture_method manual); the booking
+# decides — finish() captures exactly what the supplier CONFIRMED, or releases the hold. Never a refund after a capture. ───────────
+HELD_OR_TAKEN = ("requires_capture", "succeeded")
+
+
+async def _pi_of(sid: str) -> Optional[str]:
+    if sid.startswith("pi_"):
+        return sid
+    s, cs = await HTTP("GET", f"/checkout/sessions/{sid}", {})
+    return cs.get("payment_intent") if s == 200 and not cs.get("livemode") else None
+
+
+async def finish(sid: str, booked_cents: int) -> Dict[str, Any]:
+    """THE ONE place money moves after a booking: booked_cents > 0 → capture that (≤ the hold; the rest is released by Stripe);
+    0 → release the hold. A payment taken before this rule (automatic capture) is left as it is, said. → {captured} · {released} · {why}."""
+    if not key():
+        return {"why": "no Stripe TEST key"}
+    pi_id = await _pi_of(sid)
+    if not pi_id:
+        return {"why": "no payment for this session"}
+    s, pi = await HTTP("GET", f"/payment_intents/{pi_id}", {})
+    if s != 200 or pi.get("livemode"):
+        return {"why": f"the payment couldn't be read ({s})"}
+    st = pi.get("status")
+    if st == "succeeded":
+        return {"captured": pi.get("amount_received") or pi.get("amount"), "already": True}   # taken before 363's rule: nothing more moves
+    if st == "canceled":
+        return {"released": True, "already": True}
+    if st != "requires_capture":
+        return {"why": f"the payment isn't held ({st})"}
+    if booked_cents > 0:
+        s2, j = await HTTP("POST", f"/payment_intents/{pi_id}/capture", {"amount_to_capture": min(int(booked_cents), int(pi.get("amount") or 0))})
+        if s2 != 200:
+            log.error("[test_deposit] capture of %s refused: %s", pi_id[:14], (j.get("error") or {}).get("message", s2))
+            return {"why": f"Stripe didn't take the payment ({(j.get('error') or {}).get('message', s2)})"}
+        return {"captured": j.get("amount_received")}
+    s3, j = await HTTP("POST", f"/payment_intents/{pi_id}/cancel", {})
+    if s3 != 200:
+        log.error("[test_deposit] the hold on %s wasn't released: %s", pi_id[:14], (j.get("error") or {}).get("message", s3))
+        return {"why": "the hold couldn't be released just now"}
+    return {"released": True}
 
 
 # ── Sasha 327 · PAY IN ONE TAP: his Stripe customer and the card Stripe saved for him ────────────────────────────────────────
@@ -247,7 +297,8 @@ async def intent_saved(card: Dict[str, str], amount: str, currency: str, label: 
     s, pi = await HTTP("POST", "/payment_intents", {"amount": cents, "currency": currency.lower(), "customer": card["customer"],
                                                    "payment_method": card["id"], "description": f"TEST payment — {label}"[:250],
                                                    "metadata[test_payment]": "true", "metadata[sasha_ref]": ref[:100],
-                                                   "metadata[sasha_where]": "saved"})
+                                                   "metadata[sasha_where]": "saved",
+                                                   "capture_method": "manual"})   # Sasha 363 · a hold; captured only on a confirmed booking
     if s != 200:
         return {"why": f"Stripe refused the payment: {pi.get('error', {}).get('message', s)}"}
     if pi.get("livemode"):
@@ -258,8 +309,8 @@ async def intent_saved(card: Dict[str, str], amount: str, currency: str, label: 
 async def confirm_saved(pi_id: str) -> Dict[str, Any]:
     """Charge it, off-session. → {paid} · {confirm_url} (his bank asks him to confirm: SCA / 3-D Secure) · {declined, why}."""
     s, pi = await HTTP("POST", f"/payment_intents/{pi_id}/confirm", {"off_session": "true"})
-    if s == 200 and pi.get("status") == "succeeded":
-        return {"paid": True}
+    if s == 200 and pi.get("status") in HELD_OR_TAKEN:   # Sasha 363 · held (authorised): the booking decides capture or release
+        return {"paid": True, "held": pi.get("status") == "requires_capture"}
     err = (pi.get("error") or {}) if s != 200 else {}
     if err.get("code") == "authentication_required" or pi.get("status") == "requires_action":
         from .form_rung import public_base   # on-session now: Stripe's own page for his bank, then back to ours
@@ -269,8 +320,8 @@ async def confirm_saved(pi_id: str) -> Dict[str, Any]:
         url = ((pi2.get("next_action") or {}).get("redirect_to_url") or {}).get("url") if s2 == 200 else None
         if url:
             return {"confirm_url": url}
-        if s2 == 200 and pi2.get("status") == "succeeded":
-            return {"paid": True}
+        if s2 == 200 and pi2.get("status") in HELD_OR_TAKEN:
+            return {"paid": True, "held": pi2.get("status") == "requires_capture"}
     return {"declined": True, "why": err.get("message") or f"the bank didn't accept the saved card ({pi.get('status') or s})"}
 
 
@@ -280,7 +331,8 @@ async def _intent_state(pi_id: str) -> Optional[dict]:
         return None
     st = pi.get("status")
     url = ((pi.get("next_action") or {}).get("redirect_to_url") or {}).get("url")
-    return {"status": "complete" if st == "succeeded" else "expired" if st == "canceled" else "open", "paid": st == "succeeded", "url": url,
+    return {"status": "complete" if st in HELD_OR_TAKEN else "expired" if st == "canceled" else "open", "paid": st in HELD_OR_TAKEN,
+            "held": st == "requires_capture", "url": url,
             "client_secret": None, "embedded": False, "where": "saved", "amount": (pi.get("amount") or 0) / 100,
             "currency": (pi.get("currency") or "eur").upper(), "created": pi.get("created") or 0}
 
@@ -407,5 +459,5 @@ async def status(request: Request):
     return {"ok": True, "paid": got, "say": (f"Paid (TEST): €{got['amount']:.2f} — Stripe test payment {got['payment']}" if got else "not paid yet")}
 
 
-__all__ = ["ops", "link", "paid_since", "message", "key", "LABEL", "checkout", "session_paid", "saved_card", "remove_saved",
+__all__ = ["ops", "link", "paid_since", "message", "key", "LABEL", "checkout", "session_paid", "finish", "HELD_OR_TAKEN", "saved_card", "remove_saved",
            "intent_saved", "confirm_saved", "customer_of", "register_domains", "SAVE_WORDS"]

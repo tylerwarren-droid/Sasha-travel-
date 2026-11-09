@@ -153,10 +153,12 @@ async def status(request: Request):
     r = _req(body)
     if r is None:
         return _refuse(422, "hotel_malformed", "send the same hotel details and the session_id")
-    if not await TD.session_paid(sid):
+    held = await TD.session_paid(sid)
+    if not held:
         return {"ok": True, "status": "awaiting_payment"}
     ref = new_ref()
     await RECORD(account_for(request), r["hotel"], r["city"], tz_of(r.get("country")), r["checkin"], r["nights"], r["party"], ref)
+    await TD.finish(sid, int(round(float(held.get("amount") or 0) * 100)))   # Sasha 363 · recorded: the held amount taken
     _BOOKED[sid] = {"reference": ref, "say": f"{LABEL}: {r['hotel']}, {r['checkin']}, {r['nights']} night{'s' if r['nights'] != 1 else ''}. "
                                              f"Reference {ref} — in your itinerary and calendar as a TEST booking. Nothing was reserved or charged."}
     TD.note(sid, True, _BOOKED[sid]["say"])

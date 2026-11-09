@@ -118,11 +118,14 @@ async def save(account: str, people: List[Dict[str, Any]]) -> int:
 
 def for_order(people: List[Dict[str, Any]], passenger_ids: List[str], email: str, phone: Optional[str]) -> Optional[List[dict]]:
     """Duffel's passengers for an offer, from the saved ones — None when there are fewer saved than seats."""
+    from .contacts import supplier_mobile as SM
     if len(people) < len(passenger_ids):
         return None
     return [{"id": pid, "type": "adult", "given_name": p["given_name"], "family_name": p["family_name"],
              "born_on": str(p["born_on"]), "title": p["title"], "gender": p["gender"],
-             "email": p.get("email") or email or "guest@example.com", "phone_number": p.get("phone_e164") or phone or "+34600000000"}
+             "email": p.get("email") or email or "guest@example.com",
+             # Sasha 363 · only a number the airline accepts (never a made-up one): checked before any money is held (basket_book.pay)
+             "phone_number": SM(p.get("phone_e164")) or SM(phone)}
             for pid, p in zip(passenger_ids, people)]
 
 

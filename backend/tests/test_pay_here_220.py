@@ -336,5 +336,23 @@ class Render(unittest.TestCase):
         self.assertIsNone(AG.render("book", {"status": "awaiting_payment", "payment": "sent_to_phone"}, {}))
 
 
+
+# Sasha 363 · these tests are about the payment itself: the traveller has a mobile the airline accepts (basket_book.mobile_needed's own
+# rule is tested in test_s363_one_confirmation)
+_MOBILE_OK = None
+
+
+def setUpModule():
+    global _MOBILE_OK
+    from unittest import mock as _m
+    from booking_signer import basket_book as _BB
+    _MOBILE_OK = _m.patch.object(_BB, "mobile_needed", _m.AsyncMock(return_value=None))
+    _MOBILE_OK.start()
+
+
+def tearDownModule():
+    if _MOBILE_OK is not None:
+        _MOBILE_OK.stop()
+
 if __name__ == "__main__":
     unittest.main()

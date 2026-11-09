@@ -60,6 +60,10 @@ async def remember(account: str, kind: str, sid: str, payload: dict, label: str,
         return None
 
 
+
+#: Sasha 363 · what a refused booking says about the money (the hold is released by settle → test_deposit.finish, never refunded after)
+NOTHING_TAKEN = "Nothing was taken — the hold on your card is released."
+
 async def _claim(row_id) -> Optional[dict]:
     """The row, if THIS caller won it (one UPDATE): the payload. None: someone else is booking it, or did."""
     run = _run()
@@ -106,7 +110,7 @@ async def fulfil(row_id, payload: dict) -> dict:
             await run(lambda x: x.execute("update trip_items set status = 'failed', provider_name = $2, escalation_notes = $3, updated_at = now() "
                                           "where id = $1", row_id, f"Flight {c['flights']} {c['from']} → {c['to']} (TEST — paid, not booked)"[:200],
                                           DONE + json.dumps({"sid": sid, "why": o["why"]})))
-            return {"status": "failed", "say": f"Your TEST payment went through, but the test flight wasn't booked: {o['why']}."}
+            return {"status": "failed", "say": f"The flight wasn't booked: {T.plain(o['why'])}. {NOTHING_TAKEN}"}
         T.mark_used(payload["card"]["id"]); T.mark_used(c["id"])   # one booking per search list
         tz = c.get("from_tz") or "Europe/Madrid"
         dep = datetime.fromisoformat(c["departs"])
@@ -142,7 +146,7 @@ async def fulfil(row_id, payload: dict) -> dict:
         if not tid:
             await run(lambda x: x.execute("update trip_items set status = 'failed', escalation_notes = $2, updated_at = now() where id = $1",
                                           row_id, DONE + json.dumps({"sid": sid, "why": "not recorded"})))
-            return {"status": "failed", "say": "Your TEST payment went through, but the test stay wasn't added to your list."}
+            return {"status": "failed", "say": f"The stay wasn't booked: it couldn't be added to your list. {NOTHING_TAKEN}"}
         await run(lambda x: x.execute("update trip_items set status = 'cancelled', provider_name = $2, escalation_notes = $3, updated_at = now() "
                                       "where id = $1", row_id, f"TEST hotel payment — {h['hotel']} (booked as its own item)"[:200],
                                       DONE + json.dumps({"sid": sid, "status": "booked", "ref": ref})))
@@ -189,7 +193,8 @@ async def settle(sid: str) -> Optional[dict]:
                 if row["status"] == "confirmed" else str(row["provider_name"])}
     if notes.startswith(CLAIM):
         return {"status": "booking"}
-    if not await TD.session_paid(sid):
+    held = await TD.session_paid(sid)
+    if not held:
         return None
     payload = await _claim(row["id"])
     if payload is None:
@@ -200,6 +205,13 @@ async def settle(sid: str) -> Optional[dict]:
         log.error("[paid_watch] booking after payment failed: %s: %s", type(e).__name__, e)
         await _release(row["id"], payload)   # the next look tries again
         return {"status": "booking"}
+    # Sasha 363 · MONEY MOVES ONLY ON A CONFIRMED BOOKING: capture exactly what was confirmed, else release the hold (never a refund after)
+    cents = int(round(float(r.get("booked_eur") if r.get("booked_eur") is not None else
+                            (held.get("amount") or 0) if r.get("status") == "booked" else 0) * 100))
+    money = await TD.finish(sid, cents)
+    if "why" in money:
+        log.error("[paid_watch] %s: the money step after the booking didn't go through: %s", sid[:14], money["why"])
+        r = {**r, "say": f"{r.get('say') or ''} The payment step didn't go through ({money['why']}) — Kanoe has been told."}
     TD.note(sid, r.get("status") == "booked", str(r.get("say") or "")[:300])
     try:   # Sasha 326 · booked or not, said ONCE on one channel (live_events → channel.tell): never this line on WhatsApp AND the page
         from . import live_events as LE, plan_store as PS

@@ -151,7 +151,7 @@ class DuffelOrderCarriesIt(unittest.TestCase):
             sent.update(body["data"])
             return 201, {"data": {"id": "ord_1", "booking_reference": "ABC123", "live_mode": False}}
         with mock.patch.object(T, "HTTP", http), mock.patch.object(T, "token", lambda: "duffel_test_x"):
-            o = run(T.order({"id": "off_1", "amount": "100.00", "currency": "EUR"}, "Ana Test", "a@x.test", None,
+            o = run(T.order({"id": "off_1", "amount": "100.00", "currency": "EUR"}, "Ana Test", "a@x.test", "+34612345678",
                             loyalty=[{"airline_iata_code": "IB", "account_number": "IB98765432"}]))
         return o, sent
 

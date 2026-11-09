@@ -36,7 +36,7 @@ class Wired(unittest.TestCase):
                   {"given_name": "Ana", "family_name": "Y", "born_on": "1991-01-01", "title": "ms", "gender": "f", "is_account_holder": True}]
         docs = [{"type": "passport", "unique_identifier": "PAA123456", "issuing_country_code": "ES", "expires_on": "2031-05-01"}]
         with mock.patch.object(T, "token", lambda: "duffel_test_x"), mock.patch.object(T, "HTTP", http):
-            o = run(T.order({"id": "off_1", "amount": "120.00", "currency": "EUR"}, "Ana Y", "a@x.test", None, people, documents=docs))
+            o = run(T.order({"id": "off_1", "amount": "120.00", "currency": "EUR"}, "Ana Y", "a@x.test", "+34612345678", people, documents=docs))
         self.assertEqual(o["booking_reference"], "UHQ9B1")
         self.assertNotIn("identity_documents", sent["pax"][0])
         self.assertEqual(sent["pax"][1]["identity_documents"], docs)

@@ -44,6 +44,16 @@ async def _duffel(method: str, path: str, body: Optional[dict] = None, params: O
 HTTP = _duffel   # tests replace it
 
 
+def plain(why: str) -> str:
+    """Sasha 363 · the supplier's OWN reason, in plain words for the person ("Field 'phone_number' is invalid" → "the airline didn't accept
+    the traveller's phone number"); anything else, as the supplier said it."""
+    w = re.sub(r"^Duffel \(test\) refused the order:\s*", "", str(why or "")).strip()
+    m = re.match(r"(?i)field '([a-z_]+)' is (?:invalid|missing|required)", w)
+    if m:
+        return f"the airline didn't accept the traveller's {m.group(1).replace('_', ' ')}"
+    return w or "the airline refused it"
+
+
 def _err(j: Any, s: int) -> str:
     return ((j or {}).get("errors") or [{}])[0].get("message") or f"HTTP {s}"
 
@@ -166,12 +176,15 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
     o = j["data"]
     if o["total_amount"] != c["amount"] or o["total_currency"] != c["currency"]:
         return {"why": f"the price changed to {o['total_currency']} {o['total_amount']} — nothing booked; ask again"}
+    from .contacts import supplier_mobile as SM
+    if not any(SM(x) for x in [phone] + [p.get("phone_e164") for p in people or []]):   # Sasha 363 · never a made-up number
+        return {"why": "the traveller's mobile number isn't a real one the airline accepts — nothing was booked"}
     from . import passengers as PX   # Sasha 198 R7 · the travellers asked once and saved; placeholders only without them (TEST)
     pax = PX.for_order(people or [], [p["id"] for p in o["passengers"]], email, phone)
     if pax is None:
         given, _, family = (name or "Guest Test").partition(" ")
         pax = [{"id": p["id"], "type": "adult", "given_name": given, "family_name": family or "Guest", "email": email or "guest@example.com",
-                "phone_number": phone or "+34600000000", **PLACEHOLDERS} for p in o["passengers"]]
+                "phone_number": SM(phone), **PLACEHOLDERS} for p in o["passengers"]]   # Sasha 363 · a real mobile, or none (asked before the hold)
     if documents and "supported_passenger_identity_document_types" in o:   # Sasha 228 · only what THIS airline takes (easyJet takes none:
         ok_types = set(o.get("supported_passenger_identity_document_types") or [])   # sending one anyway would fail the order)
         documents = [d for d in documents if d.get("type") in ok_types]
@@ -361,12 +374,16 @@ async def flight_status(request: Request):
     if not paid:
         return {"ok": True, "status": "awaiting_payment"}
     c, _l, _sha, who = await _card_and_lines(account, offer)
+    from .paid_watch import NOTHING_TAKEN
     if c is None:
-        return {"ok": True, "status": "failed", "say": "paid (test), but the offer has gone — nothing booked"}
+        await TD.finish(sid, 0)   # Sasha 363 · nothing confirmed: the hold released
+        return {"ok": True, "status": "failed", "say": f"Not booked: the offer has gone. {NOTHING_TAKEN}"}
     o = await order(c, who["name"], who["email"], who["phone"])
     if "why" in o:
-        TD.note(sid, False, f"Paid (TEST), but not booked: {o['why']}")
-        return {"ok": True, "status": "failed", "say": f"paid (test), but not booked: {o['why']}"}
+        await TD.finish(sid, 0)
+        TD.note(sid, False, f"Not booked: {plain(o['why'])}. {NOTHING_TAKEN}")
+        return {"ok": True, "status": "failed", "say": f"Not booked: {plain(o['why'])}. {NOTHING_TAKEN}"}
+    await TD.finish(sid, int(round(float(paid.get("amount") or 0) * 100)))   # confirmed: exactly the held amount taken
     await RECORD(account, c, o["booking_reference"] or "")
     mark_used(offer)
     _BOOKED[sid] = {"booking_reference": o["booking_reference"], "say": f"✅ Booked (TEST): {card_line(c)}. Reference {o['booking_reference']} — {LABEL}."}

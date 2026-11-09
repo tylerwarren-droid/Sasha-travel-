@@ -56,6 +56,20 @@ def e164(raw: Any) -> Optional[str]:
     return s if re.fullmatch(r"\+[1-9]\d{7,14}", s) else None
 
 
+def supplier_mobile(raw: Any) -> Optional[str]:
+    """Sasha 363 · a mobile a SUPPLIER accepts — a real, assigned number by libphonenumber's rule (the check an airline's API applies):
+    "+447700900123" (Ofcom's drama range) → None. Found: Duffel refused U2 7640 on it AFTER the payment (Tyler's dry run, 9 Nov).
+    Stored numbers stay as given (fictional ones are right for tests and demos); only what goes TO a supplier passes here."""
+    n = e164(raw)
+    if not n:
+        return None
+    import phonenumbers
+    try:
+        return n if phonenumbers.is_valid_number(phonenumbers.parse(n)) else None
+    except phonenumbers.NumberParseException:
+        return None
+
+
 class MemoryContactStore:
     def __init__(self) -> None:
         self.rows: Dict[str, dict] = {}

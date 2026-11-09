@@ -390,6 +390,22 @@ async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Di
     return {"move": {"rows": pend["rows"], "trip_id": pend["trip_id"], "amount": (st or {}).get("amount")}}
 
 
+async def mobile_needed(account: str) -> Optional[Dict[str, Any]]:
+    """Sasha 363 · the airline refuses a passenger without a real mobile (Duffel: "Field 'phone_number' is invalid" — found AFTER the money
+    had moved, Tyler's dry run 9 Nov). Asked BEFORE any hold: their saved travellers' or the booking contact's mobile, by the supplier's rule."""
+    from . import guest_whatsapp as GW, passengers as PX
+    from .contacts import supplier_mobile
+    _s, cj = await GW.api(account, "GET", "/api/booking/contact")
+    contact = (cj or {}).get("contact") or {}
+    people = await PX.saved(account)
+    if supplier_mobile(contact.get("mobile_e164")) or any(supplier_mobile(p.get("phone_e164")) for p in people or []):
+        return None
+    shown = contact.get("mobile_e164")
+    return {"why": "Before I take any payment: the airline needs the traveller's mobile number" +
+                   (f", and {shown} isn't a real one it accepts" if shown else "") + ". What's the mobile to put on the booking? Nothing has been held.",
+            "needs": ["mobile"]}
+
+
 async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict[str, Any]:
     """The yes → one Stripe TEST checkout for exactly the rows read back → every item held with the session (Austen). Sasha 220:
     `where` — "phone": the link to their WhatsApp, as before; "here": an embedded checkout for the page they're on."""
@@ -419,6 +435,10 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
     t = await charge_of(account, cur)   # Sasha 264 · item 4: THE trip's figure (basket.trip_figures), never a sum of its own
     if "why" in t:
         return {"why": t["why"]}
+    if any(r["kind"] == "flight" for r in cur["rows"]):   # Sasha 363 · BEFORE any hold: the airline needs a real mobile for the traveller
+        need = await mobile_needed(account)
+        if need:
+            return need
     n_st, n_fl = sum(1 for r in cur["rows"] if r["kind"] == "stay"), sum(1 for r in cur["rows"] if r["kind"] == "flight")
     what = f"{n_st} hotel{'s' if n_st != 1 else ''} + {n_fl} flight{'s' if n_fl != 1 else ''}"
     # Sasha 220 · "here" is the embedded card once the page has Stripe's publishable key (SASHA_PAY_EMBEDDED=1, set with it);
@@ -654,12 +674,16 @@ async def book_paid(account: str, sid: str) -> Dict[str, Any]:
     except Exception as e:
         log.info("[basket_book] outcomes not recorded: %s", type(e).__name__)
     say = "✅ Booked — everything's in your itinerary." if done and not bad else ("Partly booked:" if done else "Not booked:")
+    if bad:   # Sasha 363 · what happened to the money, said with the outcome: only the confirmed part is taken, the rest released
+        from .paid_watch import NOTHING_TAKEN
+        say += (" Only what was booked is taken from your card; the rest of the hold is released." if done else " " + NOTHING_TAKEN)
     say += "\n" + "\n".join(r.get("status_line") or "" for r in done + bad)   # Pacioli's lines, word for word
     if applied and done:
         say += "\n" + "\n".join(dict.fromkeys(applied))   # Sasha 235 · only a number a booked item actually carried
     from . import test_deposit as TD
     TD.note(sid, bool(done), say.split("\n")[0])   # Stripe's return page says what happened
     return {"status": "booked" if done else "failed", "say": say, "booked": [r["status_line"] for r in done],
+            "booked_eur": round(sum(float(r.get("price_amount") or 0) for r in done), 2),   # Sasha 363 · exactly what is captured
             "failed": [r["status_line"] for r in bad], **({"loyalty": list(dict.fromkeys(applied))} if applied else {})}
 
 

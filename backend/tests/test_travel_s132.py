@@ -70,9 +70,9 @@ class Duffel(unittest.TestCase):
         with mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"}):
             c = TR.card_of(OFFER)
             TR.HTTP = FakeDuffel(price="420.00")
-            self.assertIn("price changed", asyncio.run(TR.order(c, "Tyler Warren", "g@example.com", None))["why"])
+            self.assertIn("price changed", asyncio.run(TR.order(c, "Tyler Warren", "g@example.com", "+34612345678"))["why"])
             TR.HTTP = FakeDuffel()
-            o = asyncio.run(TR.order(c, "Tyler Warren", "g@example.com", None))
+            o = asyncio.run(TR.order(c, "Tyler Warren", "g@example.com", "+34612345678"))
         self.assertEqual(o["booking_reference"], "RZPNX8")
 
 

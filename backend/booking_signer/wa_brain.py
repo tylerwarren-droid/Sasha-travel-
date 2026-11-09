@@ -672,8 +672,11 @@ async def reset_demo(account: str, dry: bool) -> dict:
         for w in waiting:
             sid = (_json.loads(w["escalation_notes"][len(MARK):]) or {}).get("sid")
             try:
-                if sid and not await TD.session_paid(sid):
+                got = await TD.session_paid(sid) if sid else None
+                if sid and not got:
                     await TD.expire(sid)   # Sasha 327 · the one place that touches a payment
+                elif got and got.get("held"):
+                    await TD.finish(sid, 0)   # Sasha 363 · held, never booked: the hold released
             except Exception as e:
                 log.warning("[wa_brain] a test payment link not expired: %s", type(e).__name__)
         await run(lambda c: c.execute("update trip_items set status = 'cancelled', escalation_notes = 'Sasha 186 · reset: the unpaid TEST link expired', "

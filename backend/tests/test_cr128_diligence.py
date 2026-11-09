@@ -13,12 +13,20 @@ from unittest import mock
 from agapi import venue_submit as VS
 from products import diligence as DG, space as SPC, store as ST, whatsapp as PW
 from tests import test_guest_whatsapp_s75 as TG
+from booking_signer import guest_whatsapp as GW
 from products import tools as _TL356
 AD_ASKS = "_" + _TL356.space_line("diligence", True) + "_"   # Sasha 356 · AD's greeting IS the registry's question, composed once
 
 run = TG.run
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
+
+
+def _routed(account_key):   # Sasha 361 · AD is the ONE router's choice (products/tools.route), never a space
+    from booking_signer import guest_whatsapp as _GW
+    from products import tools as _TL
+    st = TG.run(_GW.STORE.get_state(account_key))
+    return _TL.recalled(st)[0]
 
 class Base(TG.Base):
     def setUp(self):
@@ -36,8 +44,8 @@ class Base(TG.Base):
     def sent_to_ad(self):
         return [(c.args[1], c.kwargs.get("space"), c.kwargs.get("guest")) for c in self.ad.call_args_list]
 
-    def space(self):
-        return run(SPC.current_space(TG.ACCOUNT))
+    def space(self):   # Sasha 361 · AD: the router's record of their choice; Sasha's own tools: her space, as before
+        return "diligence" if _routed(GW.wa_key(TG.GUEST)) == "diligence" else run(SPC.current_space(TG.ACCOUNT))
 
 
 class TheWord(Base):
@@ -106,20 +114,20 @@ class WhatAgAPISays(Base):
 
 class OutsideNothingGoesToAD(Base):
     def test_a_never_from_sasha(self):   # Sasha 315 MOVED (Tyler: "the agent should know what I'm talking about"): from travel, only
-        TG.stand_in_brain(self)          # what MEANS AD reaches AD (products/router.py, tests/test_s315.py); nothing else, the space unchanged
+        TG.stand_in_brain(self)          # nothing reaches AD unless they chose it (Sasha 361: the ONE router)
         for t in ("ad hoc meeting tomorrow", "book a table for two tonight"):
             self.say(t)
         self.assertEqual(self.sent_to_ad(), [])
-        self.say("due diligence on Acme")
-        self.assertEqual(self.sent_to_ad(), [("due diligence on Acme", "diligence", True)])
+        self.say("due diligence on Acme")   # Sasha 361 · never by its words: a number nobody chose AD on, with no AD role, is Sasha's
+        self.assertEqual(self.sent_to_ad(), [])
         self.assertEqual(self.space(), "sasha")
 
 
 class RootTest(TG.unittest.TestCase):
     def test_a_one_switch(self):
-        """(1)/(2): the word is read in ONE place — products/whatsapp.py's keyword switch, beside campus/relocate/españa; AD's door is
-        reached only from its space (products/diligence.turn); the webhook's first call carries no space."""
-        self.assertIn('("diligence", _DILIGENCE)', (ROOT / "products" / "whatsapp.py").read_text())
+        """(1)/(2): Sasha 361 · the word is read by the ONE product router (products/tools.route, over the keyword switch's matchers); AD's
+        door is reached only through it (products/diligence.hand_over); the webhook's first call carries no space."""
+        self.assertIn("TL.route(", (ROOT / "products" / "whatsapp.py").read_text())
         users = sorted(str(f.relative_to(ROOT)) for f in ROOT.rglob("*.py")
                        if "tests" not in f.parts and re.search(r'space\s*=\s*"diligence"', f.read_text()))
         self.assertEqual(users, ["products/diligence.py"])

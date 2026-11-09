@@ -919,13 +919,11 @@ async def _follow_last_tool(ch: dict, st: dict, account: str, body: str, payload
     if not last or payload or SPC.asked(body or ""):
         return
     want, here = SPC.normalize(last), SPC.from_pending(st.get("pending"))
-    if want == here:
+    if want == here or want == "diligence":   # Sasha 361 · AD is the ONE product router's (products/tools.route) — never "who spoke last"
         return
     pend = None
     if want != "sasha":
         pend = await PW._resume(ch, SPC.engine_key(want))
-        if not pend and want == "diligence":   # AD's space holds no state of its own: in it, every message is AD's
-            pend = {"kind": "product", "product": "diligence", "step": "ask", "touched": NOW().isoformat()}
         if not pend:
             return   # a product with no conversation to resume: its own word opens it (nothing guessed)
     if here != "sasha":
@@ -1002,7 +1000,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     heard = None
     st = await STORE.get_state(key)
     _pend = st.get("pending") or {}
-    in_ad = _pend.get("kind") == "product" and _pend.get("product") == "diligence"   # CR 136 · AD's space: the AUDIO is the evidence
+    from products import tools as _TLr   # CR 136 · a message for AD (the ONE router's choice): the AUDIO is the evidence
+    in_ad = _TLr.recalled(st)[0] == "diligence"
     if not body and not _tap_id(p) and not in_ad:
         heard = await voice_text(p)   # Sasha 165 (5) · a voice note: its words, as if typed
         if heard:

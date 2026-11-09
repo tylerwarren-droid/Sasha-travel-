@@ -84,9 +84,9 @@ class AReplyAnswersTheToolThatSpokeLast(unittest.TestCase):
         self.assertIsNone(st["pending"])                                            # AD's space stepped aside (kept), Travel answers
         self.assertEqual(space, "sasha")
 
-    def test_ad_spoke_last_so_the_reply_is_ads(self):
+    def test_ad_speaking_last_never_picks_ad(self):   # Sasha 361 · AD is the ONE router's (their keyword / tap), never "who spoke last"
         st, space = self.run_follow("diligence", None, body="what did you find?")
-        self.assertEqual((st["pending"]["product"], space), ("diligence", "diligence"))
+        self.assertEqual((st.get("pending"), space), (None, "sasha"))
 
     def test_a_tool_picked_by_the_message_itself_wins(self):
         st, _ = self.run_follow("sasha", {"kind": "product", "product": "diligence", "step": "ask"}, payload="kanoe:diligence")
@@ -184,7 +184,9 @@ class CarryOnIsAnsweredByTheToolThatSpoke(T128.Base):
             x.start()
             self.addCleanup(x.stop)
 
-    def test_travel_spoke_last_so_travel_answers(self):
+    def test_travel_spoke_last_but_ad_was_chosen_so_ad_answers(self):
+        """Sasha 361 (Tyler, 9 Nov) REPLACES 349's "a reply answers the tool that spoke last": the product they last CHOSE (a keyword or a
+        tap) answers. Travel speaking while AD is chosen doesn't move them; "sasha" or the ✈️ Travel tap does (said in 361's report)."""
         self.say("diligence")
         self.say("investigate Lehman Brothers")                                   # AD answers it (AgAPI, from Kanoe's number)
         self.assertEqual(self.space(), "diligence")
@@ -198,13 +200,12 @@ class CarryOnIsAnsweredByTheToolThatSpoke(T128.Base):
             return out.said()
         with mock.patch.object(WA, "agent_turn", travel):
             self.say("Carry on")
-        self.assertEqual(len(self.sent_to_ad()), to_ad)                            # never AD's
-        self.assertEqual(self.space(), "sasha")                                    # the space moved to the tool that spoke
-        self.assertGreater(len(self.bodies()), said)
-        self.assertTrue(self.bodies()[-1].startswith("Travel here — carrying on with your flight (Carry on)"), self.bodies()[-1])   # Travel
-        tools = [(x["dir"], x.get("tool")) for x in MEM.messages_of(MEM._MEM[TG.ACCOUNT])]
-        self.assertIn(("out", "diligence"), tools)                                # AD's answer is on the record
-        self.assertEqual(tools[-1], ("out", "sasha"))                              # and Travel's reply is the last word
+        self.assertEqual(len(self.sent_to_ad()), to_ad + 1)                        # AD's: their choice
+        self.assertEqual(self.space(), "diligence")
+        with mock.patch.object(WA, "agent_turn", travel):
+            self.say("sasha")                                                      # their word moves them
+            self.say("Carry on")
+        self.assertTrue(self.bodies()[-1].startswith("Travel here — carrying on with your flight (Carry on)"), self.bodies()[-1])
 
     def test_ad_spoke_last_so_ad_answers(self):
         self.say("diligence")

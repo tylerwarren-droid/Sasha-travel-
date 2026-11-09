@@ -273,9 +273,12 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         if TL.switch_tap(p) is not None:   # Sasha 344 · the ONE switch BEFORE any tool's door: "← Everything I can do" / a tool's row
             pass                           # is Sasha's own (the guest flow below answers it) — never AgAPI's door, never AD as text
         elif await GW.first_step(sid, "agapi_in"):   # Sasha 355 · each step of THIS message once, in its own record (sql/058)
-            if (await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p)).get("matched"):
+            got = await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p)
+            if got.get("matched"):
                 await GW.first_step(sid, "agapi_took")
                 return _twiml()
+            if isinstance(got.get("conversation_role"), dict):   # Sasha 361 · AD's role for this number → the ONE product router
+                p = {**p, "_conversation_role": got["conversation_role"]}
         elif await GW.step_done(sid, "agapi_took"):   # a retry of a message AgAPI took: it stops here, nothing else answers it
             return _twiml()
     if channel == "whatsapp":

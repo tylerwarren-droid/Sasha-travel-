@@ -297,6 +297,44 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     payload = (p.get("ButtonPayload") or "").strip()
     media = media if media is not None else _media(p)   # CR 30 · the web passes its photos' bytes; WhatsApp's come from Twilio
     pend = st.get("pending") or {}
+    if frm != "web" and not payload:
+        # Sasha 361 · THE ONE PRODUCT ROUTER (products/tools.py, the registry the Menu reads): which product this message is for — an
+        # explicit keyword or tap, else their last choice, else ONE question. AD's role is AgAPI's conversation_role, passed through.
+        chose, held = _TL.recalled(st)
+        to, chose_now = _TL.route(body, p.get("_conversation_role"), chose)
+        if pend.get("product") == "diligence":   # an older record's AD space: the router decides now, never the pending question
+            st["pending"] = pend = {}
+        if to == "ask":
+            q, buttons = _TL.ask_which()
+            _TL.remember(st, chose_now, held=body)
+            out.ask(q, buttons)
+            return True
+        named = _TL._keyword_tool(body) is not None
+        rest = _TL.keyword_rest(body) if named else body
+        if named and not rest and held:      # the question's tap (or the word alone): the words he sent, as he sent them
+            rest = held
+        _TL.remember(st, chose_now, held=None)
+        if to == "diligence":
+            from . import diligence as DG
+            files = [m for m in (media or []) if isinstance(m, dict) and str(m.get("url") or "").startswith("http")]
+            if not rest and not files:
+                DG.asks(out)                     # the word alone: AD's question, from the registry
+                return True
+            return await DG.hand_over({"ch": ch, "frm": frm, "out": out, "sid": p.get("MessageSid"),
+                                       "replied_to": p.get("OriginalRepliedMessageSid"), "twilio": p, "account": ch.get("account_id")},
+                                      rest, files)
+        if named and _TL._keyword_tool(body)["id"] == "travel":
+            if not rest:                       # her word alone: Travel's own question, from the registry (the switch)
+                if pend.get("kind") == "product":   # a tool left open is kept, parked (CR 40): only its own word brings it back
+                    st["pending"] = {**pend, "touched": now.isoformat(), "parked": True}
+                    await _set_aside(st, ch)
+                st["pending"] = None
+                from . import space as _SPCs   # Sasha's own space back to travel (her word), as the exit always did
+                await _SPCs.set_space(ch.get("account_id"), "sasha", "whatsapp")
+                out.header = ("space", None, True, True)
+                return True
+            if rest != body:
+                body = p["Body"] = rest        # "Travel" answering the question: his words go to Sasha
     asked_last = pend.get("product") if pend.get("kind") == "product" else None
     if asked_last:
         # CR 20 · this channel's copy may be stale (the guest went on on the other channel): the shared row wins; a product
@@ -375,12 +413,8 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         if payload.startswith(prefixes):
             target = prod
     sashas_question = bool(pend) and pend.get("kind") != "product"
-    for prod, rx in (("campus", _CAMPUS), ("relocation", _RELOC), ("health", _HEALTH), ("diligence", _DILIGENCE)):
+    for prod, rx in (("campus", _CAMPUS), ("relocation", _RELOC), ("health", _HEALTH)):   # Sasha 361 · AD's word: the router's
         if not target and rx.match(body):
-            if prod == "diligence" and _AD_SHORT.match(body):
-                rest = _AD_SHORT.sub("", body, count=1).strip(" :,")
-                if sashas_question or rest:
-                    continue                                     # "ad" alone only ("ad hoc …" is a word); never over Sasha's question
             target, entering = prod, True
     if not target and not payload:                              # CR 40 · "relocaton", "campsu", "espña": the word, mistyped
         guess = typo_keyword(body)
@@ -388,36 +422,6 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             target, entering = guess, True
             body = START_WORD.get(guess, guess)
             p["Body"] = body
-    if not target and not asked_last and frm != "web" and (payload.startswith("rt:") or not payload):
-        # Sasha 315 · THE ROUTER (products/router.py): in travel, a message no space's word claimed goes where it MEANS — AD's case
-        # question to AD with one line, never "switch"; both at once → one question, its answer (rt:) routes the words he sent
-        from . import router as RT, space as SPC
-        if await SPC.current_space(ch.get("account_id")) == "sasha":
-            asked = RT.held(st, "route_ask") if payload.startswith("rt:") else None
-            if asked:
-                RT.hold(st, route_ask=None)
-            if payload.startswith("rt:"):
-                if not asked or not asked.get("body"):
-                    out.text("OK — what would you like?")
-                    return True
-                way = "diligence" if payload == "rt:ad" else "sasha"
-                body, payload, p["ButtonPayload"] = asked["body"], "", ""
-            else:
-                way = await RT.decide(ch, body, st, now, sashas_question)
-            if way == "ask":
-                RT.hold(st, route_ask={"body": body, "at": now.isoformat()})
-                out.ask(RT.ASK, [(RT.ASK_AD, "rt:ad"), (RT.ASK_TRAVEL, "rt:sasha")])
-                return True
-            if way == "diligence":
-                RT.hold(st, ad_at=now.isoformat())
-                await (early or _no_early)(RT.LINE)
-                from . import diligence as DG
-                return await DG.hand_over({"ch": ch, "frm": frm, "out": out, "sid": p.get("MessageSid"),
-                                           "replied_to": p.get("OriginalRepliedMessageSid"), "twilio": p}, body, [])
-            if asked:                                   # "Travel": his words, as he sent them, to Sasha
-                RT.hold(st, ad_at=None)
-                p["Body"] = body
-                return False
     if not target and not payload and (not STRICT or asked_last == "health"):   # CR 35 · "find my centre": health's (strict: in it)
         from .health import cita as CI
         if CI.AGAIN.search(body):

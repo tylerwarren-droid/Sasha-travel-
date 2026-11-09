@@ -334,12 +334,10 @@ class ProductsSeeNoQuestionAfterABrainTurn(Base):
     def test_a_bare_ad_after_a_brain_turn_is_ad_and_waits_while_sasha_asks(self):
         run(GW.push_payment_question({"account_id": ACCOUNT}, {"id": "pay-1234567890", "read_back_sha256": "b" * 64, "payee": "Casa Lucio",
                                                               "read_back_lines": ["x", "Ask them?"]}))
-        from products import space as SPC
-        self.say("ad")
-        self.assertNotEqual(run(SPC.current_space(ACCOUNT)), "diligence")   # Sasha's own question is open: not AD's space
-        self.say("no")                                                # answered → closed
-        self.say("ad")
-        self.assertEqual(run(SPC.current_space(ACCOUNT)), "diligence")      # CR 128 · bare "ad" is AD's word (was: never — G12)
+        from products import tools as TL
+        self.say("ad")   # Sasha 361 · an explicit keyword wins, always (the ONE router): bare "ad" is AD's word — chosen
+        self.assertEqual(TL.recalled(run(GW.STORE.get_state(GW.wa_key(GUEST))))[0], "diligence")
+        self.assertEqual(TL.route("ad hoc meeting tomorrow", None, None), ("sasha", None))   # never "ad …" as a word
 
 
 if __name__ == "__main__":

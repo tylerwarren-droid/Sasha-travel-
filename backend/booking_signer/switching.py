@@ -53,7 +53,7 @@ def label_space(out, product: Optional[str], entering: bool = False) -> None:
         return
     prev = getattr(out, "header", None)   # a tool that asks its registry question (diligence.asks) keeps it asked
     asks = bool(prev and prev[0] == "space" and len(prev) > 3 and prev[3])
-    out.header = ("space", product, entering or asks, asks)
+    out.header = ("space", prev[1] if asks else product, entering or asks, asks)   # Sasha 361 · a tool's own question: its own header
 
 
 def declare_space(out, st: dict, space_before, every: bool = False) -> None:

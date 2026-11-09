@@ -42,7 +42,9 @@ class TheBackRowInsideDiligence(Base):
         GW._spawn = lambda coro: self.ran.append(coro)
         ch = self.link()
         st = asyncio.get_event_loop().run_until_complete(GW.STORE.get_state(GW.wa_key(GUEST)))
-        asyncio.get_event_loop().run_until_complete(GW.STORE.put_state(GW.wa_key(GUEST), {**st, "pending": {"kind": "product", "product": "diligence"}}))
+        from products import tools as _TL361   # Sasha 361 · inside AD = AD is their choice (the ONE router's record), never a space
+        _TL361.remember(st, "diligence")
+        asyncio.get_event_loop().run_until_complete(GW.STORE.put_state(GW.wa_key(GUEST), st))
         self.ch = ch
         self.agapi_takes = True
 

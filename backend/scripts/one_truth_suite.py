@@ -318,10 +318,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "booking\" naming exactly one) IS the approval from his verified WhatsApp / the app; a short read-back only when Sasha filled "
             "a term; no SMS-link fallback, never \"I've sent you a link\" unless one went (Sasha 314)",
             ["tests.test_s314"]),
-    "T90": ("one router: in travel, a message no space's word claimed goes where it MEANS (products/router.decide) — a case AD lists for "
-            "the number, or investigation language, to AD with one line and the space unchanged; travel to travel; both → one question "
-            "(Sasha 315)",
-            ["tests.test_s315"]),
+    "T90": ("ONE product router (products/tools.route, Sasha 361 — replaces 315's by-meaning router): an explicit keyword or Menu tap wins, "
+            "else the product the person last CHOSE, else — a number with both Sasha and AD (AgAPI's conversation_role) — ONE question with "
+            "buttons; a Sasha-only number is unaffected; a message routed to AD never reaches Sasha's brain",
+            ["tests.test_s361_one_router"]),
     "T91": ("a platform hand-over is ONE message from AgAPI's decision (route platform + CR 107's hand_over): the platform's own page, "
             "\"opens on\" the slot only when the link carries it, never \"filled\", no way-back line and nothing after it on WhatsApp; his "
             "\"booked\" answered in one line on its record (Sasha 316)",

@@ -100,11 +100,15 @@ async def paid_cases(a: str, yes: dict) -> None:
     import re as _re
     from booking_signer import guest_receipt as GR, live_events as LE, paid_watch as PW, test_deposit as TD
     sid = ((yes or {}).get("result") or {}).get("session_id")
-    real = (TD.session_paid, LE.SEND, GR.address_of)
-    mails = []
+    real = (TD.session_paid, LE.SEND, GR.address_of, TD.finish)
+    mails, moved = [], []
 
-    async def paid(_sid):
-        return True
+    async def paid(_sid):   # Sasha 363 · the payment HELD (authorised): the booking decides capture or release
+        return {"amount": float(((yes or {}).get("result") or {}).get("eur") or 0) or 1.0, "currency": "EUR", "held": True}
+
+    async def finish(_sid, cents):
+        moved.append(cents)
+        return {"captured": cents} if cents else {"released": True}
 
     async def capture(msg):
         mails.append(msg)
@@ -113,11 +117,11 @@ async def paid_cases(a: str, yes: dict) -> None:
     async def addr(_acct):
         return "gate@example.com"
     q = LE.subscribe(a)
-    TD.session_paid, LE.SEND, GR.address_of = paid, capture, addr
+    TD.session_paid, LE.SEND, GR.address_of, TD.finish = paid, capture, addr, finish
     try:
         r = await PW.settle(sid) if sid else None
     finally:
-        TD.session_paid, LE.SEND, GR.address_of = real
+        TD.session_paid, LE.SEND, GR.address_of, TD.finish = real
         LE.unsubscribe(a, q)
     evs = []
     while not q.empty():
@@ -132,8 +136,9 @@ async def paid_cases(a: str, yes: dict) -> None:
        and ev.get("emailed") is True and ev.get("text", "").endswith(V.closing_line(True))
        and not _re.search(r"[€$£]\s?\d|\d\s?(?:€|EUR|euros?)\b|\b\d+[.,]\d{2}\b", ev.get("spoken", ""), _re.I)
        and (ev.get("card") or {}).get("url", "").endswith("/next?tab=trip") and len(mails) == 1 and mails[0]["to"] == "gate@example.com"
-       and "TEST" in mails[0]["subject"] and ev["card"]["url"] in mails[0]["text"],
-       f"settle {(r or {}).get('status')} · events {[e.get('type') for e in evs]} · mails {len(mails)} · {ev.get('text', '')[:120]}")
+       and "TEST" in mails[0]["subject"] and ev["card"]["url"] in mails[0]["text"]
+       and len(moved) == 1 and moved[0] > 0,   # Sasha 363 · booked → the hold captured, once
+       f"settle {(r or {}).get('status')} · events {[e.get('type') for e in evs]} · mails {len(mails)} · moved {moved} · {ev.get('text', '')[:120]}")
 
 
 async def render_cases() -> None:
@@ -173,6 +178,11 @@ async def main() -> int:
         ok("agent suite: scratch guest", False, why)
         return 1
     a = g["account_id"]
+    from booking_signer import guest_whatsapp as GW   # Sasha 363 · a traveller with a mobile an airline accepts (asked before any hold)
+    _s, cj = await GW.api(a, "GET", "/api/booking/contact")
+    c = (cj or {}).get("consent") or {}
+    await GW.api(a, "PUT", "/api/booking/contact", {"name": "Alex Agent", "mobile": "+34612000001",
+                                                     "consent_version": c.get("version"), "consent_sha256": c.get("sha256")})
     try:
         await cases(a)
         await quiver_cases()

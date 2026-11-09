@@ -24,6 +24,15 @@ def _flight(owner: str, n: str, amount: float, slice_key: str) -> dict:
             "snapshot": {"owner": owner, "flights": n, "from": "MAD", "to": "HAN"}}
 
 
+
+async def _a_real_mobile(account: str, n: int = 1) -> None:
+    """Sasha 363 · a scratch traveller with a mobile an airline accepts (the booking path asks for one before any hold); never texted."""
+    from booking_signer import guest_whatsapp as _GW
+    _s, cj = await _GW.api(account, "GET", "/api/booking/contact")
+    c = (cj or {}).get("consent") or {}
+    await _GW.api(account, "PUT", "/api/booking/contact", {"name": "Gate Traveller", "mobile": f"+346120000{n:02d}",
+                                                           "consent_version": c.get("version"), "consent_sha256": c.get("sha256")})
+
 async def store_cases(a: str, other: str, trip: str) -> None:
     from booking_signer import basket as BK
     sk = "MAD-HAN 2026-11-12"
@@ -367,6 +376,8 @@ async def main() -> int:
                 return 1
             guests.append(g["account_id"])
         a, other, av = guests
+        for i, x in enumerate(guests):
+            await _a_real_mobile(x, 3 + i)
         trip = await PS.save(a, {"title": "Basket suite", "days": [{"day": 1, "city": "Hanoi", "activities": []}]},
                              "12 November for 2", datetime.now(timezone.utc))
         if not ok("basket suite: scratch trip", bool(trip)):

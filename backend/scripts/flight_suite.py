@@ -48,6 +48,15 @@ def _resp(r) -> dict:
     return r if isinstance(r, dict) else json.loads(r.body)
 
 
+
+async def _a_real_mobile(account: str, n: int = 1) -> None:
+    """Sasha 363 · a scratch traveller with a mobile an airline accepts (the booking path asks for one before any hold); never texted."""
+    from booking_signer import guest_whatsapp as _GW
+    _s, cj = await _GW.api(account, "GET", "/api/booking/contact")
+    c = (cj or {}).get("consent") or {}
+    await _GW.api(account, "PUT", "/api/booking/contact", {"name": "Gate Traveller", "mobile": f"+346120000{n:02d}",
+                                                           "consent_version": c.get("version"), "consent_sha256": c.get("sha256")})
+
 async def _pay_and_settle(a: str, prepare, pay, body: dict, label: str) -> bool:
     """read-back → pay (a real Stripe TEST checkout) → [paid, simulated] → settled → booked."""
     from booking_signer import paid_watch as PW, test_deposit as TD
@@ -87,6 +96,7 @@ async def main() -> int:
         return 1
     a = g["account_id"]
     print(f"scratch guest {a[:8]}", flush=True)
+    await _a_real_mobile(a, 2)
     real_acc = ACC.account_for
     ACC.account_for = lambda r: getattr(r, "_a", None) or real_acc(r)
     try:

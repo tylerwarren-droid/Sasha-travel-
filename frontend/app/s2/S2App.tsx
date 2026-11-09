@@ -41,6 +41,11 @@ import { arrivalLine } from '@/lib/first-line'   // Sasha 295 · the empty conve
 import { events, reach, request } from '@/lib/request'   // Sasha 348 · the ONE request client
 import { eur as euros } from '@/lib/money'   // Sasha 349 · one way to say money
 import GroupView from '../components/group/GroupView'   // Sasha 359 · the Group tab
+import TabBar from './TabBar'   // Sasha 362 · the ONE tab bar
+
+/** Sasha 362 · S2's tabs, ONE list (the bar draws them all; every one reachable at phone width) */
+const S2_TABS = [{ id: 'sasha', label: 'Sasha' }, { id: 'trip', label: 'Trip' }, { id: 'activity', label: 'Activity' }, { id: 'keep', label: 'My Keep' },
+  { id: 'group', label: 'Group', data: 'group-tab' }] as const
 
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
@@ -1166,14 +1171,9 @@ export default function S2App() {
     <main data-s2-shell style={{ height: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflow: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px', paddingTop: 'max(18px, calc(env(safe-area-inset-top) + 10px))' }}>
         {/* Sasha 257 · Tyler (row 860): who is signed in, said quietly here (whoami) — the floating pill over the chat is gone */}
-        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
-        <nav style={{ display: 'flex', gap: 6 }}>
-          {(['sasha', 'trip', 'activity', 'keep'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === t ? C.gold : C.line}`, background: 'transparent', color: tab === t ? C.gold : C.dim, fontWeight: 600 }}>
-              {t === 'sasha' ? 'Sasha' : t === 'keep' ? 'My Keep' : t === 'trip' ? 'Trip' : 'Activity'}</button>))}
-          {/* Sasha 359 · the Group tab: the SAME GroupView as /group (one view, no copy) */}
-          <button data-group-tab onClick={() => setTab('group')} style={{ padding: '7px 14px', borderRadius: 999, border: `1px solid ${tab === 'group' ? C.gold : C.line}`, background: 'transparent', color: tab === 'group' ? C.gold : C.dim, fontWeight: 600 }}>Group</button>
-        </nav>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif", flex: '0 0 auto' }}>Sasha</div>
+        {/* Sasha 362 · the ONE tab bar: every tab reachable at phone width (it scrolls when they don't fit) */}
+        <TabBar tabs={S2_TABS} tab={tab} onTab={setTab} gold={C.gold} line={C.line} dim={C.dim} />
       </header>
       <AccountControl style={{ padding: '0 16px 8px', textAlign: 'right' }} onSignIn={() => putCarry(msgsRef.current, histRef.current, SIGN_IN_CARRY)} />{/* Sasha 274 · rows 1063/1064 */}{/* one quiet line, under the tabs — never over content */}
       {tab === 'group' ? (

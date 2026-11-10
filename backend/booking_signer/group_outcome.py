@@ -156,7 +156,8 @@ async def _book(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     # Sasha 365 · the tap (or "book them all") IS the instruction: the mandate books everyone inside the limits, reports, finishes —
     # the held ones' reasons go in its ONE grouped question (the SAME classification: reason())
     from . import mandate as M
-    go = await M.carry_out(account, str(a.get("said") or "Book all"), [r["name"] for r in rows] if a.get("who") else None, bool(a.get("over_ok")))
+    go = await M.carry_out(account, str(a.get("said") or "Book all"), [r["name"] for r in rows] if a.get("who") else None, bool(a.get("over_ok")),
+                           door=str(a.get("door") or "s2"))   # Sasha 366 · the page's tap: the page's door; the chat's: its own
     return {"done": True, "status": "booking", **GB.job_view(account), "say": go["say"], "taps": taps}
 
 

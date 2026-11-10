@@ -630,7 +630,9 @@ async def _start_retention() -> None:
     calendar_sync.start()   # S-79 · the calendar outbox drainer (SASHA_CALENDAR_LOOP; only once Google is configured)
     mailbox.start()   # S-82 · the 6-hourly read-only sync (SASHA_MAILBOX_LOOP; only once Google is configured)
     from . import paid_watch as _pw
-    _pw.start()   # Sasha 183 · a paid booking always lands: any payment still waiting is settled every 15 s (and survives restarts)
+    _pw.start()
+    from . import mandate as _mandate
+    _mandate.start()   # Sasha 366 · THE ONE WORKER: every open group instruction carried through from the trip record (survives restarts)   # Sasha 183 · a paid booking always lands: any payment still waiting is settled every 15 s (and survives restarts)
     from . import guest_whatsapp as _gw206
     _gw206.check_single_worker()   # Sasha 206 (EU 186 R3) · the in-process per-number lock needs one worker
     from scripts import live_suite as _ls

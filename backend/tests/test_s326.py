@@ -142,7 +142,7 @@ class TheWholeClass(unittest.TestCase):
             for i, line in enumerate(f.read_text().splitlines(), 1):
                 if "_tell_whatsapp(" in line and "def _tell_whatsapp" not in line:
                     hits.append(f"{f.name}:{line.strip()[:60]}")
-        self.assertEqual(sorted(h.split(":")[0] for h in hits), ["channel.py", "mailbox.py"], hits)
+        self.assertEqual(sorted({h.split(":")[0] for h in hits}), ["channel.py", "mailbox.py"], hits)   # 366: channel.progress too — still channel
         for f in ("agapi/venue_calls.py", "agapi/venue_submit.py", "booking_signer/paid_watch.py"):
             self.assertIn("CH.tell(", (BACKEND / f).read_text(), f)
 

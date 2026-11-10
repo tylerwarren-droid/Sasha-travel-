@@ -50,66 +50,141 @@ def running(account: str) -> bool:
     return bool(t is not None and not t.done())
 
 
-async def carry_out(account: str, said: str, who: Optional[List[str]] = None, over_ok: bool = False) -> Dict[str, Any]:
-    """The instruction received: the whole job runs on its own (plan → hotel → book → finish). → {started, say} at once."""
-    import secrets
+# ── Sasha 366 · THE MANDATE IS ON THE TRIP RECORD; ONE SERVER WORKER CARRIES IT ─────────────────────────────────────────────────
+# Found (Tyler, 10 Nov 19:35, WhatsApp): the trip was planned, then nothing — the mandate told only the S2 page's stream, and lived only in
+# this process's memory. Now: carry_out writes it onto the trip (rules.mandate: the words, who, the door that started it, its state);
+# sweep() — the ONE worker, every few seconds from the app's start and at once for a new one — carries every open mandate through,
+# whatever door started it and whether or not any page is open; a restart finds it on the record and carries on.
+
+async def carry_out(account: str, said: str, who: Optional[List[str]] = None, over_ok: bool = False, door: str = "s2") -> Dict[str, Any]:
+    """The instruction received → written onto the trip's record, and the worker takes it. → {started, say} at once."""
     import time
-    from . import group_book as GB
+    from . import groups as G
     if running(account):
         return {"started": False, "say": "I'm already on it — I'll tell you as it goes, and when it's done."}
-    GB._JOBS[account] = {"id": "job_" + secrets.token_hex(8), "kind": "mandate", "state": "preparing", "total": 0, "ready": 0,
-                         "at": time.time(), "result": None, "line": "Starting…"}
-    _RUNS[account] = asyncio.ensure_future(_run(account, said, who, over_ok))
+    mv = await G.store().movement(account)
+    if not mv:
+        return {"started": False, "say": "There's no group trip yet — tell me who's going, where and when."}
+    m = {"said": (said or "")[:500], "who": who or None, "over_ok": bool(over_ok), "door": door if door in ("s2", "wa") else "s2",
+         "state": "running", "at": time.time()}
+    await G.store().set_rule(account, str(mv["id"]), "mandate", m)
+    _start(account, str(mv["id"]), m)
     await asyncio.sleep(0)
     return {"started": True, "say": "On it — I'm planning each person and the hotel, then booking within the company's limits. "
                                     "I'll tell you as it goes, and when it's done."}
 
 
+def _start(account: str, movement_id: str, m: Dict[str, Any]) -> None:
+    """The worker's ONE way to run a mandate in this process (never twice at once for an account)."""
+    import secrets
+    import time
+    from . import group_book as GB
+    if running(account):
+        return
+    GB._JOBS[account] = {"id": "job_" + secrets.token_hex(8), "kind": "mandate", "state": "preparing", "total": 0, "ready": 0,
+                         "at": time.time(), "result": None, "line": "Starting…"}
+    _RUNS[account] = asyncio.ensure_future(_run(account, movement_id, m))
+
+
+async def sweep(account: Optional[str] = None) -> int:
+    """THE ONE WORKER's pass: every open mandate on the record (an account's, or all) not running in this process → run. → how many."""
+    from . import groups as G
+    n = 0
+    try:
+        for owner, mid, m in await G.store().open_mandates():
+            if (account is None or owner == account) and not running(owner):
+                _start(owner, mid, m)
+                n += 1
+    except Exception as e:
+        log.warning("[mandate] the sweep didn't read the open mandates: %s", type(e).__name__)
+    return n
+
+
+_task: Optional["asyncio.Task[Any]"] = None
+SWEEP_S = 5.0
+
+
+async def _forever() -> None:
+    while True:
+        await asyncio.sleep(SWEEP_S)
+        await sweep()
+
+
+def start() -> None:
+    """The server's own loop (started with the app; SASHA_MANDATE_LOOP=0 turns it off; tests call sweep())."""
+    import os
+    global _task
+    if _task is None and os.getenv("SASHA_MANDATE_LOOP", "1") == "1" and os.getenv("DATABASE_URL", "").strip():
+        _task = asyncio.ensure_future(_forever())
+
+
 async def finished(account: str) -> None:
-    """Wait for the job running now (tests and the proof)."""
+    """Wait for this account's mandate to be carried through (tests and the proof): the worker's pass, then its run."""
+    if not running(account):
+        await sweep(account)
     t = _RUNS.get(account)
     if t is not None:
         await asyncio.shield(t)
 
 
-async def _planning(account: str) -> None:
-    """Each person's planning, reported as it lands ("Planning 3 of 6"), until everyone on the trip is planned (or why not)."""
+async def _report(account: str, door: str, text: str) -> None:
+    """A STAGE of the work, said unasked to the door that started it: the S2 live line always (the page, when open); their WhatsApp when
+    the instruction came from WhatsApp (work in progress goes to the phone only then — booking_signer.channel, Sasha 326)."""
+    from . import channel as CH
+    _publish(account, "group_progress", text)
+    await CH.progress(account, door, text)
+
+
+async def _planning(account: str, movement_id: str) -> None:
+    """Each person's planning, reported as it lands ("Planning 3 of 6"), until everyone on the trip is planned (or why not). Anyone not
+    planned with no planning running here (a restart lost it) is planned now — from the record, never from a page."""
     from . import groups as G
-    last = None
+    last, resumed = None, False
     while True:
-        v = await G.view(account)
+        v = await G.view(account, movement_id)
         rows = v.get("rows") or []
-        busy = sum(1 for r in rows if r["status"] in ("planning…", "not planned"))
-        line = f"Planning {len(rows) - busy} of {len(rows)}"
+        busy = [r for r in rows if r["status"] in ("planning…", "not planned")]
+        line = f"Planning {len(rows) - len(busy)} of {len(rows)}"
         if line != last:
             _publish(account, "group_progress", line)
             last = line
         run = G._PLANS.get(account)
-        if run is None or run.done():
-            if busy == 0 or run is None:
-                return
-            await asyncio.shield(run)   # the last batch: its result, then one more read
+        if (run is None or run.done()) and busy and not resumed:
+            resumed = True
+            await G.plan(account, movement_id, only=[r["member_id"] for r in busy])
             continue
+        if run is None or run.done():
+            return
         try:
             await asyncio.wait_for(asyncio.shield(run), POLL_S)
         except asyncio.TimeoutError:
             pass
 
 
-async def _run(account: str, said: str, who: Optional[List[str]], over_ok: bool) -> None:
-    from . import group_book as GB, group_outcome as GO, groups as G, live_events as LE
+async def _close(account: str, movement_id: str, m: Dict[str, Any], state: str, text: str) -> None:
+    import time
+    from . import groups as G
     try:
-        await _planning(account)
-        v = await G.view(account)
-        if v.get("hotel_line"):
-            _publish(account, "group_progress", v["hotel_line"])
+        await G.store().set_rule(account, movement_id, "mandate", {**m, "state": state, "finished_at": time.time(), "said_back": text[:2000]})
+    except Exception as e:
+        log.error("[mandate] the record wasn't closed: %s", type(e).__name__)
+
+
+async def _run(account: str, movement_id: str, m: Dict[str, Any]) -> None:
+    from . import channel as CH, group_book as GB, group_outcome as GO, groups as G
+    said, who, over_ok, door = m.get("said") or "", m.get("who"), bool(m.get("over_ok")), m.get("door") or "s2"
+    try:
+        await _planning(account, movement_id)
+        v = await G.view(account, movement_id)
         rows = [r for r in v.get("rows") or [] if not who or r["name"].lower() in {w.lower() for w in who}]
-        inv = await G.invite_missing(account)   # every one without a passport: their secure link by email, now (ONE source: the list's ✓)
+        planned = sum(1 for r in rows if r["status"] not in ("planning…", "not planned"))
+        await _report(account, door, f"Planned {planned} of {len(rows)}." + (f" {v['hotel_line']}." if v.get("hotel_line") else ""))
+        inv = await G.invite_missing(account, movement_id)   # every one without a passport: their secure link by email, now (ONE source)
         held = [{"name": r["name"], "kind": GO.reason(r)} for r in rows if GO.reason(r) not in (None, "booked", "cancelled", "passport")]
         ready = [r["name"] for r in rows if GO.reason(r) is None]
         done: List[dict] = []
         if ready:
-            _publish(account, "group_progress", f"Booking 0 of {len(ready)}")
+            await _report(account, door, f"Booking {len(ready)} now — the flights and the hotel, within the company's limits.")
 
             def prog(k: int, total: int) -> None:
                 j = GB._JOBS.get(account) or {}
@@ -118,30 +193,28 @@ async def _run(account: str, said: str, who: Optional[List[str]], over_ok: bool)
             skipped = [{"name": x["name"], "kind": x.get("kind"), "code": x.get("code")} for x in card.get("skipped") or []
                        if x.get("kind") != "needs_vault"]   # invited above: said as done, never asked
             if card.get("status") == "awaiting_yes":   # the instruction IS the yes for everything inside the limits (its own words)
-                n = len(card.get("read_back_id") and GB._CARDS.get(card["read_back_id"], {}).get("items") or [])
-
                 def acted(k: int, total: int) -> None:
                     _publish(account, "group_progress", f"Booking {k} of {total}")
                 res = await GB.confirm(account, card["read_back_id"], "group_yes", said, progress=acted, ask_once=True, also=held + skipped)
-                fin = res.get("finish") or {}
-                text = res.get("say") or fin.get("say") or "Done."
+                text = res.get("say") or (res.get("finish") or {}).get("say") or "Done."
                 done = res.get("done") or []
-                log.info("[mandate] %s: %d booked of %d", account[:8], len(done), n)
             else:
                 text = (await GB.finish(account, [], held + skipped, ask_once=True))["say"]
         else:
             text = (await GB.finish(account, [], held, ask_once=True))["say"]
         said_inv = invited_words(inv)   # done things first, the ONE question last
         text = text.replace(" Not booked — ", said_inv + " Not booked — ", 1) if " Not booked — " in text else text + said_inv
-        _publish(account, "group_done", text)
-        await LE.keep_news(account, f"group:{(v.get('movement') or {}).get('id')}", text)   # away: said when they're back
+        # THE ONE FINISH, to the door that started it (channel.tell: their last turn's channel — WhatsApp, or the S2 page / its news)
+        await CH.tell(account, text, event={"type": "group_done", "text": text}, news_key=f"group:{movement_id}")
+        await _close(account, movement_id, m, "done", text)
         j = GB._JOBS.get(account)
         if j is not None and j.get("kind") == "mandate":
             j.update(state="ready", result={"status": "done", "say": text, "done": done})
     except Exception as e:
         log.exception("[mandate] the job stopped: %s", type(e).__name__)
-        _publish(account, "group_done", "I couldn't finish that just now — the master list shows what was done. Say “book them all” and "
-                                        "I'll carry on from there.")
+        stop = "I couldn't finish that just now — the master list shows what was done. Say “book them all” and I'll carry on from there."
+        await CH.tell(account, stop, event={"type": "group_done", "text": stop}, news_key=f"group:{movement_id}")
+        await _close(account, movement_id, m, "stopped", stop)
         j = GB._JOBS.get(account)
         if j is not None and j.get("kind") == "mandate":
             j.update(state="failed", why="Stopped — the master list shows what was done.")
@@ -166,4 +239,4 @@ def _and(xs: List[str]) -> str:
     return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
 
 
-__all__ = ["wants_booking", "carry_out", "finished", "running", "invited_words"]
+__all__ = ["wants_booking", "carry_out", "finished", "running", "invited_words", "sweep", "start"]

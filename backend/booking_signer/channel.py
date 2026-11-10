@@ -9,6 +9,7 @@ it (docs/sasha/S-326-one-conversation.md):
   outcome_channel(account)   OUTCOMES (confirmed / declined / changed / cancelled / reminder / delay / no answer) go to ONE channel: S2 when
                              an S2 page is open now and their last turn was there; else WhatsApp when linked; else S2's kept news
   tell(account, text, …)     THE ONE SEND of an outcome: that channel only (WhatsApp unreachable → S2's news, never lost, never both)
+  progress(account, door, t)  Sasha 366 · a server job's stage, to WhatsApp only when the job came from WhatsApp
 """
 from __future__ import annotations
 
@@ -82,6 +83,15 @@ async def outcome_channel(account: str) -> str:
     return WA if await _wa_linked(account) else S2
 
 
+async def progress(account: str, door: str, text: str) -> Optional[str]:
+    """Sasha 366 · WORK IN PROGRESS of a job the server carries (a group trip's stages): on their WhatsApp only when the job was asked for
+    there (the wip rule); the S2 page draws its own live line. → what WhatsApp answered, or None (not this door)."""
+    if door != WA:
+        return None
+    from . import live_events as LE
+    return await LE._tell_whatsapp(account, text)
+
+
 async def tell(account: str, text: str, *, event: Optional[dict] = None, wa_text: Optional[str] = None,
                news_key: Optional[str] = None, news_url: Optional[str] = None) -> Dict[str, Any]:
     """An outcome, said on ONE channel. → {to: s2|wa, wa: what WhatsApp answered, event}."""
@@ -102,4 +112,4 @@ async def tell(account: str, text: str, *, event: Optional[dict] = None, wa_text
     return out
 
 
-__all__ = ["used", "last", "from_request", "wip_on_phone", "s2_open", "outcome_channel", "tell", "S2", "WA"]
+__all__ = ["used", "last", "from_request", "wip_on_phone", "s2_open", "outcome_channel", "tell", "progress", "S2", "WA"]

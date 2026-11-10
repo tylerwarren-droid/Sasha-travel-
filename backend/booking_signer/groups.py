@@ -309,6 +309,22 @@ class PgStore:
             return [_row(r) for r in rows]
         return await self._run(go)
 
+    async def set_rule(self, owner: str, movement_id: str, key: str, value: Any) -> None:
+        """Sasha 366 · ONE key of the trip's rules, atomically (the hotel and the mandate are written by different workers at once)."""
+        async def go(c):
+            await c.execute("update group_movements m set rules = coalesce(m.rules, '{}'::jsonb) || jsonb_build_object($3::text, $4::text::jsonb) "
+                            "from groups g where g.id = m.group_id and g.owner_id = $1 and m.id = $2",
+                            uuid.UUID(owner), uuid.UUID(movement_id), key, json.dumps(value))
+        await self._run(go)
+
+    async def open_mandates(self) -> List[Tuple[str, str, dict]]:
+        """Sasha 366 · every trip whose instruction is still being carried out → [(owner, movement_id, mandate)] — the worker's ONE read."""
+        async def go(c):
+            rows = await c.fetch("select g.owner_id, m.id, m.rules->'mandate' as md from group_movements m join groups g on g.id = m.group_id "
+                                 "where m.rules->'mandate'->>'state' = 'running' and m.archived_at is null")
+            return [(str(x["owner_id"]), str(x["id"]), json.loads(x["md"]) if isinstance(x["md"], str) else dict(x["md"])) for x in rows]
+        return await self._run(go)
+
     async def set_rules(self, owner: str, movement_id: str, rules: dict) -> None:
         async def go(c):
             await c.execute("update group_movements m set rules = $3::text::jsonb from groups g where g.id = m.group_id and g.owner_id = $1 "
@@ -466,6 +482,13 @@ class MemStore:
 
     async def set_rules(self, owner, movement_id, rules):
         self.movements[movement_id]["rules"] = json.loads(json.dumps(rules))
+
+    async def set_rule(self, owner, movement_id, key, value):
+        self.movements[movement_id].setdefault("rules", {})[key] = json.loads(json.dumps(value))
+
+    async def open_mandates(self):
+        return [(m["owner_id"], mid, dict((m.get("rules") or {})["mandate"])) for mid, m in self.movements.items()
+                if ((m.get("rules") or {}).get("mandate") or {}).get("state") == "running" and not m.get("archived")]
 
     async def company(self, owner, name=None, create=False):
         if name:
@@ -676,8 +699,8 @@ async def group_hotel(account: str, mv: dict, members: List[dict]) -> Optional[D
             else min(found, key=lambda h: h["eur_per_night"]) if found else every[0])
     hotel = {"ref": pick["ref"], "name": pick["name"], "eur_per_night": pick.get("eur_per_night"), "nights": _nights(mv),
              **({"over_limit": True, "limit_eur": cap} if found and not within and cap is not None else {})}
+    await store().set_rule(account, str(mv["id"]), "hotel", hotel)   # Sasha 366 · one key, atomically (the mandate writes its own)
     rules["hotel"] = hotel
-    await store().set_rules(account, str(mv["id"]), rules)
     mv["rules"] = rules
     return hotel
 

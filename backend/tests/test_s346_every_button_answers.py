@@ -67,9 +67,10 @@ class BookAll(unittest.TestCase):
             self.assertTrue(out["say"].startswith("On it"))
             fin = [e["text"] for e in evs if e.get("type") == "group_done"][0]
             self.assertTrue(fin.startswith("18 of 20 booked (TEST)."), fin)
-            self.assertEqual(fin.count("?"), 1, fin)                                            # ONE grouped question
-            self.assertIn("Hanna Dummy: no passport in their vault yet", fin)
+            self.assertEqual(fin.count("?"), 1, fin)                                            # ONE grouped question (Rania) …
             self.assertIn("Rania Mithal: over the company's limit", fin)
+            self.assertIn("No email on the list for Hanna Dummy — their passport link is on the Group page", fin)   # … Hanna: invited, said
+            self.assertNotIn("Hanna Dummy:", fin)
 
     def test_everyone_booked_says_so(self):
         with World() as w:

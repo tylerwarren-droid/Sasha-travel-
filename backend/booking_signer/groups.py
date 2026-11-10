@@ -896,7 +896,31 @@ def _plan_later(account: str, movement_id: str, links: List[str]) -> None:
             except Exception as e:
                 log.warning("[groups] the planning before these ended: %s", type(e).__name__)
         await plan(account, movement_id, only=links)
+        try:   # Sasha 365 · the people just put on the trip: their passport link by email, automatically (a new person included)
+            await invite_missing(account, movement_id, only=links)
+        except Exception as e:
+            log.warning("[groups] the passport links weren't sent: %s", type(e).__name__)
     _PLANS[account] = asyncio.ensure_future(go())
+
+
+INVITE: Optional[Callable[..., Awaitable[Dict[str, Any]]]] = None   # tests replace it (else traveller_vault.invite)
+
+
+async def invite_missing(account: str, movement_id: Optional[str] = None, only: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Sasha 365 · EVERY person on the trip without a passport gets their secure link by email, automatically — the count and the names
+    from ONE source: the master list's own mark (view → vault.passport, the same ✓ the page shows). `only`: the people just put on the
+    trip (a new person included). → {invited: [names], emailed: [names], forward: [links]} (nobody missing: invited = [])."""
+    v = await view(account, movement_id)
+    rows = [r for r in v.get("rows") or [] if not (r.get("vault") or {}).get("passport") and r["status"] not in ("booked", "cancelled")
+            and (not only or r["member_id"] in only)]
+    if not rows:
+        return {"invited": [], "emailed": [], "forward": []}
+    if INVITE is not None:
+        got = await INVITE(account, [r["member_id"] for r in rows], (v.get("movement") or {}).get("id"))
+    else:
+        from . import traveller_vault as TV
+        got = await TV.invite(account, [r["member_id"] for r in rows], (v.get("movement") or {}).get("id"))
+    return {"invited": [r["name"] for r in rows], "emailed": list(got.get("emailed") or []), "forward": list(got.get("forward") or [])}
 
 
 async def planned(account: str) -> None:

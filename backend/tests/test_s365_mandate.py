@@ -96,6 +96,32 @@ class OneGroupedQuestionOutsideTheLimits(unittest.TestCase):
         self.assertIn("over the company's limit", fin)
 
 
+class EveryMissingPassportIsInvited(unittest.TestCase):
+    """08:01 (Tyler): every person without a passport gets the secure link by email AUTOMATICALLY — the count and the list from ONE
+    source (the master list's own ✓), the new person included."""
+
+    def test_on_the_instruction_and_for_a_new_person(self):
+        from agapi import s2_keep as KEEP
+        from booking_signer import traveller_vault as TV
+        with W339.World() as w, mock.patch.object(G, "HOTELS", G._hotel_search), mock.patch.object(G, "INVITE", None):
+            _executives(SIX)
+            amara = next(m for m in w.members() if m["name"] == "Amara Sample")           # she has an email on the list
+            run(KEEP.delete(amara["person_id"]))
+            before = len(w.mails)
+            r, events = _instruction()
+            fin = [e for e in events if e.get("type") == "group_done"][0]["text"]
+            mails = w.mails[before:]
+            self.assertTrue(any("add your passport" in m for m in mails), mails)               # emailed, unasked
+            self.assertIn("I've emailed 1 person their secure link for their passport (Amara Sample)", fin)
+            self.assertNotIn("Amara Sample:", fin)                                              # never asked about
+            self.assertTrue(fin.startswith("5 of 6 booked (TEST)."), fin)
+            self.assertNotIn("?", fin)
+            view = run(G.view(OWNER))
+            self.assertEqual([x["name"] for x in view["rows"] if not x["vault"]["passport"]], ["Amara Sample"])   # the same ONE source
+        src = (ROOT / "backend" / "booking_signer" / "groups.py").read_text()
+        self.assertIn("await invite_missing(account, movement_id, only=links)", src)               # a new person: on going on the trip
+
+
 class OneSourceForMayIAct(unittest.TestCase):
     def test_no_per_step_permission_is_left(self):
         """Whole class: every group door goes through the mandate; the asks that waited for a second yes are gone."""
@@ -120,6 +146,12 @@ class OneSourceForMayIAct(unittest.TestCase):
 
 
 class TheFaceNeverCoversTheComposer(unittest.TestCase):
+    def test_the_group_page_reads_at_phone_width_and_follows_book_all(self):
+        page = (ROOT / "frontend" / "app" / "components" / "group" / "GroupView.tsx").read_text()
+        self.assertIn("@media (max-width:640px){.gv-wide{display:none}.gv-cards{display:block}}", page)   # each person a card
+        self.assertIn("data-person-card={p.id}", page)
+        self.assertIn("j.status === 'preparing' || j.status === 'booking'", page)          # Book all = the chat's, its live line followed
+
     def test_the_floating_face_keeps_clear_of_the_input_and_send(self):
         s2 = (ROOT / "frontend" / "app" / "s2" / "S2App.tsx").read_text()
         self.assertIn("<footer data-face-clear", s2)                                       # the ONE composer, marked

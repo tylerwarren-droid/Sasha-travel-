@@ -104,7 +104,8 @@ async def _run(account: str, said: str, who: Optional[List[str]], over_ok: bool)
         if v.get("hotel_line"):
             _publish(account, "group_progress", v["hotel_line"])
         rows = [r for r in v.get("rows") or [] if not who or r["name"].lower() in {w.lower() for w in who}]
-        held = [{"name": r["name"], "kind": GO.reason(r)} for r in rows if GO.reason(r) not in (None, "booked", "cancelled")]
+        inv = await G.invite_missing(account)   # every one without a passport: their secure link by email, now (ONE source: the list's ✓)
+        held = [{"name": r["name"], "kind": GO.reason(r)} for r in rows if GO.reason(r) not in (None, "booked", "cancelled", "passport")]
         ready = [r["name"] for r in rows if GO.reason(r) is None]
         done: List[dict] = []
         if ready:
@@ -114,7 +115,8 @@ async def _run(account: str, said: str, who: Optional[List[str]], over_ok: bool)
                 j = GB._JOBS.get(account) or {}
                 j.update(ready=k, total=total)
             card = await GB.prepare(account, "book", ready, over_ok=over_ok, progress=prog)
-            skipped = [{"name": x["name"], "kind": x.get("kind"), "code": x.get("code")} for x in card.get("skipped") or []]
+            skipped = [{"name": x["name"], "kind": x.get("kind"), "code": x.get("code")} for x in card.get("skipped") or []
+                       if x.get("kind") != "needs_vault"]   # invited above: said as done, never asked
             if card.get("status") == "awaiting_yes":   # the instruction IS the yes for everything inside the limits (its own words)
                 n = len(card.get("read_back_id") and GB._CARDS.get(card["read_back_id"], {}).get("items") or [])
 
@@ -129,6 +131,7 @@ async def _run(account: str, said: str, who: Optional[List[str]], over_ok: bool)
                 text = (await GB.finish(account, [], held + skipped, ask_once=True))["say"]
         else:
             text = (await GB.finish(account, [], held, ask_once=True))["say"]
+        text += invited_words(inv)
         _publish(account, "group_done", text)
         await LE.keep_news(account, f"group:{(v.get('movement') or {}).get('id')}", text)   # away: said when they're back
         j = GB._JOBS.get(account)
@@ -143,4 +146,23 @@ async def _run(account: str, said: str, who: Optional[List[str]], over_ok: bool)
             j.update(state="failed", why="Stopped — the master list shows what was done.")
 
 
-__all__ = ["wants_booking", "carry_out", "finished", "running"]
+def invited_words(inv: Dict[str, Any]) -> str:
+    """The passport invitations, said as DONE (from invite_missing — the same names the master list marks)."""
+    names = inv.get("invited") or []
+    if not names:
+        return ""
+    emailed = [n for n in names if n in (inv.get("emailed") or [])]
+    rest = [n for n in names if n not in emailed]
+    out = ""
+    if emailed:
+        out += f" I've emailed {len(emailed)} {'person' if len(emailed) == 1 else 'people'} their secure link for their passport ({_and(emailed)}) — they're booked once it's in."
+    if rest:
+        out += f" No email on the list for {_and(rest)} — their passport link is on the Group page to forward."
+    return out
+
+
+def _and(xs: List[str]) -> str:
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1]
+
+
+__all__ = ["wants_booking", "carry_out", "finished", "running", "invited_words"]

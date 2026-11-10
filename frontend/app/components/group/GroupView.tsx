@@ -201,7 +201,8 @@ export default function GroupView({ embedded = false }: { embedded?: boolean } =
     const r = await bookingReq('/api/booking/group/act', { action, who, to, ...more }, 120000).catch(() => null)
     const j = (r?.json || {}) as Record<string, unknown>
     if (!r?.ok) { heard(name, r); return }
-    if (j.status === 'preparing') { if (j.say) setSaid(String(j.say)); if (Array.isArray(j.taps)) setTaps(j.taps as Tap[]); return follow() }
+    // Sasha 365 · Book all IS the chat's instruction (the mandate): its live line followed here, then the ONE finish
+    if (j.status === 'preparing' || j.status === 'booking') { if (j.say) setSaid(String(j.say)); if (Array.isArray(j.taps)) setTaps(j.taps as Tap[]); return follow() }
     show(j)
   }
   const answer = async (choice: string) => {
@@ -303,7 +304,28 @@ export default function GroupView({ embedded = false }: { embedded?: boolean } =
         </section>) : (<>
         <section data-on-trip style={{ ...cardS, marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, margin: '0 0 4px' }}>On this trip ({onTrip.length}){st.list.counts ? ` — ${Object.entries(st.list.counts).map(([s, n]) => `${n} ${s}`).join(' · ')}` : ''}</h2>
-          <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          {/* Sasha 365 · 08:01 (Tyler): readable at phone width — below 640 px each person is a CARD (the same row, the same buttons);
+              the table stays for a wide screen */}
+          <style>{'.gv-cards{display:none}@media (max-width:640px){.gv-wide{display:none}.gv-cards{display:block}}'}</style>
+          <div className="gv-cards" data-person-cards>
+            {onTrip.map(p => { const r = rowOf(p.id); return (
+              <div key={p.id} data-person-card={p.id} data-status={r?.status} style={{ border: `1px solid ${T.second}`, borderRadius: 12, padding: 12, marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Switch on name={p.name} onPress={press('On this trip', () => flip(p))} />
+                  <strong style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{p.name}</strong>
+                  <span style={{ color: TONE[r?.status || ''] || T.text, fontWeight: 600 }}>{r?.status || 'not planned'}</span>
+                </div>
+                <div style={{ color: T.muted, fontSize: 13.5, marginTop: 4 }}>{[p.role, p.grade, p.home_airport || p.home_city].filter(Boolean).join(' · ') || '—'}</div>
+                {r?.transport ? <div style={{ fontSize: 14, marginTop: 4, overflowWrap: 'anywhere' }}>✈️ {r.transport}</div> : null}
+                {r?.hotel ? <div style={{ fontSize: 14, marginTop: 2 }}>🏨 {r.hotel}{r.hotel_eur_per_night ? ` · ${eur(r.hotel_eur_per_night)}/night` : ''}</div> : null}
+                <div style={{ fontSize: 14, marginTop: 2 }}>{r?.price_eur ? `${eur(r.price_eur)} · ` : ''}<span data-vault>{r?.vault?.passport ? 'Passport ✓' : 'Passport missing — link emailed'}</span></div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  {(r?.actions || []).map(a => <button key={a.id} type="button" data-next={a.id} onClick={press(a.label, () => doNext(a))} style={small}>{a.label}</button>)}
+                  <button type="button" data-documents={p.id} onClick={press('Documents', () => documents(p.id))} style={small}>Documents</button>
+                </div>
+              </div>) })}
+          </div>
+          <div className="gv-wide" style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             {head(['On', 'Name', 'Role', 'Grade', 'From', 'Transport', 'Hotel', 'Price', 'Passport', 'Status', ''])}
             <tbody>{onTrip.map(p => { const r = rowOf(p.id); return (
               <tr key={p.id} data-person={p.id} data-status={r?.status} style={{ borderBottom: `1px solid ${T.second}` }}>

@@ -1503,6 +1503,10 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
         raise ToolError("not_bookable", q["why"])
     est = any(l.rstrip(")").endswith("(estimate") for l in q["lines"])   # Sasha 211 · real hotels priced as estimates
     rows_now = BK.to_book(await BK.items(ctx.account, p["trip_id"], ("suggested", "chosen")))
+    if any(r.get("kind") == "flight" for r in rows_now):   # Sasha 364 · the airline's need, asked BEFORE the card (its pay tap is the
+        need = await BB.mobile_needed(ctx.account)       # yes — found by the iPhone proof: the mobile was asked after the tap)
+        if need:
+            raise ToolError("mobile_needed", need["why"])
     after = await BK.trip_figures(ctx.account, p["trip_id"], p)   # Sasha 249 · ONE TOTAL: the figures after the re-check
     res = {"breakdown": breakdown(rows_now, q["eur"]),   # Sasha 215 · the re-quote reaches the page: the pill and the total card refresh
            **({"changed": changed} if changed else {}), **({"stays_are_estimates": True} if est else {}), "read_back": [l for l in q["lines"] if not l.startswith("Note:")], "notes": [l for l in q["lines"] if l.startswith("Note:")],

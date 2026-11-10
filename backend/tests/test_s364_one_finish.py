@@ -269,5 +269,29 @@ class TheRulesQuestionIsTheirs(unittest.TestCase):
         API._ROUTE_CHOSEN.clear()
 
 
+class TheAirlinesNeedBeforeTheCard(unittest.TestCase):
+    """Found by the iPhone proof (Part A, 10 Nov): the saved card's ONE button was tapped, THEN she asked for a mobile ("The airline
+    won't accept the mobile number I have on file") — a second question after the yes. The airline's need is asked before the card."""
+
+    def test_hold_booking_asks_for_the_mobile_before_any_card(self):
+        from agapi import v0 as API
+        from booking_signer import basket as BK, basket_book as BB, passengers as PX
+        API._HELD.clear()
+        pay, need = mock.AsyncMock(), {"why": "Before I take any payment: the airline needs the traveller's mobile number.", "needs": ["mobile"]}
+        figs = mock.AsyncMock(return_value={"total_eur": 42.25, "party": 1})
+        with mock.patch.object(API, "_plan", mock.AsyncMock(return_value={"trip_id": "t1", "party": 1})), \
+                mock.patch.object(PX, "saved", mock.AsyncMock(return_value=[{}])), mock.patch.object(BK, "trip_figures", figs), \
+                mock.patch.object(API, "_s1_passport", mock.AsyncMock(return_value=None)), \
+                mock.patch.object(BB, "quote", mock.AsyncMock(return_value={"lines": ["✈️ UX 1159", "Total €42.25 (TEST)"], "sha256": "s1", "eur": 42.25})), \
+                mock.patch.object(BK, "items", mock.AsyncMock(return_value=[{"kind": "flight"}])), mock.patch.object(BK, "to_book", lambda rows: rows), \
+                mock.patch.object(API, "breakdown", lambda rows, eur: {}), mock.patch.object(BB, "mobile_needed", mock.AsyncMock(return_value=need)), \
+                mock.patch.object(BB, "pay", pay), mock.patch("booking_signer.test_deposit.saved_card", mock.AsyncMock(return_value={"words": "Visa ••2235"})):
+            r = run(API.call(API.Ctx(account=OWNER, surface="s2"), "hold_booking", {"idempotency_key": "k-s364-mobile"}))
+        self.assertEqual(r["error"]["code"], "mobile_needed", r)
+        self.assertIn("Before I take any payment", r["error"]["message"])
+        pay.assert_not_called()                                                           # no card, no hold, no payment
+        API._HELD.clear()
+
+
 if __name__ == "__main__":
     unittest.main()

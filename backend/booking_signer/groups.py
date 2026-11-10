@@ -266,6 +266,15 @@ class PgStore:
     def __init__(self, run):
         self._run = run
 
+    async def company_limits(self, owner: str, company: str) -> Optional[dict]:
+        """Sasha 365 · the limits this company last set, on any of its trips (archived ones are still its record)."""
+        async def go(c):
+            r = await c.fetchval("select m.rules from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
+                                 "and lower(g.name) = lower($2) and m.rules ? 'limits' order by m.created_at desc limit 1", uuid.UUID(owner), company)
+            r = json.loads(r) if isinstance(r, str) else r
+            return (r or {}).get("limits") or None
+        return await self._run(go)
+
     async def new_movement(self, owner: str, company: str, destination: str, starts_on, ends_on, hotel_area) -> str:
         async def go(c):
             gid = await c.fetchval("select id from groups where owner_id = $1 and name = $2 limit 1", uuid.UUID(owner), company)
@@ -423,6 +432,11 @@ class MemStore:
             g = {"id": str(uuid.uuid4()), "owner_id": owner, "name": name}
             self.groups[g["id"]] = g
         return g
+
+    async def company_limits(self, owner, company):
+        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and str(m["company"]).lower() == company.lower()
+                     and (m.get("rules") or {}).get("limits")), key=lambda m: m["opened"])
+        return dict(ms[-1]["rules"]["limits"]) if ms else None
 
     async def new_movement(self, owner, company, destination, starts_on, ends_on, hotel_area):
         g = self._group(owner, company)
@@ -600,24 +614,80 @@ def origin(member: dict) -> Optional[str]:
 
 
 async def _quote(member: dict, movement: dict) -> Dict[str, Any]:
-    """The worker's cheapest flight out and back (Duffel TEST) and the cheapest hotel near the area (an ESTIMATE per night)."""
+    """The worker's cheapest flight out and back (Duffel TEST). Sasha 365 · the hotel is the GROUP's (group_hotel: ONE search, N rooms) —
+    never searched per person (found live, 10 Nov: one room's price, again and again; and always in Spain)."""
     from . import travel as T
     home = origin(member)
     out = await T.search(home, movement["destination"], member["out_date"], limit=1)
     back = await T.search(movement["destination"], home, member["back_date"], limit=1)
-    hotel = None
-    try:
-        from app.services.world_itinerary import hotels_in
-        hs = await hotels_in(movement.get("owner_id") or "", movement.get("hotel_area") or movement["destination"], "Spain", "ES", "", strict=True)
-        hotel = min(hs, key=lambda h: h.get("est_eur") or 1e9) if hs else None
-    except Exception as e:
-        log.warning("[groups] hotels not read: %s", type(e).__name__)
     return {"flights": [x["cards"][0] for x in (out, back) if x.get("cards")],
-            "why": next((x["why"] for x in (out, back) if x.get("why")), None),
-            "hotel": {"name": hotel["name"], "eur_per_night": hotel.get("est_eur"), "address": hotel.get("address")} if hotel else None}
+            "why": next((x["why"] for x in (out, back) if x.get("why")), None)}
 
 
 QUOTE = _quote   # tests replace it
+
+
+def _nights(mv: dict) -> int:
+    return max(1, (_d(mv["ends_on"]) - _d(mv["starts_on"])).days) if mv.get("starts_on") and mv.get("ends_on") else 1
+
+
+async def _hotel_search(account: str, mv: dict, rooms: int, nights: int) -> List[dict]:
+    """Sasha 365 · THE GROUP'S ONE hotel search: AgAPI's travel.find_stays (the source the booking uses) — the trip's area (else its
+    destination), its dates, all its rooms at once. No country of our own (it was always "ES": London read as Spain)."""
+    from . import group_book as GB
+    out: List[dict] = []
+    for where in [x for x in (mv.get("hotel_area"), mv.get("destination")) if x][:2]:
+        r = await GB._call(account, "travel.find_stays", {"city": {"query": where}, "check_in": str(mv.get("starts_on") or "")[:10],
+                                                          "nights": nights, "party": max(1, rooms)})
+        res = (r.get("result") or {}) if r.get("ok") else {}
+        for x in res.get("stays") or res.get("offers") or []:
+            nm = x.get("name")
+            per = (x.get("price_per_night") or {}).get("amount_minor") if isinstance(x.get("price_per_night"), dict) else None
+            try:
+                rating = float(x.get("rating")) if x.get("rating") is not None else None
+            except (TypeError, ValueError):
+                rating = None
+            out.append({"ref": x.get("stay_ref") or x.get("offer_ref") or x.get("ref"), "name": (nm.get("text") if isinstance(nm, dict) else nm) or "the hotel",
+                        "eur_per_night": round(per / 100, 2) if per is not None else None, "rating": rating})
+        if out:
+            break
+    return [h for h in out if h["ref"]]
+
+
+HOTELS = _hotel_search   # tests replace it
+
+
+async def group_hotel(account: str, mv: dict, members: List[dict]) -> Optional[Dict[str, Any]]:
+    """Sasha 365 · the hotel is PART OF THE PLAN: ONE search for everyone going (N rooms, the trip's dates), chosen within the company's
+    limit — the strictest hotel limit of those going; best rated within it, then the cheaper — else the cheapest, flagged over the limit
+    (the ONE grouped question asks about it). Kept on the trip's ONE record (rules.hotel); alternatives only if they ask."""
+    rules = dict(mv.get("rules") or {})
+    if (rules.get("hotel") or {}).get("ref"):
+        return rules["hotel"]
+    every = [h for h in await HOTELS(account, mv, len(members), _nights(mv)) if h.get("ref")]
+    if not every:
+        return None
+    found = [h for h in every if h.get("eur_per_night") is not None]   # a price to hold against the limit
+    caps = [limit_for(rules, m).get("hotel_night_eur") for m in members]
+    caps = [float(c) for c in caps if c is not None]
+    cap = min(caps) if caps else None
+    within = [h for h in found if cap is None or h["eur_per_night"] <= cap]
+    pick = (max(within, key=lambda h: (h.get("rating") or 0, -h["eur_per_night"])) if within
+            else min(found, key=lambda h: h["eur_per_night"]) if found else every[0])
+    hotel = {"ref": pick["ref"], "name": pick["name"], "eur_per_night": pick.get("eur_per_night"), "nights": _nights(mv),
+             **({"over_limit": True, "limit_eur": cap} if found and not within and cap is not None else {})}
+    rules["hotel"] = hotel
+    await store().set_rules(account, str(mv["id"]), rules)
+    mv["rules"] = rules
+    return hotel
+
+
+def hotel_line(mv: dict, rooms: int) -> Optional[str]:
+    """The master list's ONE hotel line: "Hotel: 6 rooms at Hotel Alba (test), €90 a night"."""
+    h = (mv.get("rules") or {}).get("hotel") or {}
+    if not h.get("name") or rooms < 1:
+        return None
+    return f"Hotel: {rooms} room{'s' if rooms != 1 else ''} at {h['name']}" + (f", €{float(h['eur_per_night']):,.0f} a night" if h.get("eur_per_night") is not None else "")
 
 
 def flight_row(c: dict) -> dict:
@@ -630,7 +700,7 @@ def flight_row(c: dict) -> dict:
     return BK.ingest_flight(row) or row
 
 
-async def _write(account: str, trip_id: str, member: dict, q: dict, lim: dict) -> None:
+async def _write(account: str, trip_id: str, member: dict, q: dict, lim: dict, hotel: Optional[dict] = None) -> None:
     """The plan on the worker's ONE trip: trip_basket_items, as any trip holds what was found (suggested — never booked here). A row over
     the worker's limit carries over_limit on its own snapshot (the master list reads it there)."""
     from . import basket as BK
@@ -641,15 +711,15 @@ async def _write(account: str, trip_id: str, member: dict, q: dict, lim: dict) -
         if over_f:
             r["snapshot"] = {**r["snapshot"], "over_limit": True, "limit_eur": lim["flight_return_eur"], "return_eur": total}
         await BK.suggest(account, trip_id, "flight", [r], slice_key=r["slice_key"], replace=True)
-    h = q.get("hotel")
+    h = hotel   # Sasha 365 · their room at the GROUP's hotel (group_hotel: one search for everyone)
     if h:
         nights = (_d(member["back_date"]) - _d(member["out_date"])).days if member.get("back_date") and member.get("out_date") else 1
         per = float(h["eur_per_night"]) if h.get("eur_per_night") is not None else None
         over_h = bool(lim.get("hotel_night_eur") is not None and per is not None and per > lim["hotel_night_eur"])
         await BK.suggest(account, trip_id, "stay", [{
-            "provider": "estimate", "day": member.get("out_date"), "party": 1, "price_source": "estimate",
+            "provider": "agapi", "provider_ref": h.get("ref"), "day": member.get("out_date"), "party": 1, "price_source": "quoted",
             "price_amount": round(per * max(1, nights), 2) if per is not None else None, "price_currency": "EUR",
-            "snapshot": {"name": h["name"], "address": h.get("address"), "nights": max(1, nights), "eur_per_night": per,
+            "snapshot": {"name": h["name"], "nights": max(1, nights), "eur_per_night": per, "group_hotel": True,
                          **({"over_limit": True, "limit_eur": lim["hotel_night_eur"]} if over_h else {})}}], slice_key=None, replace=True)
 
 
@@ -661,16 +731,22 @@ async def plan(account: str, movement_id: Optional[str] = None, only: Optional[L
     if not mv:
         return {"why": "there's no group movement yet — start one first"}
     done, failed = 0, []
-    for m in await st.members(mv["id"]):
+    everyone = await st.members(mv["id"])
+    try:   # Sasha 365 · the hotel is part of the plan: ONE search for the whole group, before anyone's flights
+        hotel = await group_hotel(account, mv, everyone)
+    except Exception as e:
+        log.warning("[groups] the group's hotel wasn't found: %s", type(e).__name__)
+        hotel = None
+    for m in everyone:
         if only and m["id"] not in only and m["name"] not in only:
             continue
         try:
             tid = await st.trip_of(account, m, f"{mv['company']} — {m['name']} to {mv['destination']}")
             q = await QUOTE(m, mv)
-            if not q.get("flights") and not q.get("hotel"):
+            if not q.get("flights"):   # Sasha 365 · planned means THEIR flights found — a room alone never reads as planned
                 failed.append({"name": m["name"], "why": q.get("why") or "nothing found"})
                 continue
-            await _write(account, tid, m, q, limit_for(mv.get("rules") or {}, m))
+            await _write(account, tid, m, q, limit_for(mv.get("rules") or {}, m), hotel)
             _PLANNING.get(account, set()).discard(m["id"])
             done += 1
             if q.get("why"):
@@ -781,7 +857,8 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
         r["actions"] = NA.for_group_row(r)
     counts = {s: sum(1 for r in out if r["status"] == s) for s in STATUSES if any(r["status"] == s for r in out)}
     return {"movement": {k: mv.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on", "hotel_area")},
-            "limits": (mv.get("rules") or {}).get("limits") or {}, "rows": out, "counts": counts, "actions": NA.for_group(out)}
+            "limits": (mv.get("rules") or {}).get("limits") or {}, "rows": out, "counts": counts, "actions": NA.for_group(out),
+            "hotel_line": hotel_line(mv, sum(1 for r in out if r["status"] != "cancelled"))}   # Sasha 365 · ONE line for the group's hotel
 
 
 def summary(v: Dict[str, Any], top: int = 25) -> str:
@@ -872,6 +949,10 @@ async def create_trip(account: str, company: Optional[str], destination: str, st
     if mid is None:
         mid = await st.new_movement(account, company.strip()[:200], destination.strip()[:120], starts_on, ends_on,
                                     (hotel_area or "").strip()[:200] or None)
+        lim = await st.company_limits(account, company.strip()[:200])   # Sasha 365 · the company's limits, on the record, go with every trip
+        lim = {k: v for k, v in (lim or {}).items() if k != "by_member"}   # a person's own limit is keyed to that trip's member
+        if lim:
+            await st.set_rules(account, mid, {"limits": lim})
     mv = await st.movement(account, mid)
     links = []
     for pid in ids:
@@ -1099,8 +1180,7 @@ async def confirm(account: str, proposal_id: Optional[str] = None) -> Dict[str, 
             return {"done": False, "say": r["why"][0].upper() + r["why"][1:] + "."}
         return {"done": True, "movement_id": r["movement_id"], "on_trip": r["on_trip"],
                 "say": f"The {r['destination']} trip ({_dates(d)}) is made: {r['on_trip']} people on it. I'm planning each from their own home "
-                       "airport now, within their limits — when they're planned, say “book them all” (or tap Book all on the Group tab). "
-                       "Nothing is booked yet."}
+                       "airport now, within their limits, and the hotel for the group — the list fills in as I go."}
     outs = [await set_on_trip(account, i, p["trip"], p["mode"] == "add") for i in p["ids"]]
     done = [o for o in outs if o.get("done") and not o.get("already")]
     held = [o["say"] for o in outs if not o.get("done")]

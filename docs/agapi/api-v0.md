@@ -479,7 +479,7 @@ Change where they stay in one city of the trip (take a name from search_stays). 
 
 ### `group_select`
 
-WHO GOES ON A GROUP TRIP, BY DESCRIPTION — a new trip (change=new: destination, starts_on / ends_on YYYY-MM-DD, hotel_area if said) or a change to the open one (change=add / drop). Pass the organiser's OWN words as the filter: roles or departments as said ("executives", "engineers", "interns"), grades, names_in / names_out (as said — "Javier Prieto"), everyone, exclude_roles ("everyone but the interns"), last_trip ("the same people as last time"). NEVER pick people yourself and never correct a name: the engine matches them and says what it couldn't. Say its `say`; if it returns only an `ask`, ask exactly that (one short question) and nothing else. Nothing changes until they say yes (group_confirm).
+WHO GOES ON A GROUP TRIP, BY DESCRIPTION — a new trip (change=new: destination, starts_on / ends_on YYYY-MM-DD, hotel_area if said) or a change to the open one (change=add / drop). Pass the organiser's OWN words as the filter: roles or departments as said ("executives", "engineers", "interns"), grades, names_in / names_out (as said — "Javier Prieto"), everyone, exclude_roles ("everyone but the interns"), last_trip ("the same people as last time"). NEVER pick people yourself and never correct a name: the engine matches them and says what it couldn't. THEIR INSTRUCTION IS THE YES (Sasha 365): with who, where and when it makes the trip at once and plans it — the hotel too (ONE group search; never search stays for a group yourself) — and when their words say book, books everyone inside the company's limits on its own and reports as it goes. Never ask "shall I" or "do you want me to". Say its `say`; if it returns an `ask` (a missing fact), ask exactly that and nothing else.
 
 **Errors:** `missing_input`, `internal`
 
@@ -568,7 +568,7 @@ WHO GOES ON A GROUP TRIP, BY DESCRIPTION — a new trip (change=new: destination
 
 ### `group_confirm`
 
-The organiser said YES to the list group_select showed (their own words, or the Yes button): the engine makes the trip — or adds / takes off those people — and plans each. Never call it without their yes. Say its `say`.
+Their answer to the ONE question group_select asked about a name it couldn't match (their own words, or the Yes button): the instruction carries on as they first gave it. Never call it without their answer. Say its `say`.
 
 **Errors:** `not_their_yes`, `not_done`, `missing_input`, `internal`
 
@@ -1445,7 +1445,7 @@ Cancel a venue booking, back the way it was made. First call: the read-back (say
 
 ### `group_book`
 
-Book the group's workers through AgAPI (TEST): everyone planned, or the names given. Over-limit workers are only included when the organiser names them AND says to book them anyway (over_limit_ok). Shows AgAPI's read-backs on ONE card with Yes / No — nothing is booked until they tap Yes. Say its `ask`.
+"Book them all" (or the names given) IS the yes (Sasha 365): books everyone inside the company's limits through AgAPI (TEST) on its own, reports as it goes, and ends with ONE message — what was booked, the references, the invoice, and ONE question about anyone outside the limits. Over-limit workers only when they name them AND say book anyway (over_limit_ok). Say its `say`; never ask for a yes first.
 
 **Errors:** `nothing_to_do`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 

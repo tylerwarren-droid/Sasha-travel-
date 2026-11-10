@@ -856,11 +856,31 @@ export default function S2App() {
       if (ev.type === 'booked' && ev.key) markNews(ev.key)
       const at = Number(ev.at) > 0 ? Number(ev.at) * 1000 : Date.now()
       let held = false   // news kept for her return: her reappearance says it — once, never also here
-      if (said && ['proactive', 'venue_notice', 'booked', 'booking_failed'].includes(String(ev.type)) && (!lastAt.current || at > lastAt.current)
+      if (said && ['proactive', 'venue_notice', 'booked', 'booking_failed', 'group_done'].includes(String(ev.type)) && (!lastAt.current || at > lastAt.current)
           && (document.visibilityState === 'hidden' || Date.now() - loadedAt.current < 10000)) {
         newsRef.current = untag(said)
         held = true
         if (document.visibilityState !== 'hidden') setTimeout(() => comeBackRef.current?.(), 0)   // the load's own replay: rule 4 now
+      }
+      // Sasha 365 · THE INSTRUCTION'S JOB, reported unasked: ONE live line from the trip record ("Planning 3 of 6", "Hotel: 6 rooms at …",
+      // "Booking 2 of 6") updated in place — then the ONE finish, written and spoken (booking_signer/mandate.py)
+      if (ev.type === 'group_progress' || ev.type === 'group_done') {
+        const text = untag(String(ev.text || ''))
+        const live = (c: Card) => c.k === 'notice' && c.status === 'Working on it'
+        setMsgs(ms => {
+          const i = ms.findIndex(m => m.cards.some(live))
+          if (ev.type === 'group_progress') {
+            const card: Card = { k: 'notice', title: 'Your group trip', lines: [text], status: 'Working on it' }
+            return i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? card : c)) } : m)) : [...ms, { role: 'sasha', text: '', cards: [card] }]
+          }
+          const doneCard: Card = { k: 'notice', title: 'Your group trip', lines: ['Done — the master list has every reference.'], status: 'Done' }
+          return [...(i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? doneCard : c)) } : m)) : ms), { role: 'sasha', text, cards: [] }]
+        })
+        if (ev.type === 'group_done') {
+          window.dispatchEvent(new Event('sasha-plan-refresh'))   // the trip card and the Trip tab follow the record
+          if (!held && text) speaker.say(text)
+        }
+        return
       }
       if (ev.type === 'proactive' && ev.say) {   // Sasha 227 · "day before pickup": her one line, and the counter card
         const card: Card[] = ev.render?.kind === 'counter_card' && ev.render.card ? [{ k: 'counter_card', card: ev.render.card }]
@@ -1278,7 +1298,7 @@ export default function S2App() {
             <span style={{ flex: 1 }} />
             <span id="s2-face-slot" style={{ display: 'inline-flex', minWidth: 40, minHeight: 40, flexShrink: 0 }} />{/* her corner: S2Hello's circle sits over this space (Sasha 271 · measured, never portalled) */}
           </div>
-          <footer style={{ flex: 'none', padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <footer data-face-clear style={{ flex: 'none', padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${C.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>{/* Sasha 365 · her face never sits on the composer (S2Hello measures this) */}
             {/* Sasha 273 · item 3: the voice label is the MIC's real state (lib/presence-rule.mjs voiceOf, from VoiceButton's strict `hearing`),
                 on the mic itself — "Voice on" and its green ring only while it hears; otherwise "Tap to talk" (the tap starts or resumes it) */}
             {(() => { const vo = voiceOf({ asleep, dormant, micLive }); const cue = cueOf({ asleep, dormant, micLive, speaking, thinking: busy || working, micNote, mic: micState }); return (

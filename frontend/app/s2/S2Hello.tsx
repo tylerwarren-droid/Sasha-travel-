@@ -507,7 +507,12 @@ export default function S2Hello({ talker, name, signedIn, backLine, dormant, asl
       const vv = viewNow()
       const sx = r ? Math.round(r.right - CORNER) : 0, sy = r ? Math.round(r.top + (r.height - CORNER) / 2) : 0
       const ok = !!r && inView({ top: sy, bottom: sy + CORNER, width: r.width }, vv, CORNER) && sx >= vv.left && sx + CORNER <= vv.left + vv.width
-      const x = ok ? sx : Math.round(vv.left + vv.width - CORNER - 16), y = ok ? sy : Math.round(vv.top + vv.height - CORNER - 16)
+      const x = ok ? sx : Math.round(vv.left + vv.width - CORNER - 16)
+      let y = ok ? sy : Math.round(vv.top + vv.height - CORNER - 16)
+      // Sasha 365 · she never covers the composer (Tyler, 10 Nov: typing with the keyboard open, her face sat on Send): wherever she
+      // lands, a place over the input or Send ([data-face-clear], the page's ONE composer) moves her just above it
+      const c = document.querySelector('[data-face-clear]')?.getBoundingClientRect()
+      if (c && c.height > 0 && y + CORNER > c.top && y < c.bottom && x + CORNER > c.left && x < c.right) y = Math.max(Math.round(vv.top + 8), Math.round(c.top - CORNER - 8))
       setSpot(s => (s && s.x === x && s.y === y ? s : { x, y }))
     }
     look()

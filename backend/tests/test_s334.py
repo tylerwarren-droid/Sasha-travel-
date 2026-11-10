@@ -26,7 +26,7 @@ class FakeAgAPI:
     resolver (HMAC, fresh) INSIDE the supplier call — what the airline / hotel received is kept here to prove it reached them."""
 
     def __init__(self):
-        self.records, self.rbs, self.apvs, self.answers, self.supplier = [], {}, {}, [], []
+        self.records, self.rbs, self.apvs, self.answers, self.supplier, self.calls = [], {}, {}, [], [], []
         self.n = 0
 
     def _id(self, p):
@@ -41,6 +41,7 @@ class FakeAgAPI:
         return {"amount_minor": 12000 if kind == "flight" else 30000, "currency": "EUR"}
 
     async def __call__(self, op, body, approval=None):
+        self.calls.append((op, json.loads(json.dumps(body))))   # Sasha 365 · what was asked (one group hotel search, never one per person)
         out = await self._do(op, body, approval)
         self.answers.append(json.dumps(out))
         return out

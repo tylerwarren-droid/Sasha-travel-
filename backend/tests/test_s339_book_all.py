@@ -60,9 +60,11 @@ class World(W334.World):
         super().__enter__()
         self.agapi = self._agapi
         for p in (mock.patch.object(GB, "CALL", self.agapi), mock.patch.object(GB, "SLEEP", lambda s: asyncio.sleep(0)),
-                  mock.patch.dict(GB._JOBS, {}, clear=True)):
+                  mock.patch.dict(GB._JOBS, {}, clear=True), mock.patch.object(G, "HOTELS", G._hotel_search)):
             p.start()
             self.p.append(p)
+        mv = run(self.store.movement(OWNER))   # Sasha 365 · the group's ONE hotel search is AgAPI's (this world's AgAPI): found anew
+        run(self.store.set_rules(OWNER, mv["id"], {k: v for k, v in (mv.get("rules") or {}).items() if k != "hotel"}))
         return self
 
 

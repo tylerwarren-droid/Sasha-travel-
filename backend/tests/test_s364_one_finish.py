@@ -118,7 +118,7 @@ class TheFinish(unittest.TestCase):
     def test_the_yes_ends_in_the_finish(self):
         src = (ROOT / "booking_signer" / "group_book.py").read_text()
         self.assertIn('if c["action"] == "book":', src)
-        self.assertIn("fin = await finish(account, done, failed)", src)
+        self.assertIn("fin = await finish(account, done, failed + list(also or []), ask_once=ask_once)", src)   # 365: + the mandate's held
 
 
 class PlanningLive(unittest.TestCase):

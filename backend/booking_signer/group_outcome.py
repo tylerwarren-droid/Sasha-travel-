@@ -151,13 +151,13 @@ async def _book(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     ready = [r for r in rows if reason(r) is None]
     taps = held([r for r in rows if reason(r) is not None])
     words = [t["say"] for t in taps]
-    if not ready:
+    if not ready and not any(r["status"] in ("planning…", "not planned") for r in rows):
         return _no("0 can be booked: " + "; ".join(words) + ".", taps=taps)
-    # the job prepares exactly the workers the record says can be tried; the held ones' reasons ride on its card (ONE classification)
-    job = await GB.start(account, [r["name"] for r in ready], bool(a.get("over_ok")), held=taps)
-    return {"done": True, "status": "preparing", **job,
-            "say": f"Preparing {len(ready)} to book — AgAPI's read-backs come on ONE card; nothing is booked until you tap Yes."
-                   + (f" Not in this booking: {'; '.join(words)}." if words else ""), "taps": taps}
+    # Sasha 365 · the tap (or "book them all") IS the instruction: the mandate books everyone inside the limits, reports, finishes —
+    # the held ones' reasons go in its ONE grouped question (the SAME classification: reason())
+    from . import mandate as M
+    go = await M.carry_out(account, str(a.get("said") or "Book all"), [r["name"] for r in rows] if a.get("who") else None, bool(a.get("over_ok")))
+    return {"done": True, "status": "booking", **GB.job_view(account), "say": go["say"], "taps": taps}
 
 
 # ── swap ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -117,22 +117,14 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
         items.append({"kind": "flight", "ref": offers[0]["offer_ref"], **({"planned_price": was} if was else {}),
                       **({"_price": offers[0]["price"]} if isinstance(offers[0].get("price"), dict) else {})})   # Sasha 339 · AgAPI's own price
     nights = max(1, (date.fromisoformat(str(m["back_date"])[:10]) - date.fromisoformat(str(m["out_date"])[:10])).days)
-    r = await _call(account, "travel.find_stays", {"city": {"query": mv.get("hotel_area") or mv["destination"], "country": "ES"},
-                                                   "check_in": str(m["out_date"])[:10], "nights": nights, "party": 1})
-    res = (r.get("result") or {}) if r.get("ok") else {}
-    stays = res.get("stays") or res.get("offers") or []
-    if not stays and mv.get("hotel_area"):   # the area as a place AgAPI doesn't know: the destination itself
-        r = await _call(account, "travel.find_stays", {"city": {"query": mv["destination"], "country": "ES"}, "check_in": str(m["out_date"])[:10],
-                                                       "nights": nights, "party": 1})
-        res = (r.get("result") or {}) if r.get("ok") else {}
-        stays = res.get("stays") or res.get("offers") or []
-    if not stays:
-        return None, "no stay found on AgAPI's sandbox"
-    s = stays[0]
-    items.append({"kind": "stay", "ref": s.get("stay_ref") or s.get("offer_ref") or s.get("ref"), "at": f"{str(m['out_date'])[:10]}T15:00:00", "nights": nights,
+    # Sasha 365 · their room at the GROUP's hotel — the plan's ONE search (groups.group_hotel), never a search per person
+    h = (mv.get("rules") or {}).get("hotel") or await G.group_hotel(account, mv, await G.store().members(mv["id"]))
+    if not h or not h.get("ref"):
+        return None, "no hotel found for the group on AgAPI's sandbox"
+    items.append({"kind": "stay", "ref": h["ref"], "at": f"{str(m['out_date'])[:10]}T15:00:00", "nights": nights,
                   **({"planned_price": planned["stay"]} if planned["stay"] else {}),
-                  **({"_per_night": s["price_per_night"]} if isinstance(s.get("price_per_night"), dict) else {}),   # Sasha 339 · AgAPI's own
-                  "_name": ((s.get("name") or {}).get("text") if isinstance(s.get("name"), dict) else s.get("name")) or "the hotel"})
+                  **({"_per_night": {"amount_minor": round(float(h["eur_per_night"]) * 100), "currency": "EUR"}} if h.get("eur_per_night") is not None else {}),
+                  "_name": h.get("name") or "the hotel"})
     return items, None
 
 
@@ -357,6 +349,8 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
     view = {r["member_id"]: r for r in (await G.view(account))["rows"]}
     items, skipped, lines = [], [], []
     records = await _records(account)   # Sasha 339 · AgAPI's ONE booking record, read for book too (never book a worker twice)
+    if action == "book" and not (mv.get("rules") or {}).get("hotel"):   # Sasha 365 · the group's ONE hotel search, before the workers
+        await G.group_hotel(account, mv, members)
     if action == "book":   # Sasha 339 · each worker in parallel (bounded), progress counted — the card in member order
         pick = [by_name[w.lower()] for w in who or [] if w.lower() in by_name] if who else members
         todo = [(m, view.get(m["id"], {}).get("status")) for m in pick if view.get(m["id"], {}).get("status") != "booked"
@@ -470,7 +464,9 @@ def job_view(account: str) -> Dict[str, Any]:
     if not j or time.time() - j["at"] > JOB_S:
         return {"state": "none"}
     out = {"job": j["id"], "state": j["state"], "total": j["total"], "ready": j["ready"]}
-    if j["state"] == "preparing":
+    if j["state"] == "preparing" and j.get("kind") == "mandate":   # Sasha 365 · the instruction's job: its live line, from the record
+        out["say"] = j.get("line") or "Starting…"
+    elif j["state"] == "preparing":
         out["say"] = ((f"Booking {j['total']}… {j['ready']} done." if j.get("kind") == "confirm" else f"Preparing {j['total']}… {j['ready']} ready.")
                       if j["total"] else "Preparing…")
     elif j["state"] == "ready":
@@ -560,7 +556,8 @@ async def _settle(account: str, trip_id: Optional[str], state: str, parts: List[
 
 
 async def confirm(account: str, card_id: str, choice: str, said: str = "",
-                  progress: Optional[Callable[[int, int], None]] = None) -> Dict[str, Any]:
+                  progress: Optional[Callable[[int, int], None]] = None, ask_once: bool = False,
+                  also: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     from . import groups as G
     from . import keep_resolver as KR
     c = _CARDS.get(card_id)
@@ -597,7 +594,7 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     verb = {"book": "booked", "swap": "swapped", "cancel": "cancelled"}[c["action"]]
     cards = [_card_for(account, c["action"], x) for x in reasked]   # Sasha 340 · each moved fare: its OWN card, its own Yes
     if c["action"] == "book":   # Sasha 364 · THE FINISH, composed from the trip record: booked, references, confirmations, the invoice
-        fin = await finish(account, done, failed)
+        fin = await finish(account, done, failed + list(also or []), ask_once=ask_once)   # Sasha 365 · `also`: the mandate's held ones
         moved = (f" The fare moved for {', '.join(x['name'] for x in reasked)} — {'a new card' if len(reasked) == 1 else 'new cards'} below, "
                  f"{'its' if len(reasked) == 1 else 'each with its'} own Yes; nothing was booked for them yet.") if reasked else ""
         return {"status": "done", "done": done, "failed": failed, "reasked": cards, "say": fin["say"] + moved, "finish": fin}
@@ -619,6 +616,22 @@ DECISIONS = {
     "offer_expired": "their fare expired before it was booked — nothing was taken. Shall I find the same flight again?",
     "upstream_unreachable": "the airline didn't answer just now — nothing was taken. Shall I try them again?",
 }
+
+
+#: Sasha 365 · the same reasons as FACTS (no question each): the mandate puts them to the manager as ONE grouped question
+FACTS = {"not_cancellable": "their fare can only be cancelled by the airline", "price_changed": "their fare's price moved",
+         "offer_expired": "their fare expired", "upstream_unreachable": "the airline didn't answer", "over_limit": "over the company's limit",
+         "over_at_booking": "over the company's limit at today's price", "needs_vault": "no passport in their vault yet",
+         "passport": "no passport in their vault yet", "not planned": "not planned yet", "not_found": "no flight found for them"}
+
+
+def one_question(asks: List[Dict[str, Any]]) -> str:
+    """Sasha 365 · everything outside the limits, as ONE grouped question (after the rest is done): who, and why, in plain words."""
+    if not asks:
+        return ""
+    who = "; ".join(f"{a['name']}: {FACTS.get(a.get('code') or a.get('kind') or '', a.get('fact') or 'not booked just now')}" for a in asks)
+    them = asks[0]["name"].split()[0] if len(asks) == 1 else "them"
+    return f"Not booked — {who}. What would you like for {them}: book anyway, another option, or leave off this trip?"
 
 
 def decision(e: Dict[str, Any]) -> Dict[str, Any]:
@@ -660,7 +673,7 @@ def _names(xs: List[str]) -> str:
     return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1] if xs else ""
 
 
-async def finish(account: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def finish(account: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]], ask_once: bool = False) -> Dict[str, Any]:
     """THE ONE FINISH of a group booking, composed from the trip record (the master list as it is now — AgAPI's record for the booked):
     how many are booked, where the references are, the confirmations sent (to each traveller's registered email; anyone without one
     named), the invoice — and anything not done as a named decision, never an error."""
@@ -689,10 +702,16 @@ async def finish(account: str, done: List[Dict[str, Any]], failed: List[Dict[str
             parts.append(f"{_names(conf['not_sent'])}'s confirmation didn't go out just now — I'll send it again.")
         if inv.get("number") and inv.get("total"):
             parts.append(f"The invoice {inv['number']}: {inv['total']}.")
-    for f in failed:
-        parts.append(f"{f['name']}: {f['why']}")
+    if ask_once:   # Sasha 365 · the mandate: ONE grouped question for everything outside the limits
+        q = one_question(failed)
+        if q:
+            parts.append(q)
+    else:
+        for f in failed:
+            parts.append(f"{f['name']}: {f['why']}")
     return {"say": " ".join(parts), "booked": booked, "total": total, "confirmations": conf, "invoice": {k: inv.get(k) for k in ("number", "total")},
-            "decisions": [{"name": f["name"], "code": f.get("code"), "why": f["why"]} for f in failed]}
+            "decisions": [{"name": f["name"], "code": f.get("code") or f.get("kind"),
+                           "why": f.get("why") or FACTS.get(f.get("code") or f.get("kind") or "", "not booked just now")} for f in failed]}
 
 
 def waiting_cards(account: str) -> List[Dict[str, Any]]:

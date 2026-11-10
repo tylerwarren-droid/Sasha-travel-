@@ -25,7 +25,7 @@ type Row = { member_id: string; person_id?: string; name: string; grade?: string
 type Trip = { id: string; destination: string; starts_on?: string | null; ends_on?: string | null; people?: number; open?: boolean }
 type State = { company?: { id: string; name: string } | null; roster: Person[]; trips: Trip[]
   trip: { id: string; company?: string; destination: string; starts_on?: string | null; ends_on?: string | null; hotel_area?: string | null } | null
-  list: { rows: Row[]; counts?: Record<string, number>; actions?: NextAct[] } }
+  list: { rows: Row[]; counts?: Record<string, number>; actions?: NextAct[]; hotel_line?: string | null } }
 type Res = Awaited<ReturnType<typeof bookingReq>>
 type Card = { read_back_id: string; read_back: string[]; ask: string; choices: { title: string; route: string }[] }
 type Tap = { label?: string; say?: string; act?: { action: 'book' | 'swap'; who: string[]; to?: string; over_ok: boolean }; invite?: string[] }
@@ -261,7 +261,7 @@ export default function GroupView({ embedded = false }: { embedded?: boolean } =
   return (
     <main data-group-view style={{ ...page, maxWidth: 1100, margin: '0 auto', padding: embedded ? '8px 4px 16px' : '24px 16px', ...(embedded ? { background: 'transparent' } : {}) }}>
       <h1 style={{ fontSize: 22, margin: '0 0 4px' }}>{newTrip ? 'New trip' : `${st?.trip?.company || ''} → ${st?.trip?.destination}`}{st?.company ? ` · ${st.company.name}` : ''}</h1>
-      {!newTrip && st?.trip && <p style={{ margin: '0 0 12px', color: T.muted }}>{[st.trip.starts_on, st.trip.ends_on].filter(Boolean).join(' – ')}{st.trip.hotel_area ? ` · hotel ${st.trip.hotel_area}` : ''}</p>}
+      {!newTrip && st?.trip && <p style={{ margin: '0 0 12px', color: T.muted }}>{[st.trip.starts_on, st.trip.ends_on].filter(Boolean).join(' – ')}{st.trip.hotel_area ? ` · hotel ${st.trip.hotel_area}` : ''}{st.list?.hotel_line ? <span data-hotel-line style={{ display: 'block', color: T.text }}>{st.list.hotel_line}</span> : null}</p>}{/* Sasha 365 · the group's ONE hotel line */}
       <p data-trips style={{ margin: '0 0 12px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
         <span style={{ color: T.muted }}>Your trips:</span>
         {(st?.trips || []).map(t => t.open && !fresh

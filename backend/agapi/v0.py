@@ -1693,25 +1693,42 @@ def _group_err(r: dict) -> dict:
 
 
 async def group_select(ctx: Ctx, a: dict) -> dict:
-    """Sasha 359 · WHO GOES, BY DESCRIPTION: the model passes the organiser's words as a structured filter (never people it picked); THE
-    ENGINE (groups.propose) applies it to the roster, names every word it couldn't match, and shows the list for their yes — nothing changes
-    until group_confirm. It asks only what's missing (where → which dates → who), one thing at a time."""
-    from booking_signer import groups as G
+    """Sasha 365 · THE INSTRUCTION IS THE YES: who / where / when complete and every word matched → the trip is made (or changed) at once
+    and planned — and when their own words say book, booked within the company's limits on its own (booking_signer.mandate). Only a
+    missing fact (where, when, who, a name it couldn't match) comes back as ONE question."""
+    from booking_signer import groups as G, mandate as M
     f = {k: a.get(k) for k in G.FILTER_KEYS if a.get(k) not in (None, [], "")}
     details = {k: a.get(k) for k in ("destination", "starts_on", "ends_on", "hotel_area") if a.get(k)}
-    return await G.propose(ctx.account, str(a.get("change") or "new"), f, details)
+    p = await G.propose(ctx.account, str(a.get("change") or "new"), f, details)
+    if not p.get("proposal_id") or p.get("unmatched"):   # a missing fact: ONE question (their answer carries on — group_confirm)
+        if p.get("proposal_id"):
+            _MANDATE_WORDS[ctx.account] = ctx.user_said or ""
+        return p
+    return await _instructed(ctx, p["proposal_id"], ctx.user_said or "")
+
+
+_MANDATE_WORDS: Dict[str, str] = {}   # account → the instruction a missing fact interrupted (its answer carries it on)
+
+
+async def _instructed(ctx: Ctx, proposal_id: str, said: str) -> dict:
+    """The instruction carried out: the list applied (create_trip / set_on_trip), then — their words said book — the mandate."""
+    from booking_signer import groups as G, mandate as M
+    r = await G.confirm(ctx.account, proposal_id)
+    if not r.get("done"):
+        raise ToolError("not_done", r["say"])
+    if M.wants_booking(said):
+        go = await M.carry_out(ctx.account, said)
+        return {**r, "booking": True, "say": r["say"].split(" I'm planning")[0] + " " + go["say"]}
+    return r
 
 
 async def group_confirm(ctx: Ctx, a: dict) -> dict:
-    """Sasha 359 · their YES to the list group_select showed — only on their own words (a yes): then the engine makes the trip / changes it."""
-    from booking_signer import groups as G
+    """Sasha 359 · their answer to the ONE question a missing fact asked (a name it couldn't match) — their own words (a yes): then the
+    instruction carries on as they first gave it (Sasha 365: planned, and booked when it said book)."""
     from booking_signer.yes import is_yes
     if not is_yes(ctx.user_said or ""):
-        raise ToolError("not_their_yes", "the list waits for their yes — ask them, never confirm it for them")
-    r = await G.confirm(ctx.account, a.get("proposal_id") or None)
-    if not r.get("done"):
-        raise ToolError("not_done", r["say"])
-    return r
+        raise ToolError("not_their_yes", "the list waits for their answer — ask them, never confirm it for them")
+    return await _instructed(ctx, a.get("proposal_id") or "", _MANDATE_WORDS.pop(ctx.account, ""))
 
 
 async def group_upload(ctx: Ctx, a: dict) -> dict:
@@ -1820,15 +1837,11 @@ async def _group_card(ctx: Ctx, out: dict) -> dict:
 
 
 async def group_book(ctx: Ctx, a: dict) -> dict:
-    """Sasha 334 · book everyone planned (or the names given) through AgAPI — its read-backs on ONE card, nothing booked until the yes."""
-    from booking_signer import group_book as GB
-    # Sasha 339 · the SAME background job as /group: the card here if it is ready within the turn, else its progress (the card on /group)
-    _outcome(await _GO().run(ctx.account, "book", {"who": a.get("who") or None, "over_ok": bool(a.get("over_limit_ok"))}))   # Sasha 346
-    v = await GB.wait(ctx.account, GB.CHAT_WAIT_S)
-    if v.get("state") == "ready":
-        return await _group_card(ctx, v["result"])
-    return {"status": "preparing", "say": (v.get("say") or "Preparing the read-backs…") + " The card with every read-back and ONE Yes "
-            "will be on the Group page (/group) in a moment — nothing is booked until you tap Yes."}
+    """Sasha 365 · "book them all" (or the names given) IS the yes: the SAME job as the Group page's Book all (group_outcome → the mandate)
+    books everyone inside the company's limits, reports as it goes and finishes with ONE message — never a card waiting for a Yes."""
+    r = _outcome(await _GO().run(ctx.account, "book", {"who": a.get("who") or None, "over_ok": bool(a.get("over_limit_ok")),
+                                                     "said": ctx.user_said or ""}))   # Sasha 346 · the ONE outcome
+    return {"status": "booking", "say": r["say"]}
 
 
 async def group_swap(ctx: Ctx, a: dict) -> dict:
@@ -2118,16 +2131,18 @@ TOOLS: List[dict] = [
        "ends_on YYYY-MM-DD, hotel_area if said) or a change to the open one (change=add / drop). Pass the organiser's OWN words as the filter: "
        "roles or departments as said (\"executives\", \"engineers\", \"interns\"), grades, names_in / names_out (as said — \"Javier Prieto\"), "
        "everyone, exclude_roles (\"everyone but the interns\"), last_trip (\"the same people as last time\"). NEVER pick people yourself and "
-       "never correct a name: the engine matches them and says what it couldn't. Say its `say`; if it returns only an `ask`, ask exactly "
-       "that (one short question) and nothing else. Nothing changes until they say yes (group_confirm).",
+       "never correct a name: the engine matches them and says what it couldn't. THEIR INSTRUCTION IS THE YES (Sasha 365): with who, where "
+       "and when it makes the trip at once and plans it — the hotel too (ONE group search; never search stays for a group yourself) — and "
+       "when their words say book, books everyone inside the company's limits on its own and reports as it goes. Never ask \"shall I\" or "
+       "\"do you want me to\". Say its `say`; if it returns an `ask` (a missing fact), ask exactly that and nothing else.",
        {"change": {"type": "string", "enum": ["new", "add", "drop"]}, "destination": {"type": "string"}, "starts_on": {"type": "string"},
         "ends_on": {"type": "string"}, "hotel_area": {"type": "string"}, "everyone": {"type": "boolean"},
         "roles": {"type": "array", "items": {"type": "string"}}, "grades": {"type": "array", "items": {"type": "string"}},
         "exclude_roles": {"type": "boolean"}, "names_in": {"type": "array", "items": {"type": "string"}},
         "names_out": {"type": "array", "items": {"type": "string"}}, "last_trip": {"type": "boolean"}},
        ["change"], {"type": "object", "properties": {"say": {"type": "string"}, "ask": {"type": "string"}}}, []),
-    _t("group_confirm", "Magellan", group_confirm, "The organiser said YES to the list group_select showed (their own words, or the Yes button): "
-       "the engine makes the trip — or adds / takes off those people — and plans each. Never call it without their yes. Say its `say`.",
+    _t("group_confirm", "Magellan", group_confirm, "Their answer to the ONE question group_select asked about a name it couldn't match "
+       "(their own words, or the Yes button): the instruction carries on as they first gave it. Never call it without their answer. Say its `say`.",
        {"proposal_id": {"type": "string"}}, [], {"type": "object", "properties": {"say": {"type": "string"}}}, ["not_their_yes", "not_done"]),
     _t("group_upload", "Magellan", group_upload, "A whole LIST pasted for the current trip (several lines: name, home city, out date, "
        "back date, grade): its people become the roster's (each once), then the list for a yes on the open trip (group_confirm). Pass their text EXACTLY. Say its `say` as it "
@@ -2154,9 +2169,10 @@ TOOLS: List[dict] = [
     _t("group_invite_vault", "Magellan", group_invite_vault, "Invite group members (by name, or everyone) to add their passport and "
        "loyalty numbers on their OWN secure page. NEVER ask for a passport or any number in chat. Say its `say`.",
        {"who": {"type": "array", "items": {"type": "string"}}}, [], {"type": "object"}, ["no_movement"]),
-    _t("group_book", "Austen", group_book, "Book the group's workers through AgAPI (TEST): everyone planned, or the names given. Over-limit "
-       "workers are only included when the organiser names them AND says to book them anyway (over_limit_ok). Shows AgAPI's read-backs "
-       "on ONE card with Yes / No — nothing is booked until they tap Yes. Say its `ask`.",
+    _t("group_book", "Austen", group_book, "\"Book them all\" (or the names given) IS the yes (Sasha 365): books everyone inside the company's "
+       "limits through AgAPI (TEST) on its own, reports as it goes, and ends with ONE message — what was booked, the references, the "
+       "invoice, and ONE question about anyone outside the limits. Over-limit workers only when they name them AND say book anyway "
+       "(over_limit_ok). Say its `say`; never ask for a yes first.",
        {"who": {"type": "array", "items": {"type": "string"}}, "over_limit_ok": {"type": "boolean"}}, [], {"type": "object"}, ["nothing_to_do"], austen=True),
     _t("group_swap", "Austen", group_swap, "\"Luis replaces Ana\": swap one worker for another (TEST). If the new worker isn't on the list, "
        "give in_city and in_grade and they're added and invited to their vault in the same step. The new worker's vault must have their "

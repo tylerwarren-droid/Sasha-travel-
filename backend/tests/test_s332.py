@@ -47,10 +47,14 @@ class World:
             fare = FARE[m["home_city"]]
             card = lambda frm, to, day: {"id": f"off_{frm}_{to}", "owner": "Iberia", "from": frm[:3].upper(), "to": to[:3].upper(),
                                          "departs": f"{day}T09:00:00", "arrives": f"{day}T12:00:00", "amount": str(fare / 2), "currency": "EUR"}
-            return {"flights": [card(m["home_city"], "Madrid", m["out_date"]), card("Madrid", m["home_city"], m["back_date"])],
-                    "hotel": {"name": "Hotel Getafe Centro (example)", "eur_per_night": self.hotel_night, "address": "Getafe"}}
+            return {"flights": [card(m["home_city"], "Madrid", m["out_date"]), card("Madrid", m["home_city"], m["back_date"])]}
+
+        async def hotels(account, mv, rooms, nights):   # Sasha 365 · the group's ONE hotel search (N rooms), stood in
+            self.hotel_searches.append(rooms)
+            return [{"ref": "stay_getafe", "name": "Hotel Getafe Centro (example)", "eur_per_night": self.hotel_night, "rating": 4.2}]
+        self.hotel_searches = []
         self.p = [mock.patch.object(G, "STORE", self.store), mock.patch.object(G, "QUOTE", quote), mock.patch.object(G, "ITEMS", items),
-                  mock.patch("booking_signer.basket.suggest", suggest)]
+                  mock.patch.object(G, "HOTELS", hotels), mock.patch("booking_signer.basket.suggest", suggest)]
         for x in self.p:
             x.start()
         # an open trip already there (data, as a fixture: the product's own create_trip never makes one with nobody on it — Sasha 358)

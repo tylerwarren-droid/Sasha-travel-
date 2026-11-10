@@ -120,13 +120,22 @@ class TheChatDoors(unittest.TestCase):
     group_confirm (only on the person's own yes)."""
 
     def test_select_then_confirm_only_on_their_yes(self):
+        """Sasha 365 · the instruction IS the yes: who / where / when complete and every word matched → the trip is made at once (no card).
+        A word the engine couldn't match is a MISSING FACT: the ONE question (the list, Yes / No); group_confirm only on their answer."""
         from app.agent import sasha as S
 
         async def go(w):
             await _roster()
             ctx = API.Ctx(account=OWNER, user_said="plan a Lisbon retreat 24–27 Nov for all the executives minus Javier Moreno")
-            r = await API.group_select(ctx, {"change": "new", "destination": "Lisbon", "starts_on": "2026-11-24", "ends_on": "2026-11-27",
-                                             "roles": ["executives"], "names_out": ["Javier Moreno"]})
+            done = await API.group_select(ctx, {"change": "new", "destination": "Lisbon", "starts_on": "2026-11-24", "ends_on": "2026-11-27",
+                                                "roles": ["executives"], "names_out": ["Javier Moreno"]})
+            self.assertTrue(done.get("done"), done)                                            # made, planned — no question
+            self.assertNotIn("?", done["say"])
+            self.assertIsNone(S.render("group_select", done, {}))                              # no card waiting for a yes
+            ctx = API.Ctx(account=OWNER, user_said="plan a Porto trip 1–3 Dec for the executives minus Javier Prieto")
+            r = await API.group_select(ctx, {"change": "new", "destination": "Porto", "starts_on": "2026-12-01", "ends_on": "2026-12-03",
+                                             "roles": ["executives"], "names_out": ["Javier Prieto"]})
+            self.assertTrue(r.get("unmatched"))                                                # nobody called Javier Prieto: asked
             ev = S.render("group_select", r, {})
             self.assertEqual(ev["kind"], "read_back")
             self.assertEqual([c["route"] for c in ev["choices"]], ["say:Yes, these people", "say:No"])   # a tap sends the words (WhatsApp too)
@@ -136,11 +145,10 @@ class TheChatDoors(unittest.TestCase):
             kind, body, buttons = out.items[0][:3]
             self.assertEqual(kind, "ask")
             self.assertIn("Ana Garcia", body)
-            self.assertEqual([b[1] for b in buttons], ["say:Yes, these people", "say:No"])
-            with self.assertRaises(API.ToolError):                                             # not their yes: nothing made
+            with self.assertRaises(API.ToolError):                                             # not their answer: nothing made
                 await API.group_confirm(API.Ctx(account=OWNER, user_said="hmm, maybe"), {"proposal_id": r["proposal_id"]})
             ok = await API.group_confirm(API.Ctx(account=OWNER, user_said="Yes, these people"), {"proposal_id": r["proposal_id"]})
-            self.assertIn("3", ok["say"])
+            self.assertIn("4", ok["say"])
         _in_world(go)
 
     def test_the_old_doors_that_picked_people_their_own_way_are_gone(self):

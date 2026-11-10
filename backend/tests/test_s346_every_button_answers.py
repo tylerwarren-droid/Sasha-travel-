@@ -46,26 +46,34 @@ class BookAll(unittest.TestCase):
             self.assertEqual((GB._JOBS, w.agapi.supplier), ({}, []))                          # nothing started, nothing booked
 
     def test_some_bookable_starts_the_one_job_and_says_who_is_held(self):
+        """Sasha 365 · the tap IS the instruction: the mandate books everyone inside the limits on its own and finishes with ONE grouped
+        question about the held ones — the record's reasons (Hanna: no passport) and AgAPI's (Rania: over the limit), each once."""
+        from booking_signer import live_events as LE, mandate as M
         with World() as w:
             hanna = next(m for m in w.members() if m["name"] == "Hanna Dummy")
             run(KEEP.delete(hanna["person_id"]))
 
             async def both():
+                q = LE.subscribe(OWNER)
                 out = await GO.run(OWNER, "book", {})
-                return out, await GB.wait(OWNER, 30)
-            out, v = run(both())
-            self.assertEqual((out["done"], out["status"]), (True, "preparing"))
-            self.assertIn("Preparing 19 to book", out["say"])
-            self.assertIn("Not in this booking: 1 is waiting for their passport.", out["say"])
-            self.assertEqual(v["result"]["status"], "awaiting_yes")                            # the ONE card, as before (Sasha 339)
-            # ONE classification: the card's held lines are the record's reasons (Hanna) + AgAPI's (Rania), each counted once
-            self.assertEqual([t["say"] for t in v["result"]["taps"]], ["1 is waiting for their passport", "1 over the limit"])
-            self.assertEqual(GB._JOBS[OWNER]["result"]["skipped"][0]["name"], "Rania Mithal")       # Hanna never reached the job
+                await M.finished(OWNER)
+                evs = []
+                while not q.empty():
+                    evs.append(q.get_nowait())
+                LE.unsubscribe(OWNER, q)
+                return out, evs
+            out, evs = run(both())
+            self.assertEqual((out["done"], out["status"]), (True, "booking"))
+            self.assertTrue(out["say"].startswith("On it"))
+            fin = [e["text"] for e in evs if e.get("type") == "group_done"][0]
+            self.assertTrue(fin.startswith("18 of 20 booked (TEST)."), fin)
+            self.assertEqual(fin.count("?"), 1, fin)                                            # ONE grouped question
+            self.assertIn("Hanna Dummy: no passport in their vault yet", fin)
+            self.assertIn("Rania Mithal: over the company's limit", fin)
 
     def test_everyone_booked_says_so(self):
         with World() as w:
             run(w.tap(run(GB.prepare(OWNER, "book"))["read_back_id"]))
-            self.assertIn("Not in this booking: 19 already booked.", go("book")["say"])            # Rania (over the limit) is still tried
             run(w.tap(run(GB.prepare(OWNER, "book", ["Rania Mithal"], over_ok=True))["read_back_id"]))
             self.assertEqual(go("book")["say"], "0 can be booked: 20 already booked.")
 

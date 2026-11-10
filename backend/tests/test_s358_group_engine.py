@@ -171,8 +171,8 @@ class Engine(unittest.TestCase):
 
 
 class TheChatUsesTheEngine(unittest.TestCase):
-    def test_the_chat_makes_no_trip_until_the_yes_then_the_engine_does(self):
-        from agapi import v0 as API   # Sasha 359 · group_select → the list → group_confirm (the chat's ONE way; group_start is gone)
+    def test_the_chat_asks_only_whats_missing_then_the_engine_makes_it(self):
+        from agapi import v0 as API   # Sasha 365 · the instruction IS the yes: complete → the engine makes the trip at once (create_trip)
 
         async def go(w):
             if True:
@@ -184,8 +184,8 @@ class TheChatUsesTheEngine(unittest.TestCase):
                 names = [p["name"] for p in (await G.state(OWNER))["roster"]][:2]
                 r = await API.group_select(ctx, {"change": "new", "destination": "Lisbon", "starts_on": "2026-11-17", "ends_on": "2026-11-21",
                                                  "names_in": names})
-                self.assertEqual(len((await G.trips(OWNER))["trips"]), n0)                  # nothing made before the yes
-                await API.group_confirm(API.Ctx(account=OWNER, user_said="yes"), {"proposal_id": r["proposal_id"]})
+                self.assertEqual(len((await G.trips(OWNER))["trips"]), n0 + 1)              # who, where, when: made — no second yes
+                self.assertNotIn("?", r["say"])
                 await G.planned(OWNER)
                 st = await G.state(OWNER)
                 self.assertEqual((st["trip"]["destination"], sum(p["on"] for p in st["roster"])), ("Lisbon", 2))

@@ -221,6 +221,11 @@ class OneAsk(unittest.TestCase):
         self.assertEqual(len(out.items), 1)
         self.assertIn("https://checkout.stripe.test/x", out.items[0][1])
 
+    def test_a_saved_card_is_held_never_said_charged(self):
+        src = (ROOT / "agapi" / "v0.py").read_text()       # found by the iPhone proof: "has been charged €41.48" — it is a hold (363)
+        self.assertNotIn('f"Paid with {got', src)
+        self.assertIn("is HELD on {got['card']}", src)
+
     def test_the_question_is_gone_everywhere(self):
         from agapi import v0 as API
         from app.services import persona as P

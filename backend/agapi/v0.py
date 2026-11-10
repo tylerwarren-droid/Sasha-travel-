@@ -1873,7 +1873,8 @@ async def _paid_out(ctx: Ctx, got: dict, where: str) -> dict:
         raise ToolError("payments_unreachable", got["why"])
     if got.get("where") == "saved" and got.get("paid"):   # Sasha 327 · one tap: charged, Pacioli books it
         return {"status": "paid_saved_card", "payment": "saved_card", "session_id": got["session_id"], "total_eur": got["eur"], "booked": False,
-                "say": f"Paid with {got['card']} — €{got['eur']:.2f}. It's booking now; I'll tell you the moment it's confirmed. "
+                "say": f"€{got['eur']:.2f} is HELD on {got['card']} — only a hold, taken once the booking is confirmed (never say charged or paid). "
+                       "It's booking now; I'll tell you the moment it's confirmed. "
                        "Say exactly that — it isn't booked until get_status says so."}
     if got.get("where") == "saved" and got.get("confirm_url"):   # his bank asks him to confirm (SCA / 3-D Secure): ONE link
         return {"status": "confirm_with_bank", "payment": "confirm_with_bank", "session_id": got["session_id"], "total_eur": got["eur"],

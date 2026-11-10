@@ -1907,8 +1907,23 @@ async def get_status(ctx: Ctx, a: dict) -> dict:
 
 
 async def hold_venue(ctx: Ctx, a: dict) -> dict:
-    from agapi import venues as VN
+    from agapi import booking_decide as BD, venues as VN
+    # Sasha 364 · the rules' ONE question ("a prefilled form you just confirm, or shall I handle it?") is the PERSON'S to answer — found
+    # by the recording gate (10 Nov): the model sent route "page" after they gave their name, and nothing went through AgAPI. At the
+    # model's door, an option of that question stands only when THEY chose it — their own words naming it, this turn or earlier in this
+    # booking (remembered from those words, never from the model; "Handle it" → the contact asked → the hold goes on as they chose).
+    picked = VN.chosen_route(ctx.user_said)
+    if picked:
+        _ROUTE_CHOSEN[ctx.account] = (picked, datetime.now(timezone.utc))
+    theirs = _ROUTE_CHOSEN.get(ctx.account)
+    if a.get("route") in {o["route"] for o in BD.CHOICES} and VN.one_path(ctx) \
+            and not (theirs and theirs[0] == a["route"] and not stale(theirs[1])):
+        log.info("[venues] the model answered the rules' question (%s) — the person didn't: dropped", a.get("route"))
+        a = {k: v for k, v in a.items() if k != "route"}
     return await VN.hold_venue(ctx, a)
+
+
+_ROUTE_CHOSEN: Dict[str, tuple] = {}   # account → (route, at): the rules' question as THEY answered it (their words), 15 minutes
 
 
 async def book_venue(ctx: Ctx, a: dict) -> dict:

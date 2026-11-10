@@ -89,7 +89,7 @@ class Base(unittest.TestCase):
     def ctx(self, said, surface="s2"):
         return API.Ctx(account=ACCT, mode="test", user_said=said, session=self.session, surface=surface)
 
-    def hold(self, said="Book La Mi Venta for two on Saturday at nine.", surface="s2", **extra):
+    def hold(self, said="Handle it — book La Mi Venta for two on Saturday at nine.", surface="s2", **extra):   # Sasha 364 · they chose it
         VN._HELD.pop(ACCT, None)
         key = uuid.uuid4().hex   # a fresh call each time (never the process's replay of an earlier test's)
         # Sasha 254 · "Handle it" (route form): the booking rules' fill_form_zero_touch — the form's read-back, the contact in it

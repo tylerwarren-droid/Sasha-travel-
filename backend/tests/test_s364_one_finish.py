@@ -58,7 +58,8 @@ class ADecisionNeverAnError(unittest.TestCase):
     def test_no_raw_supplier_message_reaches_the_failed_list(self):
         src = (ROOT / "booking_signer" / "group_book.py").read_text()
         self.assertNotRegex(src, r'"why": e\.get\("message"\)')
-        self.assertIn('failed.append({"name": it["name"], **decision(e)})', src)
+        self.assertIn("why = decision(e)", src)                                              # 365: + the refusal tried once more, then named
+        self.assertIn('failed.append({"name": it["name"], **why})', src)
 
 
 class TheFinish(unittest.TestCase):

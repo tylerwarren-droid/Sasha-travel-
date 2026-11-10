@@ -618,8 +618,11 @@ DECISIONS = {
 }
 
 
+RETRY_ONCE = ("upstream_refused", "upstream_failed", "upstream_unreachable")   # Sasha 365 · tried once more before anyone is asked
+
 #: Sasha 365 · the same reasons as FACTS (no question each): the mandate puts them to the manager as ONE grouped question
-FACTS = {"not_cancellable": "their fare can only be cancelled by the airline", "price_changed": "their fare's price moved",
+FACTS = {"upstream_refused": "the airline refused the booking", "refused_twice": "the airline refused the booking, twice",
+         "upstream_failed": "the airline's system failed on the booking","not_cancellable": "their fare can only be cancelled by the airline", "price_changed": "their fare's price moved",
          "offer_expired": "their fare expired", "upstream_unreachable": "the airline didn't answer", "over_limit": "over the company's limit",
          "over_at_booking": "over the company's limit at today's price", "needs_vault": "no passport in their vault yet",
          "passport": "no passport in their vault yet", "not planned": "not planned yet", "not_found": "no flight found for them"}
@@ -768,8 +771,19 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
             else:
                 failed.append({"name": it["name"], "why": x.get("why") or "the fare is gone and none was found again"})
             return
+    if not r.get("ok") and e.get("code") in RETRY_ONCE and it["op"] == "group.book" and not it.get("_retried"):
+        # Sasha 365 · the airline refused the ORDER (found live, 10 Nov: two Vueling orders): once more, inside the same instruction — a
+        # fresh fare for that worker (its own read-back, approved by the same words), never a question first
+        m = members.get(it["member"])
+        org = (it.get("body") or {}).get("end_user")
+        kind, x = await _prepare_worker(account, m, None, [m["name"]], bool(it.get("over")), org, mv) if m and org else ("skip", {})
+        if kind == "item":
+            return await _act_one(account, {**x, "_retried": True}, said, mv, members, done, failed, reasked)
     if not r.get("ok"):
-        failed.append({"name": it["name"], **decision(e)})   # Sasha 364 · a named decision in plain words, never the supplier's raw text
+        why = decision(e)
+        if it.get("_retried") and e.get("code") in RETRY_ONCE:
+            why = {"code": "refused_twice", "why": FACTS["refused_twice"] + " — nothing was taken. Shall I look for another flight, or take them off?"}
+        failed.append({"name": it["name"], **why})   # Sasha 364 · a named decision in plain words, never the supplier's raw text
         return
     res = r.get("result") or {}
     parts = res.get("parts") or []

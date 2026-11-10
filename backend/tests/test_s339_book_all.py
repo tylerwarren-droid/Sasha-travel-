@@ -21,9 +21,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 class PricedAgAPI(W334.FakeAgAPI):
     """CR 164's prices: flights quoted per offer, the stay by its price per night (Hotel Alba (test))."""
 
-    def __init__(self, per_night=9000, gone=(), gone_twice=(), busy=(), slow=0.0):
+    def __init__(self, per_night=9000, gone=(), gone_twice=(), busy=(), slow=0.0, refused=(), refused_twice=()):
         super().__init__()
         self.per_night, self.gone, self.gone_twice, self.busy, self.slow = per_night, set(gone), set(gone_twice), set(busy), slow
+        self.refused, self.refused_twice, self.acts = set(refused), set(refused_twice), {}   # Sasha 365 · Duffel refusing the ORDER (the act)
         self.seen, self.inflight, self.peak, self.bodies = {}, 0, 0, []
 
     async def _do(self, op, body, approval):
@@ -33,6 +34,11 @@ class PricedAgAPI(W334.FakeAgAPI):
         if op == "travel.find_stays":
             return {"ok": True, "result": {"stays": [{"stay_ref": "stay_alba", "name": {"text": "Hotel Alba (test)"},
                                                       "price_per_night": {"amount_minor": self.per_night, "currency": "EUR"}}]}}
+        if op == "group.book" and approval:   # Sasha 365 · the act refused by the airline (found live: two Vueling orders)
+            name = f"{body['worker']['given_name']} {body['worker']['family_name']}"
+            k = self.acts[name] = self.acts.get(name, 0) + 1
+            if (name in self.refused and k == 1) or name in self.refused_twice:
+                return {"ok": False, "error": {"code": "upstream_refused", "message": "Duffel refused the order.", "details": {"service": "duffel"}}}
         if op in ("group.book", "group.swap") and not approval:
             self.bodies.append((op, json.loads(json.dumps(body))))
             name = f"{body['worker']['given_name']} {body['worker']['family_name']}"

@@ -131,7 +131,8 @@ async def _run(account: str, said: str, who: Optional[List[str]], over_ok: bool)
                 text = (await GB.finish(account, [], held + skipped, ask_once=True))["say"]
         else:
             text = (await GB.finish(account, [], held, ask_once=True))["say"]
-        text += invited_words(inv)
+        said_inv = invited_words(inv)   # done things first, the ONE question last
+        text = text.replace(" Not booked — ", said_inv + " Not booked — ", 1) if " Not booked — " in text else text + said_inv
         _publish(account, "group_done", text)
         await LE.keep_news(account, f"group:{(v.get('movement') or {}).get('id')}", text)   # away: said when they're back
         j = GB._JOBS.get(account)

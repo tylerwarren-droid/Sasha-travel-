@@ -122,6 +122,21 @@ class EveryMissingPassportIsInvited(unittest.TestCase):
         self.assertIn("await invite_missing(account, movement_id, only=links)", src)               # a new person: on going on the trip
 
 
+class ARefusalIsTriedOnceMoreThenNamed(unittest.TestCase):
+    """Found by the iPhone proof (10 Nov): Duffel refused two Vueling orders (upstream_refused) and the finish said "not booked just
+    now". Inside the instruction: once more with a fresh fare (its own read-back, the same yes) — then, still refused, said plainly."""
+
+    def test_once_more_then_said_plainly(self):
+        with W339.World(W339.PricedAgAPI(refused={"Amara Sample"}, refused_twice={"Bruno Example"})) as w, mock.patch.object(G, "HOTELS", G._hotel_search):
+            _executives(SIX)
+            r, events = _instruction()
+        fin = [e for e in events if e.get("type") == "group_done"][0]["text"]
+        self.assertTrue(fin.startswith("5 of 6 booked (TEST)."), fin)                     # Amara: booked on the second try
+        self.assertIn("Bruno Example: the airline refused the booking, twice", fin)       # Bruno: named, never "just now"
+        self.assertNotIn("not booked just now", fin)
+        self.assertTrue(fin.rstrip().endswith("?"), fin)                                  # the ONE question comes last
+
+
 class OneSourceForMayIAct(unittest.TestCase):
     def test_no_per_step_permission_is_left(self):
         """Whole class: every group door goes through the mandate; the asks that waited for a second yes are gone."""

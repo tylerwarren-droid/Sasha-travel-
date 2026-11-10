@@ -621,7 +621,8 @@ DECISIONS = {
 RETRY_ONCE = ("upstream_refused", "upstream_failed", "upstream_unreachable")   # Sasha 365 · tried once more before anyone is asked
 
 #: Sasha 365 · the same reasons as FACTS (no question each): the mandate puts them to the manager as ONE grouped question
-FACTS = {"upstream_refused": "the airline refused the booking", "refused_twice": "the airline refused the booking, twice",
+FACTS = {"approval_refused": "the booking system didn't take your instruction as the yes for it (nothing was booked or charged)",
+         "upstream_refused": "the airline refused the booking", "refused_twice": "the airline refused the booking, twice",
          "upstream_failed": "the airline's system failed on the booking","not_cancellable": "their fare can only be cancelled by the airline", "price_changed": "their fare's price moved",
          "offer_expired": "their fare expired", "upstream_unreachable": "the airline didn't answer", "over_limit": "over the company's limit",
          "over_at_booking": "over the company's limit at today's price", "needs_vault": "no passport in their vault yet",
@@ -745,7 +746,7 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
     from . import keep_resolver as KR
     apv = await _approval(account, it, said or "Yes, go ahead.")
     if not apv:
-        failed.append({"name": it["name"], "why": "the yes wasn't accepted for this one"})
+        failed.append({"name": it["name"], "code": "approval_refused", "why": FACTS["approval_refused"]})   # Sasha 366 · named, never "just now"
         return
     refs = [r for r in _refs(it.get("worker") or {}) if r]
     KR.grant(it.get("owner") or it.get("member"), refs)   # THIS worker's references (their vault: the PERSON's, Sasha 351), for THIS act only

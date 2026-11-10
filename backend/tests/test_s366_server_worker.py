@@ -88,6 +88,17 @@ class NoClientAttached(unittest.TestCase):
         self.assertEqual(len([x for x in w.wa if x.startswith("All 6 booked (TEST).")]), 1, w.wa)
 
 
+class ARefusedApprovalIsNamed(unittest.TestCase):
+    def test_never_not_booked_just_now(self):
+        """Found by the WhatsApp proof: AgAPI refused the instruction as the yes (no_explicit_yes) and the finish said "not booked just now"."""
+        from booking_signer import group_book as GB
+        with World() as w, mock.patch.object(GB, "_approval", mock.AsyncMock(return_value=None)):
+            _on_whatsapp()
+        fin = [x for x in w.wa if "booked" in x and ("Nobody" in x or "of 6" in x)][-1]
+        self.assertIn("didn't take your instruction as the yes", fin)
+        self.assertNotIn("just now", fin.split("Not booked")[-1])
+
+
 class OneSource(unittest.TestCase):
     def test_one_worker_started_with_the_app_and_no_door_of_its_own(self):
         routes = (ROOT / "backend" / "booking_signer" / "routes.py").read_text()

@@ -163,7 +163,8 @@ def lines_of(rows: List[Dict[str, Any]], party: int) -> List[str]:
             conv = f" = €{float(r['price_amount']):.2f} at {fx.get('rate')} ({fx.get('as_of')})" if fx and r.get("price_amount") is not None else ""
             out.append(f"✈️ {line}{conv}" + (f" — {s['picked_by']}" if s.get("picked_by") else ""))
     t = BK.total(rows)
-    out.append(f"Total €{t['amount']:.2f} (TEST) — ONE tap to pay on your phone: Apple Pay or a saved card on Stripe's TEST page.")
+    # Sasha 364 · the read-back says only what's true on every door: the payment is the card's own (363a), a hold until it's booked
+    out.append(f"Total €{t['amount']:.2f} (TEST) — one tap pays it; a hold, taken only once it's booked.")
     out.append("Each goes in your itinerary on its day, marked TEST, with its reference.")
     return out
 

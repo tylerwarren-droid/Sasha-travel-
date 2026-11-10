@@ -52,7 +52,7 @@ class BookTheTrip(unittest.TestCase):
         self.assertIn("TEST", b["lines"][0])
         self.assertEqual(b["eur"], 5 * 120 + 1000)
         self.assertIn("Wed 11 Nov", b["lines"][4])     # the flight there leaves the day before day 1
-        self.assertIn("ONE tap to pay", b["lines"][-2])
+        self.assertIn("one tap pays it", b["lines"][-2])   # Sasha 364 · a hold until booked
 
 
 class OnlyFaresTheAirlineWillBook(unittest.TestCase):

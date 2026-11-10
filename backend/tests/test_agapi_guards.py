@@ -99,7 +99,7 @@ class ReplyGuard(unittest.TestCase):
 
     def test_s210_the_model_never_sees_test_notes_or_disclaimers(self):
         r = AG.clean_for_model({"read_back": ["⚠ TEST bookings — no hotel or airline is contacted, nothing is reserved and nothing is charged. For 2.",
-                                              "Total €1468.14 (TEST) — ONE tap to pay on your phone: Apple Pay or a saved card on Stripe's TEST page.",
+                                              "Total €1468.14 (TEST) — one tap pays it; a hold, taken only once it's booked.",
                                               "Each goes in your itinerary on its day, marked TEST, with its reference."],
                                 "note": "Duffel TEST fares — nothing is held until book", "total_eur": 1468.14})
         self.assertNotIn("note", r)

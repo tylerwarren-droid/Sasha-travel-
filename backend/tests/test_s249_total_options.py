@@ -144,8 +144,8 @@ class OneTotal(unittest.TestCase):
         tab = run(LR.trip_total(ACCOUNT, TRIP, PLAN))["total_eur"]
         figs = run(BK.trip_figures(ACCOUNT, TRIP, PLAN))["total_eur"]
         self.assertEqual({chat, tab, figs}, {496.1})
-        self.assertEqual(BB.lines_of(BK.to_book(self.rows), 2)[-2], "Total €496.10 (TEST) — ONE tap to pay on your phone: Apple Pay or "
-                                                                     "a saved card on Stripe's TEST page.")   # the read-back header
+        self.assertEqual(BB.lines_of(BK.to_book(self.rows), 2)[-2], "Total €496.10 (TEST) — one tap pays it; a hold, taken only once "
+                                                                     "it's booked.")   # the read-back header
 
     def test_the_turn_end_guard_reads_without_re_pricing(self):
         figs: dict = {}

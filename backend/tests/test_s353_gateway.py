@@ -284,6 +284,28 @@ class TheGateReplays(unittest.TestCase):
         self.assertNotEqual(k(msgs("x")), k(msgs("x", err=True)))
         self.assertNotEqual(k(msgs("x")), k(msgs("x", arg="OPO")))
 
+    def test_a_changed_prompt_or_tool_contract_is_never_answered_from_an_old_recording(self):
+        """Sasha 364 · found by the recording deploy (10 Nov): SASHA_GATE_RECORD=1 replayed replies recorded under the OLD persona
+        ("Pay here, or on your phone?" — a question the code no longer has) because the key had neither the system prompt nor what a
+        tool now returns; a recording run could never re-record a changed prompt. The key carries her persona (the cached system block,
+        dates and ids masked), each tool's description, and each tool result's shape (its keys, never its values)."""
+        def kw(system="persona one", desc="desc one", out='{"read_back": ["x"], "total_eur": 1}'):
+            return {"model": "m", "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
+                                             {"type": "text", "text": "Today is 2026-11-10. Pending: none."}],
+                    "tools": [{"name": "hold_booking", "description": desc}],
+                    "messages": [{"role": "user", "content": "book it"},
+                                 {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_1", "name": "hold_booking", "input": {}}]},
+                                 {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": out}]}]}
+        k = MG.replay_key
+        self.assertNotEqual(k(kw()), k(kw(system="persona two")))
+        self.assertNotEqual(k(kw()), k(kw(desc="desc two")))
+        self.assertNotEqual(k(kw()), k(kw(out='{"read_back": ["x"], "total_eur": 1, "pay": {"where": "here"}}')))
+        self.assertEqual(k(kw()), k(kw(out='{"read_back": ["y", "z"], "total_eur": 99}')))                # values never
+        same_day = kw()
+        same_day["system"][1]["text"] = "Today is 2026-11-11. Pending: none."
+        self.assertEqual(k(kw()), k(same_day))                                                           # the per-turn part never
+        self.assertEqual(k(kw(system="Today is 10 November, persona one")), k(kw(system="Today is 11 November, persona one")))
+
     def test_the_gate_replays_and_its_one_live_check_is_the_haiku_preflight(self):
         gate = (ROOT / "scripts" / "gate.py").read_text()
         self.assertIn('os.environ["SASHA_MODEL_REPLAY"] = "record" if os.getenv("SASHA_GATE_RECORD", "").strip() == "1" else "replay"', gate)

@@ -215,7 +215,7 @@ class OneReadBackOneYes(unittest.TestCase):
     def test_the_gate_holds_it(self):
         vl = (ROOT / "backend/scripts/voice_loop_suite.py").read_text()
         self.assertIn("the travellers were asked after his yes", vl)
-        self.assertIn('fail.append(f"payment links on the phone: {len(links)} (want exactly one)', vl)   # still exactly one link
+        self.assertIn('fail.append(f"payments in the read-back card: {len(pays)} (want exactly one)', vl)   # Sasha 363(a) · still exactly one payment
 
 
 if __name__ == "__main__":

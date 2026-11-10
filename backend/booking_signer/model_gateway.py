@@ -265,20 +265,38 @@ def _asked(kw: dict) -> dict:
     """What the request ASKS, without what changes from run to run: the tools offered (names); each message's words, and of a tool's
     call its name and inputs, of its result only ok / error — a tool's output (ids, timings, "checked two minutes ago") runs for real
     in a replay, and the model's reply follows the conversation, not those bytes (found by the first replay: 23 of the gate's requests
-    differed only in tool output). Dates, times, numbers and ids masked; never the system prompt (it carries the day's date)."""
+    differed only in tool output). Dates, times, numbers and ids masked.
+    Sasha 364 · AND what the request is ANSWERED UNDER — found by the recording deploy (10 Nov): a changed persona and a tool that now
+    returns its payment were answered from replies recorded under the old ones ("Pay here, or on your phone?"), so a recording run
+    could never record them again. So: her persona (the system's FIRST block — the cached one; the per-turn rest, with the day's date,
+    never), each tool's description, and each tool result's SHAPE (its top-level keys, never their values)."""
+    def shape(c: Any) -> str:
+        raw = c if isinstance(c, str) else " ".join(str(x.get("text") or "") for x in c if isinstance(x, dict)) if isinstance(c, list) else ""
+        try:
+            got = json.loads(raw)
+        except (TypeError, ValueError):
+            return ""
+        return ":" + ",".join(sorted(got)) if isinstance(got, dict) else ""
+
     def block(b: Any) -> str:
         if not isinstance(b, dict):
             return str(b)
         t = b.get("type")
         if t == "tool_result":
-            return "result:" + ("error" if b.get("is_error") else "ok")
+            return "result:" + ("error" if b.get("is_error") else "ok") + shape(b.get("content"))
         if t == "tool_use":
             return "call:" + str(b.get("name")) + ":" + json.dumps(b.get("input") or {}, sort_keys=True)
         return str(b.get("text") or "")
 
     def text(c: Any) -> str:
         return c if isinstance(c, str) else " ".join(block(b) for b in c) if isinstance(c, list) else str(c or "")
+    sysv = kw.get("system")
+    persona = sysv if isinstance(sysv, str) else (str((sysv[0] or {}).get("text") or "") if isinstance(sysv, list) and sysv and isinstance(sysv[0], dict) else "")
+    digest = lambda x: hashlib.sha256(x.encode()).hexdigest()[:16]
     return {"tools": sorted(t.get("name", "") for t in kw.get("tools") or [] if isinstance(t, dict)),
+            "contract": digest(json.dumps(sorted((str(t.get("name", "")), str(t.get("description", ""))) for t in kw.get("tools") or []
+                                               if isinstance(t, dict)))),
+            "persona": digest(_VOLATILE.sub("#", persona)),
             "messages": [[m.get("role"), _VOLATILE.sub("#", text(m.get("content")))] for m in kw.get("messages") or []]}
 
 

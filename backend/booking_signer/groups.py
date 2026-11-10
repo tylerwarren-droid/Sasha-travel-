@@ -29,7 +29,7 @@ from xml.etree import ElementTree as ET
 
 log = logging.getLogger("booking_signer.groups")
 
-STATUSES = ("not planned", "planned", "needs vault", "over limit", "booked", "cancelled")
+STATUSES = ("not planned", "planning…", "planned", "needs vault", "over limit", "booked", "cancelled")   # Sasha 364 · planning…: live
 
 # ── 1 · reading the list ───────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -278,6 +278,7 @@ class PgStore:
     async def movement(self, owner: str, movement_id: Optional[str] = None) -> Optional[dict]:
         async def go(c):
             q = ("select m.*, g.name as company, g.owner_id from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
+                 + "and m.archived_at is null "   # Sasha 364 · an archived trip is never the open one
                  + ("and m.id = $2 " if movement_id else "") + "order by m.opened_at desc, m.created_at desc limit 1")   # Sasha 351 · the OPEN trip
             r = await c.fetchrow(q, uuid.UUID(owner), *([uuid.UUID(movement_id)] if movement_id else []))
             return _row(r) if r else None
@@ -293,7 +294,8 @@ class PgStore:
         async def go(c):
             rows = await c.fetch("select m.id, g.name as company, m.destination, m.starts_on, m.ends_on, m.opened_at, "
                                  "(select count(*) from group_members gm where gm.movement_id = m.id) as people from group_movements m "
-                                 "join groups g on g.id = m.group_id where g.owner_id = $1 order by m.opened_at desc, m.created_at desc limit 50",
+                                 "join groups g on g.id = m.group_id where g.owner_id = $1 and m.archived_at is null "
+                                 "order by m.opened_at desc, m.created_at desc limit 50",
                                  uuid.UUID(owner))
             return [_row(r) for r in rows]
         return await self._run(go)
@@ -316,7 +318,7 @@ class PgStore:
                     r = await c.fetchrow("insert into groups (owner_id, name) values ($1,$2) returning *", uuid.UUID(owner), name[:200])
                 return _row(r) if r else None
             r = await c.fetchrow("select g.* from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
-                                 "order by m.opened_at desc, m.created_at desc limit 1", uuid.UUID(owner))   # the OPEN trip's company
+                                 "and m.archived_at is null order by m.opened_at desc, m.created_at desc limit 1", uuid.UUID(owner))   # the OPEN trip's company
             r = r or await c.fetchrow("select * from groups where owner_id = $1 order by created_at desc limit 1", uuid.UUID(owner))
             return _row(r) if r else None
         return await self._run(go)
@@ -373,6 +375,16 @@ class PgStore:
             "and not exists (select 1 from group_members gm where gm.movement_id = m.id)", uuid.UUID(owner), uuid.UUID(movement_id)))
         return str(r).split()[-1] != "0"
 
+    async def archive(self, owner: str, movement_id: str) -> bool:
+        """Sasha 364 · archived, never deleted (sql/060): off the trips and never the open one; its people, bookings and invoice stay."""
+        r = await self._run(lambda c: c.execute("update group_movements m set archived_at = now() from groups g where g.id = m.group_id "
+                                                "and g.owner_id = $1 and m.id = $2 and m.archived_at is null", uuid.UUID(owner), uuid.UUID(movement_id)))
+        return str(r).split()[-1] != "0"
+
+    async def rename_company(self, owner: str, group_id: str, name: str) -> bool:
+        r = await self._run(lambda c: c.execute("update groups set name = $3 where owner_id = $1 and id = $2", uuid.UUID(owner), uuid.UUID(group_id), name))
+        return str(r).split()[-1] != "0"
+
     async def members(self, movement_id: str) -> List[dict]:
         async def go(c):
             return [_row(r) for r in await c.fetch(_MEMBER_Q + "where gm.movement_id = $1 order by gm.created_at, p.name", uuid.UUID(movement_id))]
@@ -422,8 +434,8 @@ class MemStore:
         return mid
 
     async def movement(self, owner, movement_id=None):
-        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and (not movement_id or m["id"] == movement_id)),
-                    key=lambda m: m["opened"])
+        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and not m.get("archived")
+                     and (not movement_id or m["id"] == movement_id)), key=lambda m: m["opened"])
         return dict(ms[-1]) if ms else None
 
     async def open(self, owner, movement_id):
@@ -435,7 +447,7 @@ class MemStore:
         return True
 
     async def trips(self, owner):
-        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner), key=lambda m: -m["opened"])
+        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and not m.get("archived")), key=lambda m: -m["opened"])
         return [{k: m.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on")} | {"people": len(self.rows[m["id"]])} for m in ms]
 
     async def set_rules(self, owner, movement_id, rules):
@@ -479,6 +491,23 @@ class MemStore:
 
     async def remove_member(self, movement_id, member_id):
         self.rows[movement_id] = [x for x in self.rows[movement_id] if x["id"] != member_id]
+
+    async def archive(self, owner, movement_id):
+        m = self.movements.get(movement_id)
+        if not m or m["owner_id"] != owner or m.get("archived"):
+            return False
+        m["archived"] = True
+        return True
+
+    async def rename_company(self, owner, group_id, name):
+        g = self.groups.get(group_id)
+        if not g or g["owner_id"] != owner:
+            return False
+        g["name"] = name
+        for m in self.movements.values():
+            if m["group_id"] == group_id:
+                m["company"] = name
+        return True
 
     async def delete_movement(self, owner, movement_id):
         m = self.movements.get(movement_id)
@@ -642,12 +671,15 @@ async def plan(account: str, movement_id: Optional[str] = None, only: Optional[L
                 failed.append({"name": m["name"], "why": q.get("why") or "nothing found"})
                 continue
             await _write(account, tid, m, q, limit_for(mv.get("rules") or {}, m))
+            _PLANNING.get(account, set()).discard(m["id"])
             done += 1
             if q.get("why"):
                 failed.append({"name": m["name"], "why": q["why"]})
         except Exception as e:
             log.warning("[groups] %s not planned: %s", m["name"], type(e).__name__)
             failed.append({"name": m["name"], "why": type(e).__name__})
+        finally:
+            _PLANNING.get(account, set()).discard(m["id"])   # planned, or why not: never "planning…" again
     return {"planned": done, "failed": failed, "movement_id": mv["id"]}
 
 
@@ -739,7 +771,8 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
                     "transport": _transport(rows), "hotel": (stay.get("snapshot") or {}).get("name") if stay else None,
                     "flight_eur": f_eur, "hotel_eur_per_night": h_eur, "price_eur": price, "limit": lim,
                     **(await _vault_marks(m)),
-                    "status": recorded.get(m["id"]) or status_of(rows, lim, await _has_documents(m)),
+                    "status": recorded.get(m["id"]) or ("planning…" if m["id"] in _PLANNING.get(account, set()) and not rows
+                                                        else status_of(rows, lim, await _has_documents(m))),   # Sasha 364 · live
                     **({"price_eur": booked_rec[m["id"]]["price_eur"], "references": booked_rec[m["id"]]["references"],
                         "transport": _transport(rows) or "Booked · " + " · ".join(booked_rec[m["id"]]["references"])}
                        if m["id"] in booked_rec else {})})
@@ -768,6 +801,7 @@ def summary(v: Dict[str, Any], top: int = 25) -> str:
 # create_trip (the ONE way a trip is made — never with nobody on it), set_on_trip (the ONE way a person goes on or comes off one: the
 # last one off ends the trip, said). The /group page, its upload, [Go], and the chat's group tools all call these; state() is the view.
 
+_PLANNING: Dict[str, set] = {}   # Sasha 364 · account → the links being planned NOW ("planning…", live on every door)
 _PLANS: Dict[str, Any] = {}   # account → the planning running now (this process): the people just put on a trip, each from their home
 
 
@@ -775,6 +809,7 @@ def _plan_later(account: str, movement_id: str, links: List[str]) -> None:
     """Each person just put on a trip is planned from their own home airport, within their limit — after any planning already running."""
     if not links:
         return
+    _PLANNING.setdefault(account, set()).update(links)
     before = _PLANS.get(account)
 
     async def go() -> None:
@@ -849,7 +884,7 @@ async def create_trip(account: str, company: Optional[str], destination: str, st
 
 
 #: a person on one of these can come off (nothing booked for them); any other status (booked, a booking under way, cancelled) cannot
-OFF_OK = ("not planned", "planned", "needs vault", "over limit")
+OFF_OK = ("not planned", "planning…", "planned", "needs vault", "over limit")
 
 
 async def set_on_trip(account: str, person: str, trip: Optional[str] = None, on: bool = True, plan_now: bool = True,
@@ -1252,6 +1287,29 @@ async def open_trip(account: str, which: str) -> Dict[str, Any]:
     return {"trip": hit[0]}
 
 
+async def archive_trip(account: str, which: str) -> Dict[str, Any]:
+    """Sasha 364 · a trip ARCHIVED (never deleted): off "Your trips" and never the open one — its people, bookings and invoice stay."""
+    w = str(which or "").strip()
+    ts = await store().trips(account)
+    hit = [t for t in ts if t["id"] == w]
+    if len(hit) != 1:
+        return {"why": "that trip isn't one of yours"}
+    ok = await store().archive(account, hit[0]["id"])
+    return {"trip": hit[0], "archived": ok}
+
+
+async def rename_company(account: str, name: str) -> Dict[str, Any]:
+    """Sasha 364 · the company's DISPLAY name — never a label in it ("(fictional)" lives on the demo organiser's TEST account, Sasha 360)."""
+    n = _norm(name)
+    if not n or LABEL_IN_NAME.search(n):
+        return {"why": "a label like “(fictional)” belongs on the organisation's account, never in its name"}
+    grp = await store().company(account)
+    if not grp:
+        return {"why": "no company yet"}
+    await store().rename_company(account, grp["id"], n[:200])
+    return {"company": n[:200]}
+
+
 async def set_limits(account: str, by_grade: Optional[dict] = None, by_member: Optional[dict] = None, movement_id: Optional[str] = None) -> dict:
     st = store()
     mv = await st.movement(account, movement_id)
@@ -1292,12 +1350,18 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     /group, and — when nobody is planned yet — that, said plainly. Never "here's the list" without the list."""
     v = await view(account, movement_id)
     mv = v.get("movement") or {}
-    rows = [{"name": r["name"], "grade": r.get("grade"), "status": r["status"], "price_eur": r.get("price_eur")} for r in v.get("rows") or []]
-    planned = [r for r in rows if r["status"] not in ("not planned",)]
+    # Sasha 364 · the label people were CHOSEN by: their role; their grade only where the trip's limits are set (it explains a limit)
+    by_grade = bool(((v.get("limits") or {}).get("by_grade")))
+    rows = [{"name": r["name"], "role": r.get("role"), **({"grade": r.get("grade")} if by_grade else {}), "status": r["status"],
+             "price_eur": r.get("price_eur")} for r in v.get("rows") or []]
+    planning = [r for r in rows if r["status"] == "planning…"]
+    planned = [r for r in rows if r["status"] not in ("not planned", "planning…")]
     if not mv:
         empty = "There's no group movement yet."
     elif not rows:
         empty = "Nobody is on this trip yet — name who's going, or tick them on the People list."   # Sasha 351 · chosen from the roster
+    elif planning and not planned:
+        empty = f"Planning {len(planning)} now — each from their own home airport; the list fills in as I go."
     elif not planned:
         empty = f"Nobody is planned yet — {len(rows)} on the list, not planned."
     else:
@@ -1309,4 +1373,4 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
 
 
 __all__ = ["read_text", "read_csv", "read_xlsx", "read_photo", "members_from", "batch_question", "limit_for", "with_limits", "plan", "view",
-           "summary", "create_trip", "set_on_trip", "state", "resolve", "propose", "confirm", "planned", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]
+           "summary", "create_trip", "set_on_trip", "state", "resolve", "propose", "confirm", "archive_trip", "rename_company", "planned", "upload", "set_limits", "limits_said", "card", "status_of", "flight_row", "MemStore", "PgStore", "STATUSES"]

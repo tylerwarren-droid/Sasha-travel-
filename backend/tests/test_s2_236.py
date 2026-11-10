@@ -159,7 +159,7 @@ class BookSaysThisScreen(unittest.TestCase):
         from agapi import v0 as API
         from app.agent import s2 as S2
         self.assertIn("sent to their phone", API.BY_NAME["book"]["description"])     # S1's own words, unchanged
-        self.assertIn("the pay card on this screen", S2.S2_BOOK)
+        self.assertIn("the payment is already IN the read-back card", S2.S2_BOOK)   # Sasha 363(a) · this screen: the card itself
         src = open(os.path.join(os.path.dirname(S2.__file__), "sasha.py")).read()
         self.assertIn('"description": S2.S2_BOOK} if t["name"] == "book"', src)
 

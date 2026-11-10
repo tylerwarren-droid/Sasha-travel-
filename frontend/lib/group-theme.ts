@@ -18,7 +18,7 @@ export const PAIRS: [keyof typeof T, keyof typeof T][] = [
   ['onGold', 'gold'], ['text', 'second'], ['over', 'bg'], ['vault', 'bg'], ['planned', 'bg'], ['booked', 'bg'], ['idle', 'bg'],
 ]
 
-export const TONE: Record<string, string> = { 'over limit': T.over, 'needs vault': T.vault, planned: T.planned, booked: T.booked,
+export const TONE: Record<string, string> = { 'over limit': T.over, 'needs vault': T.vault, planned: T.planned, booked: T.booked, 'planning…': T.idle,
   cancelled: T.idle, 'not planned': T.idle }
 
 export const page: CSSProperties = { color: T.text, background: T.bg, fontFamily: 'system-ui, sans-serif' }

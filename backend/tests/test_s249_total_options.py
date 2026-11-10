@@ -206,7 +206,8 @@ class HoldBookingSaysWhenTheTotalMoved(unittest.TestCase):
         with mock.patch.object(API, "_plan", mock.AsyncMock(return_value=PLAN)), mock.patch.object(BK, "items", items_of(rows)), \
                 mock.patch.object(PX, "saved", mock.AsyncMock(return_value=[{}, {}])), \
                 mock.patch.object(API, "_s1_passport", mock.AsyncMock(return_value=None)), \
-                mock.patch.object(BB, "quote", refresh), mock.patch("agapi.keep_gate.keep_on", lambda *a: False):
+                mock.patch.object(BB, "quote", refresh), mock.patch("agapi.keep_gate.keep_on", lambda *a: False), \
+                mock.patch.object(BB, "pay", mock.AsyncMock(return_value={"where": "here", "session_id": "cs_test_card", "client_secret": "cs_x", "eur": 120.0})), mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch("booking_signer.test_deposit.saved_card", mock.AsyncMock(return_value=None)):
             res = run(API.hold_booking(ctx(), {}))
             tab = run(LR.trip_total(ACCOUNT, TRIP, PLAN))
         API._HELD.pop(ACCOUNT, None)

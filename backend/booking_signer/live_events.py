@@ -70,12 +70,13 @@ def words_for(r: dict, email: Optional[str]) -> Dict[str, str]:
         return {"text": text, "spoken": text.replace(" — ", ", ")}
     failed = [x for x in (r or {}).get("failed") or [] if x]
     done = [x for x in (r or {}).get("booked") or [] if x]
-    if done and failed:
-        text = ("Your payment went through and most of it is booked — but not everything: " + failed[0].rstrip(".") +
-                ". Shall I find the closest alternative for that part?")
+    if done and failed:   # Sasha 363/364 · money moves only on what was confirmed: the rest of the hold is released — said so
+        text = ("Most of it is booked — but not everything: " + failed[0].rstrip(".") +
+                ". Only what was booked is taken from your card. Shall I find the closest alternative for that part?")
     else:
         why = (failed[0] if failed else str((r or {}).get("say") or "the booking didn't go through")).rstrip(".")
-        text = f"Your payment went through, but the booking didn't: {why}. Shall I find the closest alternative and try again?"
+        why = why if "Nothing was taken" in why else f"{why}. Nothing was taken — the hold on your card is released"
+        text = f"{why}. Shall I find the closest alternative and try again?"
     return {"text": text, "spoken": text}
 
 

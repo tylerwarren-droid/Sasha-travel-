@@ -90,7 +90,7 @@ class Wired(unittest.TestCase):
         from booking_signer import basket_book as BB, passengers as PX, basket as BK
         with mock.patch.object(API, "_plan", mock.AsyncMock(return_value={"trip_id": "t1", "party": 1})), \
                 mock.patch.object(API, "_party", lambda p: 1), mock.patch.object(PX, "saved", mock.AsyncMock(return_value=[{}])), \
-                mock.patch.object(BB, "quote", mock.AsyncMock(return_value={"lines": ["✈️ IB3166", "Total €120.00 (TEST)"], "sha256": "s1", "eur": 120.0})), \
+                mock.patch.object(BB, "quote", mock.AsyncMock(return_value={"lines": ["✈️ IB3166", "Total €120.00 (TEST)"], "sha256": "s1", "eur": 120.0})), mock.patch.object(BB, "pay", mock.AsyncMock(return_value={"where": "here", "session_id": "cs_test_card", "client_secret": "cs_x", "eur": 120.0})), mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch("booking_signer.test_deposit.saved_card", mock.AsyncMock(return_value=None)), \
                 mock.patch.object(BK, "items", mock.AsyncMock(return_value=[])), mock.patch.object(BK, "to_book", lambda rows: rows), \
                 mock.patch.object(API, "breakdown", lambda rows, eur: {}):
             API._HELD.pop(ACCT, None)

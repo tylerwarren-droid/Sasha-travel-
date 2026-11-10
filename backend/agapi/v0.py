@@ -1521,10 +1521,51 @@ async def hold_booking(ctx: Ctx, a: dict) -> dict:
         res["read_back"] += await _KEEP.lines(ctx.account)
     if kept:   # Sasha 228 · said in this turn, before the read-back — the mask only
         res["keep"] = kept
+    res.update(await _pay_in_card(ctx, q["sha256"], res))   # Sasha 363(a) · ONE ASK: the payment is IN this card
     prev = _HELD.get(ctx.account)   # Sasha 210 · the same words read back again keep the time they were first said
     at = prev["at"] if prev and prev.get("sha") == q["sha256"] else datetime.now(timezone.utc)
     _HELD[ctx.account] = {"sha": q["sha256"], "at": at, "result": res}   # Sasha 205 · book() uses it as is
     return res
+
+
+PAY_HOW = ("ONE CARD IS THE ONE QUESTION: the read-back is on their screen WITH its payment in it (Apple Pay / Google Pay / a card; on "
+           "WhatsApp, the link in the same message). Their payment there IS their yes — a hold, taken only when it is confirmed. Sum it up "
+           "in one or two sentences and say they can pay on the card when they're happy. Never ask whether to go ahead, never \"here or on "
+           "your phone?\", and never call book after this unless they say yes out loud.")
+PAY_SAVED_HOW = ("ONE CARD IS THE ONE QUESTION: the read-back is on their screen with ONE button that pays with their saved card ({card}). "
+                 "Sum it up in one or two sentences and say the button pays with that card. Their tap (or their yes) is the yes: then book.")
+
+
+async def _pay_in_card(ctx: Ctx, sha: str, res: dict) -> dict:
+    """Sasha 363(a) · ONE ASK (Tyler's dry run, 9 Nov: a read-back card, "Shall I go ahead?", then "Pay here, or on your phone?", then a
+    second card): the read-back card carries its payment — the pay tap IS the yes (the person authorises it on their own device; it is a
+    HOLD, captured only on the supplier's confirmation, 363). Here: the embedded checkout in the card. WhatsApp: the link in the same
+    message (never a second one). A saved card: the card's one button says the yes, and book() pays it. → {"pay": {...}, "how_pay"}."""
+    from booking_signer import basket_book as BB, test_deposit as TD
+    card = await TD.saved_card(ctx.account) if not await BB.in_progress(ctx.account) else None
+    if card:
+        return {"pay": {"where": "saved", "card": card["words"]}, "how_pay": PAY_SAVED_HOW.format(card=card["words"])}
+    where = "phone" if ctx.via == "wa" else "here"
+    got = await BB.pay(ctx.account, sha, where, send=False)
+    if got.get("needs"):   # Sasha 363 · the airline needs a real mobile — asked BEFORE any hold
+        raise ToolError("mobile_needed", got["why"])
+    if got.get("unrecorded"):
+        raise ToolError("payments_unreachable", got["why"])
+    if got.get("already_paid"):
+        return {"pay": {"already_paid": True, "session_id": got.get("session_id")},
+                "how_pay": "It's already paid — nothing more to pay. It's booked once the confirmation is recorded (get_status says)."}
+    if "why" in got:
+        raise ToolError("read_back_changed" if "different words" in got["why"] else "not_bookable", got["why"])
+    from agapi.keep_gate import keep_on
+    if keep_on(ctx.account, ctx.surface):   # Sasha 224 · CR 63 — the passport named in THIS card, approved for THIS payment only
+        try:
+            await _KEEP.approve(ctx.account, res["read_back"], "their payment on the read-back card", got["session_id"])
+        except Exception as e:
+            log.warning("[keep] approve skipped: %s", type(e).__name__)
+    pay = {"where": where, "session_id": got["session_id"], "total_eur": got["eur"], "checkout_url": got.get("url"),
+           **({"client_secret": got.get("client_secret")} if where == "here" else {}),
+           **({"phone_too": True} if where == "here" and await _whatsapp_linked(ctx.account) else {})}   # "Pay on my phone": a link in the card
+    return {"pay": pay, "how_pay": PAY_HOW}
 
 
 async def _replace_gone_flights(ctx: Ctx, p: dict) -> List[str]:
@@ -1563,9 +1604,7 @@ _HERE = re.compile(r"(?i)\b(?:(?:pay\s+)?here|right here|on here|this (?:screen|
 _PHONE = re.compile(r"(?i)\b(?:(?:on|to) my (?:phone|mobile)|my phone|whatsapp|text me|(?:send|text) (?:it|me) (?:to my phone|the link)|"
                     r"on (?:the )?phone)\b")
 _PAY_CHOICE: Dict[tuple, str] = {}    # (account, conversation) → "here" | "phone"
-_PAY_ASKED: Dict[str, dict] = {}      # account → {sha, at}: "Pay here, or on your phone?" asked after their yes, awaiting the answer
-PAY_ASK = "Pay here, or on your phone?"
-_PAY_NOT = re.compile(r"(?i)\b(?:no|not|don'?t|do not|wait|hold on|later|stop|cancel\w*)\b")   # "not here", "wait" — never the answer
+_PAY_NOT = re.compile(r"(?i)\b(?:no|not|don'?t|do not|wait|hold on|later|stop|cancel\w*)\b")   # "not here", "wait" — never a switch
 
 
 def pay_words(said: Optional[str]) -> Optional[str]:
@@ -1587,16 +1626,15 @@ async def _whatsapp_linked(account: str) -> bool:
 
 
 async def book(ctx: Ctx, a: dict) -> dict:
-    """The yes → ONE Stripe TEST payment for exactly the read-back — here (an embedded checkout) or on their phone (the WhatsApp
-    link). Booked only after payment (Pacioli: get_status)."""
+    """Their spoken yes → the read-back card's payment. Sasha 363(a) · ONE ASK: the payment is already IN the read-back card
+    (hold_booking), so a yes never opens another and is never asked "here or on your phone?" — a saved card is paid on it; otherwise she
+    points to the card. "On my phone" / "here" moves the SAME payment (never a second one). Booked only after payment (get_status)."""
     from booking_signer import basket_book as BB
     said = ((a.get("approval") or {}).get("said")) or ""
-    chose = pay_words(said)
+    chose = pay_words(said) if not _PAY_NOT.search(said) and "?" not in said else None
     key = (ctx.account, ctx.session or "-")
-    asked = _PAY_ASKED.get(ctx.account)
-    answering = bool(asked and chose and not stale(asked["at"]) and not _PAY_NOT.search(said) and "?" not in said)
-    switching = bool(chose and not answering and await BB.in_progress(ctx.account))
-    if not (yes_to_book(said) or answering or switching):
+    switching = bool(chose and await BB.in_progress(ctx.account))
+    if not (yes_to_book(said) or switching):
         raise ToolError("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book")
     linked = await _whatsapp_linked(ctx.account)
     if chose == "phone" and not linked:   # no WhatsApp: never "on your phone" — here, and said why
@@ -1610,27 +1648,22 @@ async def book(ctx: Ctx, a: dict) -> dict:
         return await _paid_out(ctx, got, chose)
     sha = a.get("read_back_sha256") or ""
     held = _HELD.get(ctx.account)
-    if not answering:
-        if held and (not sha or sha == held["sha"]) and held["at"] >= ctx.started:   # Sasha 210 · the yes answers a read-back they HEARD
-            raise ToolError("read_back_first", "say the read-back's total and ask them to go ahead; book once they say yes")
     # Sasha 215 · the yes is bound to a read-back they heard in the last 15 minutes — never to an older one, never to none
-    if not held or (sha and sha != held["sha"]) or (answering and asked["sha"] != held["sha"]):
+    if not held or (sha and sha != held["sha"]):
         raise ToolError("no_read_back", "call hold_booking first — the yes is bound to a read-back they've just heard")
     if stale(held["at"]):
         _HELD.pop(ctx.account, None)
         raise ToolError("read_back_stale", "that read-back is over 15 minutes old — call hold_booking again and read it back before booking")
+    pay = (held.get("result") or {}).get("pay") or {}
+    if pay.get("session_id"):   # Sasha 363(a) · the payment is in the card they're looking at: their pay there is the yes
+        return {"status": "awaiting_payment", "payment": "in_card", "session_id": pay["session_id"], "total_eur": pay.get("total_eur"),
+                "booked": False, "say": "The payment is on the card on their screen" + (" (the link in that message)" if pay.get("where") == "phone"
+                                                                                        else "") + " — paying there books it. Say so in one line."}
+    if held["at"] >= ctx.started:   # Sasha 210 · the yes answers a read-back they HEARD (a saved card: never in the same turn)
+        raise ToolError("read_back_first", "say the read-back's total and ask them to go ahead; book once they say yes")
     sha = held["sha"]   # pay() still refuses if anything changed since
-    where = chose or _PAY_CHOICE.get(key)
     from booking_signer import test_deposit as _TD
-    if not chose and not await BB.in_progress(ctx.account) and await _TD.saved_card(ctx.account):
-        where = "saved"   # Sasha 327 · PAY IN ONE TAP: his saved card — this yes pays it, no page, no "here or phone?"
-    if where is None:
-        if linked:   # asked ONCE; their answer (next turn) pays — the yes is already given
-            _PAY_ASKED[ctx.account] = {"sha": sha, "at": datetime.now(timezone.utc), "said": said}
-            return {"status": "choose_payment", "ask": PAY_ASK, "booked": False,
-                    "say": "Ask exactly this, once, and wait: their answer pays (no yes needed again)."}
-        where = "here"   # no WhatsApp: here, never a dead end
-    _PAY_ASKED.pop(ctx.account, None)
+    where = "saved" if await _TD.saved_card(ctx.account) else (chose or _PAY_CHOICE.get(key) or ("phone" if ctx.via == "wa" and linked else "here"))
     _PAY_CHOICE[key] = where
     await claim(ctx)   # Sasha 215 · durable: this payment is sent once, across restarts and workers
     got = await BB.pay(ctx.account, sha, where)
@@ -1641,7 +1674,7 @@ async def book(ctx: Ctx, a: dict) -> dict:
     from agapi.keep_gate import keep_on
     if got.get("session_id") and "why" not in got and keep_on(ctx.account, ctx.surface):   # Sasha 224 · CR 63 — this yes, this payment
         try:
-            await _KEEP.approve(ctx.account, held["result"]["read_back"], ((asked or {}).get("said") if answering else None) or said, got["session_id"])
+            await _KEEP.approve(ctx.account, held["result"]["read_back"], said, got["session_id"])
         except Exception as e:
             log.warning("[keep] approve skipped: %s", type(e).__name__)
     return await _paid_out(ctx, got, where)

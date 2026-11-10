@@ -223,7 +223,7 @@ async def latest(account: Optional[str], hint: Optional[str] = None, strict: boo
 
     async def fn(conn):
         return await conn.fetch("select id, title, destinations, depart_date, return_date, created_at from trips where owner_id = $1 "
-                                "and destinations ? 'plan' and status in ('draft','active') order by updated_at desc, created_at desc limit 6",
+                                "and destinations ? 'plan' and status in ('draft','active') and archived_at is null order by updated_at desc, created_at desc limit 6",
                                 uuid.UUID(account))
     try:
         rows = await run(fn)
@@ -337,6 +337,16 @@ async def clear_added(account: str, dry: bool = False) -> int:
     return int(await _edit(account, None, change) or 0)
 
 
+async def archive(account: str, trip_id: str) -> bool:
+    """Sasha 364 · a trip ARCHIVED, never deleted (sql/060): it leaves the Trip tab and the plans; its rows, bookings and history stay."""
+    run = _run()
+    if run is None:
+        return False
+    r = await run(lambda c: c.execute("update trips set archived_at = now() where owner_id = $1 and id = $2 and archived_at is null",
+                                      uuid.UUID(account), uuid.UUID(trip_id)))
+    return str(r).split()[-1] != "0"
+
+
 async def plans(account: Optional[str]) -> List[dict]:
     """Sasha 175 · every trip plan on the account, newest touched first: {trip_id, title, start, end, cities}."""
     run = _run()
@@ -345,7 +355,7 @@ async def plans(account: Optional[str]) -> List[dict]:
 
     async def fn(conn):
         return await conn.fetch("select id, title, destinations->'cities' cities, depart_date, return_date from trips where owner_id = $1 "
-                                "and destinations ? 'plan' and status in ('draft','active') order by updated_at desc limit 20", uuid.UUID(account))
+                                "and destinations ? 'plan' and status in ('draft','active') and archived_at is null order by updated_at desc limit 20", uuid.UUID(account))
     try:
         rows = await run(fn)
     except Exception as e:

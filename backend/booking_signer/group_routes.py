@@ -108,6 +108,14 @@ async def switch(request: Request):
     return await GO.run(account_for(request), "switch", {"person": body.get("person"), "on": body.get("on") is not False, "trip": body.get("trip")})
 
 
+@router.post("/archive")
+async def archive(request: Request):
+    """Sasha 364 · {trip} → archived (never deleted): off the trips; its people, bookings and invoice stay."""
+    from . import group_outcome as GO
+    body = await request.json()
+    return await GO.run(account_for(request), "archive", {"trip": body.get("trip")})
+
+
 @router.post("/select")
 async def select(request: Request):
     """Sasha 359 · {text, mode: tick|add|drop} → who they mean, by the ONE resolver (the chat's too): ticked, or the list for a yes."""

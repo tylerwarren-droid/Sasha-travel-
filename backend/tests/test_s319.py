@@ -79,6 +79,7 @@ SENDER = re.compile(r"(?<![\w.])(?:E|EM|emailing)\.send\(|(?<!def )\bsend_sms\(|
                     r"|api\.twilio\.com/[^\"']*Messages|api\.resend\.com/emails|api\.bland\.ai|\bLE\.send_email\("
                     r"|(?<!def )\bsend_email\(msg|(?<!def )\bsend_email\(compose_email")
 WHO = {
+    "booking_signer/group_book.py": "the organiser's own travellers — each one's booking confirmation, to their registered email (Sasha 364), never a venue",
     "booking_signer/emailing.py": "the email transport itself (Resend) — every caller is listed here",
     "booking_signer/calls.py": "the call transport itself (Bland) — every caller is listed here",
     "agapi/venue_calls.py": "a venue — ONLY the call AgAPI's act planned (its call_plan), the one way Sasha dials a venue",

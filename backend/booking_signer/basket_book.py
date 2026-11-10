@@ -362,7 +362,7 @@ async def _supersede(account: str, pend: Dict[str, Any]) -> Optional[Dict[str, A
     return None
 
 
-async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Dict[str, Any]]:
+async def _resume(account: str, pend: Dict[str, Any], where: str, send: bool = True) -> Optional[Dict[str, Any]]:
     """Sasha 220 · ONE PAYMENT PER BASKET. A payment already under way: paid → "already paid" (never a second charge); the same
     channel again → the same session (its link resent, or its card again); the other channel → the open session is EXPIRED at
     Stripe first (so it can never also be paid), its items released, and None (the caller opens the new one)."""
@@ -378,7 +378,7 @@ async def _resume(account: str, pend: Dict[str, Any], where: str) -> Optional[Di
         if where == "here":
             return {"where": "here", "session_id": sid, "client_secret": st.get("client_secret"), "url": st.get("url"), "eur": st["amount"],
                     "resumed": True}
-        phone = await GW.tap_to_pay(account, f"€{st['amount']:.2f}", "your trip (TEST)", st["url"])
+        phone = await GW.tap_to_pay(account, f"€{st['amount']:.2f}", "your trip (TEST)", st["url"]) if send else None
         return {"where": "phone", "session_id": sid, "url": st["url"], "phone": phone, "eur": st["amount"], "resumed": True}
     if st and st["status"] == "open" and not await TD.expire(sid):   # the switch: the old one can never also be paid
         st = await TD.session_state(sid)
@@ -418,9 +418,10 @@ async def mobile_needed(account: str) -> Optional[Dict[str, Any]]:
             "needs": ["mobile"]}
 
 
-async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict[str, Any]:
+async def pay(account: str, read_back_sha256: str, where: str = "phone", send: bool = True) -> Dict[str, Any]:
     """The yes → one Stripe TEST checkout for exactly the rows read back → every item held with the session (Austen). Sasha 220:
-    `where` — "phone": the link to their WhatsApp, as before; "here": an embedded checkout for the page they're on."""
+    `where` — "phone": the link to their WhatsApp, as before; "here": an embedded checkout for the page they're on.
+    Sasha 363(a) · `send=False`: the link is made, never sent on its own — it goes IN the read-back's one message (WhatsApp)."""
     from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT
     pend = await in_progress(account)
     if pend:   # Sasha 221b · the yes is to a NEW read-back (the rows now chosen, word for word): the old payment never stands in for it
@@ -431,10 +432,10 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
                 return dropped
             pend = None
     if pend:
-        resumed = await _resume(account, pend, where)
+        resumed = await _resume(account, pend, where, send)
         if "move" not in resumed:
             return resumed
-        return await _moved(account, resumed["move"], where)
+        return await _moved(account, resumed["move"], where, send)
     cur = await current(account)
     if (not cur or not cur["rows"]) and await _all_booked(account):   # Sasha 220 · paid and booked already: never a second charge
         return {"already_paid": True}
@@ -483,7 +484,7 @@ async def pay(account: str, read_back_sha256: str, where: str = "phone") -> Dict
                 "unrecorded": True}
     if where == "here":   # Sasha 220 · the card on the page they're on; nothing to their phone
         return {"where": "here", "session_id": got["id"], "client_secret": got.get("client_secret"), "url": got.get("url"), "eur": t["amount"]}
-    phone = await GW.tap_to_pay(account, f"€{t['amount']:.2f}", f"{cur['title'] or 'your trip'} — {what} (TEST)", got["url"])
+    phone = await GW.tap_to_pay(account, f"€{t['amount']:.2f}", f"{cur['title'] or 'your trip'} — {what} (TEST)", got["url"]) if send else None
     return {"url": got["url"], "session_id": got["id"], "phone": phone, "eur": t["amount"], "where": "phone"}
 
 
@@ -532,7 +533,7 @@ async def charge_of(account: str, cur: Dict[str, Any]) -> Dict[str, Any]:
     return {**own, "amount": round(float(fig), 2), "breakdown": figs.get("breakdown")}
 
 
-async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]:
+async def _moved(account: str, mv: Dict[str, Any], where: str, send: bool = True) -> Dict[str, Any]:
     """Sasha 220 · the same payment, moved here ↔ phone: the SAME rows, the SAME amount (refused if it would differ)."""
     from . import guest_whatsapp as GW, test_deposit as TD, paid_watch as PWT, plan_store as PS
     rows = [{**r, "state": "chosen"} for r in mv["rows"]]
@@ -562,7 +563,7 @@ async def _moved(account: str, mv: Dict[str, Any], where: str) -> Dict[str, Any]
         return {"why": "I couldn't save the payment record, so I haven't moved the payment — nothing was charged.", "unrecorded": True}
     if where == "here":
         return {"where": "here", "session_id": got["id"], "client_secret": got.get("client_secret"), "url": got.get("url"), "eur": amount, "moved": True}
-    phone = await GW.tap_to_pay(account, f"€{amount:.2f}", f"{title or 'your trip'} — {what} (TEST)", got["url"])
+    phone = await GW.tap_to_pay(account, f"€{amount:.2f}", f"{title or 'your trip'} — {what} (TEST)", got["url"]) if send else None
     return {"where": "phone", "url": got["url"], "session_id": got["id"], "phone": phone, "eur": amount, "moved": True}
 
 

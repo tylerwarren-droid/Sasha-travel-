@@ -21,9 +21,9 @@ from typing import Any, Dict, List, Optional
 
 log = logging.getLogger("booking_signer.group_outcome")
 
-ACTIONS = ("book", "swap", "cancel", "invite", "invoice", "add", "person_add", "person_edit", "documents", "open", "create", "switch", "select", "confirm")
+ACTIONS = ("book", "swap", "cancel", "invite", "invoice", "add", "person_add", "person_edit", "documents", "open", "create", "switch", "select", "confirm", "archive")
 VERB = {"book": "Book", "swap": "Swap", "cancel": "Cancel", "invite": "Invite", "invoice": "The invoice", "add": "Add these",
-        "person_add": "Add to the roster", "person_edit": "Save", "documents": "Documents", "select": "Find", "confirm": "Yes, these people",
+        "person_add": "Add to the roster", "person_edit": "Save", "documents": "Documents", "select": "Find", "confirm": "Yes, these people", "archive": "Archive",
         "open": "Open this trip", "create": "Go", "switch": "On this trip"}
 #: what each action needs from the organiser, by the field's name ON THE PAGE (the same words in the chat)
 NEEDS = {
@@ -39,6 +39,7 @@ NEEDS = {
     # Sasha 358 · THE ENGINE's two writers: a new trip ([Go]) and one person's switch
     "create": (("destination", "where"), ("who", "who's going — tick them")),
     "switch": (("person", "who"),),
+    "archive": (("trip", "which trip"),),
 }
 NO_MOVEMENT = "There's no group movement yet — tell Sasha the company, where, when and the hotel area first."
 PLAN_ONE_S = 75.0   # a swapped-in newcomer is planned while the organiser waits (one person); longer → the row fills in on its own
@@ -408,8 +409,18 @@ async def _switch(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     return r
 
 
+async def _archive(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
+    """Sasha 364 · a trip archived, never deleted: off "Your trips"; its bookings and invoice stay."""
+    from . import groups as G
+    r = await G.archive_trip(account, str(a["trip"]))
+    if r.get("why") or not r.get("archived"):
+        return _no((r.get("why") or "that trip was already archived").capitalize() + ".")
+    t = r["trip"]
+    return {"done": True, "say": f"Archived the {t['destination']} trip — it's off your trips; its bookings and invoice are kept."}
+
+
 _HOW = {"book": _book, "swap": _swap, "cancel": _cancel, "invite": _invite, "invoice": _invoice, "add": _add,
         "person_add": _person_add, "person_edit": _person_edit, "documents": _documents, "open": _open_trip,
-        "create": _create, "switch": _switch, "select": _select, "confirm": _confirm}
+        "create": _create, "switch": _switch, "select": _select, "confirm": _confirm, "archive": _archive}
 
 __all__ = ["run", "answered", "missing", "held", "NEEDS", "ACTIONS"]

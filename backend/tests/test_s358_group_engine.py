@@ -262,9 +262,9 @@ class OnPostgres(unittest.TestCase):
             for role in ("anon", "authenticated"):
                 go(c.execute(f"do $$ begin create role {role}; exception when duplicate_object then null; end $$"))
             go(c.execute("create schema if not exists auth; create table auth.users (id uuid primary key)"))
-            go(c.execute("create table public.trips (id uuid primary key)"))
+            go(c.execute("create table public.trips (id uuid primary key, owner_id uuid)"))
             for f in ("036_s2_activity_whatsapp.sql", "037_keep.sql", "048_group_movement.sql", "049_traveller_vault.sql", "050_keep_owners.sql",
-                      "053_group_roster.sql", "056_group_open_trip.sql", "059_group_role.sql", "059_group_role.sql"):
+                      "053_group_roster.sql", "056_group_open_trip.sql", "059_group_role.sql", "059_group_role.sql", "060_archived_trips.sql", "060_archived_trips.sql"):
                 go(c.execute(KO._block(f)))
             org = uuid.uuid4()
             go(c.execute("insert into auth.users (id) values ($1)", org))

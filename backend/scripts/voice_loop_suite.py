@@ -8,7 +8,7 @@ Checked in every conversation:
   · no process talk — never her tools, errors, mix-ups, "I don't want to pass on bad info"
   · no test disclaimers — never "not real", "test", "demo", "nothing is charged" in her words (the cards carry the tag)
   · flights in the first proposal — a card per leg with 3–5 options, one already chosen, and a € total in her words
-  · the payment link reaching the phone — one Stripe checkout link to the guest's number, only after their yes
+  · Sasha 363(a) · ONE payment, IN the read-back card (the pay tap is the yes) — never a link to the phone, never a second question
   · and (what reading the first run's transcripts found): no sentence said twice in a turn, no list read out, and a tapped
     flight swapped straight in (choose_offer, no new search)
 The models are real (not deterministic). Sasha 212: each conversation runs ONCE — the conversation-7 "flake" was the
@@ -85,8 +85,6 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, country:
             last = history[-1]["content"] if history else ""
             if gave < 2 and history and _ASKS_TRAVELLERS.search(last) and travellers not in (todo[0] if todo else ""):
                 said, gave = travellers, gave + 1
-            elif not chose and history and re.search(r"(?i)pay here,? or on your phone", last):   # Sasha 220 · asked once: the phone
-                said, chose = "On my phone.", True
             elif todo:
                 said = todo.pop(0)
             else:
@@ -118,6 +116,8 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, country:
                 elif ev["type"] == "error":
                     t["text"] = ev["message"]
             t["links"] = [m for m in captured[GW.wa_key(number)][sent_before:] if "checkout.stripe.com" in m]
+            t["card_pays"] = [r["pay"]["session_id"] for r in t["renders"]   # Sasha 363(a) · the payment IN the read-back card
+                              if r.get("kind") == "read_back" and isinstance(r.get("pay"), dict) and r["pay"].get("session_id")]
             history += [{"role": "user", "content": said}, {"role": "assistant", "content": t["text"]}]
             turns.append(t)
         plan = None
@@ -159,14 +159,18 @@ def judge(name: str, turns: list, ends_paid: bool) -> dict:
                     f"{(first or {}).get('text', '')[:120]}")
     links = [(i, l) for i, t in enumerate(turns) for l in t["links"]]
     yes_at = next((i for i, t in enumerate(turns) if _YESLINE.match(t["user"]) or t["user"].startswith("OK, go ahead")), None)
-    if ends_paid and len(links) != 1:
-        fail.append(f"payment links on the phone: {len(links)} (want exactly one) — her last words: "
+    pays = {s for t in turns for s in t.get("card_pays") or []}
+    if ends_paid and len(pays) != 1:   # Sasha 363(a) · ONE ASK: exactly one payment, IN the read-back card (the pay tap is the yes)
+        fail.append(f"payments in the read-back card: {len(pays)} (want exactly one) — her last words: "
                     + " | ".join(f"{t['user']!r} → {str(t.get('text') or '')[:110]!r}" for t in turns[-2:]))   # Sasha 322 · a flake says why
+    if links:   # on the page the payment is the card's — never a second one sent to the phone
+        fail.append(f"a payment link went to the phone ({len(links)}) — the card's payment is the only one")
+    asked = [t["text"] for t in turns if re.search(r"(?i)pay here,? or on your phone|\b(?:shall|should) i go ahead\b", t.get("text") or "")]
+    if asked:   # Sasha 363(a) · the card is the ONE question
+        fail.append(f"a second question beside the card: {asked[0][:120]!r}")
     late = [i for i, t in enumerate(turns) if yes_at is not None and i >= yes_at and _ASKS_TRAVELLERS.search(t.get("text") or "")]
     if late:   # Sasha 323 · ONE YES: the travellers are asked BEFORE the read-back his yes answers — never after it (a second yes)
         fail.append(f"the travellers were asked after his yes (turn {late[0] + 1}): {str(turns[late[0]].get('text') or '')[:120]}")
-    if links and (yes_at is None or links[0][0] < yes_at):
-        fail.append("a payment link reached the phone before their yes")
     for t in turns:
         sents = [AG._norm(x) for _, u in t["spoken"] for x in re.split(r"(?<=[.!?])\s+", u) if x.strip()]
         if len(sents) != len(set(sents)):

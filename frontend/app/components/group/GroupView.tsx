@@ -266,7 +266,11 @@ export default function GroupView({ embedded = false }: { embedded?: boolean } =
         <span style={{ color: T.muted }}>Your trips:</span>
         {(st?.trips || []).map(t => t.open && !fresh
           ? <span key={t.id} data-trip-open={t.id} style={{ ...small, fontWeight: 700 }}>{t.destination} {String(t.starts_on || '').slice(0, 10)} · {t.people ?? 0} · open</span>
-          : <button key={t.id} type="button" data-trip={t.id} onClick={press('Open this trip', () => openTrip(t.id))} style={small}>{t.destination} {String(t.starts_on || '').slice(0, 10)} · {t.people ?? 0}</button>)}
+          : <span key={t.id} style={{ display: 'inline-flex', gap: 2 }}>
+              <button type="button" data-trip={t.id} onClick={press('Open this trip', () => openTrip(t.id))} style={small}>{t.destination} {String(t.starts_on || '').slice(0, 10)} · {t.people ?? 0}</button>
+              {/* Sasha 364 · archived, never deleted: off your trips; its bookings and invoice stay */}
+              <button type="button" data-archive={t.id} aria-label={`Archive the ${t.destination} trip`} onClick={press('Archive', () => post('Archive', '/api/booking/group/archive', { trip: t.id }))} style={{ ...small, padding: '4px 8px' }}>×</button>
+            </span>)}
         <button type="button" data-new-trip onClick={press('New trip', async () => { setFresh(true); setTicked([]); setSaid('A new trip: where and when, then tick who’s going (or add them) and press Go. Nothing is made until Go.') })} style={small}>New trip</button>
       </p>
       {said && <p data-said role="status" aria-live="polite" style={{ whiteSpace: 'pre-line', margin: '6px 0 12px' }}>{said}</p>}

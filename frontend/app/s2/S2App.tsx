@@ -20,7 +20,7 @@ import { KeepScreen } from '@/app/keep/KeepScreen'   // Sasha 235 · My Keep
 // Sasha 241 · the cards moved to components/cards/ (shared with /next's SashaChat), unchanged
 import { PlaceCard } from '@/app/components/cards/PlaceCard'   // Sasha 248 · one place card
 import { OptionsCard, TotalCard, PayLink, TripCard, NextButtons, type NextAction, type Opt } from '@/app/components/cards/S2Cards'   // Sasha 349 · 352
-import { C, Box, shrink, KeepCapture, GroupListCard, WaOpen, Plans, type CalUpdate, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
+import { C, Box, shrink, KeepCapture, GroupListCard, GroupTripNow, WaOpen, Plans, type CalUpdate, CounterCard, MyCards, AccidentCard, ClaimStatus, SubscriptionsCard, PreparedCard } from '@/app/components/cards/S2Cards'
 import type { Plan } from '@/app/components/cards/S2Cards'
 export { KeepCapture }   // Sasha 228's handoff page imports it from here
 import TripPanel from '@/app/components/workspace/TripPanel'   // Sasha 236 · the trip board: S1's own, on the same records
@@ -47,19 +47,25 @@ import TabBar from './TabBar'   // Sasha 362 · the ONE tab bar
 const S2_TABS = [{ id: 'sasha', label: 'Sasha' }, { id: 'trip', label: 'Trip' }, { id: 'activity', label: 'Activity' }, { id: 'keep', label: 'My Keep' },
   { id: 'group', label: 'Group', data: 'group-tab' }] as const
 
+/** Sasha 363(a) · the read-back card's own payment (the server's sasha.pay_in_card): the embedded checkout, the saved card's words, or
+ *  "already paid". Never a second card, never "Pay here, or on your phone?". */
+type InCardPay = { where?: string; session_id?: string; total_eur?: number; client_secret?: string; checkout_url?: string; phone_too?: boolean
+  card?: string; already_paid?: boolean }
+
 type Card =
   | { k: 'venues'; cards: { place_id: string; name: string; rating?: number; rating_count?: number; area?: string; address?: string; type?: string; photo?: string; open_at?: string }[] }
-  | { k: 'read_back'; lines: string[]; what?: string; live?: boolean; status?: string; total?: number; act?: string
-      ask?: string; choices?: { title: string; route: string }[]; read_back_id?: string }   // Sasha 265 · item 4: the call's card IS the question
+  | { k: 'read_back'; lines: string[]; what?: string; live?: boolean; status?: string; total?: number; act?: string; head?: string
+      ask?: string; choices?: { title: string; route: string }[]; read_back_id?: string   // Sasha 265 · item 4: the call's card IS the question
+      pay?: InCardPay; result?: string }   // Sasha 363(a) · ONE ASK: the read-back carries its payment (the pay tap IS the yes)
   | { k: 'calendar'; title?: string; links: Record<string, string>; update?: 'cancel' | 'change' }
-  | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean }
+  | { k: 'pay'; client_secret?: string; url?: string; total_eur?: number; already_paid?: boolean; result?: string }
   | { k: 'booked'; line: string; actions?: NextAction[] }
   | { k: 'keep_capture'; what: 'passport' | 'loyalty' }
   | { k: 'wa_open'; to: { name?: string | null; number?: string }; text: string; open: string; why: string }   // Sasha 230
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
   | { k: 'plans'; items: Plan[]; on?: string; updates?: CalUpdate[] }
   | { k: 'notice'; title: string; lines: string[]; status?: string }
-  | { k: 'group_list'; title: string; rows: { name: string; grade?: string | null; status: string; price_eur?: number | null }[]; counts?: string; link: string; empty?: string | null }   // Sasha 345 · the master list's card
+  | { k: 'group_list'; title: string; rows: { name: string; role?: string | null; grade?: string | null; status: string; price_eur?: number | null }[]; counts?: string; link: string; empty?: string | null }   // Sasha 345 · the master list's card (364: role)
   | { k: 'counter_card'; card: Ev }   // CR 75 · fine print: the counter card (each line quoted)
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
@@ -172,7 +178,8 @@ function cardsOf(ev: Ev): Card[] {
   if (k === 'venues' && ev.preset) { const cs = shownCards(ev.preset); return cs.length ? [{ k: 'venues', cards: cs }] : [] }
   if (k === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length)   // Sasha 276 · refused: no cards
     return [{ k: 'discover', groups: ev.groups, options: ev.options, pick: ev.pick || null, sources_url: ev.sources_url || null }]
-  if (k === 'read_back' && Array.isArray(ev.read_back)) return [{ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act,
+  if (k === 'read_back' && Array.isArray(ev.read_back)) return [{ k: 'read_back', lines: ev.read_back, what: ev.what, live: ev.live, status: ev.status, total: ev.total_eur, act: ev.act, head: ev.head,
+    ...(ev.pay && typeof ev.pay === 'object' ? { pay: ev.pay as InCardPay } : {}),
     ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) }]
   if (k === 'calendar' && ev.links) return [{ k: 'calendar', title: ev.title, links: ev.links, update: ev.update }]   // Sasha 312
   if (k === 'keep_capture') return [{ k: 'keep_capture', what: ev.what === 'loyalty' ? 'loyalty' : 'passport' }]
@@ -514,7 +521,8 @@ const isYes = (route: string) => YES.has(route) || /^say:yes\b/i.test(route)
 function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (title: string, readBackId: string, route: string) => void }) {
   const [tapped, setTapped] = useState<string | null>(null)
   const [twice, setTwice] = useState<string | null>(null)   // Sasha 347 · a second press is TOLD (nothing is sent twice), never greyed out
-  const head = c.act === 'cancel' ? 'Ready to cancel · one tap'
+  const head = c.head ? untag(c.head)   /* Sasha 364 · the SERVER names its card (a list of people is never "your booking") */
+    : c.act === 'cancel' ? 'Ready to cancel · one tap'
     : c.total ? `Ready to book · ${euros(c.total)} all in` : 'Your booking · one tap'
   return (
     <Box k={head} h={untag(c.ask || '')}>
@@ -527,6 +535,26 @@ function CallCard({ c, tap }: { c: Extract<Card, { k: 'read_back' }>; tap: (titl
               color: isYes(o.route) ? '#111' : C.gold, fontWeight: 700, opacity: tapped && tapped !== o.route ? 0.4 : 1 }}>{o.title}</button>))}
       </div>
       {twice ? <div role="status" data-card-twice style={{ fontSize: 13.5, color: C.dim, marginTop: 6 }}>{twice}</div> : null}
+    </Box>)
+}
+
+/** Sasha 363(a) · ONE ASK (Tyler's dry run, 9 Nov: a read-back, "Shall I go ahead?", "Pay here, or on your phone?", then a second
+ *  card): the read-back and its payment are ONE card — paying in it IS the yes (a hold, taken only once it's booked). Afterwards the card
+ *  shows Sasha's result, never Stripe's screen (PayHere's `result`). "Pay on my phone instead" moves the SAME payment (book's switch). */
+function ReadBackPay({ c, send }: { c: Extract<Card, { k: 'read_back' }>; send: (t: string) => void }) {
+  const p = c.pay || {}
+  const [moved, setMoved] = useState(false)
+  const head = c.total ? `Ready to book · ${euros(c.total)} all in` : 'Ready to book'
+  return (
+    <Box k={head} h={untag(c.ask || '')}>
+      {c.lines.filter(l => !/^\s*⚠/.test(l)).map((l, i) => <div key={i} style={{ fontSize: 14.5, padding: '2px 0', color: 'rgba(255,255,255,.88)' }}>{untag(l)}</div>)}
+      <div data-read-back-pay={p.session_id || ''} style={{ marginTop: 10 }}>
+        {moved ? <div role="status" style={{ fontSize: 13.5, color: C.dim }}>The payment is on your phone now — this one is closed.</div>
+          : <PayHere clientSecret={p.client_secret} url={p.checkout_url} totalEur={p.total_eur ?? c.total} alreadyPaid={p.already_paid} result={c.result} />}
+      </div>
+      {p.phone_too && !moved && !c.result ? (
+        <button type="button" data-card-choice="pay_on_phone" onClick={() => { setMoved(true); send('Send the payment to my phone') }}
+          style={{ marginTop: 8, padding: '8px 14px', borderRadius: 999, border: `1px solid ${C.gold}`, background: 'transparent', color: C.gold, fontWeight: 700 }}>Pay on my phone instead</button>) : null}
     </Box>)
 }
 
@@ -552,6 +580,7 @@ function NoAnswerCard({ c, tap }: { c: Extract<Card, { k: 'no_answer' }>; tap: (
 
 function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string) => void; pick: (name: string, placeId: string) => void; send: (t: string) => void
   tap: (title: string, readBackId: string, route: string) => void }) {
+  if (c.k === 'read_back' && c.pay && c.pay.where !== 'saved') return <ReadBackPay c={c} send={send} />   // Sasha 363(a) · ONE card, ONE ask
   if (c.k === 'read_back' && c.choices && c.choices.length && c.read_back_id) return <CallCard c={c} tap={tap} />
   if (c.k === 'no_answer') return <NoAnswerCard c={c} tap={tap} />
   if (c.k === 'sign_in') return (   /* Sasha 274 · rows 1063/1064 — the same sign-in as the header's, this conversation carried */
@@ -627,7 +656,7 @@ function CardView({ c, choose, pick, send, tap }: { c: Card; choose: (t: string)
       </div>
       {c.update ? <div style={{ fontSize: 12.5, color: C.dim, marginTop: 8 }}>In Google Calendar, delete or move it there — a Google link can&rsquo;t change an event it added.</div> : null}
     </Box><After k="calendar" /></>)
-  if (c.k === 'pay') return <><div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} /></div>{!c.already_paid && <After k="pay" />}</>
+  if (c.k === 'pay') return <><div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 14, marginTop: 8 }}><PayHere clientSecret={c.client_secret} url={c.url} totalEur={c.total_eur} alreadyPaid={c.already_paid} result={c.result} /></div>{!c.already_paid && <After k="pay" />}</>
   const ACT_HEAD: Record<string, string> = { late: 'Ready to call · on your yes', change: 'Ready to change · on your yes', cancel: 'Ready to cancel · on your yes' }   // Sasha 226
   const head = c.act && ACT_HEAD[c.act] ? ACT_HEAD[c.act] : c.what ? (c.status === 'sent' ? 'Sent' : c.status === 'not_sent' ? 'Not sent' : 'Ready to send · on your yes')
     : (c.total ? `Ready to book · ${euros(c.total)} all in` : 'Ready to book · on your yes')
@@ -855,7 +884,9 @@ export default function S2App() {
       }
       if (ev.type !== 'booked' && ev.type !== 'booking_failed') return
       const line = ev.type === 'booked' ? bookedLine(ev) : null   // Sasha 249 · the card from the `booked` event, the server's one status
-      setMsgs(ms => [...ms.map(x => ({ ...x, cards: x.cards.map(c => (c.k === 'pay' ? { ...c, already_paid: ev.type === 'booked' } : c)) })),
+      // Sasha 364 · the pay card shows the booking's own result (Sasha's words), never Stripe's screen — the same words written below
+      setMsgs(ms => [...ms.map(x => ({ ...x, cards: x.cards.map(c => (c.k === 'pay' && !c.result ? { ...c, already_paid: ev.type === 'booked', result: untag(String(ev.text || ev.say || '')) || undefined }
+                       : c.k === 'read_back' && c.pay && c.pay.where !== 'saved' && !c.result ? { ...c, pay: { ...c.pay, already_paid: ev.type === 'booked' }, result: untag(String(ev.text || ev.say || '')) || undefined } : c)) })),
                      { role: 'sasha', text: untag(String(ev.text || ev.say || '')), cards: line ? [{ k: 'booked', line, actions: Array.isArray(ev.actions) ? ev.actions : undefined }] : [] }])
       window.dispatchEvent(new Event('sasha-plan-refresh'))   // Sasha 352 · the trip card's buttons follow its state (booked → Change / Cancel)
       // Sasha 279 · B · SHE SAYS SO FIRST: here now → spoken at once (it was only written — Tyler, 21 Oct, had to ask); away → her
@@ -1181,6 +1212,7 @@ export default function S2App() {
       ) : tab === 'trip' ? (   /* Sasha 236 · the trip board: S1's TripPanel itself (flights, stays, bookings, forms and receipts, from /plan + /journeys) */
         <section className="s2-trip" style={{ flex: 1, minHeight: 0, overflowY: 'auto', minWidth: 0, padding: '0 12px 16px' }}>
           <style>{TRIP_BOARD_CSS}</style>
+          <GroupTripNow />{/* Sasha 364 · the group trip they're on, first: one trip on every tab */}
           <TripPanel richItinerary={null} openDays={openDays} travellerCount={0 /* Sasha 249 · no page default: the trip's own party, else "—" */}
             toggleDay={(d: number) => setOpenDays(s => { const n = new Set(s); if (n.has(d)) n.delete(d); else n.add(d); return n })} />
         </section>

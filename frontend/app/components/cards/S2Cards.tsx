@@ -11,7 +11,7 @@ import { subsHeading, subsFooter } from '@/lib/subscriptions-heading.mjs'   // S
 import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 import { bookingReq } from '@/lib/booking-client'   // Sasha 352 · the trip card reads the Trip view's own record
 import { eur as euros } from '@/lib/money'
-import { again, announce, failed, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
+import { again, announce, failed, observe, stillGoing, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Ev = Record<string, any>   // eslint-disable-line @typescript-eslint/no-explicit-any
 export const C = { bg: '#0b0b10', card: '#16151d', line: 'rgba(255,255,255,.1)', gold: '#E8B923', dim: 'rgba(255,255,255,.6)' }
@@ -347,22 +347,64 @@ export function TripCard({ send }: { send: (t: string) => void }) {
     </Box>)
 }
 
+/** Sasha 345 · the master list's card — Sasha 364: LIVE (it reads the ONE master list, groups.view, while anyone is still planning, so
+ *  "planning…" turns into "planned" here as it does on the Group page) and labelled by ROLE (grade only where the trip's limits are set). */
 export function GroupListCard({ c, send }: { c: Ev; send?: (t: string) => void }) {
-  const rows: Ev[] = Array.isArray(c.rows) ? c.rows : []
+  const [live, setLive] = useState<Ev | null>(null)
+  const cur: Ev = live || c
+  const rows: Ev[] = Array.isArray(cur.rows) ? cur.rows : []
+  const moving = !rows.length || rows.some((r) => r.status === 'planning…' || r.status === 'not planned')
+  useEffect(() => {
+    if (!moving) return
+    let off = false
+    const pull = async () => {
+      const r = await bookingReq('/api/booking/group/list')
+      const j = (r.json || {}) as Ev
+      if (off || !r.ok || !Array.isArray(j.rows)) return
+      const byGrade = Boolean(j.limits && j.limits.by_grade && Object.keys(j.limits.by_grade).length)
+      const counts = Object.entries((j.counts || {}) as Record<string, number>).map(([s, n]) => `${n} ${s}`).join(', ')
+      setLive({ ...c, counts, empty: null, rows: j.rows.map((x: Ev) => ({ name: x.name, role: x.role, ...(byGrade ? { grade: x.grade } : {}), status: x.status, price_eur: x.price_eur })),
+                actions: Array.isArray(j.actions) ? j.actions : c.actions })
+    }
+    const t = setInterval(() => observe(pull(), 'Reading the master list', toConsole), 5000)
+    return () => { off = true; clearInterval(t) }
+  }, [moving, c])
   return (
-    <Box k="The group's list" h={String(c.title || 'Group movement')}>
-      {c.counts && <div style={{ fontSize: 13, color: C.dim, marginTop: 2 }}>{String(c.counts)}</div>}
-      {c.empty ? <div style={{ marginTop: 8 }}>{String(c.empty)}</div> : (
-        <div style={{ marginTop: 8 }}>{rows.slice(0, 25).map((r, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', fontSize: 14 }}>
-            <span>{String(r.name)}{r.grade ? <span style={{ color: C.dim }}> · {String(r.grade)}</span> : null}</span>
+    <Box k="The group's list" h={String(cur.title || 'Group movement')}>
+      {cur.counts && <div style={{ fontSize: 13, color: C.dim, marginTop: 2 }}>{String(cur.counts)}</div>}
+      {cur.empty && !rows.length ? <div style={{ marginTop: 8 }}>{String(cur.empty)}</div> : (
+        <div style={{ marginTop: 8 }}>{cur.empty ? <div style={{ fontSize: 13.5, color: C.dim, marginBottom: 4 }}>{String(cur.empty)}</div> : null}
+          {rows.slice(0, 25).map((r, i) => (
+          <div key={i} data-group-row={r.status} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', fontSize: 14 }}>
+            <span>{String(r.name)}{r.role || r.grade ? <span style={{ color: C.dim }}> · {String(r.role || r.grade)}</span> : null}</span>
             <span style={{ color: C.dim }}>{String(r.status)}{typeof r.price_eur === 'number' ? ` · ${euro(r.price_eur)}` : ''}</span>
           </div>))}
           {rows.length > 25 && <div style={{ fontSize: 13, color: C.dim }}>…and {rows.length - 25} more on the Group page.</div>}
         </div>)}
-      {send ? <NextButtons actions={c.actions as NextAction[]} send={send} /> : null}
-      <a href={String(c.link || '/group')} style={{ display: 'inline-block', marginTop: 10, color: C.gold, fontWeight: 600 }}>Open the master list</a>
+      {send ? <NextButtons actions={cur.actions as NextAction[]} send={send} /> : null}
+      <a href={String(cur.link || '/group')} style={{ display: 'inline-block', marginTop: 10, color: C.gold, fontWeight: 600 }}>Open the master list</a>
     </Box>)
+}
+
+/** Sasha 364 · ONE TRIP ON EVERY TAB: the Trip tab shows the group trip the person is on (the open one — the same master list as the chat's
+ *  card and the Group page), first; nothing when they have none. */
+export function GroupTripNow() {
+  const [c, setC] = useState<Ev | null>(null)
+  useEffect(() => {
+    let off = false
+    observe(bookingReq('/api/booking/group/list').then(r => {
+      const j = (r.json || {}) as Ev
+      if (off || !r.ok || !j.movement || !Array.isArray(j.rows) || !j.rows.length) return
+      const mv = j.movement as Ev
+      const when = [String(mv.starts_on || '').slice(0, 10), String(mv.ends_on || '').slice(0, 10)].filter(Boolean).join(' – ')
+      const byGrade = Boolean(j.limits && j.limits.by_grade && Object.keys(j.limits.by_grade).length)
+      setC({ title: `${mv.company} → ${mv.destination}${when ? ` · ${when}` : ''}`, link: '/group', actions: j.actions,
+             counts: Object.entries((j.counts || {}) as Record<string, number>).map(([s2, n]) => `${n} ${s2}`).join(', '),
+             rows: j.rows.map((x: Ev) => ({ name: x.name, role: x.role, ...(byGrade ? { grade: x.grade } : {}), status: x.status, price_eur: x.price_eur })) })
+    }), 'Reading your group trip', toConsole)
+    return () => { off = true }
+  }, [])
+  return c ? <div data-trip-group style={{ margin: '0 0 12px' }}><GroupListCard c={c} /></div> : null
 }
 
 export function SharedCard({ ev, send }: { ev: Ev; send: (t: string) => void }) {

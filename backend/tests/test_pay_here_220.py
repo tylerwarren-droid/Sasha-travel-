@@ -1,6 +1,8 @@
-"""Sasha 220 · "Pay here, or on your phone?" — permanent, offline (Stripe, the basket and WhatsApp are stand-ins; 0 live calls).
+"""Sasha 220 · WHERE THEY PAY — permanent, offline (Stripe, the basket and WhatsApp are stand-ins; 0 live calls).
+Sasha 363(a) · ONE ASK: "Pay here, or on your phone?" is gone. The payment is IN the read-back card (hold_booking); paying there is
+the yes. A spoken yes never opens a second payment — book points to the card; with no payment in the card it pays where they are.
 
-  · asked once after the yes when they have WhatsApp; the answer pays (no second yes); no WhatsApp → here, never asked
+  · never asked "here or phone?"; the place is where they are (the page: here; WhatsApp: the link), or their own words
   · the choice is read from their own words, remembered for the conversation, and switchable
   · ONE payment per basket: the same place again → the same session; the other place → the open one EXPIRED first, then a new
     one; already paid → "already paid", never a second charge
@@ -35,22 +37,23 @@ class Words(unittest.TestCase):
 
 class Book(unittest.TestCase):
     def setUp(self):
-        API._HELD.clear(), API._PAY_ASKED.clear(), API._PAY_CHOICE.clear(), API._IDEM.clear(), API._CLAIMED.clear()
+        API._HELD.clear(), API._PAY_CHOICE.clear(), API._IDEM.clear(), API._CLAIMED.clear()
         API._HELD[ACCOUNT] = {"sha": "a" * 64, "at": datetime.now(timezone.utc) - timedelta(minutes=1), "result": {}}
         self.pay = mock.AsyncMock(side_effect=self._pay)
         self.calls = []
         self.p = [mock.patch("booking_signer.basket_book.pay", self.pay),
                   mock.patch("booking_signer.basket_book.in_progress", mock.AsyncMock(return_value=None)),
-                  mock.patch("booking_signer.basket._run", lambda: None)]
+                  mock.patch("booking_signer.basket._run", lambda: None),
+                  mock.patch("booking_signer.test_deposit.saved_card", mock.AsyncMock(return_value=None))]
         for p in self.p:
             p.start()
 
     def tearDown(self):
         for p in self.p:
             p.stop()
-        API._HELD.clear(), API._PAY_ASKED.clear(), API._PAY_CHOICE.clear(), API._IDEM.clear(), API._CLAIMED.clear()
+        API._HELD.clear(), API._PAY_CHOICE.clear(), API._IDEM.clear(), API._CLAIMED.clear()
 
-    async def _pay(self, account, sha, where="phone"):
+    async def _pay(self, account, sha, where="phone", send=True):
         self.calls.append((sha, where))
         if where == "here":
             return {"where": "here", "session_id": "cs_test_h", "client_secret": "cs_test_h_secret_x", "url": None, "eur": 100.0}
@@ -63,32 +66,37 @@ class Book(unittest.TestCase):
     def linked(self, yes=True):
         return mock.patch.object(API, "_whatsapp_linked", mock.AsyncMock(return_value=yes))
 
-    def test_asked_once_then_their_answer_pays_here(self):
+    def test_never_asked_where_the_yes_pays_where_they_are(self):
+        self.assertFalse(hasattr(API, "PAY_ASK") or hasattr(API, "_PAY_ASKED"))      # the question is gone, not hidden
         with self.linked():
             r = self.book("Yes, go ahead.")
-            self.assertEqual(r["result"]["status"], "choose_payment")
-            self.assertEqual(r["result"]["ask"], "Pay here, or on your phone?")
-            self.assertEqual(self.calls, [])                                   # nothing paid on the question
-            r = self.book("Here, please.", key="k2")
         self.assertEqual(r["result"]["payment"], "here")
         self.assertEqual(self.calls, [("a" * 64, "here")])
         self.assertEqual(r["result"]["checkout"]["client_secret"], "cs_test_h_secret_x")
 
-    def test_their_answer_phone_is_the_whatsapp_link_as_before(self):
+    def test_the_cards_payment_is_the_yes_a_spoken_yes_never_opens_another(self):
+        API._HELD[ACCOUNT]["result"] = {"pay": {"where": "here", "session_id": "cs_test_card", "total_eur": 100.0}}
         with self.linked():
-            self.book("Yes, go ahead.")
-            r = self.book("On my phone.", key="k2")
+            r = self.book("Yes, go ahead.")
+        self.assertEqual((r["result"]["status"], r["result"]["payment"], r["result"]["session_id"]), ("awaiting_payment", "in_card", "cs_test_card"))
+        self.assertIn("on the card on their screen", r["result"]["say"])
+        self.assertEqual(self.calls, [])
+
+    def test_on_whatsapp_the_link_as_before(self):
+        with self.linked():
+            ctx = API.Ctx(account=ACCOUNT, user_said="Yes, go ahead.", session="s1", via="wa")
+            r = run(API.call(ctx, "book", {"approval": {"said": "Yes, go ahead."}, "idempotency_key": "k"}))
         self.assertEqual(r["result"]["payment"], "sent_to_phone")
         self.assertEqual(self.calls, [("a" * 64, "phone")])
         self.assertNotIn("checkout", r["result"])
 
-    def test_no_whatsapp_pays_here_and_never_asks(self):
+    def test_no_whatsapp_pays_here(self):
         with self.linked(False):
             r = self.book("Yes, go ahead.")
         self.assertEqual(r["result"]["payment"], "here")
         self.assertEqual(self.calls, [("a" * 64, "here")])
 
-    def test_a_yes_that_says_where_pays_at_once(self):
+    def test_a_yes_that_says_where_pays_there(self):
         with self.linked():
             r = self.book("Yes, on my phone please.")
         self.assertEqual(r["result"]["payment"], "sent_to_phone")
@@ -101,15 +109,14 @@ class Book(unittest.TestCase):
         self.assertEqual(r["result"]["payment"], "here")
         self.assertEqual([w for _, w in self.calls], ["here", "here"])
 
-    def test_an_answer_with_no_question_asked_is_not_a_yes(self):
+    def test_a_place_alone_is_not_a_yes(self):
         with self.linked():
             r = self.book("Here.")
         self.assertEqual(r["error"]["code"], "no_explicit_yes")
         self.assertEqual(self.calls, [])
 
-    def test_not_here_is_never_the_answer(self):
+    def test_not_here_is_never_a_yes(self):
         with self.linked():
-            self.book("Yes, go ahead.")
             r = self.book("No, not here.", key="k2")
         self.assertEqual(r["error"]["code"], "no_explicit_yes")
         self.assertEqual(self.calls, [])

@@ -24,8 +24,11 @@ function loadStripe(): Promise<((pk: string) => StripeJs) | null> {
   })
 }
 
-export function PayHere({ clientSecret, url, totalEur, alreadyPaid }: { clientSecret?: string; url?: string; totalEur?: number; alreadyPaid?: boolean }) {
+/** Sasha 364 · `result`: the booking's own outcome in Sasha's words (the settled event's) — once Stripe's checkout completes it is
+ *  REMOVED and the card shows Sasha's state, never Stripe's "You're all done here" (Tyler's dry run, 9 Nov). */
+export function PayHere({ clientSecret, url, totalEur, alreadyPaid, result }: { clientSecret?: string; url?: string; totalEur?: number; alreadyPaid?: boolean; result?: string }) {
   const box = useRef<HTMLDivElement>(null)
+  const live = useRef<{ destroy: () => void } | null>(null)
   const [phase, setPhase] = useState<'idle' | 'mounted' | 'done' | 'failed'>('idle')
   useEffect(() => {
     if (alreadyPaid || !PK || !clientSecret || !box.current) return
@@ -34,9 +37,11 @@ export function PayHere({ clientSecret, url, totalEur, alreadyPaid }: { clientSe
     loadStripe().then(async (S) => {
       if (off || !S || !box.current) { if (!S) setPhase('failed'); return }
       try {
-        const c = await S(PK).initEmbeddedCheckout({ fetchClientSecret: async () => clientSecret, onComplete: () => setPhase('done') })
+        const c = await S(PK).initEmbeddedCheckout({ fetchClientSecret: async () => clientSecret,
+          onComplete: () => { try { live.current?.destroy() } catch { /* already gone */ } live.current = null; setPhase('done') } })
         if (off) { c.destroy(); return }
         checkout = c
+        live.current = c
         c.mount(box.current)
         setPhase('mounted')
       } catch { setPhase('failed') }
@@ -46,13 +51,14 @@ export function PayHere({ clientSecret, url, totalEur, alreadyPaid }: { clientSe
 
   const head = (k: string, h: string) => (
     <div className="lw-cardHd"><span className="lw-ci gold">💳</span><div className="lw-meta"><div className="lw-k">{k}</div><div className="lw-h">{h}</div></div></div>)
+  if (result) return <div className="lw-card" data-pay-result>{head(alreadyPaid ? 'Booked' : 'Not booked', result)}</div>
   if (alreadyPaid) return <div className="lw-card">{head('Paid', 'Nothing more to pay')}</div>
   const total = typeof totalEur === 'number' ? `${euros(totalEur)} all in` : 'Your trip'
   return (
     <div className="lw-card">
-      {head(phase === 'done' ? 'Payment received' : 'Pay here', phase === 'done' ? 'Confirming with Stripe — it shows as booked here when it’s recorded' : total)}
-      <div className="lw-cardBody" style={{ display: 'block' }}>
-        {PK && clientSecret && phase !== 'failed'
+      {head(phase === 'done' ? 'Booking it now' : 'Pay here', phase === 'done' ? 'Your card is only held — it’s taken when the booking is confirmed' : total)}
+      <div className="lw-cardBody" style={{ display: phase === 'done' ? 'none' : 'block' }}>
+        {PK && clientSecret && phase !== 'failed' && phase !== 'done'
           ? <div ref={box} style={{ minHeight: phase === 'mounted' ? 0 : 120 }} data-testid="pay-embedded" />
           : url
             ? <a className="lw-callink" href={url} target="_blank" rel="noreferrer" data-testid="pay-here-link"

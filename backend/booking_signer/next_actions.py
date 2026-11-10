@@ -43,8 +43,10 @@ _TRIP = {"offers": [], "prepared": ["see"], "chosen": ["book"], "held": ["yes"],
 
 
 def action(aid: str, **more: Any) -> Dict[str, Any]:
+    """Sasha 364 · an action as every door receives it — WITH its tool (found in Tyler's dry run: the Group page's Book all got no tool, so
+    it answered "this page can't do that yet"; the chat and the page now run the SAME tool)."""
     a = ACTIONS[aid]
-    return {"id": aid, "label": a["label"], "say": a["say"], **more}
+    return {"id": aid, "label": a["label"], "say": a["say"], **({"tool": a["tool"]} if a.get("tool") else {}), **more}
 
 
 def for_trip(state: Optional[str]) -> List[Dict[str, Any]]:

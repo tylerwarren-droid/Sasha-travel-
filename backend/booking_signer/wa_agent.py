@@ -163,6 +163,10 @@ def _read_back(ev: dict, out) -> None:
     if ev.get("status") in ("sent", "not_sent"):   # an outcome card, not a question
         out.text("\n".join(lines))
         return
+    pay = ev.get("pay") if isinstance(ev.get("pay"), dict) else {}
+    if pay.get("checkout_url") and pay.get("where") == "phone":   # Sasha 363(a) · ONE message: the read-back and its payment link — the pay IS the yes
+        out.text(("\n".join(lines) + f"\n\nPay here when you're happy (a hold — taken only once it's booked):\n{pay['checkout_url']}")[:1500])
+        return
     # Sasha 309 · ONE message: the request as it goes (AgAPI's lines), her one line, and its buttons — a tap or a typed yes sends it once
     body = "\n".join(lines) + (f"\n\n{ev['ask']}" if ev.get("ask") else "")
     out.ask(body[:1000], _buttons(ev))

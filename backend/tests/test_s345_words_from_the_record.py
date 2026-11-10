@@ -118,9 +118,10 @@ class RulesAreAnObjectOnPostgres(unittest.TestCase):
         try:
             for role in ("anon", "authenticated"):
                 go(c.execute(f"do $$ begin create role {role}; exception when duplicate_object then null; end $$"))
-            go(c.execute("create schema if not exists auth; create table auth.users (id uuid primary key); create table public.trips (id uuid primary key)"))
+            go(c.execute("create schema if not exists auth; create table auth.users (id uuid primary key); create table public.trips (id uuid primary key, owner_id uuid)"))
             go(c.execute(_block("048_group_movement.sql")))
-            go(c.execute(_block("056_group_open_trip.sql")))   # Sasha 351 · the open trip (the store orders by it)
+            go(c.execute(_block("056_group_open_trip.sql")))
+            go(c.execute(_block("060_archived_trips.sql")))   # Sasha 364 · archived trips (the readers leave them out)
             owner = uuid.uuid4()
             go(c.execute("insert into auth.users values ($1)", owner))
 

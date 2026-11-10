@@ -70,23 +70,26 @@ async def cases(a: str) -> None:
         {"given_name": "Sam", "family_name": "Smith", "date_of_birth": "1987-05-02", "title": "ms"}]})
     h = await API.call(ctx, "hold_booking", {"idempotency_key": "agent-suite-h1"})
     sha = (h.get("result") or {}).get("read_back_sha256")
-    ok("AGENT 4 (Sherlock via hold_booking): the read-back and its total; nothing held yet",
-       h.get("ok") and sha and not await BK.items(a, res["trip_id"], ("pending_payment",)), str(h.get("error")))
+    card_sid = (((h.get("result") or {}).get("pay")) or {}).get("session_id")
+
+    async def sessions():
+        return {x["paid_session"] for x in await BK.items(a, res["trip_id"], ("pending_payment",))}
+    ok("AGENT 4 (Sherlock via hold_booking · Sasha 363(a) ONE ASK): the read-back, its total and ONE payment IN its card (a hold the "
+       "person authorises there — nothing paid)", h.get("ok") and sha and card_sid and await sessions() == {card_sid}, str(h.get("error")))
     same = await API.call(ctx, "book", {"idempotency_key": "agent-suite-b-same", "approval": {"said": "Book it."}})
-    ok("AGENT 4b (Sasha 210): “book it” and the read-back in ONE turn → no payment yet: the yes answers a read-back they heard",
-       (same.get("error") or {}).get("code") == "read_back_first" and not await BK.items(a, res["trip_id"], ("pending_payment",)),
-       str(same.get("error")))
+    ok("AGENT 4b (Sasha 363(a)): “book it” beside the card → the card's payment, never a second one",
+       ((same.get("result") or {}).get("payment") == "in_card") and await sessions() == {card_sid}, str(same.get("error")))
     ctx = API.Ctx(account=a, mode="test")   # Sasha 210 · the yes comes in the NEXT turn, after the read-back was said
     no = await API.call(ctx, "book", {"read_back_sha256": sha, "idempotency_key": "agent-suite-b0",
                                       "approval": {"said": "No. What's the total with the flight and lodging?"}})
-    ok("AGENT 5: book without an explicit yes → refused; nothing held",
-       (no.get("error") or {}).get("code") == "no_explicit_yes" and not await BK.items(a, res["trip_id"], ("pending_payment",)))
+    ok("AGENT 5: book without an explicit yes → refused; nothing new held",
+       (no.get("error") or {}).get("code") == "no_explicit_yes" and await sessions() == {card_sid})
     yes = await API.call(ctx, "book", {"read_back_sha256": sha, "idempotency_key": "agent-suite-b1", "approval": {"said": "Then book it."}})
     again = await API.call(ctx, "book", {"read_back_sha256": sha, "idempotency_key": "agent-suite-b1", "approval": {"said": "Then book it."}})
     held = await BK.items(a, res["trip_id"], ("pending_payment",))
-    ok("AGENT 6 (Austen): “Then book it.” → ONE payment, the rows hold it; the same key → replayed, never a second",
-       yes.get("ok") and again.get("replayed") and held and len({x["paid_session"] for x in held}) == 1
-       and yes["result"]["booked"] is False, f"{len(held)} held · {yes.get('error')}")
+    ok("AGENT 6 (Austen): “Then book it.” → the card's ONE payment, the rows hold it; the same key → replayed, never a second",
+       yes.get("ok") and again.get("replayed") and held and {x["paid_session"] for x in held} == {card_sid}
+       and yes["result"]["session_id"] == card_sid and yes["result"]["booked"] is False, f"{len(held)} held · {yes.get('error')}")
     st = await API.call(ctx, "get_status", {})
     ok("AGENT 7 (Pacioli): before payment nothing is booked — and the reply guard catches “it's all booked”",
        st.get("ok") and not st["result"]["anything_booked"] and AG.guard_check("Great — it's all booked!", set(), st["result"]["anything_booked"]))
@@ -104,7 +107,8 @@ async def paid_cases(a: str, yes: dict) -> None:
     mails, moved = [], []
 
     async def paid(_sid):   # Sasha 363 · the payment HELD (authorised): the booking decides capture or release
-        return {"amount": float(((yes or {}).get("result") or {}).get("eur") or 0) or 1.0, "currency": "EUR", "held": True}
+        y = (yes or {}).get("result") or {}
+        return {"amount": float(y.get("eur") or y.get("total_eur") or 0) or 1.0, "currency": "EUR", "held": True}
 
     async def finish(_sid, cents):
         moved.append(cents)

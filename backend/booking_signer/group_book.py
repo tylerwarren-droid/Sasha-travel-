@@ -16,6 +16,7 @@ Sasha's resolver (keep_resolver.py) inside its one supplier call, under a grant 
 from __future__ import annotations
 
 import asyncio
+import os
 import logging
 import secrets
 import time
@@ -245,7 +246,7 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
             continue
         if _gone(e):
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": "no_fare", "why": "no fare left on their flight, even after a new search — nothing held"}
-        return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": e.get("message") or "AgAPI didn't give a read-back"}
+        return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", **decision(e)}   # Sasha 364 · plain words
     return "skip", {"name": m["name"], "member_id": m["id"], "kind": "no_fare", "why": "no fare left — nothing held"}
 
 
@@ -434,7 +435,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         r = await _read_back(account, it["op"], it["body"])
         e = r.get("error") or {}
         if e.get("code") != "approval_required":
-            skipped.append({"name": it["name"], "why": e.get("message") or "AgAPI didn't give a read-back"})
+            skipped.append({"name": it["name"], **decision(e)})   # Sasha 364 · a named decision, never the raw message
             it["skip"] = True
             continue
         d = e.get("details") or {}
@@ -595,12 +596,103 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     failed.sort(key=lambda d: order.get(d["name"], 0))
     verb = {"book": "booked", "swap": "swapped", "cancel": "cancelled"}[c["action"]]
     cards = [_card_for(account, c["action"], x) for x in reasked]   # Sasha 340 · each moved fare: its OWN card, its own Yes
+    if c["action"] == "book":   # Sasha 364 · THE FINISH, composed from the trip record: booked, references, confirmations, the invoice
+        fin = await finish(account, done, failed)
+        moved = (f" The fare moved for {', '.join(x['name'] for x in reasked)} — {'a new card' if len(reasked) == 1 else 'new cards'} below, "
+                 f"{'its' if len(reasked) == 1 else 'each with its'} own Yes; nothing was booked for them yet.") if reasked else ""
+        return {"status": "done", "done": done, "failed": failed, "reasked": cards, "say": fin["say"] + moved, "finish": fin}
     say = (f"Done — {len(done)} {verb} (TEST)." if done else "Nothing was done.") + \
-        (" Not done: " + "; ".join(f"{f['name']} ({f['why']})" for f in failed) + "." if failed else "") + \
+        (" Not done: " + "; ".join(f"{f['name']}: {f['why']}" for f in failed) + "." if failed else "") + \
         (f" The fare moved for {', '.join(x['name'] for x in reasked)} — {'a new card' if len(reasked) == 1 else 'new cards'} below, "
          f"{'its' if len(reasked) == 1 else 'each with its'} own Yes; nothing was booked for {'them' if len(reasked) > 1 else 'them'} yet." if reasked else "") + \
         " The master list shows it now."
     return {"status": "done", "done": done, "failed": failed, "reasked": cards, "say": say}
+
+
+# ── Sasha 364 · a group trip ENDS in one clear finished state, from the ONE trip record ─────────────────────────────────────────
+
+#: AgAPI's refusal codes → the decision put to the manager, in plain words (never the supplier's nested error text)
+DECISIONS = {
+    "not_cancellable": "their fare can only be cancelled by the airline, not online — that's a condition of the fare, not a failure. "
+                       "Shall I find a fare that can be cancelled online, or take them off this trip?",
+    "price_changed": "their fare's price moved before it was booked — nothing was taken. Shall I read it back again at the new price?",
+    "offer_expired": "their fare expired before it was booked — nothing was taken. Shall I find the same flight again?",
+    "upstream_unreachable": "the airline didn't answer just now — nothing was taken. Shall I try them again?",
+}
+
+
+def decision(e: Dict[str, Any]) -> Dict[str, Any]:
+    """A refusal → {why: the decision in plain words, code}. Unknown codes: a plain line and what can be done — never the raw message."""
+    code = str((e or {}).get("code") or "")
+    return {"why": DECISIONS.get(code) or "their booking couldn't be completed just now — nothing was taken. Shall I try again, or take "
+                                          "them off this trip?", "code": code or "unknown"}
+
+
+async def _confirmations(account: str, mv: Dict[str, Any], booked_names: List[str]) -> Dict[str, List[str]]:
+    """Each booked traveller's confirmation, to THEIR registered email (the roster's), through the ONE sender (live_events.send_email),
+    TEST-tagged. → {sent: [names], no_email: [names], not_sent: [names]}."""
+    from . import groups as G, live_events as LE
+    view = await G.view(account, mv["id"])
+    rows = {r["name"]: r for r in view.get("rows") or []}
+    people = {p["name"]: p for p in (await G.roster(account)).get("people") or []}
+    out: Dict[str, List[str]] = {"sent": [], "no_email": [], "not_sent": []}
+    for name in booked_names:
+        email = (people.get(name) or {}).get("email")
+        if not email:
+            out["no_email"].append(name)
+            continue
+        r = rows.get(name) or {}
+        msg = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": email,
+               "subject": f"Booked (TEST): {mv.get('destination')} {str(mv.get('starts_on') or '')[:10]} – {str(mv.get('ends_on') or '')[:10]}",
+               "text": "\n".join([f"Hello {name.split()[0]},", "", f"You're booked for {mv.get('company')}'s trip to {mv.get('destination')} (TEST).", "",
+                                  f"Travel: {r.get('transport') or '—'}", f"Hotel: {r.get('hotel') or '—'}",
+                                  "References: " + (", ".join(r.get("references") or []) or "on the trip's master list"), "",
+                                  "TEST: a demo booking — no airline or hotel charge.", "", "— Sasha (AI concierge, Kanoe Technologies SL)"])}
+        try:
+            sent = await LE.send_email(msg)
+        except Exception as ex:
+            sent = {"sent": False, "why": type(ex).__name__}
+        out["sent" if sent.get("sent") else "not_sent"].append(name)
+    return out
+
+
+def _names(xs: List[str]) -> str:
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1] if xs else ""
+
+
+async def finish(account: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """THE ONE FINISH of a group booking, composed from the trip record (the master list as it is now — AgAPI's record for the booked):
+    how many are booked, where the references are, the confirmations sent (to each traveller's registered email; anyone without one
+    named), the invoice — and anything not done as a named decision, never an error."""
+    from . import groups as G
+    mv = await G.store().movement(account)
+    view = await G.view(account, mv["id"])
+    rows = view.get("rows") or []
+    booked = [r["name"] for r in rows if r.get("status") == "booked"]
+    total = len(rows)
+    conf = await _confirmations(account, mv, booked) if booked else {"sent": [], "no_email": [], "not_sent": []}
+    try:
+        inv = await invoice(account)
+    except Exception as e:
+        log.warning("[group_book] the invoice wasn't read for the finish: %s", type(e).__name__)
+        inv = {}
+    head = (f"All {total} booked" if booked and len(booked) == total else f"{len(booked)} of {total} booked" if booked else "Nobody was booked")
+    parts = [head + (" (TEST)." if booked else ".")]
+    if booked:
+        parts.append("Their references are on the master list.")
+        if conf["sent"]:
+            parts.append(("Confirmations have been sent to each traveller's registered email" if not conf["no_email"] and not conf["not_sent"]
+                          else f"Confirmations sent to {_names(conf['sent'])}") + ".")
+        if conf["no_email"]:
+            parts.append(f"No email on file for {_names(conf['no_email'])} — add it on the Group page and I'll send theirs.")
+        if conf["not_sent"]:
+            parts.append(f"{_names(conf['not_sent'])}'s confirmation didn't go out just now — I'll send it again.")
+        if inv.get("number") and inv.get("total"):
+            parts.append(f"The invoice {inv['number']}: {inv['total']}.")
+    for f in failed:
+        parts.append(f"{f['name']}: {f['why']}")
+    return {"say": " ".join(parts), "booked": booked, "total": total, "confirmations": conf, "invoice": {k: inv.get(k) for k in ("number", "total")},
+            "decisions": [{"name": f["name"], "code": f.get("code"), "why": f["why"]} for f in failed]}
 
 
 def waiting_cards(account: str) -> List[Dict[str, Any]]:
@@ -658,7 +750,7 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
                 failed.append({"name": it["name"], "why": x.get("why") or "the fare is gone and none was found again"})
             return
     if not r.get("ok"):
-        failed.append({"name": it["name"], "why": e.get("message") or "AgAPI refused"})
+        failed.append({"name": it["name"], **decision(e)})   # Sasha 364 · a named decision in plain words, never the supplier's raw text
         return
     res = r.get("result") or {}
     parts = res.get("parts") or []

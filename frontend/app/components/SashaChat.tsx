@@ -695,6 +695,8 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
             else if (ev.kind === 'read_back' && Array.isArray(ev.read_back)) {
               setReadBack({ lines: ev.read_back, total: ev.total_eur, what: ev.what, live: ev.live, status: ev.status,
                 ...(Array.isArray(ev.choices) && ev.choices.length && ev.read_back_id ? { ask: String(ev.ask || ''), choices: ev.choices, read_back_id: String(ev.read_back_id) } : {}) }); claim('readback', ev.turn)
+              // Sasha 363(a) · ONE ASK: the read-back carries its payment (the pay IS the yes) — drawn with it, never asked "here or phone?"
+              if (ev.pay && ev.pay.where === 'here' && (ev.pay.client_secret || ev.pay.checkout_url)) setPayHere(p => ({ client_secret: ev.pay.client_secret, url: ev.pay.checkout_url, total_eur: ev.pay.total_eur, n: (p?.n ?? 0) + 1 }))
               if (ev.handoff?.code) { setHandoff({ code: String(ev.handoff.code), what: String(ev.handoff.kind || 'passport'), expires_at: ev.handoff.expires_at, added: null }); claim('handoff', ev.turn) }   // Sasha 228 · beside the read-back, never instead of it
             }
             else if (ev.kind === 'trip') window.dispatchEvent(new Event('sasha-plan-refresh'))

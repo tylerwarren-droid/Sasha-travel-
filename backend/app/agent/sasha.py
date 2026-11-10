@@ -299,9 +299,12 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
     if tool == "group_list" and isinstance(res.get("card"), dict):   # Sasha 345 · the master list goes out WITH the list
         return {"type": "render", "kind": "group_list", **res["card"]}
     if tool in ("group_select", "group_upload") and res.get("read_back") and res.get("proposal_id"):   # Sasha 359 · who goes: the list, for a yes
-        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group_pick", **yes_buttons("group_select", res)}
+        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group_pick", "head": "Who's going · one tap",
+                **yes_buttons("group_select", res)}   # Sasha 364 · the card names itself: nothing is booked by this one
     if tool in ("group_book", "group_swap", "group_cancel") and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 334
-        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group", **yes_buttons(tool, res)}
+        return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group",
+                "head": {"group_book": "Ready to book the group · one tap", "group_swap": "Ready to swap · one tap",
+                         "group_cancel": "Ready to cancel · one tap"}[tool], **yes_buttons(tool, res)}
     if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back"):   # Sasha 330 · "give me a button": the
         return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "cancel",   # cancel's read-back, on
                 **yes_buttons(tool, res)}                                                                       # the SAME card
@@ -394,8 +397,16 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
                    if tool in ("send_email", "send_whatsapp") else {}),   # Sasha 216 · its own card words
                 **({"total": res["breakdown"]} if res.get("breakdown") else {}),   # Sasha 215 · the re-quote refreshes the pill
                 **({"handoff": (res.get("keep") or {})["handoff"]} if tool == "hold_booking" and (res.get("keep") or {}).get("handoff") else {}),   # Sasha 228 · "Add from your phone", beside it
+                **({"pay": pay_in_card(res["pay"])} if tool == "hold_booking" and isinstance(res.get("pay"), dict) else {}),   # Sasha 363(a)
                 **yes_buttons(tool, res)}   # Sasha 330 · the pay read-back's Yes / No, from THE ONE PLACE
     return None
+
+
+def pay_in_card(pay: dict) -> dict:
+    """Sasha 363(a) · the read-back card's own payment, for the page / WhatsApp (never the model): the embedded checkout (here), the
+    link (WhatsApp, in the same message), or the saved card's words (its one button pays it)."""
+    keep = ("where", "session_id", "total_eur", "client_secret", "checkout_url", "phone_too", "card", "already_paid")
+    return {k: pay[k] for k in keep if pay.get(k) not in (None, "")}
 
 
 def yes_buttons(tool: str, res: dict) -> dict:
@@ -414,8 +425,18 @@ def yes_buttons(tool: str, res: dict) -> dict:
         rid = res.get("read_back_id")
         return {"ask": str(res.get("ask") or ""), "choices": choices, "read_back_id": rid} if rid else {}
     if tool == "hold_booking" and res.get("read_back_sha256"):
-        return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.TYPED_YES_CHOICES],
-                "read_back_id": str(res["read_back_sha256"])[:40]}
+        # Sasha 363(a) · ONE ASK: the payment in the card IS the yes — no Yes / No beside it. A saved card: its ONE button says the yes
+        # (the words book() reads). "Pay on my phone": the same payment moved (book's switch), never a second question.
+        pay = res.get("pay") if isinstance(res.get("pay"), dict) else {}
+        if pay.get("where") == "saved":
+            choices = [{"title": f"Pay with {pay.get('card') or 'your saved card'}", "route": "say:Yes, book it"}, dict(_V.TYPED_YES_CHOICES[1])]
+        elif pay.get("phone_too"):
+            choices = [{"title": "Pay on my phone instead", "route": "say:Send the payment to my phone"}]
+        elif pay:
+            return {}
+        else:
+            choices = [dict(c) for c in _V.TYPED_YES_CHOICES]
+        return {"ask": str(res.get("ask") or ""), "choices": choices, "read_back_id": str(res["read_back_sha256"])[:40]}
     if tool == "cancel_venue" and res.get("status") == "awaiting_yes" and res.get("read_back_id"):
         return {"ask": str(res.get("ask") or ""), "choices": [dict(c) for c in _V.CANCEL_CHOICES], "read_back_id": res["read_back_id"]}
     if tool == "group_select" and res.get("proposal_id"):   # Sasha 359 · who goes: the words are the yes (a tap SENDS them) → group_confirm

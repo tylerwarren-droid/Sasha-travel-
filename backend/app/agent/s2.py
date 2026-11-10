@@ -5,8 +5,8 @@ sends it and the default is S1, byte for byte as before.
 
   S2_WHO          her persona's opening — replaces S1's "## Who she is"; everything after it (style, how she works, the hard rules)
                   is S1's own text, shared
-  S2_TOOLS        her tool set: places and their bookings, email, the calendar, WhatsApp, Activity, and payment ("Pay here, or on
-                  your phone?") — plus trips, which are one of the things she does
+  S2_TOOLS        her tool set: places and their bookings, email, the calendar, WhatsApp, Activity, and payment (in the read-back
+                  card itself, Sasha 363) — plus trips, which are one of the things she does
   demo(account)   the S2 demo setting (Tyler, 9 Oct): Sasha 254 · a person whose record says demo = s2_demo (agapi.person_access;
                   until 254 SASHA_S2_DEMO_ACCOUNTS, a scratch "founder-mode" fixture for a live run) — a restaurant or spa booked on /s2 goes to OUR test venue, so a demo
                   reaches "Booked" with nothing real contacted. /next is untouched: the founder's account there is exactly as before.
@@ -133,9 +133,10 @@ def search_schema(base: dict) -> dict:
     return {**base, "properties": props}
 
 
-S2_BOOK = ("After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exactly the read-back they just heard (the last "
-           "hold_booking, unless read_back_sha256 is given) — the pay card on this screen (Apple Pay / Google Pay), or on their phone if "
-           "they ask. Nothing is booked until it is paid — get_status says when.")
+S2_BOOK = ("Only after the person's explicit yes said out loud in THIS turn (or their tap on the saved card's button), for the read-back "
+           "they just saw (the last hold_booking). Sasha 363(a): the payment is already IN the read-back card — paying there is the yes, "
+           "so book never opens a second one: with a saved card it pays it; otherwise it says the card is on their screen. \"On my phone\" / "
+           "\"here\" moves the same payment. Nothing is booked until it is paid — get_status says when.")
 
 
 # ── Sasha 280 · ONE THING ON ITS OWN (Tyler's demo, 21 Oct 13:44: a flight only → she kept bundling hotels and said she couldn't do

@@ -55,7 +55,7 @@ class PaymentWords(unittest.TestCase):
     def test_a_failure_is_said_plainly_with_the_next_step_never_booked(self):
         w = LE.words_for({"status": "failed", "failed": ["Iberia IB6453: the fare was withdrawn"]}, None)
         self.assertNotIn("you're booked", w["text"])
-        self.assertIn("didn't", w["text"])
+        self.assertIn("Nothing was taken", w["text"])
         self.assertTrue(w["text"].endswith("?"))
         p = LE.words_for({"status": "failed", "booked": ["Hotel X"], "failed": ["the flight home"]}, None)
         self.assertIn("not everything", p["text"])

@@ -222,7 +222,7 @@ class BothFlightsSpoken(unittest.TestCase):
         with mock.patch.object(API, "_plan", mock.AsyncMock(return_value={"trip_id": TRIP, "plan": {"party": 2}})), \
                 mock.patch.object(PX, "saved", mock.AsyncMock(return_value=[{}, {}])), \
                 mock.patch.object(API, "_s1_passport", mock.AsyncMock(return_value=None)), \
-                mock.patch.object(BB, "quote", mock.AsyncMock(return_value=q)), \
+                mock.patch.object(BB, "quote", mock.AsyncMock(return_value=q)), mock.patch.object(BB, "pay", mock.AsyncMock(return_value={"where": "here", "session_id": "cs_test_card", "client_secret": "cs_x", "eur": 120.0})), mock.patch.object(BB, "in_progress", mock.AsyncMock(return_value=None)), mock.patch("booking_signer.test_deposit.saved_card", mock.AsyncMock(return_value=None)), \
                 mock.patch.object(BK, "items", mock.AsyncMock(return_value=[])), \
                 mock.patch("agapi.keep_gate.keep_on", lambda *a: False):
             res = run(API.hold_booking(ctx(), {}))

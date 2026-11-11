@@ -85,7 +85,9 @@ async def fulfil(row_id, payload: dict) -> dict:
     sid, account = payload["sid"], payload["account"]
     if payload["kind"] == "flight":
         c = payload["card"]
-        o = await T.order(c, payload.get("name") or "Guest Test", payload.get("email") or "", payload.get("phone"))
+        from . import passengers as PX   # Sasha 369 · the travellers' OWN saved details — never a stand-in (asked before any payment)
+        people = await PX.saved(account)
+        o = await T.order(c, payload.get("name") or "", payload.get("email") or "", payload.get("phone"), people=people)
         note = ""
         if "why" in o and re.search(r"same details|already (?:been )?(?:made|booked)", o["why"], re.I):
             # Sasha 193 · Duffel TEST refuses the SAME flight booked twice under one name (rehearsals do this): the next DIFFERENT
@@ -94,7 +96,7 @@ async def fulfil(row_id, payload: dict) -> dict:
                                  adults=int(c.get("party") or 1), limit=8)
             for alt in [x for x in got.get("cards") or [] if x.get("flights") != c.get("flights") and x.get("currency") == c.get("currency")
                         and float(x["amount"]) <= float(c["amount"]) * 1.5]:
-                o2 = await T.order(alt, payload.get("name") or "Guest Test", payload.get("email") or "", payload.get("phone"))
+                o2 = await T.order(alt, payload.get("name") or "", payload.get("email") or "", payload.get("phone"), people=people)
                 if "why" not in o2:
                     note = f" ({c['flights']} was already booked under this name, so I booked {alt['owner']} {alt['flights']} instead)"
                     c, o = alt, o2
@@ -102,7 +104,7 @@ async def fulfil(row_id, payload: dict) -> dict:
         if "why" in o:   # a TEST offer expires: the same route and day, priced again — said
             alt = await TB._same_or_cheaper(c, int(c.get("party") or 1))
             if alt is not None:
-                o2 = await T.order(alt, payload.get("name") or "Guest Test", payload.get("email") or "", payload.get("phone"))
+                o2 = await T.order(alt, payload.get("name") or "", payload.get("email") or "", payload.get("phone"), people=people)
                 if "why" not in o2:
                     note = f" (the offer priced had expired; booked the same route and day at {alt['currency']} {alt['amount']}, TEST)"
                     c, o = alt, o2

@@ -342,6 +342,10 @@ async def pay(request: Request):
     c, _lines, sha, _who = await _card_and_lines(account_for(request), str(body.get("offer_id") or ""))
     if c is None:
         return _refuse(404, "offer_gone", "that flight offer has gone — search again")
+    from . import passengers as PX   # Sasha 369 · BEFORE any payment: the travellers' own details, or asked — never a stand-in
+    if not await PX.saved(account_for(request)):
+        return _refuse(422, "travellers_needed", "Before I take any payment: the airline needs the traveller's full name, Mr/Ms and date of birth "
+                                                 "as on the passport — tell Sasha in the chat (e.g. “Sam Fictional, Ms, born 3 March 1982”). Nothing was held.")
     if body.get("read_back_sha256") != sha:
         return _refuse(422, "approval_void", "the yes was to different words (the offer or its price changed) — prepare it again")
     got = await TD.checkout(c["amount"], c["currency"], f"{c['owner']} {c['flights']} {c['from']}→{c['to']}", sha[:16])

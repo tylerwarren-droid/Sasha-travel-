@@ -86,6 +86,16 @@ class NoDefaultAnywhere(unittest.TestCase):
                         hits.append(f"{f.relative_to(ROOT)}: {rx}")
         self.assertEqual(hits, [])
 
+    def test_every_single_flight_door_asks_before_any_payment(self):
+        """Found by the deploy gate (W1, V1): the single-flight doors ordered with the stand-in after payment. Now: asked BEFORE any hold."""
+        gw = (ROOT / "backend" / "booking_signer" / "guest_whatsapp.py").read_text()
+        self.assertIn('ctx["st"]["pending"] = {"kind": "flight_travellers"', gw)                 # WhatsApp / the voice page: asked, then carried on
+        self.assertEqual(gw.count('if kind == "flight_travellers":'), 2)                         # both dispatchers read the answer
+        self.assertIn('"travellers_needed"', (ROOT / "backend" / "booking_signer" / "travel.py").read_text())   # the web: refused by name
+        pw = (ROOT / "backend" / "booking_signer" / "paid_watch.py").read_text()
+        self.assertIn("people=people", pw)                                                         # the order: their own saved details
+        self.assertNotIn("Guest Test", pw)
+
     def test_a_flight_without_the_travellers_details_asks_never_invents(self):
         from booking_signer import travel as T
         c = {"id": "off_1", "amount": "41.47", "currency": "EUR", "owner": "easyJet", "flights": "U2 7640", "from": "MAD", "to": "LIS"}

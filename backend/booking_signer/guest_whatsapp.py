@@ -1669,8 +1669,17 @@ async def _flights(ctx: dict, body: str) -> None:
     ctx["st"]["pending"] = {"kind": "flight_cards", "at": ctx["now"].isoformat(), "nonce": nonce, "cards": got["cards"], "adults": adults}
 
 
+TRAVELLERS_ASK = ("Before I book it, the airline needs each traveller's full name, Mr/Ms and date of birth exactly as on the passport — "
+                  "e.g. “Sam Fictional, Ms, born 3 March 1982”. Nothing has been held.")
+
+
 async def _flight_pick(ctx: dict, pend: dict, card: dict) -> None:
-    from . import travel as TR, guest_receipt as GR
+    from . import travel as TR, guest_receipt as GR, passengers as PX
+    need = int(pend.get("adults") or 1)
+    if len(await PX.saved(ctx["account"])) < need:   # Sasha 369 · the travellers' own details before the read-back and any payment — asked once
+        ctx["out"].text(TRAVELLERS_ASK)
+        ctx["st"]["pending"] = {"kind": "flight_travellers", "at": ctx["now"].isoformat(), "card": card, "adults": need}
+        return
     _s, cj = await api(ctx["account"], "GET", "/api/booking/contact")
     contact = (cj or {}).get("contact") or {}
     try:
@@ -2386,6 +2395,16 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return False
         await _flight_pick(ctx, pend, pend["cards"][i])
         return True
+    if kind == "flight_travellers":   # Sasha 369 · their answer: read, saved once, then the flight carries on (never a stand-in)
+        from . import passengers as PX
+        got = PX.parse(body or "")
+        if len(got["passengers"]) >= int(pend.get("adults") or 1):
+            await PX.save(ctx["account"], got["passengers"])
+            await _flight_pick(ctx, pend, pend["card"])
+            return True
+        out.text("I still need " + ("; ".join(got["missing"]) if got["missing"] else "each traveller's full name, Mr/Ms and date of birth") +
+                 " — as on the passport. Nothing has been held.")
+        return True
     if kind == "flight_confirm":
         if payload.startswith("no:") or (not payload and _NO.match(body)):
             st["pending"] = None
@@ -2686,6 +2705,16 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             return False
         await _flight_pick(ctx, pend, pend["cards"][i])
+        return True
+    if kind == "flight_travellers":   # Sasha 369 · their answer: read, saved once, then the flight carries on (never a stand-in)
+        from . import passengers as PX
+        got = PX.parse(body or "")
+        if len(got["passengers"]) >= int(pend.get("adults") or 1):
+            await PX.save(ctx["account"], got["passengers"])
+            await _flight_pick(ctx, pend, pend["card"])
+            return True
+        out.text("I still need " + ("; ".join(got["missing"]) if got["missing"] else "each traveller's full name, Mr/Ms and date of birth") +
+                 " — as on the passport. Nothing has been held.")
         return True
     if kind == "flight_confirm":
         if payload.startswith("no:") or (not payload and _NO.match(body)):

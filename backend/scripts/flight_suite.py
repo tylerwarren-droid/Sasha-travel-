@@ -100,30 +100,8 @@ async def main() -> int:
     real_acc = ACC.account_for
     ACC.account_for = lambda r: getattr(r, "_a", None) or real_acc(r)
     try:
-        # W1 · web, typed: a single flight from home, picked by airline, booked
-        sid = "suite-w1-" + uuid.uuid4().hex[:6]
-        r = await conduct(f"find me flights to Hanoi on {random.randint(10, 28)} November for 2", [], user_id=a, signed_in=True, session_id=sid)
-        card = next((b for b in r.get("bookings") or [] if b.get("_provider") == "duffel"), None)
-        ok("W1 web: flights to Hanoi listed from Madrid", bool(card and card.get("options")) and "Madrid" in (r.get("response") or ""),
-           (r.get("response") or "")[:90])
-        al = _airline(card)
-        r2 = await conduct(f"the {al} one", r["messages"], user_id=a, signed_in=True, session_id=sid)
-        fp = r2.get("flight_pick")
-        if ok(f"W1 web: typed pick “the {al} one” → its read-back", bool(fp), (r2.get("response") or "")[:90]):
-            await _pay_and_settle(a, T.prepare, T.pay, {"offer_id": fp["offer_id"]}, "W1")
-
-        # W2 · web, transcribed voice: the mic's words in the meeting
-        sid = "suite-w2-" + uuid.uuid4().hex[:6]
-        r = await conduct(f"find me flights to Hanoi on {random.randint(1, 20)} December for 2", [], user_id=a, signed_in=True, session_id=sid)
-        card = next((b for b in r.get("bookings") or [] if b.get("_provider") == "duffel"), None)
-        al = _airline(card)
-        r2 = await conduct(f"Okay. Give me the {al} fight, please, Sasha.", r["messages"], user_id=a, signed_in=True, session_id=sid)
-        ok(f"W2 voice: “Give me the {al} fight, please, Sasha.” → its read-back", bool(r2.get("flight_pick")), (r2.get("response") or "")[:90])
-        r3 = await conduct("Okay. Go ahead. I'm ready to pay.", [], user_id=a, signed_in=True, session_id="suite-w2b-" + uuid.uuid4().hex[:6])
-        ok("W2 honesty: “I'm ready to pay” with nothing open never claims a booking",
-           not re.search(r"\b(?:is|are|been|all|now|it's|you're|i've|i have|has been|successfully)\s+booked\b|✅ booked|payment('s)? (has )?gone through"
-                         r"|secure payment form", r3.get("response") or "", re.I), (r3.get("response") or "")[:90])   # a claim, not "haven't booked"
-
+        # Sasha 369 · W3 FIRST: the guided trip asks the travellers' details ONCE and saves them; the single flights after it book with
+        # them (asked once, never again — and never a stand-in for a traveller)
         # W3 · web, the guided trip (Sasha 196): plan → flights asked about → a pick ADDED (not booked) → "book it, flying from Madrid"
         #      → ONE total with THAT flight → paid → booked
         sid = "suite-w3-" + uuid.uuid4().hex[:6]
@@ -156,6 +134,30 @@ async def main() -> int:
             ok("W3: the trip's flight and hotels are in the guest's list", sum(1 for x in rows if "TEST" in str(x.get("venue") or "")
                                                                                    or str(x.get("booking_reference") or "").startswith("TEST-")) >= 3,
                f"{len(rows)} rows")
+
+        # W1 · web, typed: a single flight from home, picked by airline, booked
+        sid = "suite-w1-" + uuid.uuid4().hex[:6]
+        r = await conduct(f"find me flights to Hanoi on {random.randint(10, 28)} November for 2", [], user_id=a, signed_in=True, session_id=sid)
+        card = next((b for b in r.get("bookings") or [] if b.get("_provider") == "duffel"), None)
+        ok("W1 web: flights to Hanoi listed from Madrid", bool(card and card.get("options")) and "Madrid" in (r.get("response") or ""),
+           (r.get("response") or "")[:90])
+        al = _airline(card)
+        r2 = await conduct(f"the {al} one", r["messages"], user_id=a, signed_in=True, session_id=sid)
+        fp = r2.get("flight_pick")
+        if ok(f"W1 web: typed pick “the {al} one” → its read-back", bool(fp), (r2.get("response") or "")[:90]):
+            await _pay_and_settle(a, T.prepare, T.pay, {"offer_id": fp["offer_id"]}, "W1")
+
+        # W2 · web, transcribed voice: the mic's words in the meeting
+        sid = "suite-w2-" + uuid.uuid4().hex[:6]
+        r = await conduct(f"find me flights to Hanoi on {random.randint(1, 20)} December for 2", [], user_id=a, signed_in=True, session_id=sid)
+        card = next((b for b in r.get("bookings") or [] if b.get("_provider") == "duffel"), None)
+        al = _airline(card)
+        r2 = await conduct(f"Okay. Give me the {al} fight, please, Sasha.", r["messages"], user_id=a, signed_in=True, session_id=sid)
+        ok(f"W2 voice: “Give me the {al} fight, please, Sasha.” → its read-back", bool(r2.get("flight_pick")), (r2.get("response") or "")[:90])
+        r3 = await conduct("Okay. Go ahead. I'm ready to pay.", [], user_id=a, signed_in=True, session_id="suite-w2b-" + uuid.uuid4().hex[:6])
+        ok("W2 honesty: “I'm ready to pay” with nothing open never claims a booking",
+           not re.search(r"\b(?:is|are|been|all|now|it's|you're|i've|i have|has been|successfully)\s+booked\b|✅ booked|payment('s)? (has )?gone through"
+                         r"|secure payment form", r3.get("response") or "", re.I), (r3.get("response") or "")[:90])   # a claim, not "haven't booked"
 
         # W4 · a named destination is Sasha's, never the relocation's
         r4 = await conduct("plan a twelve day trip to Singapore", [], user_id=a, signed_in=True, session_id="suite-w4-" + uuid.uuid4().hex[:6])

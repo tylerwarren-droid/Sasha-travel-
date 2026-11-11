@@ -46,7 +46,9 @@ def _on_whatsapp(said=T365.SAID):
     async def go():
         from booking_signer import channel as CH
         await CH.used(OWNER, CH.WA)                                                        # their last turn: WhatsApp
-        ctx = API.Ctx(account=OWNER, user_said=said, surface="s2", via="wa")
+        from agapi import venue_submit as VS
+        VS.WA.set({"wa_id": "34611000099", "message_id": "SM" + "a" * 32})   # the signed inbound, as the webhook sets it (367: the proof)
+        ctx = API.Ctx(account=OWNER, user_said=said, surface="s2", via="wa", session="s366-session")
         r = await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15", "ends_on": "2026-12-17",
                                                  "roles": ["executives"]})
         await M.finished(OWNER)
@@ -74,7 +76,9 @@ class NoClientAttached(unittest.TestCase):
             async def go():
                 from booking_signer import channel as CH
                 await CH.used(OWNER, CH.WA)
-                ctx = API.Ctx(account=OWNER, user_said=T365.SAID, surface="s2", via="wa")
+                from agapi import venue_submit as VS
+                VS.WA.set({"wa_id": "34611000099", "message_id": "SM" + "b" * 32})
+                ctx = API.Ctx(account=OWNER, user_said=T365.SAID, surface="s2", via="wa", session="s366-session")
                 with mock.patch.object(M, "_start", lambda *a, **k: None):           # the process that took it dies before running it
                     await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15",
                                                          "ends_on": "2026-12-17", "roles": ["executives"]})
@@ -88,15 +92,14 @@ class NoClientAttached(unittest.TestCase):
         self.assertEqual(len([x for x in w.wa if x.startswith("All 6 booked (TEST).")]), 1, w.wa)
 
 
-class ARefusedApprovalIsNamed(unittest.TestCase):
-    def test_never_not_booked_just_now(self):
-        """Found by the WhatsApp proof: AgAPI refused the instruction as the yes (no_explicit_yes) and the finish said "not booked just now"."""
-        from booking_signer import group_book as GB
-        with World() as w, mock.patch.object(GB, "_approval", mock.AsyncMock(return_value=None)):
-            _on_whatsapp()
-        fin = [x for x in w.wa if "booked" in x and ("Nobody" in x or "of 6" in x)][-1]
-        self.assertIn("didn't take your instruction as the yes", fin)
-        self.assertNotIn("just now", fin.split("Not booked")[-1])
+class ARefusedMandateIsSaid(unittest.TestCase):
+    def test_nothing_booked_and_said_plainly(self):
+        """Sasha 367 · AgAPI refusing the instruction's mandate (a proof it doesn't trust): said, never "not booked just now", nothing booked."""
+        with World() as w:
+            with mock.patch.object(w.agapi, "_proof_ok", lambda body: False):
+                r = _on_whatsapp()
+        self.assertIn("didn't accept your instruction as the yes", r["result"]["say"])
+        self.assertEqual([op for op, _ in w.agapi.calls if op == "group.book"], [])
 
 
 class OneSource(unittest.TestCase):

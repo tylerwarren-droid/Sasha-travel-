@@ -201,7 +201,21 @@ def _live_record(records: List[dict], member_id: str) -> Optional[dict]:
     return next((b for b in reversed(records) if (b.get("worker") or {}).get("key") == member_id and b.get("state") == "booked"), None)
 
 
-async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Optional[List[str]], over_ok: bool, org: str, mv: dict) -> Tuple[str, dict]:
+def contact_of(m: Dict[str, Any]) -> Dict[str, str]:
+    """Sasha 367 · the traveller's OWN contact, from the roster (CR 181): a mobile a supplier accepts (E.164) and their email — never one
+    made up; missing → AgAPI's mobile_needed / email_needed, asked as the missing fact."""
+    from .contacts import supplier_mobile
+    out = {}
+    ph = supplier_mobile(str(m.get("phone") or "")) if m.get("phone") else None
+    if ph:
+        out["phone"] = ph
+    if m.get("email"):
+        out["email"] = str(m["email"]).strip()
+    return out
+
+
+async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Optional[List[str]], over_ok: bool, org: str, mv: dict,
+                          mandate_id: Optional[str] = None) -> Tuple[str, dict]:
     """Sasha 339 · ONE worker's read-back for group.book → ("item", …) or ("skip", …): the vault, the plan's limit, AgAPI's offers, the
     limit AT BOOKING (AgAPI's own prices), the read-back — a gone offer re-planned once (the planner, the same limits), then held."""
     from . import groups as G
@@ -218,13 +232,33 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
         its, why = await _items(account, m, mv)
         if not its:
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": why}
-        body = {"end_user": org, "worker": w, "items": _wire(its)}
-        r = await _read_back(account, "group.book", body)
+        body = {"end_user": org, "worker": {**w, **contact_of(m)}, "items": _wire(its), **({"mandate_id": mandate_id} if mandate_id else {})}
+        if mandate_id:   # Sasha 367 · under the mandate THIS call is the act: THIS worker's references granted for it only (as _act_one does)
+            from . import keep_resolver as KR
+            refs = [x for x in _refs(w) if x]
+            KR.grant(owner_of(m), refs)
+            try:
+                r = await _read_back(account, "group.book", body)
+            finally:
+                KR.revoke(refs)
+        else:
+            r = await _read_back(account, "group.book", body)
         e = r.get("error") or {}
+        if mandate_id and r.get("ok"):   # Sasha 367 · INSIDE the mandate: booked on the manager's instruction (no read-back to answer)
+            return "booked", {"name": m["name"], "member_id": m["id"], "result": r.get("result") or {}}
+        if mandate_id and e.get("code") in ("mobile_needed", "email_needed", "approval_expired", "not_found", "incomplete"):
+            d = e.get("details") or {}
+            return "skip", {"name": m["name"], "member_id": m["id"], "kind": e["code"], "code": e["code"],
+                            **({"left_booked": d.get("left_booked")} if d.get("left_booked") else {})}
         if e.get("code") == "approval_required":
             d = e.get("details") or {}
             # Sasha 340 · the limit against the read-back's OWN prices (details.priced, CR 166); AgAPI without them: its offer prices
             over = over_priced(d["priced"], lim, its) if d.get("priced") else over_at_booking(its, lim)
+            outside = [x.get("why") for x in ((d.get("mandate") or {}).get("outside") or []) if x.get("why")]
+            if mandate_id and outside and not asked:   # Sasha 367 · OUTSIDE the mandate: asked with AgAPI's reasons (the explicit tap)
+                return "outside", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body,
+                                   "outside": outside, "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
+                                   "lines": list((d.get("read_back") or {}).get("lines") or [])}
             if over and not asked:
                 return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
             return "item", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body,
@@ -452,6 +486,71 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
             "verb": verb, "skipped": skipped, "taps": taps, "how": "Say `ask` word for word — nothing happens until they say yes."}
 
 
+async def book_under_mandate(account: str, mandate_id: str, names: List[str], over_ok: bool = False,
+                             progress: Optional[Callable[[int, int], None]] = None) -> Dict[str, Any]:
+    """Sasha 367 · every worker booked under the manager's ONE mandate (CR 182): inside → booked (the trip settled from AgAPI's answer);
+    outside → ONE card of AgAPI's read-backs with their reasons (the explicit tap: Yes, book them); the rest named (missing contact,
+    expired). → {done, outside, asks, card}."""
+    from . import groups as G
+    st = G.store()
+    mv = await st.movement(account)
+    members = [m for m in await st.members(mv["id"]) if m["name"] in set(names)]
+    org = await _organiser(account)
+    if not org:
+        return {"done": [], "outside": [], "asks": [{"name": m["name"], "code": "upstream_unreachable"} for m in members], "card": None}
+    if not (mv.get("rules") or {}).get("hotel"):
+        await G.group_hotel(account, mv, await st.members(mv["id"]))
+        mv = await st.movement(account)
+    view = {r["member_id"]: r for r in (await G.view(account))["rows"]}
+    sem, n = asyncio.Semaphore(BOOK_PARALLEL), [0]
+    done, outside, asks = [], [], []
+    if progress:
+        progress(0, len(members))
+
+    async def one(m: dict) -> None:
+        async with sem:
+            for attempt in (1, 2):   # Sasha 365 · an airline's refusal: once more with a fresh fare, inside the same mandate, then named
+                try:
+                    kind, x = await _prepare_worker(account, m, view.get(m["id"], {}).get("status"), [m["name"]] if over_ok else None, over_ok,
+                                                    org, mv, mandate_id=mandate_id)
+                except Exception as ex:
+                    log.warning("[group_book] %s not booked: %s", m["name"], type(ex).__name__)
+                    kind, x = "skip", {"name": m["name"], "code": "upstream_failed"}
+                if not (kind == "skip" and x.get("code") in RETRY_ONCE):
+                    break
+                if attempt == 2:
+                    x = {**x, "code": "refused_twice"}
+            if kind == "booked":
+                res = x["result"]
+                try:
+                    await _settle(account, m.get("trip_id"), "booked", res.get("parts") or [])
+                except Exception as ex:
+                    log.error("[group_book] %s: booked at AgAPI, the trip not updated: %s", m["name"], type(ex).__name__)
+                done.append({"name": m["name"], "state": res.get("state"), "parts": [p.get("reference") for p in res.get("parts") or []],
+                             "conditions": [{"kind": p.get("kind"), **(p.get("conditions") or {}), **({"cancel_by": p["cancel_by"]} if p.get("cancel_by") else {})}
+                                            for p in res.get("parts") or [] if p.get("conditions") or p.get("cancel_by")]})
+            elif kind == "outside":
+                outside.append(x)
+            else:
+                asks.append(x)
+        n[0] += 1
+        if progress:
+            progress(n[0], len(members))
+    await asyncio.gather(*(one(m) for m in members))
+    try:
+        await reconcile(account, await st.members(mv["id"]))
+    except Exception as e:
+        log.warning("[group_book] reconcile after the mandate: %s", type(e).__name__)
+    card = None
+    if outside:   # ONE card, the explicit tap (card_tap → confirm → each read-back's own approval)
+        cid = "grp_" + secrets.token_hex(10)
+        _CARDS[cid] = {"account": account, "action": "book", "items": outside, "at": time.time()}
+        lines = [l for it in outside for l in it["lines"] + [""]]
+        card = {"read_back_id": cid, "read_back": lines[:400], "ask": f"Book {'these ' + str(len(outside)) if len(outside) > 1 else outside[0]['name']} anyway?",
+                "choices": [dict(c) for c in __import__("app.agent.voice", fromlist=["x"]).GROUP_CHOICES["book"]]}
+    return {"done": done, "outside": outside, "asks": asks, "card": card}
+
+
 # ── Sasha 339 · BOOK ALL is ONE background job: the ONE prepare, its progress, its result — the page follows it ──────────────
 
 JOB_S = 900
@@ -618,7 +717,16 @@ DECISIONS = {
 }
 
 
-RETRY_ONCE = ("upstream_refused", "upstream_failed", "upstream_unreachable")   # Sasha 365 · tried once more before anyone is asked
+RETRY_ONCE = ("upstream_refused", "upstream_failed", "upstream_unreachable")
+
+#: Sasha 367 · AgAPI's mandate answers as facts (details.mandate.outside[].why, and the missing contact)
+MANDATE_FACTS = {"worker_not_named": "not named in your instruction", "another_destination": "their flight goes somewhere else",
+                 "outside_dates": "their flight is outside the trip's dates", "over_flight_limit": "their flight is over the company's flight limit",
+                 "over_stay_limit": "their hotel is over the company's nightly limit", "over_trip_limit": "their trip is over the company's limit",
+                 "currency": "the fare is in another currency", "fare_not_refundable": "their fare can't be refunded",
+                 "mobile_needed": "no mobile on their profile — add it on the Group page", "email_needed": "no email on their profile — add it on the Group page",
+                 "approval_expired": "your instruction had expired", "not_found": "the booking system didn't know your instruction",
+                 "incomplete": "part is booked (only the airline can cancel it) and the rest was refused"}   # Sasha 365 · tried once more before anyone is asked
 
 #: Sasha 365 · the same reasons as FACTS (no question each): the mandate puts them to the manager as ONE grouped question
 FACTS = {"approval_refused": "the booking system didn't take your instruction as the yes for it (nothing was booked or charged)",
@@ -633,7 +741,12 @@ def one_question(asks: List[Dict[str, Any]]) -> str:
     """Sasha 365 · everything outside the limits, as ONE grouped question (after the rest is done): who, and why, in plain words."""
     if not asks:
         return ""
-    who = "; ".join(f"{a['name']}: {FACTS.get(a.get('code') or a.get('kind') or '', a.get('fact') or 'not booked just now')}" for a in asks)
+    def fact(a: Dict[str, Any]) -> str:
+        if a.get("outside"):   # Sasha 367 · AgAPI's own reasons, each named
+            return " and ".join(MANDATE_FACTS.get(w, w.replace("_", " ")) for w in a["outside"])
+        k = a.get("code") or a.get("kind") or ""
+        return FACTS.get(k) or MANDATE_FACTS.get(k) or a.get("fact") or "not booked just now"
+    who = "; ".join(f"{a['name']}: {fact(a)}" for a in asks)
     them = asks[0]["name"].split()[0] if len(asks) == 1 else "them"
     return f"Not booked — {who}. What would you like for {them}: book anyway, another option, or leave off this trip?"
 
@@ -706,6 +819,13 @@ async def finish(account: str, done: List[Dict[str, Any]], failed: List[Dict[str
             parts.append(f"{_names(conf['not_sent'])}'s confirmation didn't go out just now — I'll send it again.")
         if inv.get("number") and inv.get("total"):
             parts.append(f"The invoice {inv['number']}: {inv['total']}.")
+    for d in done:   # Sasha 367 · each booked fare's own conditions (CR 181: parts[].conditions / cancel_by), said plainly
+        for c in d.get("conditions") or []:
+            words = [w for w in (("only the airline can cancel it" if c.get("cancel_by") == "airline" else ""),
+                                 ("it can't be refunded" if c.get("refund") in (False, "none", "no") else ""),
+                                 ("it can't be changed" if c.get("change") in (False, "none", "no") else "")) if w]
+            if words:
+                parts.append(f"{d['name']}'s {c.get('kind') or 'booking'}: " + ", ".join(words) + ".")
     if ask_once:   # Sasha 365 · the mandate: ONE grouped question for everything outside the limits
         q = one_question(failed)
         if q:

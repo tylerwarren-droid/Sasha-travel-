@@ -1718,7 +1718,8 @@ async def _instructed(ctx: Ctx, proposal_id: str, said: str) -> dict:
         raise ToolError("not_done", r["say"])
     if M.wants_booking(said):
         from booking_signer import channel as CH
-        go = await M.carry_out(ctx.account, said, door=CH.from_request(ctx))   # Sasha 366 · told on the door it came from
+        from booking_signer import agapi_mandate as AM   # Sasha 367 · the door's proof (ids), signed into ONE mandate at AgAPI
+        go = await M.carry_out(ctx.account, said, door=CH.from_request(ctx), proof=AM.proof_from(ctx))   # Sasha 366 · told on the door it came from
         return {**r, "booking": True, "say": r["say"].split(" I'm planning")[0] + " " + go["say"]}
     return r
 
@@ -1842,7 +1843,8 @@ async def group_book(ctx: Ctx, a: dict) -> dict:
     books everyone inside the company's limits, reports as it goes and finishes with ONE message — never a card waiting for a Yes."""
     from booking_signer import channel as CH
     r = _outcome(await _GO().run(ctx.account, "book", {"who": a.get("who") or None, "over_ok": bool(a.get("over_limit_ok")),
-                                                     "said": ctx.user_said or "", "door": CH.from_request(ctx)}))   # Sasha 346 · the ONE outcome
+                                                     "said": ctx.user_said or "", "door": CH.from_request(ctx),
+                                                     "proof": __import__("booking_signer.agapi_mandate", fromlist=["x"]).proof_from(ctx)}))   # Sasha 346 · the ONE outcome
     return {"status": "booking", "say": r["say"]}
 
 

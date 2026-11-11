@@ -21,13 +21,49 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 class PricedAgAPI(W334.FakeAgAPI):
     """CR 164's prices: flights quoted per offer, the stay by its price per night (Hotel Alba (test))."""
 
-    def __init__(self, per_night=9000, gone=(), gone_twice=(), busy=(), slow=0.0, refused=(), refused_twice=()):
+    def __init__(self, per_night=9000, gone=(), gone_twice=(), busy=(), slow=0.0, refused=(), refused_twice=(), outside=None):
         super().__init__()
+        self.outside, self.mandates = dict(outside or {}), {}   # Sasha 367 · CR 182: the manager's mandate (approvals.mandate)
         self.per_night, self.gone, self.gone_twice, self.busy, self.slow = per_night, set(gone), set(gone_twice), set(busy), slow
         self.refused, self.refused_twice, self.acts = set(refused), set(refused_twice), {}   # Sasha 365 · Duffel refusing the ORDER (the act)
         self.seen, self.inflight, self.peak, self.bodies = {}, 0, 0, []
 
+    def _proof_ok(self, body):
+        """CR 182 (mailbox 1866), checked independently of Sasha's signer: hex HMAC-SHA256(SASHA_AGAPI_TAP_SECRET, t.nonce.mandate.kind.id.who.sha)."""
+        import hashlib, hmac, os
+        p = body.get("proof") or {}
+        secret = os.getenv("SASHA_AGAPI_TAP_SECRET", "")
+        if not p or not secret:
+            return False
+        canon = {k: body[k] for k in ("end_user", "words", "scope", "limits", "expires_in_minutes")}
+        sha = hashlib.sha256(json.dumps(canon, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        ident, who = (p["message_id"], p["wa_id"]) if p["kind"] == "whatsapp" else (p["session_id"], f"sasha:{OWNER}")
+        want = hmac.new(secret.encode(), f"{p['t']}.{p['nonce']}.mandate.{p['kind']}.{ident}.{who}.{sha}".encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(want, p.get("signature") or "")
+
     async def _do(self, op, body, approval):
+        if op == "approvals.mandate":
+            if not self._proof_ok(body):
+                return {"ok": False, "error": {"code": "approval_untrusted_origin", "message": "bad proof"}}
+            mid = self._id("mdt")
+            self.mandates[mid] = body
+            return {"ok": True, "result": {"mandate_id": mid, "expires_at": "2026-12-01T00:00:00Z", "proof": {"kind": body["proof"]["kind"]}}}
+        if op == "group.book" and body.get("mandate_id") and not approval:   # CR 182: under the mandate, THIS call is the act
+            assert body["mandate_id"] in self.mandates
+            w = body["worker"]
+            name = f"{w['given_name']} {w['family_name']}"
+            if not w.get("phone"):
+                return {"ok": False, "error": {"code": "mobile_needed", "message": "the airline needs the traveller's mobile",
+                                               "details": {"field": "worker.phone", "worker": w["key"]}}}
+            if name in self.outside:
+                out = await self._do(op, {k: v for k, v in body.items() if k != "mandate_id"}, None)   # the read-back, as today
+                out["error"]["details"]["mandate"] = {"mandate_id": body["mandate_id"], "outside": [{"why": self.outside[name]}]}
+                return out
+            k = self.acts[name] = self.acts.get(name, 0) + 1
+            if (name in self.refused and k == 1) or name in self.refused_twice:
+                return {"ok": False, "error": {"code": "upstream_refused", "message": "Duffel refused the order.", "details": {"service": "duffel"}}}
+            res = await self._book(w, body["items"])
+            return {"ok": True, "result": {**res, "mandate_id": body["mandate_id"]}}
         if op == "travel.find_flights":
             return {"ok": True, "result": {"offers": [{"offer_ref": f"off_{body['origin']['query']}_{body['destination']['query']}_{body['date']}_{self._id('o')}",
                                                        "price": {"amount_minor": 12000, "currency": "EUR"}}]}}
@@ -58,6 +94,9 @@ class PricedAgAPI(W334.FakeAgAPI):
 
 
 class World(W334.World):
+    """Sasha 367 · the world speaks CR 182: an AgAPI that takes the manager's mandate (tests/test_s367's MandateAgAPI), the tap secret, the
+    destination's codes, and every person on the roster with their OWN contact (fictional mobiles and emails, never texted)."""
+
     def __init__(self, agapi=None):
         super().__init__()
         self._agapi = agapi or PricedAgAPI()
@@ -69,6 +108,16 @@ class World(W334.World):
                   mock.patch.dict(GB._JOBS, {}, clear=True), mock.patch.object(G, "HOTELS", G._hotel_search)):
             p.start()
             self.p.append(p)
+        import os as _os
+        from booking_signer import agapi_mandate as _AM
+
+        async def _codes(city):
+            return ["LON", "LHR", "LGW"]
+        for p in (mock.patch.dict(_os.environ, {"SASHA_AGAPI_TAP_SECRET": "test-tap-secret-367"}), mock.patch.object(_AM, "PLACE", _codes)):
+            p.start()
+            self.p.append(p)
+        for i, person in enumerate(run(G.roster(OWNER))["people"]):   # each one's OWN contact (CR 181), fictional
+            run(G.edit_person(OWNER, person["id"], {"phone": f"+3462{i:07d}", "email": f"p{i}@lusaobras.example"}))
         mv = run(self.store.movement(OWNER))   # Sasha 365 · the group's ONE hotel search is AgAPI's (this world's AgAPI): found anew
         run(self.store.set_rules(OWNER, mv["id"], {k: v for k, v in (mv.get("rules") or {}).items() if k != "hotel"}))
         return self

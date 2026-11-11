@@ -56,18 +56,25 @@ def running(account: str) -> bool:
 # sweep() — the ONE worker, every few seconds from the app's start and at once for a new one — carries every open mandate through,
 # whatever door started it and whether or not any page is open; a restart finds it on the record and carries on.
 
-async def carry_out(account: str, said: str, who: Optional[List[str]] = None, over_ok: bool = False, door: str = "s2") -> Dict[str, Any]:
-    """The instruction received → written onto the trip's record, and the worker takes it. → {started, say} at once."""
+async def carry_out(account: str, said: str, who: Optional[List[str]] = None, over_ok: bool = False, door: str = "s2",
+                    proof: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """The instruction received → Sasha 367: registered ONCE at AgAPI as a signed mandate (its id on the trip's record — an id, never a
+    token), then the worker takes it. A missing fact (the company's limits) is asked; a refusal is said. → {started, say} at once."""
     import time
-    from . import groups as G
+    from . import agapi_mandate as AM, groups as G
     if running(account):
         return {"started": False, "say": "I'm already on it — I'll tell you as it goes, and when it's done."}
     mv = await G.store().movement(account)
     if not mv:
         return {"started": False, "say": "There's no group trip yet — tell me who's going, where and when."}
+    members = [x for x in await G.store().members(mv["id"]) if not who or x["name"].lower() in {w.lower() for w in who}]
+    reg = await AM.register(account, said, mv, members, proof)
     m = {"said": (said or "")[:500], "who": who or None, "over_ok": bool(over_ok), "door": door if door in ("s2", "wa") else "s2",
-         "state": "running", "at": time.time()}
+         "state": "running" if reg.get("mandate_id") else ("waiting" if reg.get("code") == "limits_needed" else "stopped"), "at": time.time(),
+         **({"agapi": {"mandate_id": reg["mandate_id"], "expires_at": reg.get("expires_at")}} if reg.get("mandate_id") else {"why": reg.get("code")})}
     await G.store().set_rule(account, str(mv["id"]), "mandate", m)
+    if not reg.get("mandate_id"):
+        return {"started": False, "say": reg["why"]}
     _start(account, str(mv["id"]), m)
     await asyncio.sleep(0)
     return {"started": True, "say": "On it — I'm planning each person and the hotel, then booking within the company's limits. "
@@ -173,6 +180,7 @@ async def _close(account: str, movement_id: str, m: Dict[str, Any], state: str, 
 async def _run(account: str, movement_id: str, m: Dict[str, Any]) -> None:
     from . import channel as CH, group_book as GB, group_outcome as GO, groups as G
     said, who, over_ok, door = m.get("said") or "", m.get("who"), bool(m.get("over_ok")), m.get("door") or "s2"
+    card = None
     try:
         await _planning(account, movement_id)
         v = await G.view(account, movement_id)
@@ -189,23 +197,28 @@ async def _run(account: str, movement_id: str, m: Dict[str, Any]) -> None:
             def prog(k: int, total: int) -> None:
                 j = GB._JOBS.get(account) or {}
                 j.update(ready=k, total=total)
-            card = await GB.prepare(account, "book", ready, over_ok=over_ok, progress=prog)
-            skipped = [{"name": x["name"], "kind": x.get("kind"), "code": x.get("code")} for x in card.get("skipped") or []
-                       if x.get("kind") != "needs_vault"]   # invited above: said as done, never asked
-            if card.get("status") == "awaiting_yes":   # the instruction IS the yes for everything inside the limits (its own words)
-                def acted(k: int, total: int) -> None:
-                    _publish(account, "group_progress", f"Booking {k} of {total}")
-                res = await GB.confirm(account, card["read_back_id"], "group_yes", said, progress=acted, ask_once=True, also=held + skipped)
-                text = res.get("say") or (res.get("finish") or {}).get("say") or "Done."
-                done = res.get("done") or []
+            mid = ((m.get("agapi") or {}).get("mandate_id"))
+            if not mid:   # Sasha 367 · nothing is booked without the manager's mandate at AgAPI (its id on the record)
+                raise RuntimeError("no mandate on the record")
+
+            def acted(k: int, total: int) -> None:
+                prog(k, total)
+                _publish(account, "group_progress", f"Booking {k} of {total}")
+            got = await GB.book_under_mandate(account, mid, ready, over_ok=over_ok, progress=acted)
+            asks = [x for x in got["asks"] if x.get("kind") != "needs_vault"] + got["outside"]   # invited above: said as done, never asked
+            card = got["card"]
+            if any(x.get("code") == "approval_expired" for x in got["asks"]):
+                text = "Your instruction expired before I could book everyone — say it again and I'll carry on from the master list."
             else:
-                text = (await GB.finish(account, [], held + skipped, ask_once=True))["say"]
+                text = (await GB.finish(account, got["done"], held + asks, ask_once=True))["say"]
+            done = got["done"]
         else:
             text = (await GB.finish(account, [], held, ask_once=True))["say"]
         said_inv = invited_words(inv)   # done things first, the ONE question last
         text = text.replace(" Not booked — ", said_inv + " Not booked — ", 1) if " Not booked — " in text else text + said_inv
         # THE ONE FINISH, to the door that started it (channel.tell: their last turn's channel — WhatsApp, or the S2 page / its news)
-        await CH.tell(account, text, event={"type": "group_done", "text": text}, news_key=f"group:{movement_id}")
+        await CH.tell(account, text, event={"type": "group_done", "text": text, **({"card": card} if card else {})},
+                      news_key=f"group:{movement_id}", card=card)   # Sasha 367 · the outside ones: the explicit tap, with the ONE question
         await _close(account, movement_id, m, "done", text)
         j = GB._JOBS.get(account)
         if j is not None and j.get("kind") == "mandate":

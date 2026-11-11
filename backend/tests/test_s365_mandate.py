@@ -38,7 +38,7 @@ def _instruction(said=SAID):
     """The chat's door, as the model calls it with the organiser's own words (the filter is theirs; the engine picks the people)."""
     async def go():
         events = LE.subscribe(OWNER)
-        ctx = API.Ctx(account=OWNER, user_said=said, surface="s2")
+        ctx = API.Ctx(account=OWNER, user_said=said, surface="s2", session="s365-session")
         r = await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15", "ends_on": "2026-12-17",
                                                  "roles": ["executives"]})
         await M.finished(OWNER)

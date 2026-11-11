@@ -93,13 +93,14 @@ async def progress(account: str, door: str, text: str) -> Optional[str]:
 
 
 async def tell(account: str, text: str, *, event: Optional[dict] = None, wa_text: Optional[str] = None,
-               news_key: Optional[str] = None, news_url: Optional[str] = None) -> Dict[str, Any]:
-    """An outcome, said on ONE channel. → {to: s2|wa, wa: what WhatsApp answered, event}."""
+               news_key: Optional[str] = None, news_url: Optional[str] = None, card: Optional[dict] = None) -> Dict[str, Any]:
+    """An outcome, said on ONE channel. → {to: s2|wa, wa: what WhatsApp answered, event}. Sasha 367 · `card` (a read-back waiting for the
+    manager's explicit tap): on WhatsApp the same message's buttons; on S2 the event carries it."""
     from . import live_events as LE
     to = await outcome_channel(account)
     out: Dict[str, Any] = {"to": to}
     if to == WA:
-        res = await LE._tell_whatsapp(account, wa_text or text)
+        res = await LE._tell_whatsapp(account, wa_text or text, card=card)
         out["wa"] = res
         if "sent" in str(res) and "not" not in str(res):
             log.info("[channel] outcome → WhatsApp")

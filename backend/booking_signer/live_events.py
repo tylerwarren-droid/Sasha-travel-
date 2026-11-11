@@ -183,16 +183,20 @@ async def take_news(account: str) -> Optional[dict]:
         return None
 
 
-async def _tell_whatsapp(account: str, text: str) -> str:
+async def _tell_whatsapp(account: str, text: str, card: Optional[dict] = None) -> str:
     if WA_SEND is not None:
-        return await WA_SEND(account, text)
+        return await WA_SEND(account, text + (f" [card: {card.get('ask')}]" if card else ""))
     try:
         from . import guest_whatsapp as GW
         ch = await GW.STORE.channel_of_account(account) if GW.STORE else None
         if not ch:
             return "not linked"
         st = await GW.STORE.get_state(ch["wa_id_sha256"])
-        res = await GW.deliver(ch, GW.sender_for(st), GW.Out().text(text), st.get("last_inbound_at"))
+        out = GW.Out().text(text)
+        if card:   # Sasha 367 · the read-back waiting for their explicit tap: its lines and its Yes / No, as WhatsApp draws a read-back
+            from . import wa_agent as WA
+            WA._read_back({"kind": "read_back", **card}, out)
+        res = await GW.deliver(ch, GW.sender_for(st), out, st.get("last_inbound_at"))
         return str(res)
     except Exception as e:
         log.warning("[live_events] not told on WhatsApp: %s: %s", type(e).__name__, e)

@@ -11,7 +11,7 @@ from unittest import mock
 
 from agapi import s2_keep as KEEP
 from booking_signer import group_book as GB, group_outcome as GO, groups as G
-from tests import test_s334 as W334
+from tests import test_s334 as W334, test_s339_book_all as W339
 
 run = asyncio.run
 OWNER = W334.OWNER
@@ -23,7 +23,7 @@ def go(action, **a):
     return run(GO.run(OWNER, action, a))
 
 
-class World(W334.World):
+class World(W339.World):   # Sasha 367 · the group world that speaks CR 182 (the mandate, each traveller's contact)
     def __enter__(self):
         super().__enter__()
         p = mock.patch.dict(GB._JOBS, {}, clear=True)
@@ -55,7 +55,7 @@ class BookAll(unittest.TestCase):
 
             async def both():
                 q = LE.subscribe(OWNER)
-                out = await GO.run(OWNER, "book", {})
+                out = await GO.run(OWNER, "book", {"said": "Book all", "proof": {"kind": "in_app", "session_id": "group-page-s346"}})   # 367: the page's proof
                 await M.finished(OWNER)
                 evs = []
                 while not q.empty():

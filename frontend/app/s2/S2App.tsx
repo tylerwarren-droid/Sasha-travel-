@@ -874,7 +874,10 @@ export default function S2App() {
             return i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? card : c)) } : m)) : [...ms, { role: 'sasha', text: '', cards: [card] }]
           }
           const doneCard: Card = { k: 'notice', title: 'Your group trip', lines: ['Done — the master list has every reference.'], status: 'Done' }
-          return [...(i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? doneCard : c)) } : m)) : ms), { role: 'sasha', text, cards: [] }]
+          // Sasha 367 · anyone outside the mandate: AgAPI's read-backs on ONE card, answered with the explicit tap (Yes, book them / No)
+          const ask: Card[] = ev.card && Array.isArray(ev.card.read_back) && ev.card.read_back_id
+            ? [{ k: 'read_back', lines: ev.card.read_back, ask: String(ev.card.ask || ''), choices: Array.isArray(ev.card.choices) ? ev.card.choices : [], read_back_id: String(ev.card.read_back_id), head: 'Outside your instruction · your tap' }] : []
+          return [...(i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? doneCard : c)) } : m)) : ms), { role: 'sasha', text, cards: ask }]
         })
         if (ev.type === 'group_done') {
           window.dispatchEvent(new Event('sasha-plan-refresh'))   // the trip card and the Trip tab follow the record

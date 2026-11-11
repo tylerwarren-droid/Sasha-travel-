@@ -210,7 +210,10 @@ async def group_act(request: Request):
     # missing. book → its background job (Sasha 339) only when someone can be booked; swap/cancel → AgAPI's card, or the list's own swap
     out = await GO.run(account, action if action in ("book", "swap", "cancel") else "?" + action,
                        {"who": body.get("who") or None, "to": body.get("to"), "to_city": body.get("to_city"), "to_grade": body.get("to_grade"),
-                        "over_ok": bool(body.get("over_ok"))})
+                        "over_ok": bool(body.get("over_ok")),
+                        # Sasha 367 · Book all on the page IS the instruction: its in-app proof is THIS signed-in request (its own id, once)
+                        **({"said": "Book all", "door": "s2", "proof": {"kind": "in_app", "session_id": "group-page-" + __import__("uuid").uuid4().hex}}
+                           if action == "book" else {})})
     return _with_buttons(out)
 
 

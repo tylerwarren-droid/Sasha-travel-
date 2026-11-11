@@ -6,6 +6,13 @@ Kanoe does NOT ship patches. Ever.
 4. If the root fix can't be done in this ticket, STOP: post "⛔ STOPPED — root cause: <cause> · one source: <where> · root fix needs: <what>". Shipping a patch "for now" is not allowed.
 5. Existing "PATCH, said" items (e.g. NOT_YET_CLEAN lists, fallback notes) are debts: list them in your report so they get a root ticket. Never add to them.
 
+## ⛔ SEAM + REAL PATH — every change has two halves (Tyler, 11 Nov 2026 · project doc claude/Kanoe_Priorities_and_Parked.md, GATE RULES)
+1. Name the SEAM: who SENDS the fact and who READS it (Sasha, AgAPI, AD, the frontend, a script, a supplier).
+2. Search AD + AgAPI + this repo for EVERY reader and writer of that fact, and LIST them in the report (file:line) — a reader you didn't
+   list is a reader you didn't change.
+3. DONE only when BOTH halves are live and proven through the REAL path (the deployed service, the real route, the real caller) — never a
+   stand-in, a mock or a local harness alone. A half that isn't live is "⛔ STOPPED — waiting on <the other half>", not DONE.
+
 # CLAUDE.md — Sasha / Kanoe.ai Project
 
 This file gives Claude Code the full context and operating rules for the sasha-travel repo.

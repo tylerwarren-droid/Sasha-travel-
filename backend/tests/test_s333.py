@@ -68,7 +68,7 @@ class World(W.World):
 
     def fill(self, m, i, loyalty=True):
         return run(TV.save(self.token(m), {"number": PASSPORTS[f"Worker{i}"], "country": "ES", "expires_on": "2031-05-01",
-                                           "name": m["name"].upper(), "born_on": "1990-01-01"},
+                                           "name": m["name"].upper(), "born_on": "1990-01-01", "sex": "FM"[i % 2]},   # 369: as printed
                            [{"program": "Iberia Plus", "number": f"IB7700{i:02d}99"}] if loyalty else []))
 
 
@@ -92,7 +92,7 @@ class InviteAndPage(unittest.TestCase):
             st = {r["name"]: r for r in after["rows"]}
         self.assertEqual(before, {"needs vault": 19, "over limit": 1})                # Rania's flight over the worker's €600
         self.assertEqual(after["counts"], {"planned": 10, "needs vault": 9, "over limit": 1})   # 10 filled → planned; over limit stays over
-        self.assertTrue(all(st[n]["status"] == "planned" and st[n]["vault"] == {"passport": True, "loyalty": ["Iberia Plus"]} for n in filled))
+        self.assertTrue(all(st[n]["status"] == "planned" and st[n]["vault"] == {"passport": True, "loyalty": ["Iberia Plus"], "missing": []} for n in filled))
         print(f"\n[s333 proof] invite: {len(inv['emailed'])} emailed, {len(inv['forward'])} to forward · master list before {before} → after "
               f"{after['counts']}")
 

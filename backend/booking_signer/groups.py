@@ -833,9 +833,9 @@ async def _vault_marks(m: dict) -> Dict[str, Any]:
     try:
         from . import traveller_vault as TV
         v = await TV.vault_view(m)
-        return {"vault": {"passport": v["passport"], "loyalty": v["loyalty"]}}
+        return {"vault": {"passport": v["passport"], "loyalty": v["loyalty"], "missing": v.get("missing") or []}}   # Sasha 369 · + what it lacks
     except Exception:
-        return {"vault": {"passport": False, "loyalty": []}}
+        return {"vault": {"passport": False, "loyalty": [], "missing": []}}
 
 
 async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any]:

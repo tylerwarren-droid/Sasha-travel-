@@ -246,7 +246,7 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
         e = r.get("error") or {}
         if mandate_id and r.get("ok"):   # Sasha 367 · INSIDE the mandate: booked on the manager's instruction (no read-back to answer)
             return "booked", {"name": m["name"], "member_id": m["id"], "result": r.get("result") or {}}
-        if mandate_id and e.get("code") in ("mobile_needed", "email_needed", "approval_expired", "not_found", "incomplete"):
+        if mandate_id and e.get("code") in ("mobile_needed", "email_needed", "approval_expired", "not_found", "incomplete", "passport_detail_needed"):
             d = e.get("details") or {}
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": e["code"], "code": e["code"],
                             **({"left_booked": d.get("left_booked")} if d.get("left_booked") else {})}
@@ -724,7 +724,8 @@ MANDATE_FACTS = {"worker_not_named": "not named in your instruction", "another_d
                  "outside_dates": "their flight is outside the trip's dates", "over_flight_limit": "their flight is over the company's flight limit",
                  "over_stay_limit": "their hotel is over the company's nightly limit", "over_trip_limit": "their trip is over the company's limit",
                  "currency": "the fare is in another currency", "fare_not_refundable": "their fare can't be refunded",
-                 "mobile_needed": "no mobile on their profile — add it on the Group page", "email_needed": "no email on their profile — add it on the Group page",
+                 "mobile_needed": "no mobile on their profile — add it on the Group page",
+                 "passport_detail_needed": "a detail an airline needs is missing from their passport (sex, date of birth or name) — their link is emailed", "email_needed": "no email on their profile — add it on the Group page",
                  "approval_expired": "your instruction had expired", "not_found": "the booking system didn't know your instruction",
                  "incomplete": "part is booked (only the airline can cancel it) and the rest was refused"}   # Sasha 365 · tried once more before anyone is asked
 

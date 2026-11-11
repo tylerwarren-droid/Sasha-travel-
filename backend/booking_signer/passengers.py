@@ -2,7 +2,7 @@
 
 The airline needs each traveller's full name, title, gender and date of birth. Sasha asks ONCE, at the first "book it" with
 a flight in the basket, in one line; the answer is read here (no model), saved on the account, and every later booking reuses
-it — never asked again. Duffel's TEST placeholders (travel.PLACEHOLDERS) are used only when nothing is saved, and only in
+it — never asked again. Sasha 369: nothing is ever made up when nothing is saved — they're asked — and that holds in
 TEST mode (travel.token() accepts a duffel_test_ token alone).
 
     "Alex Smith, Mr, 12 March 1985; Sam Smith, Ms, 02/05/1987"  →  two passengers
@@ -123,7 +123,7 @@ def for_order(people: List[Dict[str, Any]], passenger_ids: List[str], email: str
         return None
     return [{"id": pid, "type": "adult", "given_name": p["given_name"], "family_name": p["family_name"],
              "born_on": str(p["born_on"]), "title": p["title"], "gender": p["gender"],
-             "email": p.get("email") or email or "guest@example.com",
+             "email": p.get("email") or email,   # Sasha 369 · their own, or none (the order refuses it by name) — never a made-up one
              # Sasha 363 · only a number the airline accepts (never a made-up one): checked before any money is held (basket_book.pay)
              "phone_number": SM(p.get("phone_e164")) or SM(phone)}
             for pid, p in zip(passenger_ids, people)]

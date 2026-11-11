@@ -12,7 +12,7 @@ import { reach } from '@/lib/request'   // Sasha 348 · the ONE request client
 import { announce, observe, stillGoing } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
 type Page = { name: string; company?: string; destination?: string; saved: { type: string; masked: string; item_id: string }[] }
-const empty = { number: '', country: '', expires_on: '', name: '', born_on: '' }
+const empty = { number: '', country: '', expires_on: '', name: '', born_on: '', sex: '' }   // Sasha 369 · + sex, as printed
 
 export default function VaultPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)
@@ -71,6 +71,10 @@ export default function VaultPage({ params }: { params: Promise<{ token: string 
         {field('country', 'Issuing country (2 letters, e.g. ES)', 'text', 'ES')}
         {field('expires_on', 'Expiry date', 'date')}
         {field('born_on', 'Date of birth', 'date')}
+        <label data-passport-sex style={{ display: 'block', margin: '10px 0', color: T.text }}>Sex, as printed on the passport
+          <select value={pp.sex} onChange={e => setPp({ ...pp, sex: e.target.value })} style={{ ...fieldS, display: 'block', width: '100%', marginTop: 4, colorScheme: 'dark' }}>
+            <option value="">Choose…</option><option value="F">F</option><option value="M">M</option><option value="X">X</option>
+          </select></label>{/* Sasha 369 · the airline needs it (and its title comes from it) — never assumed */}
         <h2 style={{ fontSize: 16 }}>Frequent-flyer and hotel loyalty</h2>
         {loy.map((l, i) => <div key={i} style={{ display: 'flex', gap: 8 }}>
           <input placeholder="Programme (e.g. Iberia Plus, Marriott Bonvoy)" value={l.program} autoComplete="off"

@@ -3,8 +3,8 @@
 Every step says TEST. The Duffel token must be a TEST token (duffel_test_…): a live token is refused here, always — a
 test order issues no ticket and charges nothing. The fare is paid in one touch on Stripe's TEST page (Apple Pay or the
 phone's saved card; nothing is charged); only when Stripe records it paid is the Duffel test order made, with Duffel's
-test "balance" payment. Duffel needs a passenger's birth date, title and gender to make an order: in test mode Sasha
-uses PLACEHOLDERS, and the read-back says so.
+test "balance" payment. Duffel needs a passenger's birth date, title and gender to make an order: they are the traveller's
+OWN (saved once, or from their passport) — Sasha 369: never a stand-in; without them nothing is booked and they are asked.
 
 Hotels are NOT here: Duffel Stays isn't enabled on this account (403, 3 Oct) and RateHawk has no credentials — hotels are
 found as cards and requested from the hotel itself (guest_whatsapp), said as such.
@@ -21,7 +21,6 @@ from zoneinfo import ZoneInfo
 
 log = logging.getLogger("booking_signer.travel")
 DUFFEL = "https://api.duffel.com"
-PLACEHOLDERS = {"born_on": "1980-01-01", "title": "mr", "gender": "m"}
 LABEL = "TEST booking — Duffel test mode: no real ticket, nothing charged"
 
 
@@ -158,8 +157,7 @@ def read_back(c: dict, name: str, email: str) -> List[str]:
     # Sasha 183 · only what's true: no saved traveller details or passport are used (Duffel's TEST mode takes placeholders),
     # payment is Apple Pay on the phone (Stripe TEST), and no confirmation email is sent for a test flight
     return [f"I'll book {card_line(c)} for {name}.",
-            "Traveller details: no saved details or passport are used — Duffel's test mode needs a birth date, title and gender, "
-            "so I'll use test placeholders (1 Jan 1980, Mr, M).",
+            "Traveller details: the ones saved for them (name, date of birth, Mr/Ms as on the passport) — asked before booking if missing.",
             "Payment: Apple Pay on your phone, on Stripe's TEST page — nothing is charged, and I never see your card.",
             f"⚠ {LABEL}.",
             "Once it's paid it goes straight into your itinerary on the platform, and I'll confirm it here."]
@@ -179,12 +177,13 @@ async def order(c: dict, name: str, email: str, phone: Optional[str], people: Op
     from .contacts import supplier_mobile as SM
     if not any(SM(x) for x in [phone] + [p.get("phone_e164") for p in people or []]):   # Sasha 363 · never a made-up number
         return {"why": "the traveller's mobile number isn't a real one the airline accepts — nothing was booked"}
-    from . import passengers as PX   # Sasha 198 R7 · the travellers asked once and saved; placeholders only without them (TEST)
+    from . import passengers as PX   # Sasha 198 R7 · the travellers asked once and saved
     pax = PX.for_order(people or [], [p["id"] for p in o["passengers"]], email, phone)
-    if pax is None:
-        given, _, family = (name or "Guest Test").partition(" ")
-        pax = [{"id": p["id"], "type": "adult", "given_name": given, "family_name": family or "Guest", "email": email or "guest@example.com",
-                "phone_number": SM(phone), **PLACEHOLDERS} for p in o["passengers"]]   # Sasha 363 · a real mobile, or none (asked before the hold)
+    if pax is None:   # Sasha 369 · never a stand-in for a traveller: their own details, or asked — nothing was booked
+        return {"why": "the traveller's details (name, date of birth and Mr/Ms as on the passport) aren't saved — nothing was booked; "
+                       "ask for them once, then book", "needs": ["travellers"]}
+    if any(not p.get("email") for p in pax):
+        return {"why": "the traveller's email isn't saved — nothing was booked; ask for it once, then book", "needs": ["email"]}
     if documents and "supported_passenger_identity_document_types" in o:   # Sasha 228 · only what THIS airline takes (easyJet takes none:
         ok_types = set(o.get("supported_passenger_identity_document_types") or [])   # sending one anyway would fail the order)
         documents = [d for d in documents if d.get("type") in ok_types]

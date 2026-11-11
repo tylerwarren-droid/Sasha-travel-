@@ -57,14 +57,15 @@ class Duffel(unittest.TestCase):
                 self.assertIn("TEST token", asyncio.run(TR.search("Madrid", "Hanoi", "2026-11-12"))["why"])
         self.assertEqual(self.fake.calls, [])
 
-    def test_cards_say_test_and_the_read_back_says_the_placeholders(self):
+    def test_cards_say_test_and_the_read_back_says_whose_details(self):
         with mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"}):
             got = asyncio.run(TR.search("Madrid", "Hanoi", "2026-11-12", 2))
         c = got["cards"][0]
         self.assertEqual(TR.card_line(c), "Duffel Airways ZZ 123 + ZZ 456 · Thu 12 Nov 08:30 MAD → 07:15+1 HAN · 1 stop · 21h 45m · EUR 391.52 (TEST)")
         lines = TR.read_back(c, "Tyler Warren", "guest@example.com")
         self.assertIn("⚠ TEST booking — Duffel test mode: no real ticket, nothing charged.", lines)
-        self.assertTrue(any("test placeholders (1 Jan 1980, Mr, M)" in ln for ln in lines))
+        self.assertTrue(any("the ones saved for them" in ln for ln in lines))   # Sasha 369 · never placeholders
+        self.assertFalse(any("placeholder" in ln for ln in lines))
 
     def test_the_order_is_refused_when_the_price_moved(self):
         with mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"}):
@@ -72,7 +73,7 @@ class Duffel(unittest.TestCase):
             TR.HTTP = FakeDuffel(price="420.00")
             self.assertIn("price changed", asyncio.run(TR.order(c, "Tyler Warren", "g@example.com", "+34612345678"))["why"])
             TR.HTTP = FakeDuffel()
-            o = asyncio.run(TR.order(c, "Tyler Warren", "g@example.com", "+34612345678"))
+            o = asyncio.run(TR.order(c, "Tyler Warren", "g@example.com", "+34612345678", people=[{"given_name": "Tyler", "family_name": "Warren", "born_on": "1980-02-01", "title": "mr", "gender": "m", "is_account_holder": True}]))   # 369: his own
         self.assertEqual(o["booking_reference"], "RZPNX8")
 
 

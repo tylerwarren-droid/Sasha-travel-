@@ -85,15 +85,32 @@ def _owner(member: Dict[str, Any]) -> str:
 
 
 async def has_passport(member: Dict[str, Any]) -> bool:
-    return any(i["type"] == "passport" for i in await _items(_owner(member)))
+    """Sasha 369 · a passport an airline can use: there AND complete (sex, birth date, name …) — the list's ✓ and the status read this."""
+    return not await passport_missing(member)
+
+
+async def passport_missing(member: Dict[str, Any]) -> List[str]:
+    """Sasha 369 · what the member's passport lacks for an airline (field NAMES; [] when complete, all of them when there's none)."""
+    from agapi import s2_keep as KEEP
+    pp = next((i for i in await _items(_owner(member)) if i["type"] == "passport"), None)
+    if not pp:
+        return list(REQUIRED_PASSPORT)
+    try:
+        have = set(await KEEP.fields_of(_owner(member), pp["item_id"]))
+    except Exception as e:
+        log.warning("[vault] the passport's fields weren't read: %s", type(e).__name__)
+        return ["unread"]
+    return [f for f in REQUIRED_PASSPORT if f not in have]
 
 
 async def vault_view(member: Dict[str, Any]) -> Dict[str, Any]:
-    """The organiser's view: ✓ / missing — never a number, never a mask with digits. References for the booking call (CR 163)."""
+    """The organiser's view: ✓ / missing — never a number, never a mask with digits. References for the booking call (CR 163).
+    Sasha 369 · `missing`: what the passport lacks for an airline (field names: "sex", "born_on" …) — the ✓ means complete."""
     items = await _items(_owner(member))
     loy = [i for i in items if i["type"] == "loyalty"]
     pp = next((i for i in items if i["type"] == "passport"), None)
-    return {"passport": bool(pp), "loyalty": [i["masked"].split("•")[0].strip() for i in loy],   # "Iberia Plus" — its name, no digits
+    missing = await passport_missing(member) if pp else []
+    return {"passport": bool(pp) and not missing, "missing": missing, "loyalty": [i["masked"].split("•")[0].strip() for i in loy],
             "refs": {"passport": "keep:" + pp["item_id"] if pp else None, "loyalty": ["keep:" + i["item_id"] for i in loy]}}
 
 
@@ -137,7 +154,7 @@ async def page(token: str) -> Dict[str, Any]:
             "saved": [{"type": i["type"], "masked": i["masked"], "item_id": i["item_id"]} for i in await _items(_owner(m))]}
 
 
-REQUIRED_PASSPORT = ("number", "country", "expires_on", "name", "born_on")   # what an airline needs (the Keep keeps the last two optional)
+REQUIRED_PASSPORT = ("number", "country", "expires_on", "name", "born_on", "sex")   # what an airline needs (Sasha 369: + sex, as printed)
 
 
 async def save(token: str, passport: Optional[dict] = None, loyalty: Optional[List[dict]] = None) -> Dict[str, Any]:

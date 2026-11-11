@@ -358,6 +358,36 @@ async def list_with_uses(account: str) -> List[dict]:
     return [{**i, "uses": uses.get(i["item_id"], [])[:10]} for i in items]
 
 
+async def fields_of(account: str, item_id: str) -> List[str]:
+    """Sasha 369 · which fields a saved item holds — their NAMES only (opened here, server-side; no value leaves, nothing recorded as a use):
+    so "is this passport complete for an airline?" is answered from the passport itself."""
+    st = _store()
+    it = await st.item(account, item_id)
+    if not it:
+        return []
+    dek = await _dek(account, create=False)
+    values = K.open_(dek, K.item_aad(account, account, str(it["id"]), it["type"]), bytes(it["nonce"]), bytes(it["ciphertext"]))
+    names = sorted(k for k, v in values.items() if str(v or "").strip())
+    values = None
+    return names
+
+
+async def amend(account: str, item_id: str, fields: Dict[str, str]) -> dict:
+    """Sasha 369 · fields ADDED to a saved item (the passport's sex) — opened, merged, sealed again as one item; the old one shredded. Never
+    a value out; the same validation as any put."""
+    st = _store()
+    it = await st.item(account, item_id)
+    if not it:
+        raise KeepError("not_found", "That isn't in your Keep.")
+    dek = await _dek(account, create=False)
+    values = K.open_(dek, K.item_aad(account, account, str(it["id"]), it["type"]), bytes(it["nonce"]), bytes(it["ciphertext"]))
+    out = await put(account, it["type"], {**values, **fields})
+    values = None
+    if out.get("created"):
+        await delete(account, str(it["id"]))
+    return out
+
+
 async def show(account: str, item_id: str) -> Dict[str, str]:
     """A read-back-only item, to the signed-in person's OWN screen (the route returns it to their browser, never to the model)."""
     st = _store()

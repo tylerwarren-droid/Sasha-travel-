@@ -98,7 +98,19 @@ def parse_td3(line1: str, line2: str) -> Dict[str, str]:
         expires = date(2000 + int(exp[0:2]), int(exp[2:4]), int(exp[4:6]))
     except ValueError:
         raise ScanRefused("mrz_check_failed", "The expiry date didn't read cleanly — take another photo.") from None
-    return {"number": num.replace("<", ""), "country": country, "expires_on": expires.isoformat()}
+    # Sasha 369 · what the airline needs, from the SAME verified read: the sex as printed (M / F; "<" → X), the birth date, the name
+    sex = {"M": "M", "F": "F", "<": "X"}.get(l2[20])
+    if sex is None:
+        raise ScanRefused("mrz_check_failed", "The passport's sex didn't read cleanly — take another photo.")
+    try:
+        yy = int(dob[0:2])
+        born = date((1900 if yy > date.today().year % 100 else 2000) + yy, int(dob[2:4]), int(dob[4:6]))
+    except ValueError:
+        raise ScanRefused("mrz_check_failed", "The date of birth didn't read cleanly — take another photo.") from None
+    surname, _, given = l1[5:].partition("<<")
+    name = " ".join(w.capitalize() for w in (given.replace("<", " ").split() + surname.replace("<", " ").split()))
+    return {"number": num.replace("<", ""), "country": country, "expires_on": expires.isoformat(), "sex": sex, "born_on": born.isoformat(),
+            **({"name": name[:80]} if name else {})}
 
 
 # ── the photo, read once ─────────────────────────────────────────────────────────────────────────────────────────────────────

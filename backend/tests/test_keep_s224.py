@@ -32,7 +32,9 @@ def specimen(number="XDA123456", state="ESP", dob="800201", sex="M", expiry="310
 
 class Mrz(unittest.TestCase):
     def test_a_checked_mrz_reads(self):
-        self.assertEqual(SCAN.parse_td3(*specimen()), {"number": "XDA123456", "country": "ES", "expires_on": "2031-05-01"})
+        got = SCAN.parse_td3(*specimen())   # Sasha 369 · + what an airline needs, from the same verified read
+        self.assertEqual({k: got[k] for k in ("number", "country", "expires_on")}, {"number": "XDA123456", "country": "ES", "expires_on": "2031-05-01"})
+        self.assertEqual((got["sex"], got["born_on"]), ("M", "1980-02-01"))
 
     def test_one_wrong_character_is_refused(self):
         l1, l2 = specimen()

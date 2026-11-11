@@ -51,7 +51,10 @@ TYPES: Dict[str, dict] = {
                                                                    "expires_on": (10, 10, "date"),
                                                                    # Sasha 333 · what an airline needs with it (optional here: the frozen vectors
                                                                    # stand; the traveller vault page asks for both) — AgAPI's copy: same CR ask
-                                                                   "name": (0, 80, "text"), "born_on": (0, 10, "date")}},
+                                                                   "name": (0, 80, "text"), "born_on": (0, 10, "date"),
+                                                                   # Sasha 369 · as PRINTED on the passport (its MRZ: M, F, or "<" → X) —
+                                                                   # the one source of a passenger's sex (and the airline's title); never a default
+                                                                   "sex": (0, 1, "sex")}},
     "national_id":       {"tier": YES, "name": "National ID", "fields": {"kind": (2, 5, "enum:dni|nie|other"), "number": (5, 20, "id"),
                                                                        "country": (2, 2, "iso2")}},
     "trusted_traveller": {"tier": YES, "name": "Trusted traveller", "fields": {
@@ -191,6 +194,10 @@ def normalise(kind: str, value: dict) -> Dict[str, str]:
                 date.fromisoformat(v)
             except ValueError:
                 raise Refused(f"/value/{f}", "date", "A date is YYYY-MM-DD.") from None
+        elif fk == "sex":   # Sasha 369 · F | M | X, kept as printed (upper case)
+            v = v.upper()
+            if v not in ("F", "M", "X"):
+                raise Refused(f"/value/{f}", "enum", "The sex is as printed on the passport: F, M or X.")
         elif fk.startswith("enum:"):
             v = v.lower()
             if v not in fk[5:].split("|"):

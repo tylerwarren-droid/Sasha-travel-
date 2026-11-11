@@ -224,7 +224,7 @@ class NeverAnAuthority(unittest.TestCase):
         self.assertEqual(hits, [])
         src = (BACKEND / "app" / "agent" / "sasha.py").read_text(encoding="utf-8")
         self.assertEqual(src.count("_MS.read_week("), 1)                  # the founder route only
-        self.assertIn('if not GA.founder(await chat_account(request)):\n        return JSONResponse({"ok": False, "rule": "founder_only"}', src)
+        self.assertIn('if not GA.founder(await acting(request)):\n        return JSONResponse({"ok": False, "rule": "founder_only"}', src)
 
     def test_hooks_are_observation_only(self):
         v0 = (BACKEND / "agapi" / "v0.py").read_text(encoding="utf-8")

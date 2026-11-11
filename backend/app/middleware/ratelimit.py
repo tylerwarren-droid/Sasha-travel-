@@ -52,7 +52,7 @@ COST_ALERT_WEBHOOK = os.getenv("COST_ALERT_WEBHOOK", "").strip()
 # Every public surface that spends money on someone else's meter.
 #
 # This list used to be just ("/api/agents", "/api/voice"), which left the two widest LLM
-# doors wide open: /api/heygen/chat/completions and /conversation/chat both run full
+# doors wide open: /api/heygen/chat/completions and /conversation/chat (both deleted, Sasha 370) ran full
 # Claude calls (the conductor even fans out into PAID web_search), and neither started with
 # a protected prefix — so they skipped the secret, the bucket and the counter entirely.
 # A loop against either billed us with no friction at all.
@@ -62,12 +62,8 @@ COST_ALERT_WEBHOOK = os.getenv("COST_ALERT_WEBHOOK", "").strip()
 _PROTECTED_PREFIXES = (
     "/api/agents",        # conductor, ideas, golf, booking-confirmation — Claude
     "/api/voice",         # Deepgram key minting + voice conductor — Deepgram + Claude
-    "/api/heygen",        # chat/completions shim — full conductor pipeline
-    "/conversation",      # /conversation/chat — Sonnet, uncapped history
     "/api/photos",        # Unsplash — metered quota, exhaustible
-    "/search",            # RateHawk — partner credential, throttleable
-    "/bookings",          # RateHawk booking writes
-    "/api/cards",         # writes attacker input to disk
+    "/api/cards",         # the card catalogue
     "/api/agent/",        # Sasha 215 · CR 56 #7 — the /next agent (Claude + Duffel + Places + Stripe); was outside the limiter
 )
 # Sasha 215 · the agent's routes are behind sign-in and come through the /next proxy (ONE caller IP for everyone), so the

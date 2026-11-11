@@ -25,6 +25,8 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370 · the ONE account door, at the router
 from fastapi.responses import JSONResponse
 
 log = logging.getLogger("app.avatar_gate")
@@ -287,12 +289,12 @@ async def reaper_forever() -> None:
 
 
 # ── the routes: /api/avatar/* — called by the frontend's server routes only (agentHeaders: the person's own sign-in) ──────────
-router = APIRouter(prefix="/api/avatar", tags=["avatar"])
+router = APIRouter(prefix="/api/avatar", tags=["avatar"], dependencies=[Depends(require_account)])
 
 
 async def _account(request: Request) -> Optional[str]:
-    from app.services.chat_account import chat_account
-    return await chat_account(request, anonymous=None)
+    from app.services.chat_account import acting
+    return await acting(request, anonymous=None)   # Sasha 370 · read from the router's door
 
 
 async def _body(request: Request) -> dict:

@@ -28,6 +28,8 @@ from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import APIRouter, Request
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370 · the ONE account door, at the router
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from agapi import v0 as API
@@ -39,7 +41,7 @@ from agapi.s2_subscriptions import TOOL_NAMES as _SUBS_TOOLS   # Sasha 261 · su
 from app.services import persona as P
 
 log = logging.getLogger("agent.sasha")
-router = APIRouter(prefix="/api/agent", tags=["agent"])
+router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[Depends(require_account)])
 MODEL = os.getenv("SASHA_AGENT_MODEL", "claude-opus-5-5")               # tools and planning
 FAST_MODEL = os.getenv("SASHA_AGENT_FAST_MODEL", "claude-sonnet-5-5")   # Sasha 204 · the first step of a turn (plain conversation)
 QUIVER_AFTER_S = float(os.getenv("SASHA_QUIVER_AFTER_S", "1.5"))      # Sasha 210 · nothing ready by then → one short acknowledgement
@@ -1764,9 +1766,9 @@ async def agent_events(request: Request):
     """Sasha 212 · the open /next page's live channel (server-sent events): a settled payment ("booked" / "booking_failed")
     reaches it the moment Pacioli records it. `since` = the last event id the page heard (a reconnect hears nothing twice)."""
     import asyncio
-    from app.services.chat_account import chat_account, signed_in
+    from app.services.chat_account import acting, signed_in
     from booking_signer import live_events as LE
-    account = await chat_account(request)
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     try:
@@ -1799,9 +1801,9 @@ async def agent_events(request: Request):
 async def measures(request: Request, days: int = 7):
     """Sasha 275 · S1 measure — the founder's week: by day, by venue type, by stop reason, p50/p95/p99. Founder only. Read from the
     derived store (agapi.measure), which no code that decides her behaviour ever reads."""
-    from app.services.chat_account import chat_account
+    from app.services.chat_account import acting
     from booking_signer import guest_accounts as GA
-    if not GA.founder(await chat_account(request)):
+    if not GA.founder(await acting(request)):
         return JSONResponse({"ok": False, "rule": "founder_only"}, status_code=403)
     try:
         return {"ok": True, **(await _MS.read_week(max(1, min(int(days), 31)))), "writer": _MS.stats()}
@@ -1812,9 +1814,9 @@ async def measures(request: Request, days: int = 7):
 @router.post("/measures/daily")
 async def measures_daily(request: Request):
     """Sasha 275 · the daily summary now (the gate; the founder): {day?} — yesterday by default. Founder only."""
-    from app.services.chat_account import chat_account
+    from app.services.chat_account import acting
     from booking_signer import guest_accounts as GA
-    if not GA.founder(await chat_account(request)):
+    if not GA.founder(await acting(request)):
         return JSONResponse({"ok": False, "rule": "founder_only"}, status_code=403)
     b = await request.json() if (request.headers.get("content-type") or "").startswith("application/json") else {}
     try:
@@ -1826,12 +1828,12 @@ async def measures_daily(request: Request):
 @router.post("/timing")
 async def agent_timing(request: Request):
     """Sasha 204 · the page's own measure of a voice turn: end of speech → first sound, → the full answer spoken."""
-    from app.services.chat_account import chat_account, signed_in
-    if not signed_in(await chat_account(request)):
+    from app.services.chat_account import acting, signed_in
+    if not signed_in(await acting(request)):
         return JSONResponse({"ok": False}, status_code=403)
     b = await request.json()
     if b.get("tid"):   # Sasha 275 · S1 measure: the page's own clock for one turn (ids only, no words)
-        _MS.client(str(b.get("tid")), b, await chat_account(request))
+        _MS.client(str(b.get("tid")), b, await acting(request))
         return {"ok": True}
     row = {k: b.get(k) for k in ("session", "first_sound_ms", "full_answer_ms", "first_sound_kind", "engine_first_text_ms", "tools")}
     row["at"] = datetime.now(timezone.utc).isoformat()
@@ -1895,11 +1897,11 @@ async def agent_ics(token: str):
 async def s2_statement(request: Request):
     """CR 72 · /s2 only: the person's statement (CSV, PDF or photo), kept in this server's MEMORY for 30 minutes (never on disk) → a
     statement_ref that find_subscriptions reads once. /next (no S2 header) is refused."""
-    from app.services.chat_account import chat_account, signed_in
+    from app.services.chat_account import acting, signed_in
     from agapi import s2_subscriptions as SUBS
     if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
         return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
-    account = await chat_account(request)
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     try:
@@ -1916,11 +1918,11 @@ async def s2_statement(request: Request):
 async def s2_card_image(request: Request):
     """CR 74 · /s2 only: a photo of a card or a Wallet screenshot, kept in this server's MEMORY for 10 minutes (never on disk) → a
     card_image_ref that add_card reads once (AgAPI keeps only the card's product). /next (no S2 header) is refused."""
-    from app.services.chat_account import chat_account, signed_in
+    from app.services.chat_account import acting, signed_in
     from agapi import s2_fine_print as FP
     if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
         return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
-    account = await chat_account(request)
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     try:
@@ -1937,11 +1939,11 @@ async def s2_card_image(request: Request):
 async def s2_accident_photo(request: Request):
     """CR 75 · /s2 only: one guided accident photo from the accident card, straight to AgAPI (sealed under the person's own key, hashed
     evidence) — never through the chat or the model. /next is refused."""
-    from app.services.chat_account import chat_account, signed_in
+    from app.services.chat_account import acting, signed_in
     from agapi import s2_fine_print as FP
     if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
         return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
-    account = await chat_account(request)
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     try:
@@ -2118,12 +2120,12 @@ async def _try_again(account: str, act_id: str):
 
 @router.post("/turn")
 async def agent_turn(request: Request):
-    from app.services.chat_account import chat_account, signed_in
+    from app.services.chat_account import acting, signed_in
     t_req = time.perf_counter()
     pre: Dict[str, int] = {}   # Sasha 257 · where the time goes BEFORE her turn starts (row 863), each awaited step, in ms
     def lap(k: str) -> None:
         pre[k] = int((time.perf_counter() - t_req) * 1000) - sum(pre.values())
-    account = await chat_account(request)
+    account = await acting(request)
     lap("account")
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in", "message": "Sasha's agent (/next) is for a signed-in account"}, status_code=403)
@@ -2299,8 +2301,8 @@ async def voice_note(token: str):
 async def memory(request: Request, session: str = ""):
     """Sasha 241 · S1 PARITY: /next's welcome back — the same memory as /s2 (one per account, shared by /s2, /next and WhatsApp).
     /s2/memory stays as it is (its alias)."""
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     from agapi import s2_memory as MEM
@@ -2326,8 +2328,8 @@ async def first_line_rule():
 async def memory_clear(request: Request):
     """Sasha 265 · item 3 · NEW CHAT (/s2 and /next): the conversation cleared in the conversation record (s2_memory.clear_conversation)
     — her short-term memory of it with it. Bookings, trips and receipts stay: they live in the trip record. Signed-in accounts only."""
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     from agapi import s2_memory as MEM
@@ -2342,8 +2344,8 @@ async def memory_clear(request: Request):
 async def space_now(request: Request):
     """Sasha 249 · ONE SPACE: the account's space (products/space.py) — the same answer WhatsApp, the web chips and sasha.turn read.
     Signed-in accounts only."""
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     from products import space as SPC
@@ -2357,9 +2359,9 @@ async def place_detail(request: Request, place_id: str):
     """Sasha 248 · ONE PLACE CARD's detail sheet (/s2, /next; WhatsApp gets the same as text): a place the person was SHOWN, its
     facts from the venue engine (agapi/venue_truth — the site's own words, each with its source; Google's only labelled). The read
     is awaited here (a cached one is instant)."""
-    from app.services.chat_account import chat_account
+    from app.services.chat_account import acting
     from agapi import venue_truth as VT, venues as VN
-    account = await chat_account(request)
+    account = await acting(request)
     card = VN.card_of(account, place_id[:200])
     if not card:
         return JSONResponse({"ok": False, "rule": "not_shown", "message": "that place isn't on your screen any more — search again"}, status_code=404)
@@ -2374,10 +2376,10 @@ async def place_detail(request: Request, place_id: str):
 async def s2_memory(request: Request, session: str = ""):
     """Sasha 231 · /s2 on return: what she remembers for this account (masked) — the "Welcome back — we were looking at …" line,
     the recent conversation, the cards she'd shown (on screen again for this new session). Signed-in accounts only."""
-    from app.services.chat_account import chat_account, signed_in
+    from app.services.chat_account import acting, signed_in
     if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
         return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
-    account = await chat_account(request)
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     from agapi import s2_memory as MEM
@@ -2395,8 +2397,8 @@ async def s2_memory(request: Request, session: str = ""):
 @router.put("/s2/silent")
 async def s2_silent(request: Request):
     """Sasha 349 · the page's "Silent mode" switch → kept on the person (voice.set_silent): text only, until turned off."""
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in", "message": "Sign in to keep Silent mode on your account."}, status_code=403)
     body = await request.json()
@@ -2408,10 +2410,10 @@ async def s2_silent(request: Request):
 async def s2_pickup(request: Request):
     """Sasha 296 · COMING BACK: her first words after a return to /s2 (voice.pickup_line over her memory) — read only: no recall, no
     handover, no news taken (those are the load's, /s2/memory). Signed-in accounts only."""
-    from app.services.chat_account import chat_account, signed_in
+    from app.services.chat_account import acting, signed_in
     if request.headers.get("x-sasha-surface", "").strip().lower() != "s2":
         return JSONResponse({"ok": False, "rule": "s2_only"}, status_code=404)
-    account = await chat_account(request)
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     from agapi import s2_memory as MEM

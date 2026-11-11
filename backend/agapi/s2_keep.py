@@ -755,15 +755,17 @@ def tools() -> List[dict]:
 # ── the /keep screen's API (included into the agent router by the wiring note → /api/agent/keep…) ────────────────────────────
 
 from fastapi import APIRouter, Request                       # noqa: E402
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370
 from fastapi.responses import JSONResponse                   # noqa: E402
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_account)])   # Sasha 370 · the ONE account door, on the router itself
 _HTTP = {"not_found": 404, "keep_closed": 503, "keep_unreachable": 503}
 
 
 async def _who(request: Request) -> Optional[str]:
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     return account if signed_in(account) else None
 
 

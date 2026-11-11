@@ -42,6 +42,31 @@ def founder_session(request: Request) -> bool:
     return ok
 
 
+async def require_account(request: Request) -> None:
+    """Sasha 370 · THE ROUTER-LEVEL DOOR for WHO. Declared on every Sasha router that touches a booking, trip, person or payment
+    (`APIRouter(dependencies=[Depends(require_account)])`; /api/booking/* gets the same from booking_signer.gate.require_booking_key,
+    which ends in this same resolver). It resolves the request ONCE — a verified token, the founder's session, or nobody — onto
+    request.state.account; handlers read it with acting() and check the owner. app/account_gate.py refuses to start the server
+    if any mounted route lacks it (or a named public reason)."""
+    request.state.account = await chat_account(request, anonymous=None)
+    request.state.account_gate = True
+
+
+async def acting(request: Request, anonymous: Optional[str] = DEMO_ACCOUNT_ID) -> Optional[str]:
+    """Sasha 370 · the account a handler acts for — read from the router's door (require_account), never resolved again here.
+    Nobody signed in → `anonymous` (the public demo for a chat; None where an account is required). A handler on a router
+    without the door is a bug, said loudly."""
+    if not getattr(request.state, "account_gate", False):
+        raise RuntimeError("Sasha 370: this route's router does not declare require_account — no handler resolves WHO by itself")
+    acct = getattr(request.state, "account", None)
+    if acct:
+        return acct
+    if anonymous:
+        from agapi import person_access as PA
+        await PA.warm(anonymous)
+    return anonymous
+
+
 async def chat_account(request: Request, anonymous: Optional[str] = DEMO_ACCOUNT_ID) -> Optional[str]:
     """The acting account (_resolve below), its access record warmed (Sasha 254 item 5: the sync checks — is_founder, calls_on,
     real_contact_refusal … — then read a fresh record; a failed read is closed)."""

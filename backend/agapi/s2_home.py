@@ -225,15 +225,17 @@ def _VN():
 # ── routes (mounted under the agent router → /api/agent/…) ───────────────────────────────────────────────────────────────────
 
 from fastapi import APIRouter, Request                       # noqa: E402
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370
 from fastapi.responses import JSONResponse                   # noqa: E402
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_account)])   # Sasha 370 · the ONE account door, on the router itself
 
 
 @router.get("/me")
 async def me(request: Request):
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     name = None
@@ -248,9 +250,9 @@ async def me(request: Request):
 
 @router.get("/not-yet")
 async def not_yet_list(request: Request):
-    from app.services.chat_account import chat_account
+    from app.services.chat_account import acting
     from app.services.accounts import is_founder   # Sasha 249 · the one founder decision
-    if not is_founder(await chat_account(request)):
+    if not is_founder(await acting(request)):
         return JSONResponse({"ok": False, "rule": "founder_only"}, status_code=403)
     rows: List[dict] = []
     run = await _run()

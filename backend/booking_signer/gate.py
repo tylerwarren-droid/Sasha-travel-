@@ -72,3 +72,4 @@ async def require_booking_key(request: Request) -> None:
     # S-62 step 1 · the key proves the proxy; WHO is a verified token or the founder's session (identity.py)
     from .identity import resolve
     request.state.account = await resolve(request)
+    request.state.account_gate = True   # Sasha 370 · the same door as app's require_account (chat_account.acting reads it)

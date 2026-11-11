@@ -1,13 +1,15 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370 · the ONE account door, at the router
 from fastapi.responses import StreamingResponse, JSONResponse
 from app.services.deepgram_service import transcribe_audio
 from app.services.conductor import conduct
-from app.services.chat_account import chat_account, signed_in  # Sasha 143
+from app.services.chat_account import acting, signed_in  # Sasha 143
 import httpx
 import os
 import json
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_account)])
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
 DEEPGRAM_PROJECT_ID = os.getenv("DEEPGRAM_PROJECT_ID", "")
@@ -160,7 +162,7 @@ async def voice_conductor(
             history = []
 
         # Sasha 143 · WHO, as the chat: a verified guest, the founder through the site's pass-through, else the PUBLIC demo
-        account = await chat_account(request)
+        account = await acting(request)
         result = None
         if signed_in(account):   # Sasha 169 (6) · a booking on the voice page: the cards, picked by voice, read back, one yes
             from booking_signer import voice_turn as _vt

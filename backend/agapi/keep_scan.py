@@ -242,14 +242,16 @@ def tools() -> List[dict]:
 # ── routes (mounted under the agent router → /api/agent/keep/scan…) ─────────────────────────────────────────────────────────
 
 from fastapi import APIRouter, Request                       # noqa: E402
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370
 from fastapi.responses import JSONResponse                   # noqa: E402
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_account)])   # Sasha 370 · the ONE account door, on the router itself
 
 
 async def _who(request: Request) -> Optional[str]:
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     return account if signed_in(account) else None
 
 

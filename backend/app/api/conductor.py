@@ -2,14 +2,16 @@ import logging
 import uuid
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370 · the ONE account door, at the router
 from pydantic import BaseModel, Field
 from app.services.conductor import conduct, classify_intents
 from app.services.llm import client, FAST_MODEL
 from app.services.prompts import get_prompt_async
 from app.services import chat_store
-from app.services.chat_account import chat_account, own_session, signed_in
+from app.services.chat_account import acting, own_session, signed_in
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_account)])
 
 
 @router.get("/warmup")
@@ -60,7 +62,7 @@ async def classify(body: ClassifyRequest, request: Request):
     the conductor call so it costs the turn nothing.
     """
     # S-62 step 7 · only the caller's own session is looked into
-    sid = await own_session(body.session_id, await chat_account(request)) if body.session_id else None
+    sid = await own_session(body.session_id, await acting(request)) if body.session_id else None
     stored = await chat_store.latest_itinerary_for_session(sid) if sid else None
     has_itinerary = bool(stored) if body.session_id else None
     result = await classify_intents(body.message, body.conversation_history, has_itinerary)
@@ -119,7 +121,7 @@ class ConductorResponse(BaseModel):
 @router.post("/conductor")
 async def conductor_endpoint(body: ConductorRequest, request: Request):
     # S-62 step 7 · WHO: a verified guest, or the public demo. A bad token is refused here, never turned into the demo.
-    account = await chat_account(request)
+    account = await acting(request)
     try:
         client_config = getattr(request.state, "client", None)
         # Mint the session id BEFORE conducting: the conductor needs it to look up whether a

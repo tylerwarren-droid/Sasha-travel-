@@ -8,6 +8,8 @@ Resolution order:
 On success, sets request.state.client to a ClientConfig.
 On failure (unrecognised domain/key), sets request.state.client = None
 and continues — individual routes decide whether to gate on tenancy.
+⛔ Sasha 370 · a tenant is a brand, never WHO: the acting account is resolved ONLY at the router (chat_account.require_account /
+booking_signer.gate.require_booking_key), and the server refuses to start without it (app/account_gate.py).
 
 Skipped for health/docs paths so infrastructure tooling always works.
 """

@@ -44,7 +44,9 @@ golf (20 Vietnam courses, real emails, Resend booking), foto (Unsplash), car_ren
 ## Key API routes
 - POST /api/agents/conductor — main text entry point
 - POST /api/voice/conductor — voice pathway (Deepgram STT + Conductor + TTS)
-- POST /api/heygen/chat/completions — HeyGen avatar pathway (OpenAI-compatible)
+- (Sasha 370: /api/heygen/chat/completions, /bookings/*, /search/*, /conversation/*, /voice/transcribe and /api/cards/submit are DELETED — no callers.)
+- ⛔ Sasha 370: every mounted route declares the account door at its ROUTER (`APIRouter(dependencies=[Depends(require_account)])`, or
+  booking_signer.gate for /api/booking/*), or is named in backend/app/account_gate.PUBLIC with a reason — the server refuses to start otherwise.
 - POST /api/agents/ideas — Ideas agent (NOT /api/ideas — mounted with /api/agents prefix)
 - payments: /api/payments/create-checkout, /verify, /webhook
 - /api/chats, /api/trips

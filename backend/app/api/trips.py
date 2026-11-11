@@ -8,12 +8,14 @@ booking the guest genuinely made never showed up.
 """
 
 from fastapi import APIRouter, Request
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370 · the ONE account door, at the router
 from fastapi.responses import JSONResponse
 
 from app.services import chat_store
-from app.services.chat_account import chat_account
+from app.services.chat_account import acting
 
-router = APIRouter(prefix="/api/trips", tags=["trips"])
+router = APIRouter(prefix="/api/trips", tags=["trips"], dependencies=[Depends(require_account)])
 
 
 def _first_city(payload: dict) -> str:
@@ -24,7 +26,7 @@ def _first_city(payload: dict) -> str:
 @router.get("")
 async def list_trips(request: Request):
     """Paid trips for the caller — a signed-in guest's own, or the public demo's — newest first (S-62 step 7)."""
-    account = await chat_account(request)
+    account = await acting(request)
     try:
         rows = await chat_store.list_booked_trips(account)
     except chat_store.TripsUnavailable as e:

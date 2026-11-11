@@ -3,11 +3,13 @@
 from typing import List, Optional
 
 from fastapi import APIRouter
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370 · the ONE account door, at the router
 from pydantic import BaseModel
 
 from app.services.ideas_agent import generate_ideas
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_account)])
 
 
 class IdeasRequest(BaseModel):

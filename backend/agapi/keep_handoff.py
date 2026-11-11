@@ -94,9 +94,11 @@ def added_line(masked: str) -> str:
 # ── routes (mounted under the agent router → /api/agent/keep/handoff…) ─────────────────────────────────────────────────────
 
 from fastapi import APIRouter, Request                       # noqa: E402
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370
 from fastapi.responses import JSONResponse                   # noqa: E402
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_account)])   # Sasha 370 · the ONE account door, on the router itself
 _NS = {"Cache-Control": "no-store"}
 
 

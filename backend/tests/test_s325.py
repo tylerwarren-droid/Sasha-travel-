@@ -79,7 +79,6 @@ class OneSpeechEngine(unittest.TestCase):
         self.assertIn("SP.speakable(text)", body)
         self.assertIn('"linear16"', body)                                                  # her face's lip-sync audio, same engine
         self.assertEqual(vc.count("DEEPGRAM_TTS_URL,"), 1)                                 # one call to the speech engine
-        self.assertIn("SP.speakable(text)", (BACKEND / "app/api/heygen_chat.py").read_text())   # HeyGen's avatar speaks it too
 
     def test_no_second_engine(self):
         hits = []

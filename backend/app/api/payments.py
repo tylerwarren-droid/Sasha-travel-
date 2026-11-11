@@ -26,10 +26,12 @@ from typing import Optional
 import httpx
 import stripe
 from fastapi import APIRouter, HTTPException, Request
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370 · the ONE account door, at the router
 from pydantic import BaseModel
 
 from app.services import chat_store
-from app.services.chat_account import chat_account, own_itinerary, own_offer
+from app.services.chat_account import acting, own_itinerary, own_offer
 from app.services.booking_ref import generate as generate_booking_ref
 
 # Sasha 229 · SASHA_LEGACY_STRIPE_MODE (test | live; anything else, or unset, is test) — the beta runs this legacy path on Stripe
@@ -52,7 +54,7 @@ CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/vietnam?cance
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 RESEND_FROM = os.getenv("RESEND_FROM", "Sasha <onboarding@resend.dev>")
 
-router = APIRouter(prefix="/api/payments", tags=["payments"])
+router = APIRouter(prefix="/api/payments", tags=["payments"], dependencies=[Depends(require_account)])
 
 
 class LineItem(BaseModel):
@@ -137,7 +139,7 @@ async def reserve(body: ReserveRequest, request: Request):
     Stripe keys configured, which is the demo's normal state. The paid flow (create-checkout /
     verify / webhook) remains intact for when payments are re-enabled.
     """
-    account = await chat_account(request)   # S-62 step 7 · only the caller's own offer or itinerary can be paid for
+    account = await acting(request)   # S-62 step 7 · only the caller's own offer or itinerary can be paid for
     offer = await own_offer(body.offer_id, account) if body.offer_id else None
     if body.offer_id and not offer:
         raise HTTPException(status_code=404, detail="offer not found")
@@ -211,7 +213,7 @@ async def create_checkout(body: CheckoutRequest, request: Request):
 
     # A single bookable card (hotel / flight / cab). Priced from the STORED offer, exactly like
     # a whole trip is priced from its stored itinerary — the browser's amount is never trusted.
-    account = await chat_account(request)   # S-62 step 7 · only the caller's own offer or itinerary can be paid for
+    account = await acting(request)   # S-62 step 7 · only the caller's own offer or itinerary can be paid for
     offer = await own_offer(body.offer_id, account) if body.offer_id else None
     if body.offer_id and not offer:
         raise HTTPException(status_code=404, detail="offer not found")

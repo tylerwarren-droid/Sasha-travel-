@@ -17,12 +17,14 @@ from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request
+from fastapi import Depends  # Sasha 370
+from app.services.chat_account import require_account  # Sasha 370
 from fastapi.responses import JSONResponse
 
 from agapi import powers as P, s2_records as REC
 
 log = logging.getLogger("agapi.activity")
-router = APIRouter()   # included into the agent router (prefix /api/agent) by the wiring note → /api/agent/activity
+router = APIRouter(dependencies=[Depends(require_account)])   # Sasha 370 · the ONE account door, on the router itself   # included into the agent router (prefix /api/agent) by the wiring note → /api/agent/activity
 
 VENUE = {"confirmed": ("booking", "done"), "guest_booked": ("booking", "done"), "requested": ("booking", "requested"),
          "attempting": ("booking", "requested"), "link_sent": ("booking", "requested"), "unclear": ("booking", "requested"),
@@ -161,8 +163,8 @@ def tools() -> List[dict]:
 @router.get("/activity")
 async def activity_route(request: Request):
     """The /activity screen's data: the signed-in account's own rows only."""
-    from app.services.chat_account import chat_account, signed_in
-    account = await chat_account(request)
+    from app.services.chat_account import acting, signed_in
+    account = await acting(request)
     if not signed_in(account):
         return JSONResponse({"ok": False, "rule": "sign_in"}, status_code=403)
     got = await collect(account, since_of(request.query_params.get("since")), 100)

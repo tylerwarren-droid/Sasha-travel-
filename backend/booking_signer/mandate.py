@@ -73,6 +73,8 @@ async def carry_out(account: str, said: str, who: Optional[List[str]] = None, ov
          "state": "running" if reg.get("mandate_id") else ("waiting" if reg.get("code") == "limits_needed" else "stopped"), "at": time.time(),
          **({"agapi": {"mandate_id": reg["mandate_id"], "expires_at": reg.get("expires_at")}} if reg.get("mandate_id") else {"why": reg.get("code")}),
          **({"proof": proof} if proof and reg.get("code") == "limits_needed" else {})}   # waiting for the missing fact: the proof's IDS kept
+    if reg.get("mandate_id"):   # the runner that takes it holds it (no other process runs it beside this one)
+        m["lease"] = {"by": RUNNER, "until": time.time() + LEASE_S}
     await G.store().set_rule(account, str(mv["id"]), "mandate", m)
     if not reg.get("mandate_id"):
         return {"started": False, "say": reg["why"]}
@@ -96,7 +98,7 @@ async def resume_waiting(account: str) -> Optional[str]:
     if not reg.get("mandate_id"):
         return reg["why"]
     m = {**{k: v for k, v in m.items() if k not in ("proof", "why")}, "state": "running", "at": time.time(),
-         "agapi": {"mandate_id": reg["mandate_id"], "expires_at": reg.get("expires_at")}}
+         "agapi": {"mandate_id": reg["mandate_id"], "expires_at": reg.get("expires_at")}, "lease": {"by": RUNNER, "until": time.time() + LEASE_S}}
     await G.store().set_rule(account, str(mv["id"]), "mandate", m)
     _start(account, str(mv["id"]), m)
     return "Thanks — I'm carrying on with your instruction now, within those limits. I'll tell you as it goes, and when it's done."
@@ -114,13 +116,30 @@ def _start(account: str, movement_id: str, m: Dict[str, Any]) -> None:
     _RUNS[account] = asyncio.ensure_future(_run(account, movement_id, m))
 
 
+LEASE_S = 900   # a runner holds a mandate this long (a job takes a minute or two); a runner that died is taken over after it
+RUNNER = f"{__import__('socket').gethostname()}:{__import__('os').getpid()}"
+
+
+async def _claim(owner: str, mid: str, m: Dict[str, Any]) -> bool:
+    """Sasha 367 · ONE runner per mandate across processes (a deploy's two containers, a proof's process): the lease on the record."""
+    import time
+    from . import groups as G
+    lease = m.get("lease") or {}
+    if lease.get("by") not in (None, RUNNER) and float(lease.get("until") or 0) > time.time():
+        return False
+    await G.store().set_rule(owner, mid, "mandate", {**m, "lease": {"by": RUNNER, "until": time.time() + LEASE_S}})
+    fresh = ((await G.store().movement(owner, mid)) or {}).get("rules", {}).get("mandate") or {}
+    return (fresh.get("lease") or {}).get("by") == RUNNER   # the last writer holds it; the other sees it and stands back
+
+
 async def sweep(account: Optional[str] = None) -> int:
-    """THE ONE WORKER's pass: every open mandate on the record (an account's, or all) not running in this process → run. → how many."""
+    """THE ONE WORKER's pass: every open mandate on the record (an account's, or all) not running here, and not held by another
+    runner's lease → claimed, then run. → how many."""
     from . import groups as G
     n = 0
     try:
         for owner, mid, m in await G.store().open_mandates():
-            if (account is None or owner == account) and not running(owner):
+            if (account is None or owner == account) and not running(owner) and await _claim(owner, mid, m):
                 _start(owner, mid, m)
                 n += 1
     except Exception as e:

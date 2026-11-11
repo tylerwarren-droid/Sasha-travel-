@@ -102,6 +102,34 @@ class ARefusedMandateIsSaid(unittest.TestCase):
         self.assertEqual([op for op, _ in w.agapi.calls if op == "group.book"], [])
 
 
+class OneRunnerPerMandate(unittest.TestCase):
+    def test_another_runners_lease_is_respected_and_an_expired_one_taken_over(self):
+        """Sasha 367 · found by the WhatsApp proof: a second process ran the same mandate beside the server's worker."""
+        import time
+        with World() as w:
+            async def go():
+                from booking_signer import channel as CH
+                from agapi import venue_submit as VS
+                await CH.used(OWNER, CH.WA)
+                VS.WA.set({"wa_id": "34611000099", "message_id": "SM" + "c" * 32})
+                ctx = API.Ctx(account=OWNER, user_said=T365.SAID, surface="s2", via="wa", session="s366-lease")
+                with mock.patch.object(M, "_start", lambda *a, **k: None):
+                    await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15",
+                                                         "ends_on": "2026-12-17", "roles": ["executives"]})
+                mv = await G.store().movement(OWNER)
+                md = mv["rules"]["mandate"]
+                await G.store().set_rule(OWNER, mv["id"], "mandate", {**md, "lease": {"by": "another:1", "until": time.time() + 600}})
+                M._RUNS.clear()
+                held = await M.sweep()                                                      # another runner holds it: stood back
+                await G.store().set_rule(OWNER, mv["id"], "mandate", {**md, "lease": {"by": "another:1", "until": time.time() - 1}})
+                taken = await M.sweep()                                                     # its lease ran out: taken over
+                await M.finished(OWNER)
+                return held, taken
+            held, taken = run(go())
+        self.assertEqual((held, taken), (0, 1))
+        self.assertEqual(len([x for x in w.wa if x.startswith("All 6 booked (TEST).")]), 1, w.wa)
+
+
 class OneSource(unittest.TestCase):
     def test_one_worker_started_with_the_app_and_no_door_of_its_own(self):
         routes = (ROOT / "backend" / "booking_signer" / "routes.py").read_text()

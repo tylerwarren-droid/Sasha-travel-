@@ -519,7 +519,7 @@ async def book_under_mandate(account: str, mandate_id: str, names: List[str], ov
                 if not (kind == "skip" and x.get("code") in RETRY_ONCE):
                     break
                 if attempt == 2:
-                    x = {**x, "code": "refused_twice"}
+                    x = {**x, "code": "refused_twice"}   # x keeps the airline's own reason (airline_code / _field / _title)
             if kind == "booked":
                 res = x["result"]
                 try:
@@ -746,17 +746,29 @@ def one_question(asks: List[Dict[str, Any]]) -> str:
         if a.get("outside"):   # Sasha 367 · AgAPI's own reasons, each named
             return " and ".join(dict.fromkeys(MANDATE_FACTS.get(w, w.replace("_", " ")) for w in a["outside"]))   # each reason once (both legs say it)
         k = a.get("code") or a.get("kind") or ""
-        return FACTS.get(k) or MANDATE_FACTS.get(k) or a.get("fact") or "not booked just now"
+        said = FACTS.get(k) or MANDATE_FACTS.get(k) or a.get("fact") or "not booked just now"
+        return said + (f" — the airline says: “{a['airline_title']}”" if a.get("airline_title") else "")   # Sasha 369 · its own reason
     who = "; ".join(f"{a['name']}: {fact(a)}" for a in asks)
     them = asks[0]["name"].split()[0] if len(asks) == 1 else "them"
     return f"Not booked — {who}. What would you like for {them}: book anyway, another option, or leave off this trip?"
 
 
+def airline_reason(e: Dict[str, Any]) -> Dict[str, str]:
+    """Sasha 369 · the AIRLINE's own reason, as CR 183 keeps it on error.details (its code, the field it names, its title) — never the
+    free-text message (it can echo a passenger's value back). {} when the supplier said nothing."""
+    d = (e or {}).get("details") or {}
+    out = {k: str(d[k])[:120] for k in ("code", "field", "title") if d.get(k)}
+    if out:
+        log.warning("[group_book] the airline refused: %s [%s] %s", out.get("code"), out.get("field"), out.get("title"))
+    return {"airline_" + k: v for k, v in out.items()}
+
+
 def decision(e: Dict[str, Any]) -> Dict[str, Any]:
-    """A refusal → {why: the decision in plain words, code}. Unknown codes: a plain line and what can be done — never the raw message."""
+    """A refusal → {why: the decision in plain words, code} + the airline's own reason (CR 183). Unknown codes: a plain line and what can be
+    done — never the raw message."""
     code = str((e or {}).get("code") or "")
     return {"why": DECISIONS.get(code) or "their booking couldn't be completed just now — nothing was taken. Shall I try again, or take "
-                                          "them off this trip?", "code": code or "unknown"}
+                                          "them off this trip?", "code": code or "unknown", **airline_reason(e)}
 
 
 async def _confirmations(account: str, mv: Dict[str, Any], booked_names: List[str]) -> Dict[str, List[str]]:

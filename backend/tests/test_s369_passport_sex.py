@@ -74,6 +74,20 @@ class MissingIsAMissingFact(unittest.TestCase):
         self.assertIn("Amara Sample", inv["invited"])                                          # her link, by email, unasked
 
 
+class TheAirlinesOwnReason(unittest.TestCase):
+    def test_a_refusal_is_named_in_the_airlines_own_words(self):
+        """CR 183 keeps the airline's code / field / title on error.details: the finish says its title; never the free-text message."""
+        from booking_signer import group_book as GB
+        e = {"code": "upstream_refused", "message": "The airline refused the booking — Invalid phone number +34612345678.",
+             "details": {"service": "duffel", "status": 422, "code": "invalid_phone_number", "field": "passengers[0].phone_number",
+                         "title": "Invalid phone number"}}
+        d = GB.decision(e)
+        self.assertEqual((d["airline_code"], d["airline_field"], d["airline_title"]), ("invalid_phone_number", "passengers[0].phone_number", "Invalid phone number"))
+        q = GB.one_question([{"name": "Carmen Castro", "code": "refused_twice", **{k: v for k, v in d.items() if k.startswith("airline_")}}])
+        self.assertIn("the airline says: “Invalid phone number”", q)
+        self.assertNotIn("+34612345678", q)                                                       # never a passenger's value
+
+
 class NoDefaultAnywhere(unittest.TestCase):
     def test_no_default_title_or_gender_in_sasha(self):
         hits = []

@@ -37,7 +37,7 @@ class PricedAgAPI(W334.FakeAgAPI):
             return False
         canon = {k: body[k] for k in ("end_user", "words", "scope", "limits", "expires_in_minutes")}
         sha = hashlib.sha256(json.dumps(canon, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-        ident, who = (p["message_id"], p["wa_id"]) if p["kind"] == "whatsapp" else (p["session_id"], f"sasha:{OWNER}")
+        ident, who = (p["message_id"], p["wa_id"]) if p["kind"] == "whatsapp" else (p["session_id"], OWNER)   # cr/182 access.person_of
         want = hmac.new(secret.encode(), f"{p['t']}.{p['nonce']}.mandate.{p['kind']}.{ident}.{who}.{sha}".encode(), hashlib.sha256).hexdigest()
         return hmac.compare_digest(want, p.get("signature") or "")
 

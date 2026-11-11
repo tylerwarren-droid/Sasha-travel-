@@ -84,7 +84,7 @@ def mandate_sha256(end_user: str, words: str, scope: dict, limits: dict, expires
 
 def sign(proof: Dict[str, str], account: str, sha: str, t: Optional[int] = None, nonce: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """The proof as AgAPI checks it (1866): kind whatsapp — id the message id, who the wa_id digits; in_app — id the session id, who
-    "sasha:<person>". None: no secret here (nothing is sent unsigned)."""
+    the person (<person> of their end user "sasha:<person>", AgAPI cr/182 access.person_of). None: no secret here (nothing is sent unsigned)."""
     secret = os.getenv("SASHA_AGAPI_TAP_SECRET", "")
     if not secret or not proof:
         return None
@@ -94,7 +94,7 @@ def sign(proof: Dict[str, str], account: str, sha: str, t: Optional[int] = None,
         ident, who = proof["message_id"], proof["wa_id"]
         extra = {"wa_id": who, "message_id": ident}
     else:
-        ident, who = proof["session_id"], f"sasha:{account}"
+        ident, who = proof["session_id"], account   # cr/182 access.person_of: the end user "sasha:<person>" → <person>
         extra = {"session_id": ident}
     sig = hmac.new(secret.encode(), f"{t}.{nonce}.mandate.{proof['kind']}.{ident}.{who}.{sha}".encode(), hashlib.sha256).hexdigest()
     return {"kind": proof["kind"], "t": t, "nonce": nonce, **extra, "signature": sig}

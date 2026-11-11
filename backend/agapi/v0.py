@@ -1773,6 +1773,10 @@ async def group_limits(ctx: Ctx, a: dict) -> dict:
     # Sasha 345 · what was SAVED is what she says — read back from the ONE place, in euros, per grade and per person (found live, 5 Nov:
     # "400 a night, and 250 for the workers" was answered with "$729") — then the next step: planning, started now when the list is in
     saved = await G.limits_said(ctx.account)
+    from booking_signer import mandate as M
+    resumed = await M.resume_waiting(ctx.account)   # Sasha 367 · the missing fact given: the instruction waiting for it carries on
+    if resumed:
+        return {**r, "saved": saved, "planning": True, "say": (f"Saved: {saved}. " if saved else "") + resumed}
     started = await _start_plan(ctx.account)
     say = (f"Saved: {saved}." if saved else "No limits are saved.") + (
         f" I'm planning all {started} now, one by one, within those limits — the master list fills in as I go. Nothing is booked yet."

@@ -11,9 +11,9 @@ const content = read('app/agapi/content.ts')
 const body = content.slice(content.indexOf('export const PITCHES'))
 const pitches = body.split(/\n  \{\n    key: /).slice(1)
 
-test('the root is the Sasha Vietnam site; the hub is /agapi', () => {
-  assert.match(read('app/page.tsx'), /import VietnamPage from '\.\/vietnam\/page'/)
-  assert.match(read('app/page.tsx'), /export default VietnamPage/)
+test('the hub is /agapi; "/" belongs to the ONE route map (Sasha 368: the portal — backend/tests/test_s368_one_route_map.py)', () => {
+  assert.doesNotMatch(read('app/page.tsx'), /VietnamPage|<Hub/)
+  assert.match(read('lib/routes.ts'), /'\/agapi': 'the AgAPI hub/)
   assert.match(read('app/agapi/page.tsx'), /<Hub \/>/)
 })
 

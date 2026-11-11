@@ -9,7 +9,7 @@ const root = new URL('..', import.meta.url).pathname
 const read = (p) => readFileSync(join(root, p), 'utf8')
 const CONTENT = ['agapi', 'sasha', 'ad', 'campusme', 'relocation', 'spain'].map((n) => [n, read(`app/(site)/content/${n}.ts`)])
 
-test('1 · the menu has exactly the six tabs, and no archive page', () => {
+test('1 · the six-tab menu (now redirected into /agapi) never lists the portal pages', () => {
   const nav = read('app/components/site/SiteNav.tsx')
   const hrefs = [...nav.matchAll(/href: '([^']+)'/g)].map((m) => m[1])
   assert.deepEqual(hrefs, ['/agapi', '/sasha', '/applied-diligence', '/campusme', '/relocation', '/spain-services'])
@@ -29,10 +29,8 @@ test('3 · every demo carries a label', () => {
   assert.match(read('app/(site)/content/spain.ts'), /demo: \{ kind: 'concept'/)   // CONCEPT only
 })
 
-test('6 · the archive pages are noindex; the new pages are not', () => {
-  for (const p of ['app/archive/page.tsx', 'app/deck/page.tsx', 'app/walkthrough/page.tsx', 'app/tdm/page.tsx', 'app/data-strategy/page.tsx', 'app/demo/page.tsx'])
-    assert.match(read(p), /robots: \{ index: false/, p)
-  for (const p of ['app/page.tsx', 'app/sasha/page.tsx', 'app/applied-diligence/page.tsx', 'app/campusme/page.tsx', 'app/relocation/page.tsx', 'app/spain-services/page.tsx'])
+test('6 · Sasha 368 · the portal is the site again: "/" and its tabs are indexed (no archive noindex)', () => {
+  for (const p of ['app/page.tsx', 'app/deck/page.tsx', 'app/walkthrough/page.tsx', 'app/tdm/page.tsx', 'app/data-strategy/page.tsx', 'app/demo/page.tsx'])
     assert.doesNotMatch(read(p), /index: false/, p)
 })
 
@@ -43,12 +41,13 @@ test('7 · the content never says what isn\'t so', () => {
   assert.doesNotMatch(read('app/(site)/content/relocation.ts'), /\b(31\s*\/\s*8|44\s*\/\s*1\s*\/\s*51|43\s*\/\s*8\s*\/\s*45)\b/)
 })
 
-test('the archive: the old home page moved verbatim, the Teaser tab points at it, the banner is on, the footer links it', () => {
-  const archive = read('app/archive/page.tsx')
-  assert.match(archive, /<PortalShell>\s*<Teaser \/>\s*<\/PortalShell>/)
-  assert.match(read('app/components/portal/PortalNav.tsx'), /\{ href: '\/archive', label: 'Teaser' \}/)
-  assert.match(read('app/components/portal/PortalShell.tsx'), /<ArchiveBanner \/>/)
-  assert.match(read('app/components/site/SiteShell.tsx'), /href="\/archive">Original vision \(archive\) →/)
+test('Sasha 368 · the portal is "/" (lib/routes.ts): restored verbatim, its Teaser tab "/", no banner; /archive only a redirect; the footer links it', () => {
+  assert.match(read('app/page.tsx'), /<PortalShell>\s*<Teaser \/>\s*<\/PortalShell>/)
+  assert.match(read('app/components/portal/PortalNav.tsx'), /\{ href: '\/', label: 'Teaser' \}/)
+  assert.doesNotMatch(read('app/components/portal/PortalShell.tsx'), /ArchiveBanner/)
+  assert.ok(!existsSync(join(root, 'app/archive/page.tsx')))
+  assert.match(read('next.config.ts'), /\{ source: '\/archive', destination: '\/', permanent: false \}/)
+  assert.match(read('app/components/site/SiteShell.tsx'), /href="\/">Kanoe\.ai portal →/)
   assert.match(read('app/components/site/SiteShell.tsx'), /© 2026 Kanoe Technologies SL · NIF B23942923 · Calle Padre Damián 41, 28036 Madrid/)
 })
 

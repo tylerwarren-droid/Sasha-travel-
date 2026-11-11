@@ -1,6 +1,17 @@
-import VietnamPage from './vietnam/page'
+import type { Metadata } from 'next'
+import PortalShell from './components/portal/PortalShell'
+import Teaser from './components/portal/Teaser'
 
-// Sasha 142 · the founder's structure (4 Oct 2026): project.kanoe.ai is the Sasha Vietnam site — the same page as
-// /vietnam, which keeps working (Stripe returns there). The new site (Sasha 123) is the hub at /agapi.
-// No metadata here: the root layout's own ("Sasha by Kanoe: AI concierge") is the Sasha site's.
-export default VietnamPage
+export const metadata: Metadata = {
+  title: 'Kanoe.ai — Investor Portal',
+  description: 'Kanoe.ai is an AI-first, crypto-native infrastructure layer for the B2B and D2C travel market.',
+}
+
+// Sasha 368 · "/" is the Kanoe portal, restored VERBATIM from git (d867648a^, the home page before 3 Oct) — its owner is lib/routes.ts.
+export default function Home() {
+  return (
+    <PortalShell>
+      <Teaser />
+    </PortalShell>
+  )
+}

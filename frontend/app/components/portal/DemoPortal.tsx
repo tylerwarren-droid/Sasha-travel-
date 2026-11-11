@@ -2,19 +2,14 @@
 
 import { useState } from 'react'
 import PortalShell from './PortalShell'
+import { SASHA } from '@/lib/routes'   // Sasha 368 · the ONE route map
 
-type DemoKey = 'lt' | 'vn' | 'pq'
+type DemoKey = 'sasha'
 
-// The Vietnam concierge is part of THIS app, so its demo points at our own route rather than
-// at a hardcoded Vercel URL. That hardcoded origin meant the Demo tab always framed the
-// deployed build: running the portal locally still showed production inside the iframe, so
-// local changes to /vietnam never appeared here and looked like they had failed to apply.
-// A same-origin path follows whatever it is served from — localhost in dev, the deployment
-// in production. Luxurious Traveler stays absolute: it is a separate product on its own host.
+// Sasha 368 · the Demo tab opens TODAY's Sasha (lib/routes.ts SASHA = /s2, the 364–367 work) — never an older Sasha page (before 3 Oct it
+// framed Luxurious Traveler, the Vietnam page and Phu Quoc). A same-origin path: it follows whatever it is served from.
 const DEMOS: { key: DemoKey; label: string; src: string; title: string }[] = [
-  { key: 'lt', label: 'Luxurious Traveler', src: 'https://demo.kanoe.ai/chat', title: 'Luxurious Traveler demo' },
-  { key: 'vn', label: 'Vietnam', src: '/vietnam', title: 'Vietnam concierge demo' },
-  { key: 'pq', label: 'Phu Quoc', src: '/phuquoc', title: 'Phu Quoc demo' },
+  { key: 'sasha', label: 'Sasha', src: SASHA, title: 'Sasha — AI concierge' },
 ]
 
 function Pills({ active, onSelect }: { active: DemoKey; onSelect: (k: DemoKey) => void }) {
@@ -47,7 +42,7 @@ function Pills({ active, onSelect }: { active: DemoKey; onSelect: (k: DemoKey) =
 }
 
 export default function DemoPortal() {
-  const [active, setActive] = useState<DemoKey>('vn')  // the demo IS Vietnam — open on it
+  const [active, setActive] = useState<DemoKey>('sasha')  // Sasha 368 · the demo IS today's Sasha
   const current = DEMOS.find(d => d.key === active)!
 
   return (

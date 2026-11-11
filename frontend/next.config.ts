@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: '/sasha_investor.html', destination: '/', permanent: false },
+      { source: '/archive', destination: '/', permanent: false },   // Sasha 368 · the portal is "/" (lib/routes.ts); /archive only leads there
       // Sasha 143 · the hub (/agapi) supersedes the Sasha 123 six-tab pages: each goes to its own tab there
       { source: '/sasha', destination: '/agapi#sasha', permanent: false },
       { source: '/applied-diligence', destination: '/agapi#applied-diligence', permanent: false },

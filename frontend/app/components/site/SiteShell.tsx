@@ -20,7 +20,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
         <div className={s.footerInner}>
           <span>© 2026 Kanoe Technologies SL · NIF B23942923 · Calle Padre Damián 41, 28036 Madrid</span>
           <a href="/sasha-privacy">Privacy</a>
-          <a href="/archive">Original vision (archive) →</a>
+          <a href="/">Kanoe.ai portal →</a>
         </div>
       </footer>
     </div>

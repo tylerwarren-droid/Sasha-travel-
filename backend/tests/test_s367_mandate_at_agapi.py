@@ -131,6 +131,22 @@ class TheMissingFactAndTheProof(unittest.TestCase):
         self.assertIn("I need the company's limits", r["result"]["say"])
         self.assertEqual([op for op, _ in w.agapi.calls if op in ("approvals.mandate", "group.book")], [])
 
+    def test_the_limits_given_carry_the_instruction_on(self):
+        with World() as w:
+            gone = mock.patch.object(G, "limit_for", lambda rules, m: {})
+            gone.start()
+            r, _ = _instruction(w)
+            self.assertEqual(run(G.store().movement(OWNER))["rules"]["mandate"]["state"], "waiting")
+            gone.stop()                                                                        # the manager gives the limits …
+            ctx = API.Ctx(account=OWNER, user_said="limits: 900 a return flight and 140 a hotel night", surface="s2", session="s367-session-2")
+            out = run(API.call(ctx, "group_limits", {"by_grade": {"worker": {"flight_return_eur": 900, "hotel_night_eur": 140},
+                                                                  "supervisor": {"flight_return_eur": 900, "hotel_night_eur": 140}}}))
+            run(M.finished(OWNER))
+            mv = run(G.store().movement(OWNER))
+        self.assertIn("carrying on with your instruction", out["result"]["say"])           # … and it carries on, no second instruction
+        self.assertEqual(mv["rules"]["mandate"]["state"], "done")
+        self.assertEqual(len([op for op, _ in w.agapi.calls if op == "approvals.mandate"]), 1)
+
     def test_the_proof_is_signed_as_agapi_checks_it(self):
         with mock.patch.dict(os.environ, {"SASHA_AGAPI_TAP_SECRET": SECRET}):
             p = AM.sign({"kind": "whatsapp", "wa_id": "34611000000", "message_id": "SM1"}, OWNER, "ab" * 32, t=1700000000, nonce="n" * 16)

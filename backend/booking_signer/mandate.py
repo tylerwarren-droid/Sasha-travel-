@@ -71,7 +71,8 @@ async def carry_out(account: str, said: str, who: Optional[List[str]] = None, ov
     reg = await AM.register(account, said, mv, members, proof)
     m = {"said": (said or "")[:500], "who": who or None, "over_ok": bool(over_ok), "door": door if door in ("s2", "wa") else "s2",
          "state": "running" if reg.get("mandate_id") else ("waiting" if reg.get("code") == "limits_needed" else "stopped"), "at": time.time(),
-         **({"agapi": {"mandate_id": reg["mandate_id"], "expires_at": reg.get("expires_at")}} if reg.get("mandate_id") else {"why": reg.get("code")})}
+         **({"agapi": {"mandate_id": reg["mandate_id"], "expires_at": reg.get("expires_at")}} if reg.get("mandate_id") else {"why": reg.get("code")}),
+         **({"proof": proof} if proof and reg.get("code") == "limits_needed" else {})}   # waiting for the missing fact: the proof's IDS kept
     await G.store().set_rule(account, str(mv["id"]), "mandate", m)
     if not reg.get("mandate_id"):
         return {"started": False, "say": reg["why"]}
@@ -79,6 +80,26 @@ async def carry_out(account: str, said: str, who: Optional[List[str]] = None, ov
     await asyncio.sleep(0)
     return {"started": True, "say": "On it — I'm planning each person and the hotel, then booking within the company's limits. "
                                     "I'll tell you as it goes, and when it's done."}
+
+
+async def resume_waiting(account: str) -> Optional[str]:
+    """Sasha 367 · the missing fact given (the company's limits): the instruction waiting on the open trip is registered now — with ITS
+    own proof (ids kept on the record) — and carried through by the worker. → what she says, or None (nothing was waiting)."""
+    import time
+    from . import agapi_mandate as AM, groups as G
+    mv = await G.store().movement(account)
+    m = ((mv or {}).get("rules") or {}).get("mandate") or {}
+    if m.get("state") != "waiting":
+        return None
+    members = [x for x in await G.store().members(mv["id"]) if not m.get("who") or x["name"].lower() in {w.lower() for w in m["who"]}]
+    reg = await AM.register(account, m.get("said") or "", mv, members, m.get("proof"))
+    if not reg.get("mandate_id"):
+        return reg["why"]
+    m = {**{k: v for k, v in m.items() if k not in ("proof", "why")}, "state": "running", "at": time.time(),
+         "agapi": {"mandate_id": reg["mandate_id"], "expires_at": reg.get("expires_at")}}
+    await G.store().set_rule(account, str(mv["id"]), "mandate", m)
+    _start(account, str(mv["id"]), m)
+    return "Thanks — I'm carrying on with your instruction now, within those limits. I'll tell you as it goes, and when it's done."
 
 
 def _start(account: str, movement_id: str, m: Dict[str, Any]) -> None:

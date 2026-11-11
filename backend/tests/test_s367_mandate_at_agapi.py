@@ -155,6 +155,18 @@ class TheMissingFactAndTheProof(unittest.TestCase):
         self.assertEqual(set(p), {"kind", "t", "nonce", "wa_id", "message_id", "signature"})
 
 
+class FoundOnTheIphone(unittest.TestCase):
+    def test_each_reason_named_once_and_one_planner(self):
+        """Found by the iPhone proof (11 Nov): "their fare can't be refunded and their fare can't be refunded" (both legs); and the limits'
+        planning ran beside the mandate's (a second registry), leaving a person "not planned"."""
+        from booking_signer import group_book as GB
+        q = GB.one_question([{"name": "Elena Ortega", "outside": ["fare_not_refundable", "fare_not_refundable"]}])
+        self.assertEqual(q.count("can't be refunded"), 1, q)
+        v0 = (ROOT / "backend" / "agapi" / "v0.py").read_text()
+        self.assertIn("G._plan_later(account, mv[\"id\"], ids)", v0)
+        self.assertNotIn("_GROUP_PLANS", v0)
+
+
 class OneSource(unittest.TestCase):
     def test_no_text_as_yes_and_no_made_up_contact(self):
         src = (ROOT / "backend" / "booking_signer" / "mandate.py").read_text()

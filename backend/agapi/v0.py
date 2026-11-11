@@ -1786,32 +1786,27 @@ async def group_limits(ctx: Ctx, a: dict) -> dict:
 
 async def _start_plan(account: str) -> int:
     """Sasha 345 · planning starts after the limits (the organiser's next step, never waiting to be asked): → how many are being planned
-    (0: no one on the list, or a plan already running)."""
+    (0: no one on the list, or a plan already running). Sasha 367 · through the groups engine's ONE planner (groups._plan_later — the
+    registry the instruction's worker waits on; found live: a second planner here left a person "not planned" under the mandate)."""
     from booking_signer import groups as G
-    run = _GROUP_PLANS.get(account)
+    run = G._PLANS.get(account)
     if run is not None and not run.done():
         return 0
     mv = await G.store().movement(account)
-    n = len(await G.store().members(mv["id"])) if mv else 0
-    if n:
-        _GROUP_PLANS[account] = asyncio.ensure_future(G.plan(account, mv["id"]))
-    return n
-
-
-_GROUP_PLANS: Dict[str, Any] = {}
+    ids = [m["id"] for m in await G.store().members(mv["id"])] if mv else []
+    if ids:
+        G._plan_later(account, mv["id"], ids)
+    return len(ids)
 
 
 async def group_plan(ctx: Ctx, a: dict) -> dict:
     """Work through the list one by one — planning only (booking is CR 163). It runs on its own; the master list fills in as it goes."""
     from booking_signer import groups as G
-    run = _GROUP_PLANS.get(ctx.account)
-    if run is not None and not run.done():
-        return {"status": "planning", "say": "I'm already working through the list — the master list fills in as each person is planned."}
-    mv = await G.store().movement(ctx.account)
-    if not mv:
+    if not await G.store().movement(ctx.account):
         raise ToolError("no_movement", "there's no group movement yet")
-    _GROUP_PLANS[ctx.account] = asyncio.ensure_future(G.plan(ctx.account, mv["id"]))
-    n = len(await G.store().members(mv["id"]))
+    n = await _start_plan(ctx.account)
+    if not n:
+        return {"status": "planning", "say": "I'm already working through the list — the master list fills in as each person is planned."}
     return {"status": "planning", "people": n, "say": f"I'm working through all {n} now, one by one, each within their limit — "
             "the master list fills in as I go. Nothing is booked yet."}
 

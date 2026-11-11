@@ -743,7 +743,7 @@ def one_question(asks: List[Dict[str, Any]]) -> str:
         return ""
     def fact(a: Dict[str, Any]) -> str:
         if a.get("outside"):   # Sasha 367 · AgAPI's own reasons, each named
-            return " and ".join(MANDATE_FACTS.get(w, w.replace("_", " ")) for w in a["outside"])
+            return " and ".join(dict.fromkeys(MANDATE_FACTS.get(w, w.replace("_", " ")) for w in a["outside"]))   # each reason once (both legs say it)
         k = a.get("code") or a.get("kind") or ""
         return FACTS.get(k) or MANDATE_FACTS.get(k) or a.get("fact") or "not booked just now"
     who = "; ".join(f"{a['name']}: {fact(a)}" for a in asks)

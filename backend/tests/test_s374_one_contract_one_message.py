@@ -5,7 +5,7 @@ NO PATCHES. Spec: agapi cr/186 docs/agapi/cr186-sasha-half.md (mailbox row 1896)
     the ratchet (kanoe_contract.ratchet) at 0 over backend/ (tests excluded).
   · (a) ONE reader of the provider id — inbound_phone.provider_id: MessageSid, else SmsSid — read in the webhook, carried as _message_id.
   · (b) messages.whatsapp_inbound ALWAYS carries message_id.
-  · (c) a person already in Due diligence on Sasha's own record → ONE call, carrying the space.
+  · (c) ONE call per message (Sasha 379b · CR 192: carrying what AD may need — never a `space`).
   · a test double may never answer a field AgAPI doesn't publish (agapi/contract_shape: assert_shape, guard on every CALL / _call hook).
 
     cd backend && python -m unittest tests.test_s374_one_contract_one_message -v
@@ -37,7 +37,7 @@ class TheOneContract(unittest.TestCase):
         for name, sha in v["files"].items():
             self.assertEqual(hashlib.sha256((BACKEND / "kanoe_contract" / name).read_bytes()).hexdigest(), sha, name)
         agapi = json.loads((BACKEND / "kanoe_contract" / "AGAPI_MANIFEST.json").read_text())
-        self.assertEqual((KC.CONTRACT_VERSION, agapi["version"], v["version"]), ("1.84.0", "1.84.0", "1.84.0"))   # Sasha 378 · CR 190
+        self.assertEqual((KC.CONTRACT_VERSION, agapi["version"], v["version"]), ("1.86.0", "1.86.0", "1.86.0"))   # Sasha 379b · CR 192
 
     def test_the_ratchet_finds_no_hand_written_copy(self):
         r = subprocess.run([sys.executable, "-m", "kanoe_contract.ratchet", ".", "--exclude", "tests"], cwd=BACKEND, capture_output=True, text=True)
@@ -97,22 +97,20 @@ class OneInboundMessage(TIP.InboundPhone):
         self.assertEqual(self.deliver({}).status_code, 400)
         self.assertEqual(self.inbound(), [])
 
-    def test_in_due_diligence_on_sashas_record_is_one_call_with_the_space(self):
+    def test_a_linked_guest_is_one_call_with_what_ad_may_need_and_no_space(self):
+        """Sasha 379b · CR 192: ONE call per message, carrying what AD may need (their own Kanoe email, CR 165) — never a `space`."""
         from datetime import datetime, timezone
-        from booking_signer import wa_agent as WA
         from products import diligence as DG
         now = datetime.now(timezone.utc)
         run(GW.STORE.link({"account_id": "00000000-0000-4000-8000-000000000374", "wa_id_sha256": GW.wa_key(GUEST), "number_e164": GUEST,
                            "linked_at": now, "consent_at": now, "consent_wording_version": "v2", "consent_text_sha256": GW.consent()["sha256"]}))
-        st = run(GW.STORE.get_state(GW.wa_key(GUEST)))
-        WA.set_agent_state(st, chose="diligence")                                         # the router's own record: Due diligence
-        run(GW.STORE.put_state(GW.wa_key(GUEST), st))
         with mock.patch.object(DG, "_account_email", mock.AsyncMock(return_value="tyler@example.test")):
             r = self.deliver({"MessageSid": "SM374dd", "Body": "any news on Lehman?"})
         self.assertEqual(r.status_code, 200)
         calls = self.inbound()
         self.assertEqual(len(calls), 1)                                                   # ONE call …
-        self.assertEqual((calls[0]["space"], calls[0]["message_id"], calls[0]["account_email"]), ("diligence", "SM374dd", "tyler@example.test"))
+        self.assertEqual((calls[0]["message_id"], calls[0]["account_email"]), ("SM374dd", "tyler@example.test"))
+        self.assertNotIn("space", calls[0])
 
     def test_the_one_reader(self):
         self.assertEqual(IP.provider_id({"MessageSid": "SM1", "SmsSid": "SM2"}), "SM1")

@@ -257,14 +257,14 @@ def asks(out) -> None:
 
 
 async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optional[bool]:
-    pend, out = ctx["st"]["pending"], ctx["out"]
-    pend["step"] = "ask"                           # in the space until its word or another one leaves it (never "done" by itself)
-    t = _WORD.sub("", body or "", count=1).strip() if entering else (body or "").strip()
-    media = [m for m in (ctx.get("media") or []) if isinstance(m, dict) and str(m.get("url") or "").startswith("http")]
-    if not t and not media:   # CR 136 · a file or a voice note with no words is evidence for a case, never "who should I investigate?"
-        asks(out)
+    """Sasha 379b · CR 192 · AD's words reach AD only through AgAPI's ONE call (the webhook's first: matched). The web chat: AD works on
+    WhatsApp (its line). On WhatsApp this turn is never AD's door: a message that reaches it was not AgAPI's to take — told (the
+    turn's ONE outcome), never handed over a second time."""
+    if ctx.get("frm") == "web":
+        ctx["out"].text(WHATSAPP_ONLY)
         return True
-    return await hand_over(ctx, t, media)
+    from booking_signer.inbound_outcome import Failed
+    raise Failed("a message for Applied Diligence that AgAPI's one call didn't take — never handed over a second time (CR 192)")
 
 
 async def _account_email(account: Optional[str]) -> Optional[str]:
@@ -275,60 +275,6 @@ async def _account_email(account: Optional[str]) -> Optional[str]:
     except Exception as e:
         log.warning("[diligence] the account's email wasn't read: %s", type(e).__name__)
     return None
-
-
-async def space_now(sender: str, body: str, p: dict) -> dict:
-    """Sasha 374 · CR 186 (c) · the webhook's ONE call carries AD's space when Sasha's OWN record already says this person is in Due
-    diligence (the router's record: their last choice) and this message names no other tool — the same fields hand_over sends (their
-    email, the files, the message it answers). AgAPI then routes it to AD's door in that one call; hand_over is never reached for it.
-    {} otherwise: the router decides after AD's role (products/whatsapp.py, TL.route) — the same message continuing (CR 186's claim)."""
-    from booking_signer import guest_whatsapp as GW
-    from products import tools as TL
-    try:
-        if TL.switch_tap(p) is not None or TL._keyword_tool(body or "") is not None or GW.STORE is None:
-            return {}
-        ch = await GW.STORE.channel_for(GW.wa_key(sender))
-        if not ch:
-            return {}
-        chose, _ = TL.recalled(await GW.STORE.get_state(ch["wa_id_sha256"]))
-        if TL.route(body or "", None, chose)[0] != "diligence":
-            return {}
-        from . import whatsapp as PW
-        files = [m for m in PW._media(p) if str(m.get("url") or "").startswith("http")]
-        return {"space": "diligence", "account_email": await _account_email(ch.get("account_id")),
-                "media": [{"url": m["url"], "type": m.get("type") or ""} for m in files], "replied_to": p.get("OriginalRepliedMessageSid")}
-    except Exception as e:   # the record unread: the router decides after AD's role (the same message, AgAPI's claim) — never lost
-        log.warning("[diligence] the space wasn't read for the webhook's call: %s", type(e).__name__)
-        return {}
-
-
-async def hand_over(ctx: dict, t: str, media: list) -> bool:
-    """The message to AgAPI's ONE door in AD's space — from inside the space, or (Sasha 315) handed over by the router from travel."""
-    out = ctx["out"]
-    number = (ctx.get("ch") or {}).get("number_e164")
-    if not number or ctx.get("frm") == "web":      # the web chat: AD's door is Kanoe's WhatsApp number
-        out.text(WHATSAPP_ONLY)
-        return True
-    from agapi import venue_submit as VS
-    if not ctx.get("sid"):   # Sasha 374 · CR 186 (b): the provider's id always goes — a message without one is never handed over with a made-up id
-        from booking_signer.inbound_outcome import Failed
-        raise Failed("a WhatsApp message reached AD's space without its provider id")
-    email = await _account_email(ctx.get("account"))   # CR 165 · their own Kanoe email, offered by AgAPI as "Is this you?" to link AD
-    r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence", account_email=email,
-                                  media=[{"url": m["url"], "type": m.get("type") or ""} for m in media],   # CR 136 · relayed onto the case
-                                  replied_to=ctx.get("replied_to"), twilio=ctx.get("twilio"))
-    if r.get("ad") and r.get("ad") != "closed" and ctx.get("account"):
-        # Sasha 349 · AgAPI answers from Kanoe's number itself: AD spoke last — in the ONE record, so a reply goes back to AD
-        from agapi import s2_memory as MEM
-        await MEM.record(ctx["account"], MEM.message("out", "wa", "[Applied Diligence answered on Kanoe's number]", "diligence"))
-    if r.get("ad") and r.get("ad") != "closed":
-        out.answered_by = "agapi"                  # Sasha 357 · AgAPI sent AD's reply from Kanoe's number: that IS this message's reply
-    if r.get("ad") == "closed":
-        out.text(CLOSED)                           # AgAPI never writes to a number outside the beta: said here
-    elif not r.get("ad"):   # Sasha 357 · the cause, raised to the turn's ONE outcome (inbound_outcome): told in their language
-        from booking_signer.inbound_outcome import Failed
-        raise Failed(f"AgAPI didn't take a message in AD's space: {r.get('why') or 'no answer'}")
-    return True                                    # AgAPI sent AD's reply (or its own line) from Kanoe's number
 
 
 def claims(pend: dict, body: str, payload: str, media: list) -> bool:

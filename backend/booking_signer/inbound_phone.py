@@ -301,6 +301,47 @@ async def _whatsapp(p: dict, channel: str, sender: str, body: str, sid: str, hel
             WK.settle(held)   # its answer has left (a guest's background turn keeps the hold until its own reply leaves: deliver)
 
 
+async def _after_ad(sender: str, got: dict) -> str:
+    """Sasha 379b · AgAPI took the message (CR 192). AD answered from Kanoe's number → that IS its one answer, kept on Sasha's ONE record
+    (Sasha 349: the tool that spoke last). AD closed to this number (outside its beta) → AgAPI writes nothing: said here, once."""
+    ad = got.get("ad")
+    if not ad:
+        return ""
+    from products import diligence as DG
+    from . import guest_whatsapp as GW
+    if ad == "closed":
+        return GW._twiml_message(DG.CLOSED)
+    try:
+        ch = await GW.STORE.channel_for(GW.wa_key(sender)) if GW.STORE is not None else None
+        if ch and ch.get("account_id"):
+            from agapi import s2_memory as MEM
+            await MEM.record(ch["account_id"], MEM.message("out", "wa", "[Applied Diligence answered on Kanoe's number]", "diligence"))
+    except Exception as e:   # the record unread: AD's answer has gone regardless
+        log.warning("[inbound_phone] AD's answer not kept on the record: %s", type(e).__name__)
+    return ""
+
+
+async def for_ad(sender: str, p: dict) -> dict:
+    """Sasha 379b · CR 192 · what AD may need, on the ONE call (never a second one): the message's files (Twilio's media URLs), the
+    message it answers, and — for a linked guest — their own Kanoe email (CR 165: AgAPI offers it, "Is this you?", to link AD)."""
+    from products import diligence as DG, whatsapp as PW
+    from . import guest_whatsapp as GW
+    out: Dict[str, Any] = {}
+    files = [{"url": m["url"], "type": m.get("type") or ""} for m in PW._media(p) if str(m.get("url") or "").startswith("http")]
+    if files:
+        out["media"] = files
+    if p.get("OriginalRepliedMessageSid"):
+        out["replied_to"] = p["OriginalRepliedMessageSid"]
+    try:
+        ch = await GW.STORE.channel_for(GW.wa_key(sender)) if GW.STORE is not None else None
+        email = await DG._account_email(ch.get("account_id")) if ch else None
+        if email:
+            out["account_email"] = email
+    except Exception as e:   # the record unread: the message still goes to AgAPI, once — without the email
+        log.warning("[inbound_phone] the guest's email wasn't read for AgAPI's call: %s", type(e).__name__)
+    return out
+
+
 def said_in(r: Any) -> List[str]:
     """What a TwiML answer would have said: its <Message> texts, unescaped. A non-2xx (a store that failed) is logged — the message is
     AgAPI's record already (CR 118), and Twilio, answered at once, has nothing to retry."""
@@ -344,16 +385,19 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         from . import guest_whatsapp as GW
         from agapi import venue_submit as VS
         from products import tools as TL
-        if TL.switch_tap(p) is not None:   # Sasha 344 · the ONE switch BEFORE any tool's door: "← Everything I can do" / a tool's row
-            pass                           # is Sasha's own (the guest flow below answers it) — never AgAPI's door, never AD as text
+        tap = TL.switch_tap(p)
+        ad_tap = tap is not None and tap[0] == "tool" and TL.product_of(tap[1]) == "diligence"
+        if tap is not None and not ad_tap:   # Sasha 344 · the ONE switch: "← Everything I can do" / one of SASHA's own tools' rows —
+            pass                             # hers (the guest flow below answers it), never AgAPI's door
         elif await GW.first_step(sid, "agapi_in"):   # Sasha 355 · each step of THIS message once, in its own record (sql/058)
-            from products import diligence as DG   # Sasha 374 · CR 186 (c): in Due diligence on Sasha's own record → the space, in THIS call
-            got = await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p,
-                                            **(await DG.space_now(sender, body, p)))
+            # Sasha 379b · CR 192 · AgAPI decides WHOSE message this is ONCE, on this call, from AD's own reading — the Due diligence row
+            # reaches it as AD's own word (AD then asks its own question, and its answer is AD's). Everything AD may need goes on THIS call.
+            got = await VS.whatsapp_inbound(sender, tap[1]["word"] if ad_tap else body, message_id=sid, guest=await GW.linked(sender),
+                                            twilio=p, **(await for_ad(sender, p)))
             if got.get("matched"):
                 await GW.first_step(sid, "agapi_took")
-                return _twiml()
-            if isinstance(got.get("conversation_role"), dict):   # Sasha 361 · AD's role for this number → the ONE product router
+                return _twiml(await _after_ad(sender, got))
+            if isinstance(got.get("conversation_role"), dict):   # AgAPI's answer, passed on as it came: the router reads it (TL.route)
                 p = {**p, "_conversation_role": got["conversation_role"]}
         elif await GW.step_done(sid, "agapi_took"):   # a retry of a message AgAPI took: it stops here, nothing else answers it
             return _twiml()

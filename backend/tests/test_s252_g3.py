@@ -335,9 +335,9 @@ class ProductsSeeNoQuestionAfterABrainTurn(Base):
         run(GW.push_payment_question({"account_id": ACCOUNT}, {"id": "pay-1234567890", "read_back_sha256": "b" * 64, "payee": "Casa Lucio",
                                                               "read_back_lines": ["x", "Ask them?"]}))
         from products import tools as TL
-        self.say("ad")   # Sasha 361 · an explicit keyword wins, always (the ONE router): bare "ad" is AD's word — chosen
-        self.assertEqual(TL.recalled(run(GW.STORE.get_state(GW.wa_key(GUEST))))[0], "diligence")
-        self.assertEqual(TL.route("ad hoc meeting tomorrow", None, None), ("sasha", None))   # never "ad …" as a word
+        # Sasha 379b · bare "ad" is AD's word — AgAPI's to take on the first call (CR 192); here only its reading as a word stays
+        self.assertEqual(TL.route("ad", None), "diligence")
+        self.assertEqual(TL.route("ad hoc meeting tomorrow", None), "sasha")   # never "ad …" as a word
 
 
 if __name__ == "__main__":

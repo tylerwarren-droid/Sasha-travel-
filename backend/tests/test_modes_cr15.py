@@ -108,8 +108,7 @@ class Words(Base):
         self.assertIn("never why you need a doctor", said)                       # the working health demo, consent first
 
     def test_no_walls(self):
-        self.say("españa")
-        self.say("diligence")
+        self.say("españa")   # Sasha 379b · AD's word is AgAPI's to take (CR 192), never a turn of Sasha's
         self.assertNotRegex(self.said(), r"(?i)say exit|go back to sasha")
 
 

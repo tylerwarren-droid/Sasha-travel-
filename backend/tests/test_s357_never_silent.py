@@ -105,15 +105,14 @@ class EveryFailurePoint(Through):
         self.assertIn(EN, self.heard(r))
         self.assertTrue(any("StorageUnavailable" in l for l in logs.output), logs.output)
 
-    def test_c_agapi_down_in_ads_space(self):
+    def test_c_agapi_down_for_ads_word(self):
+        # Sasha 379b · CR 192: AD's word is AgAPI's to take on the ONE call — AgAPI unreachable → told, never travel's answer
         self.link()
-        self.msg("SM" + "c3" * 16, "diligence")                                             # into AD's space
-        GW.SENDER.sent.clear()
         self.agapi = {"matched": False, "why": "unavailable"}                               # AgAPI can't be reached
         with self.assertLogs("booking_signer.inbound_outcome", "ERROR") as logs:
-            r = self.msg("SM" + "c4" * 16, "investigate Acme")
+            r = self.msg("SM" + "c4" * 16, "diligence")
         self.assertIn(EN, self.heard(r))
-        self.assertTrue(any("AgAPI" in l and "unavailable" in l for l in logs.output), logs.output)
+        self.assertTrue(any("AgAPI" in l and "Applied Diligence" in l for l in logs.output), logs.output)
         self.assertIn(EN, self.recorded())                                                  # on the conversation record (349)
 
     def test_d_the_model_capped(self):

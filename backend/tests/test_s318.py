@@ -50,7 +50,6 @@ class TheMapper(unittest.TestCase):
         src = inspect.getsource(VS)
         self.assertEqual(src.count('"ButtonPayload"'), 1)                                               # button_of, once
         self.assertIn("twilio=p", (ROOT / "booking_signer" / "inbound_phone.py").read_text())             # the webhook's hand-over
-        self.assertIn('twilio=ctx.get("twilio")', (ROOT / "products" / "diligence.py").read_text())       # AD's space
 
 
 class ThroughTheWebhook(TIP.InboundPhone):
@@ -87,21 +86,7 @@ class ThroughTheWebhook(TIP.InboundPhone):
         locals()[_k] = None
 
 
-class InADsSpace(unittest.TestCase):
-    def test_the_space_hands_the_same_fields_to_the_same_mapper(self):
-        from products import diligence as DG
-        sent = []
-
-        async def call(op, body, approval=None, account=None):
-            sent.append(body)
-            return {"ok": True, "result": {"matched": True, "ad": "door"}}
-
-        class Out:
-            def text(self, t):
-                pass
-        with mock.patch.object(VS, "CALL", call):
-            asyncio.run(DG.hand_over({"ch": {"number_e164": SUBJECT}, "frm": "whatsapp", "out": Out(), "sid": "SM1", "twilio": ALLOW}, "", []))
-        self.assertEqual(sent[0]["button"], {"payload": "ACCEPTED", "permanent": True})
+# Sasha 379b · InADsSpace retired with diligence.hand_over: the button goes on the webhook's ONE call (twilio=p), as above
 
 
 if __name__ == "__main__":

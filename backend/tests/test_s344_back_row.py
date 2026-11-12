@@ -34,18 +34,17 @@ SHAPES = {   # the back row in every shape a tap can arrive in
 }
 
 
-class TheBackRowInsideDiligence(Base):
+class TheBackRowAndADsRows(Base):
     def setUp(self):
         super().setUp()
         GW.SENDER = ListSender()
         self.ran = []
         GW._spawn = lambda coro: self.ran.append(coro)
         ch = self.link()
-        st = asyncio.get_event_loop().run_until_complete(GW.STORE.get_state(GW.wa_key(GUEST)))
-        from products import tools as _TL361   # Sasha 361 · inside AD = AD is their choice (the ONE router's record), never a space
-        _TL361.remember(st, "diligence")
-        asyncio.get_event_loop().run_until_complete(GW.STORE.put_state(GW.wa_key(GUEST), st))
-        self.ch = ch
+        self.ch = ch   # Sasha 379b · no "inside AD" of Sasha's: AgAPI's one call decides each message (CR 192)
+        self._ack = IP.ACK_WAIT_S   # Sasha 379a · the work runs after Twilio's ack: wait for it here
+        IP.ACK_WAIT_S = 30.0
+        self.addCleanup(setattr, IP, "ACK_WAIT_S", self._ack)
         self.agapi_takes = True
 
     def webhook(self, fields, sid):
@@ -79,11 +78,11 @@ class TheBackRowInsideDiligence(Base):
             doors = self.webhook(list_reply(title, desc, rid), f"SM344ad{i}")
             self.assertEqual(doors, [title], title)                                                # the row's exact title — not "…\n<desc>"
 
-    def test_and_through_ads_own_door_inside_the_space_too(self):
-        self.agapi_takes = False   # AgAPI's first look doesn't take it: the turn hands it to AD's door (products/diligence.hand_over)
+    def test_one_door_even_when_agapi_doesnt_take_it(self):
+        self.agapi_takes = False   # Sasha 379b · CR 192: AgAPI's ONE call decides — never a second door (diligence.hand_over is gone)
         for i, (title, desc, rid) in enumerate(AD_ROWS):
             doors = self.webhook(list_reply(title, desc, rid), f"SM344own{i}")
-            self.assertEqual(doors, [title, title], title)                                        # both doors: the exact title
+            self.assertEqual(doors, [title], title)                                               # ONE door: the exact title
 
     def test_an_ordinary_message_in_ads_space_still_goes_to_agapi_first(self):
         doors = self.webhook({"Body": "Show my cases", "MessageType": "text"}, "SM344x")
@@ -111,7 +110,7 @@ class TheOneReader(unittest.TestCase):
         import inspect
         src = inspect.getsource(IP.sms) + inspect.getsource(IP._sms)   # Sasha 350 · the webhook, then its body
         self.assertIn("TL.switch_tap(p)", src)
-        self.assertLess(src.index("TL.switch_tap(p)"), src.index("VS.whatsapp_inbound(sender, body"))   # BEFORE any door
+        self.assertLess(src.index("TL.switch_tap(p)"), src.index("VS.whatsapp_inbound(sender, "))   # BEFORE any door
         self.assertNotIn("diligence", inspect.getsource(TL.switch_tap))
 
 

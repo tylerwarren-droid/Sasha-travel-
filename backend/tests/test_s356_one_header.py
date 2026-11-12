@@ -71,7 +71,7 @@ class OnWhatsAppEveryTool(Base):
     def test_each_header_once(self):
         self.link()
         for t in TL.TOOLS:
-            if t["product"]:
+            if t["product"] and TL.product_of(t) == "sasha":   # Sasha 379b · AD's row is AgAPI's to take on the first call (CR 192)
                 self.say(TL.title(t), payload=TL.TOOL_ID + t["id"])                         # into the tool from the Menu
             self.say(TL.title(TL.BY_ID["travel"]), payload=TL.TOOL_ID + "travel")            # back to Travel
         self.say("Campus visits", payload=TL.TOOL_ID + "campus")

@@ -198,7 +198,7 @@ class OnePlace(unittest.TestCase):
         bg = inspect.getsource(IP._whatsapp)
         self.assertIn("WK.settle(held)", bg[bg.index("finally:"):])
         body = inspect.getsource(IP._sms)
-        self.assertLess(body.index("TL.switch_tap(p)"), body.index("VS.whatsapp_inbound(sender, body"))
+        self.assertLess(body.index("TL.switch_tap(p)"), body.index("VS.whatsapp_inbound(sender, "))
 
     def test_the_reply_ends_it(self):
         self.assertIn('_WK.stop_for(ch.get("wa_id_sha256") or "")', inspect.getsource(GW.deliver))

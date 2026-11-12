@@ -155,7 +155,11 @@ class FoundLive(unittest.TestCase):
             self.assertEqual(GB.act_timeout(), 4.0)
         with mock.patch.dict("os.environ", {"SASHA_GROUP_ACT_TIMEOUT_S": ""}):
             self.assertEqual(GB.act_timeout(), 60.0)
-        self.assertIn("act_timeout() if (op in GROUP_ACTS and approval) else TIMEOUT_S", (BS / "group_book.py").read_text())
+        self.assertIn("act_timeout() if is_act(op, body, approval) else TIMEOUT_S", (BS / "group_book.py").read_text())
+        self.assertTrue(GB.is_act("group.book", {"mandate_id": "mdt_1"}, None))               # under the mandate, that call IS the act
+        self.assertTrue(GB.is_act("group.cancel", {}, "apv_1"))
+        self.assertFalse(GB.is_act("group.book", {}, None))                                   # a read-back
+        self.assertFalse(GB.is_act("group.bookings", {"mandate_id": "x"}, "apv_1"))
 
 
 if __name__ == "__main__":

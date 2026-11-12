@@ -73,7 +73,7 @@ async def _call(account: str, op: str, body: dict, approval: Optional[str] = Non
         return {"ok": False, "error": {"code": "not_configured", "message": "AgAPI's sandbox key isn't set here"}}
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": idem or "s334_" + secrets.token_hex(12),
          **({"AgAPI-Approval-Id": approval} if approval else {})}
-    return await AR.post(url, key, op, body, h, act_timeout() if (op in GROUP_ACTS and approval) else TIMEOUT_S)
+    return await AR.post(url, key, op, body, h, act_timeout() if is_act(op, body, approval) else TIMEOUT_S)
 
 
 async def _send(account: str, op: str, body: dict, idem: str, approval: Optional[str] = None) -> Dict[str, Any]:
@@ -114,6 +114,11 @@ def recorded(e: Dict[str, Any]) -> Dict[str, Any]:
 CALL = None   # tests replace it: (op, body, approval) → envelope
 KEYS: List[Tuple[str, Optional[str]]] = []   # tests read it: every (op, Idempotency-Key) sent through CALL
 TIMEOUT_S = 60.0
+
+
+def is_act(op: str, body: dict, approval: Optional[str]) -> bool:
+    """The call that ORDERS: an approved group act, or a group.book under the manager's mandate (that call IS the act — CR 182)."""
+    return op in GROUP_ACTS and bool(approval or (body or {}).get("mandate_id"))
 
 
 def act_timeout() -> float:

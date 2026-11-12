@@ -24,7 +24,7 @@ class PricedAgAPI(W334.FakeAgAPI):
     def __init__(self, per_night=9000, gone=(), gone_twice=(), busy=(), slow=0.0, refused=(), refused_twice=(), outside=None):
         super().__init__()
         self.outside, self.mandates = dict(outside or {}), {}   # Sasha 367 · CR 182: the manager's mandate (approvals.mandate)
-        self.takes_instruction, self.proofs_used = True, set()   # Sasha 372 · CR's half (proof.instruction_id) unless a test says otherwise
+        self.proofs_used = set()   # Sasha 372 · CR 187: the in-app id is proof.instruction_id, each once
         self.per_night, self.gone, self.gone_twice, self.busy, self.slow = per_night, set(gone), set(gone_twice), set(busy), slow
         self.refused, self.refused_twice, self.acts = set(refused), set(refused_twice), {}   # Sasha 365 · Duffel refusing the ORDER (the act)
         self.seen, self.inflight, self.peak, self.bodies = {}, 0, 0, []
@@ -38,10 +38,10 @@ class PricedAgAPI(W334.FakeAgAPI):
             return False
         canon = {k: body[k] for k in ("end_user", "words", "scope", "limits", "expires_in_minutes")}
         sha = hashlib.sha256(json.dumps(canon, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-        # Sasha 372 · CR's half as written: in_app signs the INSTRUCTION's id when the contract takes it (else today's session id)
-        ident, who = (p["message_id"], p["wa_id"]) if p["kind"] == "whatsapp" else (p.get("instruction_id") or p["session_id"], OWNER)
-        if p["kind"] == "in_app" and self.takes_instruction != bool(p.get("instruction_id")):
-            return False                                                                  # the contract's form, exactly
+        # Sasha 372 · CR 187 as written: in_app signs the INSTRUCTION's id
+        ident, who = (p["message_id"], p["wa_id"]) if p["kind"] == "whatsapp" else (p.get("instruction_id"), OWNER)
+        if p["kind"] == "in_app" and not p.get("instruction_id"):
+            return False                                                                  # CR 187: an in-app proof names its instruction
         want = hmac.new(secret.encode(), f"{p['t']}.{p['nonce']}.mandate.{p['kind']}.{ident}.{who}.{sha}".encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(want, p.get("signature") or ""):
             return False
@@ -128,10 +128,7 @@ class World(W334.World):
 
         async def _codes(city):
             return ["LON", "LHR", "LGW"]
-        async def _contract(account):
-            return self.agapi.takes_instruction
-        for p in (mock.patch.dict(_os.environ, {"SASHA_AGAPI_TAP_SECRET": "test-tap-secret-367"}), mock.patch.object(_AM, "PLACE", _codes),
-                  mock.patch.object(_AM, "CONTRACT", _contract)):
+        for p in (mock.patch.dict(_os.environ, {"SASHA_AGAPI_TAP_SECRET": "test-tap-secret-367"}), mock.patch.object(_AM, "PLACE", _codes)):
             p.start()
             self.p.append(p)
         for i, person in enumerate(run(G.roster(OWNER))["people"]):   # each one's OWN contact (CR 181), fictional

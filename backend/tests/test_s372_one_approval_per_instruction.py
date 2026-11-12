@@ -5,8 +5,8 @@ Found (row 1891): the in-app proof's id was the session id, and AgAPI takes a pr
 a SECOND instruction in the same conversation was refused (approval_untrusted_origin), live 3× on 12 Nov.
 
 ONE source: the instruction's own id (agapi.v0.Ctx.turn — every turn and tap builds its own Ctx; WhatsApp: the message_id), signed into the
-proof. AgAPI's half (CR, written in mailbox row for Sasha 372): approvals.mandate proof.instruction_id, signed as the in_app id, once.
-Until AgAPI's PUBLISHED contract (its /openapi.json) takes proof.instruction_id, Sasha signs today's form — so today's verify never breaks.
+proof. AgAPI's half (CR 187, written in mailbox row 1892): approvals.mandate proof.instruction_id, signed as the in_app id, once.
+ONE proof form (Tyler, 12 Nov): no today's-form fallback and no contract detection — Sasha 372 deploys TOGETHER with CR 187, never before.
 
     cd backend && python -m unittest tests.test_s372_one_approval_per_instruction -v
 """
@@ -58,13 +58,11 @@ class TheInstructionIsTheId(unittest.TestCase):
         proof = {"kind": "in_app", "session_id": "conv-1", "instruction_id": "turn_abc"}
         with mock.patch.dict(os.environ, {"SASHA_AGAPI_TAP_SECRET": SECRET}):
             p = AM.sign(proof, OWNER, "ab" * 32, t=1700000000, nonce="n" * 16)
-            old = AM.sign(proof, OWNER, "ab" * 32, t=1700000000, nonce="n" * 16, per_instruction=False)
+            none = AM.sign({"kind": "in_app", "session_id": "conv-1"}, OWNER, "ab" * 32, t=1700000000, nonce="n" * 16)
         want = hmac.new(SECRET.encode(), f"1700000000.{'n' * 16}.mandate.in_app.turn_abc.{OWNER}.{'ab' * 32}".encode(), hashlib.sha256).hexdigest()
         self.assertEqual(p["signature"], want)
         self.assertEqual((p["session_id"], p["instruction_id"]), ("conv-1", "turn_abc"))
-        self.assertNotIn("instruction_id", old)                                               # today's contract: today's form, exactly
-        was = hmac.new(SECRET.encode(), f"1700000000.{'n' * 16}.mandate.in_app.conv-1.{OWNER}.{'ab' * 32}".encode(), hashlib.sha256).hexdigest()
-        self.assertEqual(old["signature"], was)
+        self.assertIsNone(none)                                                               # no instruction → nothing signed, never the session
 
 
 class TwoInstructionsOneConversation(unittest.TestCase):
@@ -93,22 +91,11 @@ class TwoInstructionsOneConversation(unittest.TestCase):
         self.assertEqual(len(w.agapi.mandates), 1)
 
 
-class TodaysVerifyNeverBreaks(unittest.TestCase):
-    def test_before_crs_half_the_proof_is_todays_form(self):
-        agapi = T367.MandateAgAPI()
-        agapi.takes_instruction = False                                                      # AgAPI's contract without proof.instruction_id
-        with T367.World(agapi) as w:
-            _, r = _say(w, "Book all executives to London 15–17 December", "conv-old")
-        mand = [b for op, b in w.agapi.calls if op == "approvals.mandate"]
-        self.assertEqual(len(mand), 1)
-        self.assertNotIn("instruction_id", mand[0]["proof"])
-        self.assertEqual(len(w.agapi.mandates), 1)                                            # accepted by today's verify
-
-    def test_the_contract_is_read_from_agapis_own_openapi(self):
+class OneProofForm(unittest.TestCase):
+    def test_no_fallback_and_no_detection(self):
         src = (ROOT / "backend" / "booking_signer" / "agapi_mandate.py").read_text()
-        self.assertIn('["paths"]["/v1/approvals.mandate"]["post"]["requestBody"]["content"]["application/json"]["schema"]', src)
-        self.assertIn('"instruction_id" in', src)
-        self.assertNotIn("SASHA_MANDATE_PROOF", src)                                          # never a flag of Sasha's
+        for gone in ("per_instruction", "takes_instruction", "openapi.json", "CONTRACT", 'ident, who = proof["session_id"]'):
+            self.assertNotIn(gone, src, gone)
 
     def test_no_door_invents_a_session(self):
         routes = (ROOT / "backend" / "booking_signer" / "group_routes.py").read_text()

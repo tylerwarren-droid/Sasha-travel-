@@ -2237,8 +2237,9 @@ ACTS = {"book", "book_venue", "cancel_venue", "send_email", "send_whatsapp"}   #
 READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total",
          "add_to_calendar", "get_activity", "keep_list"}
 ACTS = ACTS | {"running_late", "change_booking", "cancel_booking"}   # Sasha 226 · claimed once, durably, before they act
-#: Sasha 376 · the tools that START something (an act, or a group instruction): one start per (tool, arguments) per turn
-STARTS = set(ACTS) | {"group_select", "group_book", "group_plan", "group_limits"}
+#: Sasha 376 · the tools that START a group instruction: one start per (tool, arguments) per turn. The ACTS are not here — each already
+#: answers a repeat by its own once-only key (replayed, _IDEM): one rule per kind, never two
+STARTS = {"group_select", "group_book", "group_plan", "group_limits"}
 READS = READS | {"my_plans"}
 READS = READS | {"booking_fine_print"}   # Sasha 301 · reads the itinerary only
 

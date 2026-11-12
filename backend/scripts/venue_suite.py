@@ -39,8 +39,9 @@ async def real_test_venue(a: str) -> None:
     day = (date.today() + timedelta(days=4)).isoformat()
     v = {"name": "Sasha Test Venue", "city": "Madrid", "country": "ES", "website": test_venue_url("plain"), "what": "dinner"}
     r = await API.call(_ctx(a), "read_booking_route", v)
-    ok("VENUE 1 (Sherlock): read_booking_route reads the venue's routes through the booking API",
-       r.get("ok") and "form" in r["result"]["routes"], str(r.get("error") or r.get("result"))[:200])
+    ok("VENUE 1 (Sherlock): read_booking_route says AgAPI's ONE decision for it — their own form, Kanoe sends it (Sasha 378 · CR 188)",
+       r.get("ok") and r["result"]["routes"] == ["send_form"] and (r["result"].get("decision") or {}).get("route") == "send_form",
+       str(r.get("error") or r.get("result"))[:200])
     turn1 = _ctx(a, "Book it, the form please")
     h = await API.call(turn1, "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form", "idempotency_key": "venue-suite-h1"})
     ok("VENUE 2 (Austen): hold_venue → AgAPI's read-back, nothing sent", h.get("ok") and h["result"]["status"] == "awaiting_yes" and h["result"]["route"] == "agapi",

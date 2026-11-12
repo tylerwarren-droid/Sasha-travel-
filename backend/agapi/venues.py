@@ -1538,12 +1538,13 @@ async def _via_agapi(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, c
         raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {p['error']['message']}. " + d["takeover"]["say"])
     rb = await VS.read_back(ctx.account, p["prepared_id"])
     if not rb.get("ok") and rb["error"]["code"] == "not_allowed":
-        # Sasha 254 · not allowed to contact venues (not granted): said kindly, with their page prepared — never an error
-        from agapi.booking_rules import booking_rules as BR
+        # Sasha 380 · AgAPI didn't send it: its reason LOGGED, their prepared page handed over (voice.FINISH_IT) — never a reason of Sasha's own. Found
+        # live (Tyler, 12 Nov 16:39 UTC, Peñalver on WhatsApp): every not_allowed was said as "I can't contact venues for you yet on this
+        # account" (the vendored no_real_sends phrase) whatever AgAPI's reason was — and its reason was never kept.
         link = next((x for x in (rb["error"].get("details", {}).get("link"), p.get("link"), d["takeover"].get("link"))
                      if str(x or "").startswith("https://")), None)
-        d2 = {**d, "action": "prepared_link", "say": "no_real_sends", "say_text": BR.PHRASES["no_real_sends"],
-              "takeover": {**d["takeover"], "link": link}}
+        said = refused_words(venue, rb["error"].get("message"))
+        d2 = {**d, "action": "prepared_link", "say": "not_allowed", "say_text": said, "takeover": {**d["takeover"], "link": link}}
         return _said({"status": "not_contacted", "venue": venue, "booked": False, "not_allowed": True, **_link_out(link)}, d2)
     if not rb.get("ok"):
         raise _err("not_prepared", f"{venue} couldn't be prepared from here right now — {rb['error']['message']}. " + d["takeover"]["say"])
@@ -1569,6 +1570,16 @@ async def _no_engine(ctx, rd: dict, d: dict, venue: str) -> dict:
     """Sasha 271 · a hotel stay with no booking service on this server: said, with the take-over — never Sasha's own room email (the
     call the rules attach to it would be nobody's)."""
     raise _err("no_route", f"I can't ask {venue} for the room from here right now. " + d["takeover"]["say"])
+
+
+def refused_words(venue: str, agapi_say: Optional[str]) -> str:
+    """Sasha 380 · AgAPI didn't send a booking (venue.submit_booking status not_allowed): AgAPI's reason is LOGGED (its own sentence,
+    never lost again), and she hands over the page AgAPI prepared in her voice — voice.FINISH_IT, never "can't" (Sasha 288, rule 15)
+    and never a reason of Sasha's own about the person or their account (the old no_real_sends phrase, "…yet on this account")."""
+    from app.agent import voice as V
+    w = " ".join(str(agapi_say or "").split())
+    log.warning("[venues] AgAPI didn't send the booking at %s: %s", venue, w[:300] or "(no words)")
+    return V.FINISH_IT
 
 
 def _link_out(link: Optional[str]) -> dict:
@@ -2052,10 +2063,10 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
         # read-back named none: their listing shows no number now) — never promise a call the booking won't make: the sent line
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "act_id": r.get("act_id"),
                 "line": sent_line if held.get("agapi_action") == "call_and_email" else held.get("rules_say") or sent_line}
-    if st == "not_allowed":   # not this person (yet): kindly, with their prepared page — nothing reached the venue
+    if st == "not_allowed":   # Sasha 380 · AgAPI didn't send it: its reason logged, their prepared page handed over — nothing reached the venue
         link = held.get("link")
         return {"status": "not_allowed", "venue": venue, "when": held["summary"], "booked": False,
-                "say": f"{BR.PHRASES['no_real_sends']} {BR.PHRASES['takeover']}", **({"open": link, "page_url": link} if link else {})}
+                "say": f"{refused_words(venue, r.get('say'))} {BR.PHRASES['takeover']}", **({"open": link, "page_url": link} if link else {})}
     raise _err("not_sent", r.get("say") or f"{venue} didn't take it — nothing is booked")
 
 
@@ -2072,6 +2083,8 @@ async def _kanoe_sent(ctx, held: dict, r: dict, venue: str, where) -> dict:
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False, "act_id": r.get("act_id"),
                 **({"reference": r["reference"]} if r.get("reference") else {}), "wa_sent": True, "line": line, **in_app,
                 "how": "Say `line` word for word — nothing else; it's a request until they reply."}
+    if r.get("status") == "not_allowed":   # Sasha 380 · AgAPI's reason, kept (the hand-over below is Sasha 288's, unchanged)
+        refused_words(venue, r.get("say"))
     log.info("[venues] %s: Kanoe's message not sent (%s) — handed over", venue, r.get("status"))
     # Sasha 288 · the same hand-over for every channel: their own WhatsApp when AgAPI wrote one, else THE FLOOR (286) — never "can't"
     out = await own_whatsapp(ctx, held.get("booking") or {}, {"venue": held["venue"], "place_id": held.get("place_id")},

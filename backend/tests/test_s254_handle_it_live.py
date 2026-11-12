@@ -148,11 +148,13 @@ class TheSend(HandleIt):
         self.assertTrue(got["line"].startswith("✅ Booked: Casa Gate"))
 
     def test_not_allowed_is_said_kindly_with_their_prepared_page(self):
-        self.agapi.submit.update(status="not_allowed", submitted=False, act_id=None)
+        why = "I can't send this one for you (no form of their own to send, and no WhatsApp or email to write to). The link I prepared is yours to finish — open it and confirm."
+        self.agapi.submit.update(status="not_allowed", submitted=False, act_id=None, say=why)
         self.handle_it()
         got = self.yes()
         self.assertEqual(got["status"], "not_allowed")
-        self.assertEqual(got["say"], f"{BR.PHRASES['no_real_sends']} {BR.PHRASES['takeover']}")
+        self.assertEqual(got["say"], f"{V.FINISH_IT} {BR.PHRASES['takeover']}")                 # Sasha 380 · their page handed over; AgAPI's reason logged
+        self.assertNotIn("on this account", got["say"])
         self.assertEqual(got["page_url"], "https://agapi.test/prepared/casagate")
         from app.agent import sasha as AG
         self.assertEqual(AG.render("book_venue", got, {})["kind"], "handover")                   # their page, drawn
@@ -169,7 +171,8 @@ class TheSend(HandleIt):
             out = self.handle_it()
         self.assertEqual(out["status"], "not_contacted")
         self.assertTrue(out["not_allowed"])
-        self.assertTrue(out["say"].startswith(BR.PHRASES["no_real_sends"]))
+        self.assertTrue(out["say"].startswith(V.FINISH_IT))                                      # Sasha 380 · their prepared page, in her voice
+        self.assertNotIn(BR.PHRASES["no_real_sends"], out["say"])
         self.assertEqual(out["page_url"], "https://agapi.test/prepared/casagate")
 
     def test_no_key_here_is_sashas_own_sender(self):

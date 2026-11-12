@@ -142,6 +142,7 @@ def _through_the_turn(case, body):   # Sasha 357 · the real background turn (gu
     from booking_signer import guest_whatsapp as _GW
     ch = TG.run(_GW.STORE.channel_for(_GW.wa_key(TG.GUEST)))
     with case.assertLogs("booking_signer.inbound_outcome", "ERROR") as logs:
-        TG.run(_GW._turn(ch, TG.SANDBOX, {"From": f"whatsapp:{TG.GUEST}", "To": f"whatsapp:{TG.SANDBOX}", "Body": body}))
+        TG.run(_GW._turn(ch, TG.SANDBOX, {"From": f"whatsapp:{TG.GUEST}", "To": f"whatsapp:{TG.SANDBOX}", "Body": body,
+                                          "MessageSid": "SM" + __import__("uuid").uuid4().hex}))   # Sasha 374 · a delivery's own id
     return logs.output
 

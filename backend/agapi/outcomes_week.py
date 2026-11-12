@@ -10,6 +10,7 @@ adds only the attempts that ended before an act — docs/sasha/S-324-outcomes.md
   line(w)           the week in one line, numbers only (the log, the founder's tool)
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import logging
 from datetime import datetime, timedelta, timezone
@@ -93,7 +94,7 @@ async def _rows(since: str) -> tuple:
     out: List[dict] = []
     until = None
     for _ in range(20):
-        r = await CALL("outcomes.list", {"from": since, "limit": LIST_MAX, **({"to": until} if until else {})})
+        r = await CALL(OP.OUTCOMES_LIST, {"from": since, "limit": LIST_MAX, **({"to": until} if until else {})})
         if not r.get("ok"):
             return out, (r.get("error") or {}).get("message") or "outcomes.list didn't answer"
         page = (r.get("result") or {}).get("outcomes") or []
@@ -113,7 +114,7 @@ async def week(days: Optional[int] = None, now: Optional[datetime] = None, befor
         return {"ok": True, "started": False, "say": "Real-booking count not started — Tyler says when (start_count)."}
     recent = (now - timedelta(days=days or 7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     since = recent if before_count else (max(f"{start}T00:00:00Z", recent) if days else f"{start}T00:00:00Z")
-    rep = await CALL("outcomes.report", {"from": since, "by": ["kind", "channel", "rung", "sector"]})   # CR 155 · kind and channel too
+    rep = await CALL(OP.OUTCOMES_REPORT, {"from": since, "by": ["kind", "channel", "rung", "sector"]})   # CR 155 · kind and channel too
     if not rep.get("ok"):
         return {"ok": False, "started": True, "why": (rep.get("error") or {}).get("message") or "the outcomes ledger didn't answer",
                 "say": "I couldn't read the real bookings — " + ((rep.get("error") or {}).get("message") or "the ledger didn't answer") + "."}
@@ -124,7 +125,7 @@ async def week(days: Optional[int] = None, now: Optional[datetime] = None, befor
     for x in rows:
         k = classify(x, now)
         outcomes[k] = outcomes.get(k, 0) + 1
-    un = await CALL("venue.unhandled", {"since": since[:10]})
+    un = await CALL(OP.VENUE_UNHANDLED, {"since": since[:10]})
     unhandled = (un.get("result") or {}) if un.get("ok") else {}
     items = unhandled.get("items") or []   # AgAPI's shape: {count, items: [{kind_guess, request, why, at}], table}
     by_kind: Dict[str, int] = {}
@@ -164,3 +165,8 @@ def line(w: Dict[str, Any]) -> str:
 
 
 __all__ = ["WAIT_H", "classify", "week", "line", "count_from", "start_count"]
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

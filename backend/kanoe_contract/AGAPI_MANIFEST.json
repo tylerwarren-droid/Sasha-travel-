@@ -1,0 +1,26 @@
+{
+ "package": "@kanoe/contract / kanoe-contract",
+ "version": "1.80.0",
+ "ad_door": "kanoe-ad-door.1",
+ "operations": 116,
+ "door_kinds": 21,
+ "error_codes": 38,
+ "sources_sha256": {
+  "spec/ext/ad-door.json": "d12e581ca5854740b6392dd7ef2f34a136b8186812c3da91cc2be45e079e468b",
+  "spec/v1/operations.json": "df31f0606a84c2c8a7399d69cc29bde747877ff0d82c5740efa93cab4e6bbf1c",
+  "spec/ext/operations.ext.json": "7a56b935d6a056dbbfafeb3d3c9bb9faa504861276f3589555d77c90970286b5",
+  "spec/v1/error-codes.json": "a53800f58ec80c9934e27881b1a88470c87cfeb8cccc58ebb9baf82064e42447",
+  "spec/ext/error-codes.ext.json": "d28c69c72fbcdbc281d05da47e950184c1c38907bd65d97de0125dbea81452ed",
+  "spec/ext/kanoe-sandbox.schema.json": "8d05edd7773ba23b3336e51c27ff2386b75043d220ba339666e8ff6675349247",
+  "spec/v1/schemas/approval.schema.json": "fb9ac95b7b5659d3691c403d4352c8c9ff3a941dd193150c3a5de4cc5a84ab16",
+  "spec/v1/schemas/common.schema.json": "e1f56551f3719fe24c908d8498f6c4909e70ddcdbb7766133c4923a67be6bb4b",
+  "spec/v1/schemas/error.schema.json": "8a760897840318e120665df2fb334b0c1b54c1fe13c3d10a64f17235d7b9173d",
+  "spec/v1/schemas/ext/ext.schema.json": "c073888e74b525d346e35dfb2fc6f2aa27c1a59d99f8a52bc9f635870f26a879",
+  "spec/v1/schemas/keep/keep.schema.json": "99e3c5e60df6321af99b52ae3fe668ba3ce991fbf08a57bca3ebfeb87625d1d1",
+  "spec/v1/schemas/product/product.schema.json": "833bb375c457f91df7786208d2f05c9e8c958c0422b1c5def5d7a642644cc3e0",
+  "spec/v1/schemas/read_back.schema.json": "2e11b962aa4ed7a5cb93886d176bbd00138894518746aa99f8bc4dfa53f5fb33",
+  "spec/v1/schemas/request.schema.json": "b1d84b95ae843b36749b64fba94a221bf72d22fe30a06b8f09cd3541983d25a1",
+  "spec/v1/schemas/response.schema.json": "c9fe4715cdd15848b7e95613890b16eba5338abd5d9743aa3853ae3f2b8407ec",
+  "spec/v1/schemas/tools/tools.schema.json": "3280c4c655a93566cd26982bf70fe70355388e3d836c07f91de9e477c4053165"
+ }
+}

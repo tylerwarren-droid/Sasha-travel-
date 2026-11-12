@@ -153,7 +153,7 @@ class BasketBookingsInTheLedger(unittest.TestCase):
 
         async def call(op, body):
             sent.append((op, body))
-            return {"ok": True, "result": {"id": "o1"}}
+            return {"ok": True, "result": {"outcome_id": "o1"}}   # Sasha 374 · outcomes.record's own field
         rows = [{"id": "b-1", "kind": "flight", "state": "booked", "booking_reference": "ABC123",
                  "snapshot": {"owner": "Iberia", "flights": "IB3100", "from": "MAD", "to": "LIS", "passengers": [{"name": "Ana"}]}},
                 {"id": "b-2", "kind": "stay", "state": "failed", "failed_why": "sold out", "snapshot": {"name": "Tings Lisbon", "city": "Lisbon"}},

@@ -56,6 +56,8 @@ class Base(unittest.TestCase):
 
         async def call(op, body):
             test.calls.append(op)
+            if op == "users.register":   # Sasha 374 · AgAPI's users.register answers the end user — never another op's fields
+                return {"ok": True, "result": {"end_user_id": "usr_test"}}
             return {"ok": True, "result": {"link": PREP, "submitted": False, "human_step": f"book on {test.PLATFORM} — you press Book there",
                                            "say": "Ready for you to confirm: La Mi Venta, Sat 14 Nov 14:00, 2 people. Nothing has been sent yet.",
                                            "decision": platform_dec(test.PLATFORM, PREP),

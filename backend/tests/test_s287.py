@@ -338,7 +338,7 @@ class RepliesComeBackToTheBooking(Base):
         async def call(op, body, approval=None, account=None):
             return {"ok": True, "result": {"matched": True, "kept": True, "opted_out": True, "booking": None}}
         with mock.patch.object(VS, "CALL", call):
-            got = run(VS.whatsapp_inbound("+34611222333", "STOP"))
+            got = run(VS.whatsapp_inbound("+34611222333", "STOP", message_id="SM_test_" + __import__("uuid").uuid4().hex))
         self.assertEqual((got["matched"], got["opted_out"]), (True, True))
 
 

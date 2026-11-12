@@ -260,7 +260,7 @@ class TheOneRecords(unittest.TestCase):
         import inspect
         src = inspect.getsource(GB)
         self.assertNotIn("create table", src.lower())                                                # AgAPI's record, never a copy
-        self.assertIn('"group.bookings"', src)                                                       # read from it, each time
+        self.assertIn("OP.GROUP_BOOKINGS", src)   # Sasha 374 · the contract's name, never the string                                                       # read from it, each time
         self.assertIn("KR.grant(", src)                                                             # the references: for this act only
         self.assertIn("KR.revoke(", src)
         from agapi import agapi_route as AR

@@ -8,6 +8,7 @@
 CR 149 · a clinic known only by its phone is a venue AgAPI records (proved on agapi-sandbox, 1 Nov). No venues key on this server, or a
 clinic AgAPI still can't record → nothing is prepared or dialled: Tyler takes it (agapi.venues.TO_TYLER)."""
 from __future__ import annotations
+from kanoe_contract import ERR  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import logging
 from datetime import datetime
@@ -26,7 +27,7 @@ async def prepare(account: str, clinic: str, phone: str, at: datetime, who: Dict
     p = await VS.prepare(account, place, person, at.strftime("%Y-%m-%d"), at.strftime("%H:%M"), 1, notes=what,
                          call={"phone": phone, "source": "venue"})
     if not p.get("ok"):
-        if p["error"]["code"] in ("not_configured", "invalid_input"):   # no venues key here / no venue AgAPI can put on a record
+        if p["error"]["code"] in ("not_configured", ERR.INVALID_INPUT):   # no venues key here / no venue AgAPI can put on a record
             log.info("[health] %s: not prepared by AgAPI (%s) — Tyler's, nothing dialled", clinic, p["error"]["code"])
             return {"ok": False, "say": VN.TO_TYLER}
         return {"ok": False, "say": f"Not prepared — {p['error']['message']}. Nothing was dialled."}

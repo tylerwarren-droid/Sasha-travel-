@@ -15,6 +15,7 @@ FLIP BACK: SASHA_S2_VIA_AGAPI=0 (or unset) — the next tool call is Sasha's own
 Each guest's own sign-in token goes with every AgAPI call (X-Sasha-Guest-Token), so AgAPI acts as THAT guest at Sasha's booking
 routes. The AgAPI key (SASHA_AGAPI_KEY, agp_live_…) and URL (SASHA_AGAPI_URL) are Railway variables; never printed."""
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import contextvars
@@ -73,7 +74,7 @@ def _venues_in(a: dict) -> dict:
                                                                        **({"country": a["country"]} if a.get("country") else {})}}
 
 
-READS = {"search_flights": ("travel.find_flights", _flights_in), "search_venues": ("venues.find_venues", _venues_in)}
+READS = {"search_flights": (OP.TRAVEL_FIND_FLIGHTS, _flights_in), "search_venues": (OP.VENUES_FIND_VENUES, _venues_in)}
 
 
 def _offer_card(o: dict) -> dict:
@@ -184,3 +185,8 @@ def runner(base: Callable[..., Awaitable[Dict[str, Any]]], m: Optional[str] = No
 
 
 __all__ = ["mode", "runner", "GUEST_TOKEN", "SHADOW_LOG", "SHADOW_TASKS", "MODES", "compare"]
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

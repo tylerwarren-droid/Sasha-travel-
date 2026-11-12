@@ -9,6 +9,7 @@
   WhatsApp-only draft — and never a send without the person's explicit yes in a LATER turn.
 """
 from __future__ import annotations
+from kanoe_contract import ERR  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import os
@@ -47,7 +48,7 @@ async def real_test_venue(a: str) -> None:
     same = await API.call(turn1, "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": "venue-suite-b0"})
     ok("VENUE 3: a yes in the SAME turn as the read-back books nothing", (same.get("error") or {}).get("code") == "read_back_first", str(same)[:160])
     no = await API.call(_ctx(a, "hmm, maybe"), "book_venue", {"approval": {"said": "hmm, maybe"}, "idempotency_key": "venue-suite-b1"})
-    ok("VENUE 4: without an explicit yes, nothing is sent", (no.get("error") or {}).get("code") == "no_explicit_yes", str(no)[:160])
+    ok("VENUE 4: without an explicit yes, nothing is sent", (no.get("error") or {}).get("code") == ERR.NO_EXPLICIT_YES, str(no)[:160])
     b = await API.call(_ctx(a, "Yes, book it"), "book_venue", {"approval": {"said": "Yes, book it"}, "idempotency_key": "venue-suite-b2"})
     res = b.get("result") or {}
     # Sasha 319 · ONE SENDER: the yes goes through AgAPI's act (venue.submit_booking) — never Sasha's own form send
@@ -216,7 +217,7 @@ async def routes_offline(a: str) -> None:
         VN._read = read_with({"email": {}})
         await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "route": "email", "idempotency_key": "vo-n"})
         nb = await API.call(_ctx(a, "no, wait"), "book_venue", {"approval": {"said": "no, wait"}, "idempotency_key": "vo-nb"})
-        ok("VENUE ROUTE · “no, wait” never sends", (nb.get("error") or {}).get("code") == "no_explicit_yes"
+        ok("VENUE ROUTE · “no, wait” never sends", (nb.get("error") or {}).get("code") == ERR.NO_EXPLICIT_YES
            and not any(p.endswith("/send") for _, p, _ in fake.calls[n0:]), str(nb.get("error")))
     finally:
         GW.api, GW.tap_platform, VN._read, WB.trip_day_words, GW._tell, GW.STORE = real

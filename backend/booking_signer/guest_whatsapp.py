@@ -20,6 +20,7 @@ called in process (no HTTP to ourselves) as that guest's own account. What is ne
 Steps 11–12 (the production sender, templates outside 24 hours, voice notes) wait for counsel (F-1) and are not here.
 """
 from __future__ import annotations
+from kanoe_contract import ERR  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import base64
@@ -812,7 +813,7 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
     ch = await STORE.channel_for(key)
     if not ch and await venue_call_for(sender):
         return None                        # a venue that is not a linked guest: the venue path (de-duplicated there), never a reply
-    if not await first_time(p.get("MessageSid") or ""):   # Sasha 206 (EU 186 R2) · a guest's Twilio retry never runs a turn twice
+    if not await first_time(_provider_id(p) or ""):   # Sasha 374 · the webhook's ONE provider id   # Sasha 206 (EU 186 R2) · a guest's Twilio retry never runs a turn twice
         log.info("[guest_whatsapp] a repeated MessageSid — already handled, nothing run")
         return ""
     if ch:
@@ -839,7 +840,7 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
             return ""
         # Sasha 269 · CR 100 §F: AgAPI says whether the code came FROM the number being linked (Sasha-signed) — verified only then
         from agapi import venue_submit as VS
-        ok = await VS.confirm_whatsapp(code["account_id"], sender, p.get("MessageSid") or "", p.get("Body") or "")
+        ok = await VS.confirm_whatsapp(code["account_id"], sender, _provider_id(p) or "", p.get("Body") or "")
         if not ok.get("ok") or ok.get("state") != "verified":
             await STORE.put_state(key, {**st, "link_tries": tries + [now.isoformat()]})
             log.info("[guest_whatsapp] link not verified by AgAPI (%s) — nothing linked, nothing sent", (ok.get("error") or {}).get("code"))
@@ -913,7 +914,7 @@ async def confirmed_by_code(ch: dict, sender: str, p: Dict[str, str]) -> Optiona
         return None
     from agapi import venue_submit as VS, venues as VN
     from app.agent import voice as V
-    ok = await VS.confirm_whatsapp(code["account_id"], sender, p.get("MessageSid") or "", body)
+    ok = await VS.confirm_whatsapp(code["account_id"], sender, _provider_id(p) or "", body)
     verified = bool(ok.get("ok") and ok.get("state") == "verified") and await VS.whatsapp_verified(code["account_id"], sender)
     log.info("[guest_whatsapp] a linked number's confirmation: %s", "verified (read back)" if verified else (ok.get("error") or {}).get("code") or "not verified")
     held = VN._HELD.get(code["account_id"]) or VN._CANCEL.get(code["account_id"])   # Sasha 314 · a booking's yes, or a cancel's
@@ -3909,7 +3910,7 @@ async def whatsapp_link(request: Request):
     from agapi import venue_submit as VS
     got = await VS.link_whatsapp(account, theirs)   # registered UNVERIFIED; nothing is sent to it
     if not got.get("ok"):
-        return _refuse(422 if got["error"]["code"] == "invalid_input" else 503, got["error"]["code"], got["error"]["message"])
+        return _refuse(422 if got["error"]["code"] == ERR.INVALID_INPUT else 503, got["error"]["code"], got["error"]["message"])
     if got.get("state") == "verified" or not got.get("code"):
         return {"verified": True, "say": got.get("say")}
     now = NOW()
@@ -3969,3 +3970,8 @@ try:
 except Exception as _e:   # the hook never stops the module loading
     log.warning("[guest_whatsapp] hand-over hook not registered: %s", _e)
 
+
+def _provider_id(p: dict) -> str:
+    """Sasha 374 · CR 186 (a): the ONE reader (inbound_phone.provider_id) — MessageSid or SmsSid, read once in the webhook."""
+    from .inbound_phone import provider_id
+    return provider_id(p)

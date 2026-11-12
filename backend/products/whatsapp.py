@@ -320,7 +320,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             if not rest and not files:
                 DG.asks(out)                     # the word alone: AD's question, from the registry
                 return True
-            return await DG.hand_over({"ch": ch, "frm": frm, "out": out, "sid": p.get("MessageSid"),
+            return await DG.hand_over({"ch": ch, "frm": frm, "out": out, "sid": __import__("booking_signer.inbound_phone", fromlist=["x"]).provider_id(p),   # Sasha 374 · CR 186 (a)
                                        "replied_to": p.get("OriginalRepliedMessageSid"), "twilio": p, "account": ch.get("account_id")},
                                       rest, files)
         if named and _TL._keyword_tool(body)["id"] == "travel":
@@ -557,7 +557,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         rest = body if rest and not re.match(r"^(me|mode)\b", rest, re.I) else rest   # "campus visits at Yale…": all of it
     ctx = {"account": ch["account_id"], "ch": ch, "frm": frm, "st": st, "now": now, "out": out, "media": media,
            "early": early or _no_early, "plan_for": plan_for, "espana": bool(entering and _ESPANA.match(body)),
-           "sid": p.get("MessageSid"),   # CR 128 · AD's space hands the message to AgAPI with Twilio's id (its idempotency key)
+           "sid": __import__("booking_signer.inbound_phone", fromlist=["x"]).provider_id(p),   # CR 128 · Sasha 374 (CR 186 a): the provider's id, read once in the webhook (MessageSid or SmsSid)
            "replied_to": p.get("OriginalRepliedMessageSid"),   # CR 136 · the message this one answers (a reply to a case message)
            "twilio": p}   # Sasha 318 · Twilio's own fields, for the ONE inbound mapper (venue_submit.whatsapp_inbound)
     import json as _json

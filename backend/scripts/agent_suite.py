@@ -8,6 +8,7 @@ client would, on a scratch guest (Duffel replayed in the gate), cleaned up after
   · get_status says nothing is booked before payment — and the reply guard catches "it's booked"
 """
 from __future__ import annotations
+from kanoe_contract import ERR  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import os
@@ -64,7 +65,7 @@ async def cases(a: str) -> None:
        c.get("ok") and legs == ["back", "out"] and abs(c["result"]["total_eur"] - q2["eur"]) < 0.01, f"legs {legs} · {c.get('error')}")
     h = await API.call(ctx, "hold_booking", {"idempotency_key": "agent-suite-h0"})
     ok("AGENT 3: hold_booking with no travellers on file → travellers_missing (never placeholders)",
-       (h.get("error") or {}).get("code") == "travellers_missing", str(h.get("error")))
+       (h.get("error") or {}).get("code") == ERR.TRAVELLERS_MISSING, str(h.get("error")))
     await API.call(ctx, "save_travellers", {"idempotency_key": "agent-suite-s1", "travellers": [
         {"given_name": "Alex", "family_name": "Smith", "date_of_birth": "1985-03-12", "title": "mr"},
         {"given_name": "Sam", "family_name": "Smith", "date_of_birth": "1987-05-02", "title": "ms"}]})
@@ -83,7 +84,7 @@ async def cases(a: str) -> None:
     no = await API.call(ctx, "book", {"read_back_sha256": sha, "idempotency_key": "agent-suite-b0",
                                       "approval": {"said": "No. What's the total with the flight and lodging?"}})
     ok("AGENT 5: book without an explicit yes → refused; nothing new held",
-       (no.get("error") or {}).get("code") == "no_explicit_yes" and await sessions() == {card_sid})
+       (no.get("error") or {}).get("code") == ERR.NO_EXPLICIT_YES and await sessions() == {card_sid})
     yes = await API.call(ctx, "book", {"read_back_sha256": sha, "idempotency_key": "agent-suite-b1", "approval": {"said": "Then book it."}})
     again = await API.call(ctx, "book", {"read_back_sha256": sha, "idempotency_key": "agent-suite-b1", "approval": {"said": "Then book it."}})
     held = await BK.items(a, res["trip_id"], ("pending_payment",))

@@ -16,6 +16,7 @@ POST /api/agent/turn {message, history, session_id} → text/event-stream:
   · {"type":"done","text","guard":[...],"ms":{...}}
 """
 from __future__ import annotations
+from kanoe_contract import ERR  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import hashlib
 import json
@@ -140,7 +141,7 @@ def travellers_ask(calls: list, text: str) -> Optional[str]:
     asked. → the line to add, or None."""
     from booking_signer import passengers as PX
     holds = [c for c in calls or [] if c.get("tool") == "hold_booking"]
-    if holds and holds[-1].get("code") == "travellers_missing" and not _ASKS_TRAVELLERS.search(text or ""):
+    if holds and holds[-1].get("code") == ERR.TRAVELLERS_MISSING and not _ASKS_TRAVELLERS.search(text or ""):
         return PX.ASK
     return None
 
@@ -1498,7 +1499,7 @@ def what_happened(calls: List[dict], why: str) -> str:
                  _DONE_WORDS.get(t or ""))
             if w and w not in done:
                 done.append(w)
-        elif c.get("code") == "internal" and t in API.ACTS:
+        elif c.get("code") == ERR.INTERNAL and t in API.ACTS:
             unsure.append(t)
     line = why
     if done:

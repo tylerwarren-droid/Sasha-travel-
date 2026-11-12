@@ -12,6 +12,7 @@ leaves:
 No typing call anywhere else, no second sender, no "working on it…" text. Every call is logged with Twilio's status.
 """
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import logging
@@ -43,7 +44,7 @@ async def _typing(sid: str) -> Dict[str, Any]:
             r = await CALL(sid)
         else:
             from agapi import venue_submit as VS
-            r = await VS._call(None, "messages.typing", {"message_id": sid})
+            r = await VS._call(None, OP.MESSAGES_TYPING, {"message_id": sid})
             r = {"ok": bool(r.get("ok")), **(r.get("result") or {}), **({"error": r["error"]} if r.get("error") else {})}
     except Exception as e:
         r = {"ok": False, "error": {"code": type(e).__name__}}
@@ -63,7 +64,7 @@ async def _hold(sid: str) -> None:
         if r.get("ok"):
             shown = True
             break
-        if (r.get("error") or {}).get("code") != "not_found":
+        if (r.get("error") or {}).get("code") != ERR.NOT_FOUND:
             break
     if not shown:
         _trail("[wa_working] …%s: no dots (AgAPI never saw this message, or refused it)", sid[-8:])

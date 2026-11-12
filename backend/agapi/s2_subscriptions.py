@@ -11,6 +11,7 @@ The work is AgAPI's (subscriptions.find / cancel_plan / cancel); Sasha only asks
                             phone and they tap it → "cancel requested" until the merchant confirms
 Where: SASHA_SUBSCRIPTIONS_VIA = sandbox (default) | live.  Keys: SASHA_AGAPI_TEST_KEY (sandbox) / SASHA_AGAPI_KEY (live). Never printed."""
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import base64
@@ -63,7 +64,7 @@ READ_WAIT_S, READ_TIMEOUT_S, CALL_TIMEOUT_S = 40.0, 240.0, 60.0
 READING_SAY = "I'm reading your receipts now — the list will appear here in a minute or two."
 _READING: Dict[str, Any] = {}         # account → the read in progress (asyncio.Task), held so it isn't garbage-collected mid-read
 #: an AgAPI that didn't answer, timed out or is out of budget: said as that — never a statement offered in its place
-_NOT_ANSWERED = ("unreachable", "timeout", "budget_exhausted", "rate_limited", "upstream_unreachable", "internal")
+_NOT_ANSWERED = ("unreachable", "timeout", ERR.BUDGET_EXHAUSTED, ERR.RATE_LIMITED, ERR.UPSTREAM_UNREACHABLE, ERR.INTERNAL)   # unreachable / timeout: the transport's
 NOT_ANSWERED_SAY = "I couldn't finish reading your receipts — the service didn't answer in time. Nothing was kept; ask me again in a minute."
 MEDIA = {"text/csv", "text/plain", "application/pdf", "image/png", "image/jpeg", "image/webp"}
 
@@ -106,7 +107,7 @@ async def _end_user(account: str) -> Optional[str]:
     k = account if via() == "sandbox" else f"live|{account}"   # Sasha 244 · each AgAPI has its own end users
     if k in _USERS:
         return _USERS[k]
-    r = await CALL("users.register", {"external_ref": f"sasha:{account}"})
+    r = await CALL(OP.USERS_REGISTER, {"external_ref": f"sasha:{account}"})
     if r.get("ok"):
         _USERS[k] = r["result"]["end_user_id"]
         return _USERS[k]
@@ -220,7 +221,7 @@ async def _read_mail(account: str, body: dict, source: str, said_first: Optional
 
     async def job() -> Dict[str, Any]:
         try:
-            r = await CALL("subscriptions.find", body)
+            r = await CALL(OP.SUBSCRIPTIONS_FIND, body)
         finally:
             body.pop("emails", None)                       # the emails are dropped here, as soon as AgAPI has answered
         try:
@@ -302,12 +303,12 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             source = "statement"
         if body.get("emails"):                             # Sasha 260 · a mailbox read: its own job (READ_WAIT_S here, then the page)
             return await _read_mail(ctx.account, body, source, said_first)
-        r = await CALL("subscriptions.find", body)
+        r = await CALL(OP.SUBSCRIPTIONS_FIND, body)
         if ref:
             _STATEMENTS.pop(ref, None)                     # read once; never kept
         return _found(ctx.account, r, source, said_first)
     if name == "plan_cancel_subscription":
-        r = await CALL("subscriptions.cancel_plan", {"end_user": uid, "subscription_id": args["subscription_id"]})
+        r = await CALL(OP.SUBSCRIPTIONS_CANCEL_PLAN, {"end_user": uid, "subscription_id": args["subscription_id"]})
         if not r.get("ok"):
             return _fail(r)
         return {"ok": True, "result": {"service": r["result"]["merchant"], "routes": [{"route": rt["kind"], "where": rt["value"]} for rt in r["result"]["routes"]
@@ -318,7 +319,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         want = str(args["service"]).lower().strip()
         subs = _LAST.get(ctx.account)
         if subs is None:
-            r0 = await CALL("subscriptions.find", {"end_user": uid})
+            r0 = await CALL(OP.SUBSCRIPTIONS_FIND, {"end_user": uid})
             subs = [_brief(s) for s in ((r0.get("result") or {}).get("subscriptions") or [])] if r0.get("ok") else []
         hits = [b for b in subs if want in b["service"].lower() or want in (b.get("plan") or "").lower()]
         if len(hits) != 1:
@@ -331,7 +332,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     pend = _PENDING.get(key)
     route = args.get("route") or (pend or {}).get("route")
     if not route:
-        pl = await CALL("subscriptions.cancel_plan", {"end_user": uid, "subscription_id": sid})
+        pl = await CALL(OP.SUBSCRIPTIONS_CANCEL_PLAN, {"end_user": uid, "subscription_id": sid})
         if not pl.get("ok"):
             return _fail(pl)
         kinds = [rt["kind"] for rt in pl["result"]["routes"]]
@@ -341,11 +342,11 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     inp = {"end_user": uid, "subscription_id": sid, "route": route, **({"account_email": args["account_email"]} if args.get("account_email") else {})}
     if pend and pend["at"] < ctx.started.timestamp():     # their yes, in a LATER turn than the read-back
         if via() == "sandbox":
-            a = await CALL("sandbox.simulate_approval", {"read_back_id": pend["read_back_id"], "said": ctx.user_said or ""})
+            a = await CALL(OP.SANDBOX_SIMULATE_APPROVAL, {"read_back_id": pend["read_back_id"], "said": ctx.user_said or ""})
             if not a.get("ok"):
                 return {"ok": False, "error": {"code": (a.get("error") or {}).get("code") or "no_explicit_yes",
                                                "message": "that wasn't a clear yes — ask them again before cancelling"}}
-            r = await CALL("subscriptions.cancel", inp, approval=a["result"]["approval_id"])
+            r = await CALL(OP.SUBSCRIPTIONS_CANCEL, inp, approval=a["result"]["approval_id"])
             if not r.get("ok"):
                 return _fail(r)
             _PENDING.pop(key, None)
@@ -359,25 +360,25 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                                   if isinstance(page, str) and page.startswith("https://") else {})}}
             return {"ok": True, "result": {"status": "cancel_requested", "service": s["merchant"],
                                            "line": f"Cancellation requested from {s['merchant']} — it's not cancelled until they confirm."}}
-        st = await CALL("approvals.status", {"read_back_id": pend["read_back_id"]})   # live: their tap on AgAPI's link decides
+        st = await CALL(OP.APPROVALS_STATUS, {"read_back_id": pend["read_back_id"]})   # live: their tap on AgAPI's link decides
         ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
         if (not ap.get("approval_id") or ap.get("state") != "valid") and not pend.get("link_sent"):   # Sasha 314 · no link went
             return {"ok": True, "result": {"status": "not_sent", "line": "I couldn't send you a way to say yes from here, so nothing has gone. Say yes in the app or on WhatsApp."}}
         if not ap.get("approval_id") or ap.get("state") != "valid":
             return {"ok": True, "result": {"status": "waiting_for_their_tap", "line": "It's on their phone: they tap Yes there, then it goes."}}
-        r = await CALL("subscriptions.cancel", inp, approval=ap["approval_id"])
+        r = await CALL(OP.SUBSCRIPTIONS_CANCEL, inp, approval=ap["approval_id"])
         if not r.get("ok"):
             return _fail(r)
         _PENDING.pop(key, None)
         return {"ok": True, "result": {"status": "cancel_requested", "service": r["result"]["subscription"]["merchant"]}}
-    r = await CALL("subscriptions.cancel", inp)
+    r = await CALL(OP.SUBSCRIPTIONS_CANCEL, inp)
     e = r.get("error") or {}
-    if e.get("code") != "approval_required":
+    if e.get("code") != ERR.APPROVAL_REQUIRED:
         return _fail(r) if not r.get("ok") else {"ok": True, "result": {"status": "cancel_requested"}}
     d = e.get("details") or {}
     _PENDING[key] = {"read_back_id": d["read_back_id"], "route": route, "at": time.time()}
     if via() == "live":   # Sasha 314 · the one-tap link — and whether it really went
-        q = await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
+        q = await CALL(OP.APPROVALS_REQUEST, {"read_back_id": d["read_back_id"], "channel": "link_sms"})
         _PENDING[key]["link_sent"] = bool(q.get("ok"))
     return {"ok": True, "result": {"status": "awaiting_yes", "read_back": (d.get("read_back") or {}).get("lines") or [],
                                    "ask": "Read this back and ask; cancel only on their yes, in their next message."}}
@@ -393,3 +394,8 @@ def wrap(base: Callable[..., Awaitable[Dict[str, Any]]]) -> Callable[..., Awaita
 
 
 __all__ = ["TOOLS", "TOOL_NAMES", "wrap", "keep_statement", "via"]
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

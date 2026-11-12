@@ -603,7 +603,8 @@ async def photo_intake(ch: dict, p: Dict[str, str], st: dict, out, now) -> str:
     kind = want.get("kind") if want and _hours(now, want.get("at") or "") * 60 <= PHOTO_FOR_MIN else None
     kind = kind or purpose_of(p.get("Body") or "")
     if not kind:
-        sid = str(p.get("MessageSid") or "") or __import__("secrets").token_hex(8)
+        from .inbound_phone import provider_id
+        sid = provider_id(p)   # Sasha 374 · the webhook's ONE provider id — never a made-up one
         _sweep(now)
         _HELD_PHOTOS[sid] = {"account": account, "raw": raw, "mime": mime, "at": now}
         out.ask("What's this?", [("Passport", f"photo:passport:{sid}"), ("Loyalty card", f"photo:loyalty:{sid}"),

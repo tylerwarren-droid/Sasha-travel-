@@ -14,6 +14,7 @@ venue.profile is live, switching is this one line (and the family's route). Read
 machine; a booking platform is never read (dive refuses one).
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import logging
@@ -25,7 +26,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 log = logging.getLogger("agapi.venue_truth")
 
-ENGINE_OP = "venue.profile"           # CR 89 (agapi v1.6.0, 12 Oct) — was "dive.onboard"; _from_engine reads either shape
+ENGINE_OP = OP.VENUE_PROFILE           # CR 89 (agapi v1.6.0, 12 Oct) — was "dive.onboard"; _from_engine reads either shape
 FAMILY = "venues"
 TTL_S = 24 * 3600
 ENGINE_TIMEOUT_S = 75.0
@@ -144,7 +145,7 @@ async def _read_site(website: Optional[str], replay: bool = False, place: Option
     fut = asyncio.get_running_loop().create_future()
     _INFLIGHT[host] = fut
     try:
-        r = await CALL(ENGINE_OP, {"url": website, **({"replay": True} if replay else {})} if ENGINE_OP == "dive.onboard" else
+        r = await CALL(ENGINE_OP, {"url": website, **({"replay": True} if replay else {})} if ENGINE_OP == OP.DIVE_ONBOARD else
                        {"place": {k: v for k, v in place.items() if v}})
         out = _from_engine(r["result"]) if r.get("ok") else {"cant_read": (r.get("error") or {}).get("message") or "the venue engine didn't answer"}
         if r.get("ok"):
@@ -162,7 +163,7 @@ async def _read_site(website: Optional[str], replay: bool = False, place: Option
 async def prepare(place: dict, person: dict, date: str, time_: str, party: int, account: Optional[str] = None) -> Optional[dict]:
     """"Fill it now" (CR 89's venue.prepare_booking): a ready-to-confirm link for their phone — NOTHING is submitted; human_step is
     theirs. None when the engine doesn't prepare it (then their own page + the details to copy, as before)."""
-    if ENGINE_OP != "venue.profile":
+    if ENGINE_OP != OP.VENUE_PROFILE:
         return None
     body = {"place": {k: v for k, v in {"name": place.get("name"), "website": place.get("website"), "place_id": place.get("place_id")}.items() if v},
             "person": {k: v for k, v in person.items() if v}, "date": date, "time": time_, "party": int(party)}
@@ -172,7 +173,7 @@ async def prepare(place: dict, person: dict, date: str, time_: str, party: int, 
         if eu:
             body["end_user"] = eu
     try:
-        r = await CALL("venue.prepare_booking", body)
+        r = await CALL(OP.VENUE_PREPARE_BOOKING, body)
     except Exception as e:
         log.warning("[venue_truth] prepare_booking failed: %s", type(e).__name__)
         return None
@@ -247,7 +248,7 @@ async def profile(place: dict, replay: bool = False, listing: bool = False) -> d
             "place_id": place.get("place_id")}
     if place.get("website"):
         site = await _read_site(place["website"], replay, meta)
-    elif listing and place.get("place_id") and ENGINE_OP == "venue.profile":
+    elif listing and place.get("place_id") and ENGINE_OP == OP.VENUE_PROFILE:
         site = await _read_site(None, replay, {"place_id": place["place_id"], "name": place.get("name")}, key=_key_of(place))
     else:
         site = None
@@ -370,3 +371,8 @@ def reservable_say(place: Optional[dict]) -> Optional[str]:
 
 __all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "ASK_FILL", "ENGINE_OP", "CALL",
            "link_profile", "person_channel", "reservable_say", "decision"]
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

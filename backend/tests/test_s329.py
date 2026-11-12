@@ -355,7 +355,7 @@ class TheWholeClass(unittest.TestCase):
             self.assertNotIn("choice_of", s, str(f))
 
     def test_one_cancel_path(self):
-        hits = sorted(str(f.relative_to(ROOT)) for f, s in self._py() if re.search(r'"venue\.cancel_booking",\s*\{', s))
+        hits = sorted(str(f.relative_to(ROOT)) for f, s in self._py() if re.search(r'OP\.VENUE_CANCEL_BOOKING,\s*\{', s))
         self.assertEqual(hits, ["agapi/venue_submit.py"])
         self.assertFalse(hasattr(VN, "platform_cancel"))
         src = inspect.getsource(VN._cancel_act)

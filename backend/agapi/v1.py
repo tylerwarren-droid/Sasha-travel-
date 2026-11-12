@@ -8,6 +8,7 @@
     classify(sources)                       Part 1 §5.1 — an upstream failure is never "no results"
 """
 from __future__ import annotations
+from kanoe_contract import ERR  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import hashlib
 import json
@@ -160,7 +161,7 @@ def decide(case: dict, test_mode: bool = False) -> Tuple[str, Optional[str]]:
 
 # ── §5.1 outage ≠ no results ──────────────────────────────────────────────────────────────────────────────────────────
 
-TRANSIENT = ["upstream_unreachable", "upstream_timeout", "upstream_rate_limited", "upstream_failed"]
+TRANSIENT = [ERR.UPSTREAM_UNREACHABLE, ERR.UPSTREAM_TIMEOUT, ERR.UPSTREAM_RATE_LIMITED, ERR.UPSTREAM_FAILED]
 
 
 def classify(sources: List[dict]):

@@ -163,8 +163,7 @@ class TheSend(HandleIt):
         async def refuse_early(op, body, approval=None, account=None):
             if op == "venue.submit_booking" and not approval:
                 self.agapi.calls.append((op, body, approval))
-                return {"ok": True, "result": {"status": "not_allowed", "submitted": False, "say": "not granted",
-                                               "link": "https://agapi.test/prepared/casagate"}}
+                return {"ok": True, "result": {"status": "not_allowed", "submitted": False, "say": "not granted"}}   # AgAPI's own fields
             return await real(op, body, approval, account)
         with mock.patch.object(VS, "CALL", refuse_early):
             out = self.handle_it()

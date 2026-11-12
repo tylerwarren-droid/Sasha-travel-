@@ -14,6 +14,7 @@ Sasha's resolver (keep_resolver.py) inside its one supplier call, under a grant 
                                   refunds, the total, the REAV note — TEST in test mode
 """
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import hashlib
@@ -36,9 +37,9 @@ HOTEL_WORDS = ("marriott", "bonvoy", "hilton", "hyatt", "ihg", "accor", "all ", 
 # ── the ONE transport (agapi_route.post), on the group family (the sandbox: CR 163 is TEST) ─────────────────────────────────
 
 #: Sasha 371b · CR 184: AgAPI's group acts are idempotent — ONE key per traveller + movement + plan, re-sent unchanged on every retry
-GROUP_ACTS = ("group.book", "group.swap", "group.cancel")
+GROUP_ACTS = (OP.GROUP_BOOK, OP.GROUP_SWAP, OP.GROUP_CANCEL)
 #: the answers that mean "AgAPI didn't (yet) answer this request" — the SAME request is sent again with the SAME key, never a new one
-RESEND = ("timeout", "unreachable", "idempotency_in_flight", "upstream_rate_limited", "rate_limited")
+RESEND = ("timeout", "unreachable", ERR.IDEMPOTENCY_IN_FLIGHT, ERR.UPSTREAM_RATE_LIMITED, ERR.RATE_LIMITED)   # timeout / unreachable: the transport's own (agapi_route.post)
 RESEND_WAIT_S = (2.0, 5.0, 10.0, 20.0)
 
 
@@ -95,14 +96,14 @@ async def _send(account: str, op: str, body: dict, idem: str, approval: Optional
 
 
 #: Sasha 371b · CR 184's answers that NAME the traveller's record on this movement (details {booking_id, state, movement_id}): states, never "failed"
-ON_RECORD = ("already_completed", "outcome_unknown")
-NO_ANSWER = ("timeout", "unreachable", "idempotency_in_flight")   # still no answer after _send's re-sends: AgAPI may have ordered — its record decides, read by movement
+ON_RECORD = (ERR.ALREADY_COMPLETED, ERR.OUTCOME_UNKNOWN)
+NO_ANSWER = ("timeout", "unreachable", ERR.IDEMPOTENCY_IN_FLIGHT)   # still no answer after _send's re-sends: AgAPI may have ordered — its record decides, read by movement
 
 
 def recorded(e: Dict[str, Any]) -> Dict[str, Any]:
     """An answer that names (or may name) the record → {state, status, booking_id?, why} in plain words — never "not booked"."""
     d = (e or {}).get("details") or {}
-    state = d.get("state") or ("unknown" if (e or {}).get("code") in ("outcome_unknown",) + NO_ANSWER else "booked")
+    state = d.get("state") or ("unknown" if (e or {}).get("code") in (ERR.OUTCOME_UNKNOWN,) + NO_ANSWER else "booked")
     status = RECORD_STATUS.get(state, "confirming")
     why = {"booked": "already booked on this trip — nothing new was ordered",
            "confirming": "the airline hasn't confirmed yet — I'm checking; nothing will be ordered twice",
@@ -131,7 +132,7 @@ def act_timeout() -> float:
 
 
 async def _organiser(account: str) -> Optional[str]:
-    r = await _call(account, "users.register", {"external_ref": f"sasha:{account}"})
+    r = await _call(account, OP.USERS_REGISTER, {"external_ref": f"sasha:{account}"})
     return ((r.get("result") or {}).get("end_user_id")) if r.get("ok") else None
 
 
@@ -188,10 +189,10 @@ async def _items(account: str, m: Dict[str, Any], mv: Dict[str, Any]) -> Tuple[O
     home = G.origin(m)   # Sasha 351 · the ONE answer to where they fly from (the roster's airport, else their city)
     for frm, to, day in ((home, mv["destination"], m["out_date"]), (mv["destination"], home, m["back_date"])):
         q = {"origin": {"query": frm}, "destination": {"query": to}, "date": str(day)[:10], "passengers": 1}
-        r = await _call(account, "travel.find_flights", q)
-        if not r.get("ok") and (r.get("error") or {}).get("code") in ("upstream_failed", "upstream_rate_limited"):   # Sasha 339 · once more
+        r = await _call(account, OP.TRAVEL_FIND_FLIGHTS, q)
+        if not r.get("ok") and (r.get("error") or {}).get("code") in (ERR.UPSTREAM_FAILED, ERR.UPSTREAM_RATE_LIMITED):   # Sasha 339 · once more
             await SLEEP(5)
-            r = await _call(account, "travel.find_flights", q)
+            r = await _call(account, OP.TRAVEL_FIND_FLIGHTS, q)
         offers = (r.get("result") or {}).get("offers") or [] if r.get("ok") else []
         if not offers:
             return None, f"no flight {frm} → {to} on {str(day)[:10]} on AgAPI's sandbox" + (f" ({(r.get('error') or {}).get('code')})" if not r.get("ok") else "")
@@ -259,7 +260,7 @@ def over_priced(priced: List[dict], lim: Dict[str, float], items: Optional[List[
 
 def _gone(e: dict) -> bool:
     d = e.get("details") or {}
-    return e.get("code") == "upstream_refused" and (d.get("reason") == "offer_gone" or
+    return e.get("code") == ERR.UPSTREAM_REFUSED and (d.get("reason") == "offer_gone" or
                                                     d.get("duffel_code") in ("offer_no_longer_available", "offer_expired", "not_found"))
 
 
@@ -280,7 +281,7 @@ async def _records(account: str, movement_id: str) -> List[dict]:
     org = await _organiser(account)
     if not org:
         raise Unread("the organiser isn't known to AgAPI just now")
-    r = await _send(account, "group.bookings", {"end_user": org, "movement_id": str(movement_id)}, "s376_read_" + secrets.token_hex(12))
+    r = await _send(account, OP.GROUP_BOOKINGS, {"end_user": org, "movement_id": str(movement_id)}, "s376_read_" + secrets.token_hex(12))
     if not r.get("ok"):
         raise Unread((r.get("error") or {}).get("code") or "unread")
     return (r.get("result") or {}).get("bookings") or []
@@ -333,38 +334,38 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": why}
         body = {"end_user": org, "movement_id": str(mv["id"]), "worker": {**w, **contact_of(m)}, "items": _wire(its),
                 **({"mandate_id": mandate_id} if mandate_id else {})}   # Sasha 371b · CR 184: the movement on the record; worker.key = member id
-        idem = act_key("group.book", mv["id"], m["id"], body)   # the read-back, the act and every retry of it: ONE key
+        idem = act_key(OP.GROUP_BOOK, mv["id"], m["id"], body)   # the read-back, the act and every retry of it: ONE key
         if mandate_id:   # Sasha 367 · under the mandate THIS call is the act: THIS worker's references granted for it only (as _act_one does)
             from . import keep_resolver as KR
             refs = [x for x in _refs(w) if x]
             KR.grant(owner_of(m), refs)
             try:
-                r = await _read_back(account, "group.book", body, idem)
+                r = await _read_back(account, OP.GROUP_BOOK, body, idem)
             finally:
                 KR.revoke(refs)
         else:
-            r = await _read_back(account, "group.book", body, idem)
+            r = await _read_back(account, OP.GROUP_BOOK, body, idem)
         e = r.get("error") or {}
         if mandate_id and r.get("ok"):   # Sasha 367 · INSIDE the mandate: booked on the manager's instruction (no read-back to answer)
             return "booked", {"name": m["name"], "member_id": m["id"], "result": r.get("result") or {}}
         if e.get("code") in ON_RECORD or (mandate_id and e.get("code") in NO_ANSWER):   # Sasha 371b · AgAPI's record holds it: a STATE, never "failed"
             return "recorded", {"name": m["name"], "member_id": m["id"], **recorded(e)}
-        if mandate_id and e.get("code") in ("mobile_needed", "email_needed", "approval_expired", "not_found", "incomplete", "passport_detail_needed"):
+        if mandate_id and e.get("code") in (ERR.MOBILE_NEEDED, ERR.EMAIL_NEEDED, ERR.APPROVAL_EXPIRED, ERR.NOT_FOUND, "incomplete", "passport_detail_needed"):
             d = e.get("details") or {}
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": e["code"], "code": e["code"],
                             **({"left_booked": d.get("left_booked")} if d.get("left_booked") else {})}
-        if e.get("code") == "approval_required":
+        if e.get("code") == ERR.APPROVAL_REQUIRED:
             d = e.get("details") or {}
             # Sasha 340 · the limit against the read-back's OWN prices (details.priced, CR 166); AgAPI without them: its offer prices
             over = over_priced(d["priced"], lim, its) if d.get("priced") else over_at_booking(its, lim)
             outside = [x.get("why") for x in ((d.get("mandate") or {}).get("outside") or []) if x.get("why")]
             if mandate_id and outside and not asked:   # Sasha 367 · OUTSIDE the mandate: asked with AgAPI's reasons (the explicit tap)
-                return "outside", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body, "idem": idem,
+                return "outside", {"op": OP.GROUP_BOOK, "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body, "idem": idem,
                                    "outside": outside, "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
                                    "lines": list((d.get("read_back") or {}).get("lines") or [])}
             if over and not asked:
                 return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
-            return "item", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body, "idem": idem,
+            return "item", {"op": OP.GROUP_BOOK, "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body, "idem": idem,
                             **({"outside": outside} if outside else {}),   # Sasha 376 · AgAPI's reasons ride on the card's item
                             "over": st_ == "over limit" or bool(over), "over_words": over, "replanned": replanned,
                             "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
@@ -582,8 +583,8 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
             return {"status": "nothing", "say": f"{b['name']}'s own flights are over the limit: {over}.",
                     "taps": [{"label": "Swap anyway", "say": f"{b['name']} — {over}", "act": {"action": "swap", "who": [a["name"]], "to": b["name"], "over_ok": True}}]}
         sb = {"end_user": org, "booking_id": rec["booking_id"], "worker": w, "flights": _wire(own)}   # CR 164 · HIS own flights
-        items.append({"op": "group.swap", "member": b["id"], "owner": owner_of(b), "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
-                      "over": bool(over), "over_words": over, "body": sb, "idem": act_key("group.swap", mv["id"], b["id"], sb)})
+        items.append({"op": OP.GROUP_SWAP, "member": b["id"], "owner": owner_of(b), "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
+                      "over": bool(over), "over_words": over, "body": sb, "idem": act_key(OP.GROUP_SWAP, mv["id"], b["id"], sb)})
     elif action == "cancel":
         for nm in who or []:
             m = (G.pick(members, [nm])[0] or [None])[0]   # Sasha 376 · the one person resolver
@@ -592,7 +593,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
                 skipped.append({"name": nm, "why": "no booking to cancel"})
                 continue
             cb = {"end_user": org, "booking_id": rec["booking_id"]}
-            items.append({"op": "group.cancel", "member": m["id"], "name": m["name"], "body": cb, "idem": act_key("group.cancel", mv["id"], m["id"], cb)})
+            items.append({"op": OP.GROUP_CANCEL, "member": m["id"], "name": m["name"], "body": cb, "idem": act_key(OP.GROUP_CANCEL, mv["id"], m["id"], cb)})
     for it in items:   # AgAPI's read-back for each (nothing is done without the approval)
         if it.get("read_back_id"):   # Sasha 339 · a book item brings its own (prepared in parallel)
             lines += it["lines"] + ([f"⚠ {it['name']} is OVER the group's limit ({it.get('over_words') or 'by the plan'}) — included only because you asked."]
@@ -600,7 +601,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
             continue
         r = await _read_back(account, it["op"], it["body"], it["idem"])
         e = r.get("error") or {}
-        if e.get("code") != "approval_required":
+        if e.get("code") != ERR.APPROVAL_REQUIRED:
             skipped.append({"name": it["name"], **decision(e)})   # Sasha 364 · a named decision, never the raw message
             it["skip"] = True
             continue
@@ -760,7 +761,7 @@ async def _approval(account: str, it: dict, said: str) -> Optional[str]:
         if VS.WA.get() is not None:
             r = await VS.whatsapp_tap(account, it["read_back_id"], it["sha"])
             return r.get("approval_id") if r.get("ok") else None
-    r = await _call(account, "sandbox.simulate_approval", {"read_back_id": it["read_back_id"], "said": (said or "Yes, go ahead.")[:200]})
+    r = await _call(account, OP.SANDBOX_SIMULATE_APPROVAL, {"read_back_id": it["read_back_id"], "said": (said or "Yes, go ahead.")[:200]})
     return ((r.get("result") or {}).get("approval_id")) if r.get("ok") else None
 
 
@@ -865,7 +866,7 @@ DECISIONS = {
 }
 
 
-RETRY_ONCE = ("upstream_refused", "upstream_failed", "upstream_unreachable")
+RETRY_ONCE = (ERR.UPSTREAM_REFUSED, ERR.UPSTREAM_FAILED, ERR.UPSTREAM_UNREACHABLE)
 
 #: Sasha 367 · AgAPI's mandate answers as facts (details.mandate.outside[].why, and the missing contact)
 MANDATE_FACTS = {"worker_not_named": "not named in your instruction", "another_destination": "their flight goes somewhere else",
@@ -1082,14 +1083,14 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
         x = recorded(e)
         done.append({"name": it["name"], "state": x["state"], "parts": []})
         return
-    if e.get("code") == "approval_void" and d.get("void_reason") == "payload_changed" and reasked is not None:
+    if e.get("code") == ERR.APPROVAL_VOID and d.get("void_reason") == "payload_changed" and reasked is not None:
         # Sasha 340 · CR 166: nothing was booked for THIS worker; the rest stand. A fresh read-back → their own card, their own Yes;
         # an offer gone (no read-back) → this worker prepared again (re-planned once), then their own card — or held, said.
         if d.get("read_back_id"):
             reasked.append({**it, "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
                             "lines": list((d.get("read_back") or {}).get("lines") or []), "moved": True})
             return
-        if it["op"] == "group.book":
+        if it["op"] == OP.GROUP_BOOK:
             m = members.get(it["member"])
             org = (it.get("body") or {}).get("end_user")
             kind, x = await _prepare_worker(account, m, None, [m["name"]], bool(it.get("over")), org, mv) if m and org else ("skip", {"why": "not on the list"})
@@ -1098,7 +1099,7 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
             else:
                 failed.append({"name": it["name"], "why": x.get("why") or "the fare is gone and none was found again"})
             return
-    if not r.get("ok") and e.get("code") in RETRY_ONCE and it["op"] == "group.book" and not it.get("_retried"):
+    if not r.get("ok") and e.get("code") in RETRY_ONCE and it["op"] == OP.GROUP_BOOK and not it.get("_retried"):
         # Sasha 365 · the airline refused the ORDER (found live, 10 Nov: two Vueling orders): once more, inside the same instruction — a
         # fresh fare for that worker (its own read-back, approved by the same words), never a question first
         m = members.get(it["member"])
@@ -1116,9 +1117,9 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
     parts = res.get("parts") or []
     note = None
     try:   # AgAPI has DONE it: the trip follows — and if the trip can't, the act still happened and is said as done
-        if it["op"] == "group.book":
+        if it["op"] == OP.GROUP_BOOK:
             await _settle(account, members[it["member"]].get("trip_id"), "booked", parts)
-        elif it["op"] == "group.cancel":
+        elif it["op"] == OP.GROUP_CANCEL:
             await _settle(account, members[it["member"]].get("trip_id"), "cancelled", [])
         else:   # a swap: the one who leaves — cancelled; the one who comes — their trip, booked with the new references
             await _settle(account, members[it["from_member"]].get("trip_id"), "cancelled", [])
@@ -1261,3 +1262,8 @@ def read_invoice_token(token: str, now: Optional[float] = None) -> Optional[Dict
 def invoice_link(owner: str, movement_id: str) -> str:
     import os
     return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/invoice/" + invoice_token(owner, movement_id)
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

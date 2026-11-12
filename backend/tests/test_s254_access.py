@@ -22,11 +22,11 @@ INVITED = "00000000-0000-4000-8000-0000000254a3"   # tylerwarren+eu234 / falguni
 SCRATCH = "00000000-0000-4000-8000-0000000254a4"   # a suite guest: no row
 
 #: what access.get answers on agapi-live today (row 823), as the wire carries it
-WIRE = {TYLER: {"mode": "live", "calls": "on", "real_venue_sends": "on", "mailboxes": ["gmail", "outlook"], "real_money": "off",
+WIRE = {TYLER: {"mode": "live", "calls": "on", "real_venue_sends": "on", "mailbox": ["gmail", "outlook"], "real_money": "off",
                 "founder": True, "demo": None, "source": "person_access"},
-        JON: {"mode": "live", "calls": "on", "real_venue_sends": "on", "mailboxes": ["gmail", "outlook"], "real_money": "off",
+        JON: {"mode": "live", "calls": "on", "real_venue_sends": "on", "mailbox": ["gmail", "outlook"], "real_money": "off",
               "source": "person_access"},
-        INVITED: {"mode": "test", "calls": "off", "real_venue_sends": "off", "mailboxes": [], "real_money": "off",
+        INVITED: {"mode": "test", "calls": "off", "real_venue_sends": "off", "mailbox": [], "real_money": "off",
                   "source": "person_access"}}
 
 
@@ -45,13 +45,16 @@ class Wire:
         if self.fail == "raise":
             raise RuntimeError("down")
         if self.fail == "error":
-            return {"ok": False, "error": {"code": "unavailable", "message": "x", "retryable": True}}
+            return {"ok": False, "error": {"code": "upstream_unreachable", "message": "x", "retryable": True}}
         if op == "users.register":
             return {"ok": True, "result": {"end_user_id": "usr_" + body["external_ref"].split(":", 1)[1]}}
         if op == "access.get":
             acct = body["end_user"][4:]
-            return {"ok": True, "result": self.records.get(acct) or {**PA.CLOSED, "mailboxes": [], "source": "closed"}}
-        return {"ok": False, "error": {"code": "unknown"}}
+            rec = self.records.get(acct) or {k: v for k, v in PA.CLOSED.items() if k not in ("mailboxes", "email")}   # Sasha 374 · access.get's own fields
+            return {"ok": True, "result": {**{k: v for k, v in rec.items() if k not in ("mailboxes", "email")},
+                                           **({"mailbox": rec.get("mailbox", rec.get("mailboxes"))} if rec.get("mailbox", rec.get("mailboxes")) is not None else {}),
+                                           **({} if self.records.get(acct) else {"source": "closed"})}}
+        return {"ok": False, "error": {"code": "unknown_operation"}}
 
 
 class Base(unittest.TestCase):

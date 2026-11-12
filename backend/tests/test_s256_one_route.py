@@ -157,6 +157,8 @@ class ByThePerson(unittest.TestCase):
             seen.append((op, AR.current("cards")))
             if op == "users.register":
                 return {"ok": True, "result": {"end_user_id": "usr_1"}}
+            if op == "cards.accident_photo":   # Sasha 374 · each op answers its own published fields (kanoe_contract)
+                return {"ok": True, "result": {"case_id": "acc_1", "step": "photos", "steps": [], "say": "Got it."}}
             return {"ok": True, "result": {"speak": False}}
 
         with mock.patch.object(FP, "CALL", call), mock.patch.dict(FP._USERS, {}, clear=True):

@@ -10,6 +10,7 @@
   answer(res, action)        the fare's line for that action + the page as one button. Nothing is sent: he does it there.
 """
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import logging
 from typing import Any, Dict, Optional
@@ -22,10 +23,10 @@ async def from_mail(account: str, email: Dict[str, Any]) -> Optional[Dict[str, A
     uid = await VS.end_user(account)
     if not uid:
         return None
-    r = await VS._call(account, "venue.confirmation", {"end_user": uid, "emails": [{k: str(email.get(k) or "") for k in ("from", "subject", "date", "text")}]})
+    r = await VS._call(account, OP.VENUE_CONFIRMATION, {"end_user": uid, "emails": [{k: str(email.get(k) or "") for k in ("from", "subject", "date", "text")}]})
     if not r.get("ok"):   # invalid_input = not a confirmation from a seller AgAPI knows; anything else = AgAPI not answering
         code = (r.get("error") or {}).get("code")
-        if code != "invalid_input":
+        if code != ERR.INVALID_INPUT:
             log.info("[self_booked] venue.confirmation not read: %s", code)
         return None
     res = r.get("result") or {}
@@ -46,7 +47,7 @@ async def manage(account: str, act_id: str) -> Optional[Dict[str, Any]]:
     uid = await VS.end_user(account)
     if not uid or not act_id:
         return None
-    r = await VS._call(account, "venue.manage_options", {"end_user": uid, "act_id": act_id})
+    r = await VS._call(account, OP.VENUE_MANAGE_OPTIONS, {"end_user": uid, "act_id": act_id})
     if not r.get("ok"):
         return None
     res = r.get("result") or {}

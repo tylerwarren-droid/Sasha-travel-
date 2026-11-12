@@ -165,6 +165,8 @@ class TheHoldFollows(unittest.TestCase):
 
         async def call(op, body):
             test.calls.append(op)
+            if op == "users.register":   # Sasha 374 · AgAPI's users.register answers the end user — never another op's fields
+                return {"ok": True, "result": {"end_user_id": "usr_test"}}
             d = {**test.dec, "button": {**test.dec["button"], "link": PREP}}
             return {"ok": True, "result": {"link": PREP, "say": "Ready for you to confirm: Opulence. Nothing has been sent yet.",
                                            "human_step": "confirm", "submitted": False, "decision": d}}

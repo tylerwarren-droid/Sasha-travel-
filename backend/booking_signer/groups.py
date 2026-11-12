@@ -14,6 +14,7 @@ stored. The group's rules (price limits) live in ONE place: group_movements.rule
   summary(view)                         the master list in a few lines (WhatsApp)
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import csv
@@ -660,7 +661,7 @@ async def _hotel_search(account: str, mv: dict, rooms: int, nights: int) -> List
     from . import group_book as GB
     out: List[dict] = []
     for where in [x for x in (mv.get("hotel_area"), mv.get("destination")) if x][:2]:
-        r = await GB._call(account, "travel.find_stays", {"city": {"query": where}, "check_in": str(mv.get("starts_on") or "")[:10],
+        r = await GB._call(account, OP.TRAVEL_FIND_STAYS, {"city": {"query": where}, "check_in": str(mv.get("starts_on") or "")[:10],
                                                           "nights": nights, "party": max(1, rooms)})
         res = (r.get("result") or {}) if r.get("ok") else {}
         for x in res.get("stays") or res.get("offers") or []:

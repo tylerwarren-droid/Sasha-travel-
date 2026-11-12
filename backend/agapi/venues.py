@@ -18,6 +18,7 @@ Pacioli: every booking is a trip_items row the routes write; it is in the itiner
 from proof (the form's confirmation page, the platform's email via Gmail, the venue's reply) — get_status reads them.
 """
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import hashlib
@@ -2119,14 +2120,14 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
                     "booked": False, "route": dec.get("route"),
                     "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": True, "button": label,
-                                 **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},
+                                 **({"human_step": held["human_step"], "prepared_by": OP.VENUE_PREPARE_BOOKING} if held.get("human_step") else {})},
                     **({"in_app": True} if VS.TAP.get() is not None else {}),
                     "say": (said := next((x for x in ((prep.get("say") if fw["refused"] else dec.get("say_text")),)
                                           if x and not V.asks_for_link(x)), None) or V.done_form(getattr(ctx, "surface", "s2"))),   # 286: never a link ask
                     "page_says": said}   # Sasha 299 · in the app said by code (voice.page_line): no model step just to say it
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
                 "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": filled,
-                             **({"human_step": held["human_step"], "prepared_by": "venue.prepare_booking"} if held.get("human_step") else {})},
+                             **({"human_step": held["human_step"], "prepared_by": OP.VENUE_PREPARE_BOOKING} if held.get("human_step") else {})},
                 **({"in_app": True} if VS.TAP.get() is not None else {}),
                 # Sasha 249 · her words for it are her voice's, never the engine's (which may name the booking platform)
                 "say": (V.done_form(getattr(ctx, "surface", "s2")) if filled else V.NOT_FILLED) + " Say exactly that — never that it's booked."}
@@ -2236,7 +2237,7 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
             _HELD[ctx.account] = held
             from agapi import yes_gate as YG
             YG.shown(ctx, "book_venue", {"read_back": [held.get("summary") or venue]})
-        raise _err("no_explicit_yes" if code == "no_explicit_yes" else "not_sent", r["error"]["message"])
+        raise _err(ERR.NO_EXPLICIT_YES if code == ERR.NO_EXPLICIT_YES else "not_sent", r["error"]["message"])
     st = r.get("status")
     if st in ("confirmed", "sent"):
         _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}   # Sasha 258 · a repeated yes answers "already sent"
@@ -2387,7 +2388,7 @@ async def _tap_refused(ctx, held: dict, code: str, err: dict, venue: str) -> dic
     this person's session → sign in again; already tapped → "already sent" and the booking's status. Nothing is sent twice."""
     from agapi import venue_submit as VS
     from app.agent import voice as V
-    if code in ("approval_void", "approval_expired"):
+    if code in (ERR.APPROVAL_VOID, ERR.APPROVAL_EXPIRED):
         fresh = (err.get("details") or {}).get("fresh")
         if fresh and fresh.get("ok"):
             held = {**held, "read_back_id": fresh["read_back_id"], "sha": fresh["sha256"], "lines": fresh["lines"],
@@ -2397,7 +2398,7 @@ async def _tap_refused(ctx, held: dict, code: str, err: dict, venue: str) -> dic
                     "ask": V.tap_line(code), "how": "Say `ask` word for word — the new card is on their screen."}
         _HELD.pop(ctx.account, None)
         return {"status": "not_sent", "venue": venue, "booked": False, "say": V.tap_line(code) + " " + "Ask me to hold it again."}
-    if code == "approval_untrusted_origin":
+    if code == ERR.APPROVAL_UNTRUSTED_ORIGIN:
         _HELD[ctx.account] = held   # the card stays: after signing in, their yes still answers it
         return {"status": "not_sent", "venue": venue, "booked": False, "say": V.tap_line(code)}
     # approval_consumed: the yes was already taken — the booking's own status, never a second send

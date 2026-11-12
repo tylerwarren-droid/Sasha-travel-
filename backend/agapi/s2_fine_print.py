@@ -9,6 +9,7 @@ The work is AgAPI's (cards.mine / intake / ask / which, on the sandbox by defaul
   which_card   "which of my cards for this?" → the cards ranked by quoted FX fee, cover and points — information, never advice
 Where: SASHA_FINE_PRINT_VIA = sandbox (default) | live.  Keys: SASHA_AGAPI_TEST_KEY (sandbox) / SASHA_AGAPI_KEY (live). Never printed."""
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import base64
 import json
@@ -270,7 +271,7 @@ async def _end_user(account: str) -> Optional[str]:
     k = _user_key(account)
     if k in _USERS:
         return _USERS[k]
-    r = await CALL("users.register", {"external_ref": f"sasha:{account}"})
+    r = await CALL(OP.USERS_REGISTER, {"external_ref": f"sasha:{account}"})
     if r.get("ok"):
         _USERS[k] = r["result"]["end_user_id"]
         return _USERS[k]
@@ -322,7 +323,7 @@ def _words(s: str) -> set:
 
 
 async def _card_item(uid: str, words: str) -> Optional[str]:
-    mine = await CALL("cards.mine", {"end_user": uid})
+    mine = await CALL(OP.CARDS_MINE, {"end_user": uid})
     cards = (mine.get("result") or {}).get("cards") or []
     want = _words(words or "")
     pick = [c for c in cards if want and want <= _words(f"{c['issuer']} {c['product']}")] if want else (cards if len(cards) == 1 else [])
@@ -340,11 +341,11 @@ async def _with_yes(ctx, key: str, op: str, body: dict) -> Dict[str, Any]:
         pend = None
     if pend and pend["at"] < ctx.started.timestamp():
         if via() == "sandbox":
-            a = await CALL("sandbox.simulate_approval", {"read_back_id": pend["read_back_id"], "said": ctx.user_said or ""})
+            a = await CALL(OP.SANDBOX_SIMULATE_APPROVAL, {"read_back_id": pend["read_back_id"], "said": ctx.user_said or ""})
             code = (a.get("error") or {}).get("code") if not a.get("ok") else None
             if code in (None, "") and not a.get("ok"):
                 code = "no_explicit_yes"
-            if code == "no_explicit_yes":
+            if code == ERR.NO_EXPLICIT_YES:
                 return {"ok": False, "error": {"code": code, "message": "that wasn't a clear yes — ask them again before sending"}}
             apv = a["result"]["approval_id"] if a.get("ok") else await _valid_approval(pend["read_back_id"])
             if not apv:   # answered or expired, and nothing valid to use: a fresh read-back, never a refusal of their yes
@@ -366,7 +367,7 @@ async def _with_yes(ctx, key: str, op: str, body: dict) -> Dict[str, Any]:
 
 async def _valid_approval(read_back_id: str) -> Optional[str]:
     """The approval AgAPI holds for this read-back, while it's valid (its 15 minutes); else None."""
-    st = await CALL("approvals.status", {"read_back_id": read_back_id})
+    st = await CALL(OP.APPROVALS_STATUS, {"read_back_id": read_back_id})
     ap = ((st.get("result") or {}).get("approval") or {}) if st.get("ok") else {}
     return ap["approval_id"] if ap.get("approval_id") and ap.get("state") == "valid" else None
 
@@ -374,11 +375,11 @@ async def _valid_approval(read_back_id: str) -> Optional[str]:
 async def _hold(key: str, op: str, body: dict, again: bool = False) -> Dict[str, Any]:
     r = await CALL(op, body)
     e = r.get("error") or {}
-    if e.get("code") == "approval_required":
+    if e.get("code") == ERR.APPROVAL_REQUIRED:
         d = e.get("details") or {}
         _PEND[key] = {"read_back_id": d["read_back_id"], "at": time.time(), **({"case": body["case_id"]} if body.get("case_id") else {})}
         if via() == "live":   # Sasha 314 · the one-tap link — and whether it really went (never "it's on their phone" when it didn't)
-            q = await CALL("approvals.request", {"read_back_id": d["read_back_id"], "channel": "link_sms"})
+            q = await CALL(OP.APPROVALS_REQUEST, {"read_back_id": d["read_back_id"], "channel": "link_sms"})
             _PEND[key]["link_sent"] = bool(q.get("ok"))
         lines = (d.get("read_back") or {}).get("lines") or []
         ask = ("The read-back they answered can't take a yes any more, and nothing has been sent: read this one back and ask again."
@@ -499,7 +500,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     if not uid:
         return {"ok": False, "error": {"code": "unavailable", "message": "card fine print didn't answer"}}
     if name == "rental_cover":
-        r = await CALL("cards.rental_cover", {"end_user": uid, "country": str(args.get("country") or "").upper()[:2], "rental_company": args.get("rental_company") or "",
+        r = await CALL(OP.CARDS_RENTAL_COVER, {"end_user": uid, "country": str(args.get("country") or "").upper()[:2], "rental_company": args.get("rental_company") or "",
                                               **({"days": int(args["days"])} if args.get("days") else {})})
         if not r.get("ok"):
             return _fail(r)
@@ -516,7 +517,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         # CR 78 · an open case is never restarted by a later fact (CR 75 opened a new case whenever country + place came without an answer)
         if not cid or args.get("new_accident"):
             item = await _card_item(uid, args.get("card") or "") if args.get("card") else None
-            r = await CALL("cards.accident_start", {"end_user": uid, "country": str(args.get("country") or "ES").upper()[:2], "place": args.get("place") or "",
+            r = await CALL(OP.CARDS_ACCIDENT_START, {"end_user": uid, "country": str(args.get("country") or "ES").upper()[:2], "place": args.get("place") or "",
                                                     "rental_company": args.get("rental_company") or "", **({"card_item_id": item} if item else {}),
                                                     **({"facts": facts} if facts else {})})
             if not r.get("ok"):
@@ -525,7 +526,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             _ACCIDENT_CITY[ctx.account] = str(args.get("place") or "").strip().lower()
             return {"ok": True, "result": {"say": r["result"]["say"], "step": "safety", "render": _view(r["result"])}}
         item = await _card_item(uid, args["card"]) if args.get("card") else None
-        r = await CALL("cards.accident_step", {"end_user": uid, "case_id": cid, **({"answer": args["answer"]} if args.get("answer") else {}),
+        r = await CALL(OP.CARDS_ACCIDENT_STEP, {"end_user": uid, "case_id": cid, **({"answer": args["answer"]} if args.get("answer") else {}),
                                                **({"flags": args["flags"]} if args.get("flags") else {}), **({"facts": facts} if facts else {}),
                                                **({"card_item_id": item} if item else {})})
         if not r.get("ok"):
@@ -542,7 +543,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         cid = _ACCIDENT.get(ctx.account)
         if not cid:
             return {"ok": False, "error": {"code": "no_accident", "message": "there's no accident case open"}}
-        r = await _with_yes(ctx, f"{ctx.account}|accident_notify", "cards.accident_notify", {"end_user": uid, "case_id": cid})
+        r = await _with_yes(ctx, f"{ctx.account}|accident_notify", OP.CARDS_ACCIDENT_NOTIFY, {"end_user": uid, "case_id": cid})
         if r.get("ok") and (r["result"].get("claim_case_id")):
             _CLAIM[ctx.account] = r["result"]["claim_case_id"]
         if r.get("ok") and r["result"].get("state"):
@@ -555,14 +556,14 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     if name == "file_claim":
         cid = _CLAIM.get(ctx.account)
         if not cid and _ACCIDENT.get(ctx.account):   # CR 78 · an accident with no card named: ask, don't fail
-            mine = await CALL("cards.mine", {"end_user": uid})
+            mine = await CALL(OP.CARDS_MINE, {"end_user": uid})
             cards = (mine.get("result") or {}).get("cards") or []
             return {"ok": True, "result": {"status": "which_card", "ask": "Which card did you pay the rental with?",
                                            "cards": [_card_name(c) for c in cards],
                                            "how": "Ask `ask` as given; their answer goes to `accident` as `card`, then file_claim again."}}
         if not cid:
             return {"ok": False, "error": {"code": "no_claim", "message": "there's no claim prepared yet"}}
-        r = await _with_yes(ctx, f"{ctx.account}|file_claim", "cards.claim_file", {"end_user": uid, "case_id": cid})
+        r = await _with_yes(ctx, f"{ctx.account}|file_claim", OP.CARDS_CLAIM_FILE, {"end_user": uid, "case_id": cid})
         if r.get("ok") and r["result"].get("state"):
             return {"ok": True, "result": {"status": r["result"]["state"], "render": {"kind": "claim_status", "claim": r["result"]}}}
         return r if r.get("ok") else _fail(r)
@@ -573,7 +574,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             flight[k] = str(flight.get(k) or "").upper()
         if flight.get("number"):
             flight["number"] = flight_number(flight["airline"], flight["number"])   # Sasha 236 · never "EXEX123"
-        r = await CALL("money.flight_check", {"end_user": uid, "flight": flight, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
+        r = await CALL(OP.MONEY_FLIGHT_CHECK, {"end_user": uid, "flight": flight, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
                                               **({"passengers": args["passengers"]} if args.get("passengers") else {})})
         if not r.get("ok"):
             return _fail(r)
@@ -589,7 +590,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             return {"ok": False, "error": {"code": "no_case", "message": "check the flight first (flight_money_back)"}}
         body = {"end_user": uid, "case_id": cid, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
                 **({"passengers": args["passengers"]} if args.get("passengers") else {})}
-        r = await _with_yes(ctx, f"{ctx.account}|file_flight_claim", "money.flight_claim", body)
+        r = await _with_yes(ctx, f"{ctx.account}|file_flight_claim", OP.MONEY_FLIGHT_CLAIM, body)
         if r.get("ok") and r["result"].get("state"):
             v = r["result"]
             return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {}),
@@ -598,14 +599,14 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
     if name == "suggest_activities":
         import asyncio as _aio
         day = str(args.get("date") or "")[:10]
-        r = await CALL("activities.suggest", {"city": str(args.get("city") or ""), "dates": {"from": day},
+        r = await CALL(OP.ACTIVITIES_SUGGEST, {"city": str(args.get("city") or ""), "dates": {"from": day},
                                               **({"interests": [str(i) for i in args["interests"]][:8]} if args.get("interests") else {}), "limit": 8})
         if not r.get("ok"):
             return _fail(r)
         cands = r["result"]["candidates"]   # all of them are checked (each from its stored read); the first VERIFY_TOP readable ones are shown
         if not cands:
             return {"ok": True, "result": {"say": r["result"]["say"]}}
-        got = await _aio.gather(*[CALL("activities.verify", {"candidate_id": c["candidate_id"], "date": day}) for c in cands])
+        got = await _aio.gather(*[CALL(OP.ACTIVITIES_VERIFY, {"candidate_id": c["candidate_id"], "date": day}) for c in cands])
         cards = [g["result"] for g in got if g.get("ok")]
         shown = [c for c in cards if c["confidence"] in ("verified", "partial")][:VERIFY_TOP]
         unread = [c for c in cards if c["confidence"] == "not_read"]
@@ -626,7 +627,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                 bag["expenses_minor"] = int(round(float(args["expenses"]) * 100))
             except (TypeError, ValueError):
                 pass
-        r = await CALL("money.bag_check", {"end_user": uid, "bag": bag, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
+        r = await CALL(OP.MONEY_BAG_CHECK, {"end_user": uid, "bag": bag, **({"booking_reference": args["booking_reference"]} if args.get("booking_reference") else {}),
                                            **({"passengers": args["passengers"]} if args.get("passengers") else {})})
         if not r.get("ok"):
             return _fail(r)
@@ -642,7 +643,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         if not cid:
             return {"ok": False, "error": {"code": "no_case", "message": "check the bag first (bag_money_back)"}}
         body = {"end_user": uid, "case_id": cid, **{k: args[k] for k in ("pir_reference", "booking_reference", "passengers") if args.get(k)}}
-        r = await _with_yes(ctx, f"{ctx.account}|file_bag_claim", "money.bag_claim", body)
+        r = await _with_yes(ctx, f"{ctx.account}|file_bag_claim", OP.MONEY_BAG_CLAIM, body)
         if r.get("ok") and r["result"].get("state"):
             v = r["result"]
             return {"ok": True, "result": {"status": v["state"], "say": v.get("say"), **({"draft": v["draft"]} if v.get("draft") else {}),
@@ -652,7 +653,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         cid = _MONEY.get(ctx.account)
         if not cid:
             return {"ok": True, "result": {"say": "There's no money-back claim open."}}
-        r = await CALL("money.claim_status", {"end_user": uid, "case_id": cid})
+        r = await CALL(OP.MONEY_CLAIM_STATUS, {"end_user": uid, "case_id": cid})
         if not r.get("ok"):
             return _fail(r)
         v = r["result"]
@@ -665,9 +666,9 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         if not dests:
             return {"ok": False, "error": {"code": "need_destination", "message": "ask where they're going (and when they land)"}}
         pc = await _own_passport_country(ctx.account)   # Sasha 243 · the passport saved on /keep lives in Sasha's Keep: its country only
-        r = await CALL("entry.check", {"end_user": uid, "destinations": dests, **({"passport_country": pc} if pc else {})})
-        if not r.get("ok") and pc and (r.get("error") or {}).get("code") == "invalid_input":   # an AgAPI from before the input: as before
-            r = await CALL("entry.check", {"end_user": uid, "destinations": dests})
+        r = await CALL(OP.ENTRY_CHECK, {"end_user": uid, "destinations": dests, **({"passport_country": pc} if pc else {})})
+        if not r.get("ok") and pc and (r.get("error") or {}).get("code") == ERR.INVALID_INPUT:   # an AgAPI from before the input: as before
+            r = await CALL(OP.ENTRY_CHECK, {"end_user": uid, "destinations": dests})
         if not r.get("ok"):
             return _fail(r)
         v = r["result"]
@@ -677,7 +678,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                        "how": "Say `say` as given: every rule is the government's own sentence, quoted. Never say they're cleared to enter."}}
     if name == "prepare_entry":
         trip = {k: str(args[k]) for k in ("flight", "arrival_date", "accommodation") if args.get(k)}
-        r = await CALL("entry.prepare", {"end_user": uid, "country": str(args.get("country") or "").upper()[:2], **({"trip": trip} if trip else {})})
+        r = await CALL(OP.ENTRY_PREPARE, {"end_user": uid, "country": str(args.get("country") or "").upper()[:2], **({"trip": trip} if trip else {})})
         if not r.get("ok"):
             return _fail(r)
         v = await _with_own_passport(ctx.account, r["result"])
@@ -689,7 +690,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         cid = _CLAIM.get(ctx.account)
         if not cid:
             return {"ok": True, "result": {"say": "There's no claim open."}}
-        r = await CALL("cards.claim_status", {"end_user": uid, "case_id": cid})
+        r = await CALL(OP.CARDS_CLAIM_STATUS, {"end_user": uid, "case_id": cid})
         if not r.get("ok"):
             return _fail(r)
         c = r["result"]
@@ -698,7 +699,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                        "missing": [e["item"] for e in c["evidence"] if e.get("missing")], "replies": len(c.get("replies") or []),
                                        "render": {"kind": "claim_status", "claim": c}}}
     if name == "my_cards":
-        r = await CALL("cards.mine", {"end_user": uid})
+        r = await CALL(OP.CARDS_MINE, {"end_user": uid})
         if not r.get("ok"):
             return _fail(r)
         cards = r["result"]["cards"]
@@ -710,7 +711,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
             img = _IMAGES.pop(ref, None)                                  # read once, then gone
             if not img or img["account"] != ctx.account:
                 return {"ok": False, "error": {"code": "image_unknown", "message": "that picture isn't here any more — ask them to add it again"}}
-            r = await CALL("cards.intake", {"end_user": uid, "image": {"media_type": img["media_type"], "content_base64": img["b64"]}})
+            r = await CALL(OP.CARDS_INTAKE, {"end_user": uid, "image": {"media_type": img["media_type"], "content_base64": img["b64"]}})
             img = None
             if not r.get("ok"):
                 return _fail(r)
@@ -719,13 +720,13 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
                                            "note": res["note"]}}
         if not args.get("issuer") or not args.get("product"):
             return {"ok": False, "error": {"code": "need_card", "message": "ask which card: the bank and the card's name, or a photo of it"}}
-        r = await CALL("keep.put", {"end_user": uid, "type": "card_product",
+        r = await CALL(OP.KEEP_PUT, {"end_user": uid, "type": "card_product",
                                     "value": {"issuer": args["issuer"], "product": args["product"], "network": args.get("network") or "other"}})
         if not r.get("ok"):
             return _fail(r)
         return {"ok": True, "result": {"added": r["result"]["masked"], "note": "Only the card's product was kept — never a number."}}
     if name == "card_cover":
-        mine = await CALL("cards.mine", {"end_user": uid})
+        mine = await CALL(OP.CARDS_MINE, {"end_user": uid})
         if not mine.get("ok"):
             return _fail(mine)
         cards = mine["result"]["cards"]
@@ -735,7 +736,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         pick = [c for c in cards if want and want <= _words(f"{c['issuer']} {c['product']}")] if want else (cards if len(cards) == 1 else [])
         if len(pick) != 1:
             return {"ok": True, "result": {"answer": "which_card", "ask": "Which card?", "cards": [c["masked"] for c in cards]}}
-        r = await CALL("cards.ask", {"end_user": uid, "card_item_id": pick[0]["item_id"], "question": args["question"]})
+        r = await CALL(OP.CARDS_ASK, {"end_user": uid, "card_item_id": pick[0]["item_id"], "question": args["question"]})
         if not r.get("ok"):
             return _fail(r)
         a = r["result"]
@@ -747,7 +748,7 @@ async def _run_tool(ctx, name: str, args: dict) -> Dict[str, Any]:
         minor = int(round(float(amt) * 100))
     except (TypeError, ValueError):
         return {"ok": False, "error": {"code": "need_amount", "message": "ask how much it is, and in which currency"}}
-    r = await CALL("cards.which", {"end_user": uid, "purchase": {"amount_minor": max(1, minor), "currency": str(args.get("currency") or "EUR").upper()[:3],
+    r = await CALL(OP.CARDS_WHICH, {"end_user": uid, "purchase": {"amount_minor": max(1, minor), "currency": str(args.get("currency") or "EUR").upper()[:3],
                                                                   "kind": args.get("kind") or "other"}})
     if not r.get("ok"):
         return _fail(r)
@@ -775,7 +776,7 @@ async def accident_photo(account: str, shot: str, media_type: str, b64: str) -> 
         cid = _ACCIDENT.get(account)
         if not uid or not cid:
             return {"ok": False, "error": {"code": "no_accident", "message": "there's no accident case open"}}
-        return await CALL("cards.accident_photo", {"end_user": uid, "case_id": cid, "shot": shot, "media_type": media_type, "content_base64": b64})
+        return await CALL(OP.CARDS_ACCIDENT_PHOTO, {"end_user": uid, "case_id": cid, "shot": shot, "media_type": media_type, "content_base64": b64})
 
 
 async def moment(account: str, event: dict) -> Dict[str, Any]:
@@ -787,7 +788,7 @@ async def moment(account: str, event: dict) -> Dict[str, Any]:
         uid = await _end_user(account)
         if not uid:
             return {"speak": False, "why_silent": "card fine print didn't answer"}
-        r = await CALL("cards.moment", {"end_user": uid, "event": event})
+        r = await CALL(OP.CARDS_MOMENT, {"end_user": uid, "event": event})
     return r["result"] if r.get("ok") else {"speak": False, "why_silent": (r.get("error") or {}).get("message") or "unavailable"}
 
 
@@ -835,3 +836,8 @@ async def activity_places(account: str, cards: list, day: str) -> list:
 
 
 __all__ = ["TOOLS", "TOOL_NAMES", "wrap", "keep_image", "via", "accident_photo", "moment", "RENDER_KINDS"]
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

@@ -170,6 +170,8 @@ class BEveryRouteOneRule(Base):
 class DAskedAgain(Base):
     def test_a_cancel_already_sent_is_said_never_an_error(self):   # found by the sandbox proof (31 Oct): it raised "didn't ask for their yes"
         async def call(op, body, approval=None, account=None):
+            if op == "venue.manage_options":   # Sasha 374 · each op answers its own published fields (kanoe_contract)
+                return {"ok": True, "result": {"act_id": "act_LS", "known": False, "options": []}}
             return {"ok": True, "result": {"status": "already_cancelled", "say": "I already asked Taverna Correo to cancel it."}}
         with mock.patch.object(VS, "CALL", call), mock.patch.object(VS, "end_user", mock.AsyncMock(return_value="eu")), \
                 mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=[dict(LS)])):

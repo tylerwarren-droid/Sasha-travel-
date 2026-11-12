@@ -11,6 +11,7 @@ Sasha tab's (docs/sasha/s2-powers-wiring.md); nothing here is imported by the ag
                     leaves the person's account.
 """
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import hashlib
 import logging
@@ -112,9 +113,9 @@ async def agapi_email(account: str, msg: dict, said: str) -> Dict[str, Any]:
         return {"ok": False, "error": {"code": "no_end_user", "message": "the sending service doesn't know this person yet"}}
     body = {"end_user": uid, "to": {"address": msg["to"]["address"], **({"name": msg["to"]["name"]} if msg["to"].get("name") else {})},
             "subject": msg["subject"], "body": msg["body"]}
-    r = await VS._call(account, "messages.send_email", body)
+    r = await VS._call(account, OP.MESSAGES_SEND_EMAIL, body)
     e = r.get("error") or {}
-    if e.get("code") != "approval_required":
+    if e.get("code") != ERR.APPROVAL_REQUIRED:
         return {"ok": False, "error": VS._err(r) if not r.get("ok") else {"code": "sent_without_yes", "message": "it went without the yes"}}
     d = e.get("details") or {}
     rid, rsha = d.get("read_back_id"), d.get("read_back_sha256") or ""
@@ -127,7 +128,7 @@ async def agapi_email(account: str, msg: dict, said: str) -> Dict[str, Any]:
         approval = await VS._approval(account, rid, said)
         if isinstance(approval, dict):
             return approval
-    r = await VS._call(account, "messages.send_email", body, approval=approval)
+    r = await VS._call(account, OP.MESSAGES_SEND_EMAIL, body, approval=approval)
     if not r.get("ok"):
         return {"ok": False, "error": VS._err(r)}
     out = (r.get("result") or {}).get("outcome") or {}
@@ -342,8 +343,8 @@ def tools() -> List[dict]:
         _t("send_email", "Austen", send_email, "Email someone the person names, FROM SASHA'S OWN ADDRESS (never their mailbox). The first call "
            "returns the exact message to read back; say it, ask 'shall I send it?', and call again with the SAME message after their yes "
            "in a later turn. Any change is a new read-back. A question is never a yes.", msg_props, ["to", "subject", "body"],
-           {"type": "object", "properties": {"status": {"enum": ["awaiting_yes", "sent", "not_sent"]}}}, ["invalid_input", "no_explicit_yes",
-                                                                                              "upstream_refused", "upstream_unreachable"], austen=True),
+           {"type": "object", "properties": {"status": {"enum": ["awaiting_yes", "sent", "not_sent"]}}}, [ERR.INVALID_INPUT, ERR.NO_EXPLICIT_YES,
+                                                                                              ERR.UPSTREAM_REFUSED, ERR.UPSTREAM_UNREACHABLE], austen=True),
         _t("add_to_calendar", "Pacioli", add_to_calendar, "Put a CONFIRMED booking (a table or a flight; ids from get_status) in the person's "
            "calendar: returns 'Add to calendar' links (Google, Outlook, Apple) and an .ics. No yes needed — nothing leaves their account.",
            {"booking_id": {"type": "string"}}, ["booking_id"], {"type": "object", "properties": {"links": {"type": "object"}}},

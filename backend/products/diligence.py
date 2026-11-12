@@ -267,6 +267,41 @@ async def turn(ctx: dict, body: str, payload: str, *, entering: bool) -> Optiona
     return await hand_over(ctx, t, media)
 
 
+async def _account_email(account: Optional[str]) -> Optional[str]:
+    try:
+        from booking_signer import ladder_routes as LR
+        if account and hasattr(LR.LADDER_STORE, "account_email"):
+            return await LR.LADDER_STORE.account_email(account)
+    except Exception as e:
+        log.warning("[diligence] the account's email wasn't read: %s", type(e).__name__)
+    return None
+
+
+async def space_now(sender: str, body: str, p: dict) -> dict:
+    """Sasha 374 · CR 186 (c) · the webhook's ONE call carries AD's space when Sasha's OWN record already says this person is in Due
+    diligence (the router's record: their last choice) and this message names no other tool — the same fields hand_over sends (their
+    email, the files, the message it answers). AgAPI then routes it to AD's door in that one call; hand_over is never reached for it.
+    {} otherwise: the router decides after AD's role (products/whatsapp.py, TL.route) — the same message continuing (CR 186's claim)."""
+    from booking_signer import guest_whatsapp as GW
+    from products import tools as TL
+    try:
+        if TL.switch_tap(p) is not None or TL._keyword_tool(body or "") is not None or GW.STORE is None:
+            return {}
+        ch = await GW.STORE.channel_for(GW.wa_key(sender))
+        if not ch:
+            return {}
+        chose, _ = TL.recalled(await GW.STORE.get_state(ch["wa_id_sha256"]))
+        if TL.route(body or "", None, chose)[0] != "diligence":
+            return {}
+        from . import whatsapp as PW
+        files = [m for m in PW._media(p) if str(m.get("url") or "").startswith("http")]
+        return {"space": "diligence", "account_email": await _account_email(ch.get("account_id")),
+                "media": [{"url": m["url"], "type": m.get("type") or ""} for m in files], "replied_to": p.get("OriginalRepliedMessageSid")}
+    except Exception as e:   # the record unread: the router decides after AD's role (the same message, AgAPI's claim) — never lost
+        log.warning("[diligence] the space wasn't read for the webhook's call: %s", type(e).__name__)
+        return {}
+
+
 async def hand_over(ctx: dict, t: str, media: list) -> bool:
     """The message to AgAPI's ONE door in AD's space — from inside the space, or (Sasha 315) handed over by the router from travel."""
     out = ctx["out"]
@@ -275,13 +310,10 @@ async def hand_over(ctx: dict, t: str, media: list) -> bool:
         out.text(WHATSAPP_ONLY)
         return True
     from agapi import venue_submit as VS
-    email = None   # CR 165 · their own Kanoe account email, offered by AgAPI as "Is this you?" to link AD by a tap
-    try:
-        from booking_signer import ladder_routes as LR
-        if ctx.get("account") and hasattr(LR.LADDER_STORE, "account_email"):
-            email = await LR.LADDER_STORE.account_email(ctx["account"])
-    except Exception as e:
-        log.warning("[diligence] the account's email wasn't read: %s", type(e).__name__)
+    if not ctx.get("sid"):   # Sasha 374 · CR 186 (b): the provider's id always goes — a message without one is never handed over with a made-up id
+        from booking_signer.inbound_outcome import Failed
+        raise Failed("a WhatsApp message reached AD's space without its provider id")
+    email = await _account_email(ctx.get("account"))   # CR 165 · their own Kanoe email, offered by AgAPI as "Is this you?" to link AD
     r = await VS.whatsapp_inbound(number, t, message_id=ctx.get("sid"), guest=True, space="diligence", account_email=email,
                                   media=[{"url": m["url"], "type": m.get("type") or ""} for m in media],   # CR 136 · relayed onto the case
                                   replied_to=ctx.get("replied_to"), twilio=ctx.get("twilio"))

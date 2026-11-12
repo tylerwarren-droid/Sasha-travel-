@@ -124,14 +124,14 @@ class VenueRepliesLandOnAgAPIsRecord(unittest.TestCase):
             got.append((op, body, account))
             return {"ok": True, "result": {"matched": True, "kept": True}}
         with mock.patch.object(VS, "CALL", call):
-            self.assertEqual(run(VS.whatsapp_inbound(VENUE, "STOP"))["matched"], True)
-        self.assertEqual(got, [("messages.whatsapp_inbound", {"from": VENUE, "text": "STOP"}, None)])
+            self.assertEqual(run(VS.whatsapp_inbound(VENUE, "STOP", message_id="SM_test_stop"))["matched"], True)
+        self.assertEqual(got, [("messages.whatsapp_inbound", {"from": VENUE, "text": "STOP", "message_id": "SM_test_stop"}, None)])   # Sasha 374 · CR 186 (b): the id ALWAYS goes
 
     def test_agapi_down_never_loses_it(self):
         async def call(op, body, approval=None, account=None):
             return {"ok": False, "error": {"code": "upstream_unreachable"}}
         with mock.patch.object(VS, "CALL", call):
-            self.assertEqual(run(VS.whatsapp_inbound(VENUE, "hola")), {"matched": False, "why": "upstream_unreachable"})
+            self.assertEqual(run(VS.whatsapp_inbound(VENUE, "hola", message_id="SM_test_hola")), {"matched": False, "why": "upstream_unreachable"})
 
 
 class ThePersonRidesOnPrepare(unittest.TestCase):

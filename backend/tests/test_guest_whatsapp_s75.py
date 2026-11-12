@@ -145,7 +145,8 @@ class Base(unittest.TestCase):
     def say(self, body, payload="", text=""):
         ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
         return run(GW.turn(ch, SANDBOX, {"From": f"whatsapp:{GUEST}", "To": f"whatsapp:{SANDBOX}", "Body": body,
-                                         "ButtonPayload": payload, "ButtonText": text}))
+                                         "ButtonPayload": payload, "ButtonText": text,
+                                         "MessageSid": "SM" + __import__("uuid").uuid4().hex}))   # Sasha 374 · every Twilio delivery has its id
 
     def bodies(self):
         return [s["body"] for s in GW.SENDER.sent]

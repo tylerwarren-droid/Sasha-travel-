@@ -284,6 +284,8 @@ class TheWhatsAppYes(unittest.TestCase):
 
         async def call(account, op, body, approval=None):
             seen.append((op, body))
+            if op == "users.register":   # Sasha 374 · AgAPI's users.register answers the end user — never another op's fields
+                return {"ok": True, "result": {"end_user_id": "usr_test"}}
             return {"ok": True, "result": {"result": {"status": "calling", "act_id": "act_1"}}}
         tok = VS.WA.set({"wa_id": "+15005550101", "message_id": "SM9"})
         try:

@@ -10,6 +10,7 @@ every worker booked under it. Never the instruction's text sent as a yes, never 
                                        hex HMAC-SHA256 of "<t>.<nonce>.mandate.<kind>.<id>.<who>.<mandate_sha256>"
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import hashlib
 import hmac
@@ -123,14 +124,14 @@ async def register(account: str, words: str, mv: dict, members: List[dict], proo
     if not end_user:
         return {"code": "upstream_unreachable", "why": "The booking system didn't answer — nothing was booked. Say it again in a minute."}
     if proof["kind"] == "whatsapp":   # the number as THEIR end user's destination (AgAPI counts only a verified one)
-        await GB._call(account, "users.register", {"external_ref": f"sasha:{account}", "destinations": [{"channel": "whatsapp", "value": "+" + proof["wa_id"]}]})
+        await GB._call(account, OP.USERS_REGISTER, {"external_ref": f"sasha:{account}", "destinations": [{"channel": "whatsapp", "value": "+" + proof["wa_id"]}]})
     scope = await scope_for(mv, members)
     words = (words or "")[:500]
     sha = mandate_sha256(end_user, words, scope, limits, EXPIRES_MIN)
     signed = sign(proof, account, sha)
     if not signed:
         return {"code": "not_configured", "why": "Booking on your word isn't switched on here — nothing was booked."}
-    r = await GB._call(account, "approvals.mandate", {"end_user": end_user, "words": words, "scope": scope, "limits": limits,
+    r = await GB._call(account, OP.APPROVALS_MANDATE, {"end_user": end_user, "words": words, "scope": scope, "limits": limits,
                                                       "expires_in_minutes": EXPIRES_MIN, "proof": signed})
     if r.get("ok"):
         res = r.get("result") or {}

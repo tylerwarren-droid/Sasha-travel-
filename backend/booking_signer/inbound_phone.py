@@ -225,6 +225,12 @@ STORE: Any = None
 
 # ── the routes ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+def provider_id(p: dict) -> str:
+    """Sasha 374 · CR 186 (a) · THE ONE reader of the provider's message id: Twilio's MessageSid, else its SmsSid (a delivery may carry only
+    that). Read in the webhook and carried on the payload as p["_message_id"]; every reader asks THIS function. Never made up."""
+    return str(p.get("_message_id") or p.get("MessageSid") or p.get("SmsSid") or "")
+
+
 @router.post("/sms")
 async def sms(request: Request):
     p = await _verified(request, "sms")
@@ -233,9 +239,10 @@ async def sms(request: Request):
     from products import tools as _TL
     p = _TL.normalized(p)   # Sasha 344 · a list row's tap as its exact title + id (never Twilio's joined title + description)
     channel, sender = _channel_and_number(p.get("From", ""))
-    body, sid = p.get("Body", ""), p.get("MessageSid") or p.get("SmsSid")
+    body, sid = p.get("Body", ""), provider_id(p)
     if not sid:
         return Response("no message id", status_code=400)
+    p = {**p, "_message_id": sid}   # Sasha 374 · CR 186 (a): the provider's id, read ONCE here and carried — every reader reads p["_message_id"]
     # Sasha 350 · EVERY WhatsApp message shows it's being worked on, from here until its reply leaves (wa_working — the ONE place)
     held = None
     if channel == "whatsapp" and sender:
@@ -273,7 +280,9 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         if TL.switch_tap(p) is not None:   # Sasha 344 · the ONE switch BEFORE any tool's door: "← Everything I can do" / a tool's row
             pass                           # is Sasha's own (the guest flow below answers it) — never AgAPI's door, never AD as text
         elif await GW.first_step(sid, "agapi_in"):   # Sasha 355 · each step of THIS message once, in its own record (sql/058)
-            got = await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p)
+            from products import diligence as DG   # Sasha 374 · CR 186 (c): in Due diligence on Sasha's own record → the space, in THIS call
+            got = await VS.whatsapp_inbound(sender, body, message_id=sid, guest=await GW.linked(sender), twilio=p,
+                                            **(await DG.space_now(sender, body, p)))
             if got.get("matched"):
                 await GW.first_step(sid, "agapi_took")
                 return _twiml()

@@ -18,6 +18,7 @@ Rules of the contract (they live HERE, not in any prompt):
 docs/agapi/api-v0.md is GENERATED from TOOLS (scripts/agapi_doc.py).
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import hashlib
@@ -679,7 +680,7 @@ async def _discover(ctx: Ctx, a: dict) -> dict:
             **({"dates": {k: str(dates[k])[:10] for k in ("from", "to") if dates.get(k)}} if dates else {}),
             **({"when_words": str(a["when_words"])[:60]} if a.get("when_words") else {}),
             **({"party": int(a["party"])} if a.get("party") else {}), **({"near": str(a["near"])[:120]} if a.get("near") else {})}
-    r = await VS._call(ctx.account, "venue.discover", body)
+    r = await VS._call(ctx.account, OP.VENUE_DISCOVER, body)
     if not r.get("ok"):
         e = r.get("error") or {}
         raise ToolError(e.get("code") or "discover_failed", e.get("message") or "the search didn't answer")
@@ -732,7 +733,7 @@ def kind_answer(kd: dict, res: dict, a: dict) -> dict:
         say = str(res.get("say_text") or res.get("say") or "").strip()
         return {"venues": [], "say": say, "kind": kd.get("kind"), "operators": {"line": say, "buttons": []},
                 "how": "Said for you already: say nothing more this turn."
-                       + (" It's a flight — call search_flights for it." if nxt == "travel.find_flights" else "")}
+                       + (" It's a flight — call search_flights for it." if nxt == OP.TRAVEL_FIND_FLIGHTS else "")}
     line = trip_line(kd, res.get("trip") if isinstance(res.get("trip"), dict) else {}, a, pages)
     return {"venues": [], "say": line, "kind": kd.get("kind"),
             "operators": {"line": line, "of": kd.get("kind"), "buttons": [{"label": str(h["operator"])[:60], "url": h["page"]} for h in pages]},

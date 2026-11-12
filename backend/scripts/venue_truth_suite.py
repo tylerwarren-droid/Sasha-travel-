@@ -9,6 +9,7 @@ up; (c) the thumbnails didn't open.
       WhatsApp's text + link
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -103,7 +104,7 @@ async def main() -> bool:
         check("(b) the prefilled form is DRAWN from hold_venue (what she says is on screen, is)", (ev0 or {}).get("kind") == "prepared", str(ev0)[:120])
         prep = out.get("prepared") or {}
         check("(b) ready to confirm on the phone (venue.prepare_booking), every detail with it", "agapi.test/prepared/madrid.hammamalandalus.com" in str(prep.get("url"))
-              and prep.get("prepared_by") == "venue.prepare_booking" and {"Day", "Time", "People", "Name", "Mobile"} <= {f["label"] for f in prep.get("fields") or []}, str(prep)[:240])
+              and prep.get("prepared_by") == OP.VENUE_PREPARE_BOOKING and {"Day", "Time", "People", "Name", "Mobile"} <= {f["label"] for f in prep.get("fields") or []}, str(prep)[:240])
         from app.agent import sasha as AG
         ev = AG.render("book_venue", out, {})
         check("(b) the prepared card renders", (ev or {}).get("kind") == "prepared")

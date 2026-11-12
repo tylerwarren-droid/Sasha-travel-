@@ -18,6 +18,7 @@ A person with no row (every guest session) reads CLOSED: test, everything off. T
    founder: bool, real_money: on|off, email: str|None, source: person_access|closed|installed|…}
 The key is never logged or printed."""
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import contextlib
 import logging
@@ -105,7 +106,7 @@ def _local(k: str) -> Optional[Dict[str, Any]]:
 async def _end_user(k: str) -> Optional[str]:
     if k in _USERS:
         return _USERS[k]
-    r = await CALL("users.register", {"external_ref": f"sasha:{k}"})
+    r = await CALL(OP.USERS_REGISTER, {"external_ref": f"sasha:{k}"})
     uid = ((r or {}).get("result") or {}).get("end_user_id") if (r or {}).get("ok") else None
     if uid:
         _USERS[k] = str(uid)
@@ -145,7 +146,7 @@ async def _read(k: str) -> Dict[str, Any]:
         if not uid:
             _FAILED[k] = time.time()
             return closed()
-        r = await CALL("access.get", {"end_user": uid})
+        r = await CALL(OP.ACCESS_GET, {"end_user": uid})
         if not (r or {}).get("ok") or not isinstance(r.get("result"), dict):
             log.warning("[person_access] access not read (closed): %s", ((r or {}).get("error") or {}).get("code"))
             _FAILED[k] = time.time()
@@ -227,3 +228,8 @@ FOUNDER_PERSON = {**LIVE_PERSON, "founder": True}
 
 __all__ = ["get", "cached", "warm", "install", "uninstall", "clear", "records", "normalise", "closed", "CLOSED", "TTL_S",
            "LIVE_PERSON", "FOUNDER_PERSON", "CALL", "RESOLVER"]
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

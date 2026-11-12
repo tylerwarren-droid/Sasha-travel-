@@ -17,6 +17,7 @@ PRIVACY (counsel): every person/session/act id is hashed (sha256, a server-side 
 and its category word. Rows expire after RETENTION_DAYS (90); the daily job deletes them and says how many.
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import contextvars
@@ -49,7 +50,7 @@ STOP_OF = {
 FINAL_OUTCOME = {"confirmed": "confirmed", "booked": "confirmed", "declined": "refused", "refused": "refused", "failed": "refused",
                  "not_allowed": "refused", "cancelled": "cancelled", "expired": "unresolved", "unknown": "unresolved"}
 BOOKING_TOOLS = ("read_booking_route", "hold_venue", "book_venue", "cancel_venue", "answer_card", "call_again")
-SUBMIT_OPS = ("venue.submit_booking", "venue.call_again", "venue.prepare_booking")
+SUBMIT_OPS = (OP.VENUE_SUBMIT_BOOKING, OP.VENUE_CALL_AGAIN, OP.VENUE_PREPARE_BOOKING)
 
 _PEPPER: Optional[bytes] = None
 _TURN: contextvars.ContextVar = contextvars.ContextVar("measure_turn", default=None)
@@ -479,7 +480,7 @@ def decision_of(op: str, result: dict) -> dict:
     out = {"op": op, **{k: d.get(k) for k in ("route", "channel", "sender", "how_far")}, "button_link": _is_link(b.get("link")),
            "button_sends": bool(b.get("sends")),
            "option_links": sum(1 for o in d.get("options") or [] if isinstance(o, dict) and _is_link(o.get("link")))}
-    if op == "venue.prepare_booking":
+    if op == OP.VENUE_PREPARE_BOOKING:
         out["person_send"] = _is_link((result.get("person_send") or {}).get("whatsapp"))
     return out
 
@@ -516,14 +517,14 @@ def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional
         b["agapi"] = version or ("sandbox" if "sandbox" in (url or "") else "live")
         if act:
             _bind(b, act)
-        if op in ("venue.submit_booking", "venue.call_again") and isinstance(env, dict) and env.get("ok"):
+        if op in (OP.VENUE_SUBMIT_BOOKING, OP.VENUE_CALL_AGAIN) and isinstance(env, dict) and env.get("ok"):
             b["submits"] += 1
             b["action_at"] = b.get("action_at") or _now()
-            if b["submits"] > 1 and op == "venue.submit_booking":
+            if b["submits"] > 1 and op == OP.VENUE_SUBMIT_BOOKING:
                 b["duplicates"] += 1   # a second submit for the same request — should never happen (must be 0)
             if b.get("cancel_at"):
                 b["after_cancel"] += 1
-        if op == "venue.booking_status" and isinstance(result, dict):
+        if op == OP.VENUE_BOOKING_STATUS and isinstance(result, dict):
             state = str(result.get("state") or "")
             if state in ("sent", "replied", "calling"):
                 _reach(b, "submitted")
@@ -536,11 +537,11 @@ def agapi_op(op: str, body: dict, env: Any, ms: int, url: str, version: Optional
                     _stop(b, state)
             elif state == "no_answer":
                 _stop(b, "no_answer")
-        if op == "venue.profile":
+        if op == OP.VENUE_PROFILE:
             b["profile_ms"].append(ms)
-        if op in ("venue.profile", "venue.prepare_booking") and isinstance(result, dict) and isinstance(result.get("decision"), dict):
+        if op in (OP.VENUE_PROFILE, OP.VENUE_PREPARE_BOOKING) and isinstance(result, dict) and isinstance(result.get("decision"), dict):
             b["decisions"] = (b.get("decisions") or [])[-4:] + [decision_of(op, result)]   # Sasha 289 · read on the row, never replayed
-        if op == "venue.cancel_booking" and isinstance(env, dict) and env.get("ok") and (body or {}).get("act_id"):
+        if op == OP.VENUE_CANCEL_BOOKING and isinstance(env, dict) and env.get("ok") and (body or {}).get("act_id"):
             _cancelled(b, (result or {}).get("status") or (result or {}).get("state"))
         _save(b)
     except Exception as e:

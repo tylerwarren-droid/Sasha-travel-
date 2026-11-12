@@ -195,7 +195,8 @@ async def _live_one(account: str, text: str) -> list:
 
 async def _say(GW, key, body="", payload="", media=False):
     ch = await GW.STORE.channel_for(key)
-    p = {"From": f"whatsapp:{NUMBER}", "To": "whatsapp:+14155238886", "Body": body, "ButtonPayload": payload}
+    sid = "SM" + __import__("uuid").uuid4().hex   # Sasha 374 · CR 186 (a): a delivery carries its provider id, carried as the webhook does
+    p = {"From": f"whatsapp:{NUMBER}", "To": "whatsapp:+14155238886", "Body": body, "ButtonPayload": payload, "MessageSid": sid, "_message_id": sid}
     if media:
         p.update(NumMedia="1", MediaUrl0="https://api.twilio.com/specimen", MediaContentType0="image/jpeg")
     before = len(GW.SENDER.sent)

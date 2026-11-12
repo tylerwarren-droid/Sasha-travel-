@@ -19,6 +19,7 @@ Sasha 249 · where is now agapi_route's "outcomes" family (SASHA_AGAPI_ROUTE; SA
 agapi_route.client_for. The OPEN set is kept in s2_memory too (kind "outcomes_open"): after a restart the sweep picks the open
 attempts back up (restore(), at start-up) instead of forgetting them."""
 from __future__ import annotations
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import logging
@@ -75,7 +76,7 @@ async def _send(op: str, body: dict, account: Optional[str] = None) -> Optional[
         return None
     if not r.get("ok"):
         code = (r.get("error") or {}).get("code")
-        if code not in ("not_found", "already_completed"):
+        if code not in (ERR.NOT_FOUND, ERR.ALREADY_COMPLETED):
             log.warning("[outcomes] %s not recorded: %s", op, code)
         return None
     return r["result"]
@@ -102,7 +103,7 @@ async def booked(account: str, held: dict, venue: str, city: Optional[str], resu
         body["confirmation_quote"] = (f"Their reference: {result['reference']}" if (result or {}).get("reference") else (result or {}).get("line") or "confirmed")
     if st == "failed":
         body["failure_reason"] = (error or (result or {}).get("status") or "not sent")[:300]
-    out = await _send("outcomes.record", body, account)
+    out = await _send(OP.OUTCOMES_RECORD, body, account)
     if out:
         _DONE.add((ref, st))
         if st not in ("confirmed", "declined", "failed") and held.get("trip_item_id"):
@@ -178,7 +179,7 @@ async def no_act(account: Optional[str], tool: str, why: str, out: Any = None, a
             "state": "handed_to_person" if handed else "failed", "failure_reason": why[:300],
             **({"sector": str(a.get("what") or a.get("category") or "")[:40]} if (a.get("what") or a.get("category")) else {}),
             **({"city": str(a.get("city"))[:80]} if a.get("city") else {})}
-    await _send("outcomes.record", body, account)
+    await _send(OP.OUTCOMES_RECORD, body, account)
 
 
 async def basket_booked(account: str, rows: list) -> int:
@@ -205,7 +206,7 @@ async def basket_booked(account: str, rows: list) -> int:
             body["confirmation_quote"] = f"Their reference: {r['booking_reference']}" if r.get("booking_reference") else "booked"
         else:
             body["failure_reason"] = str(r.get("failed_why") or "refused")[:300]
-        if await _send("outcomes.record", body, account):
+        if await _send(OP.OUTCOMES_RECORD, body, account):
             _DONE.add((ref, state))
             n += 1
     return n
@@ -234,7 +235,7 @@ async def sync(account: str, reservations: list) -> int:
         if st in ("declined", "failed"):
             body["failure_reason"] = ("cancelled before the venue answered" if status == "cancelled" else str(words or status))[:600]
         _DONE.add((ref, st))
-        if await _send("outcomes.update", body, account):
+        if await _send(OP.OUTCOMES_UPDATE, body, account):
             n += 1
         _OPEN.get(account, set()).discard(tid)
     if set(_OPEN.get(account, set())) != was:
@@ -315,3 +316,8 @@ def start() -> None:
 
 
 __all__ = ["booked", "basket_booked", "sync", "ref_of", "via", "restore", "RUNG", "LATER"]   # Sasha 249 · + basket_booked, restore
+
+
+# Sasha 374 · CR 186 · a test double on CALL may never answer a field AgAPI doesn't publish (agapi/contract_shape.py)
+from agapi import contract_shape as _CONTRACT_SHAPE  # noqa: E402
+_CONTRACT_SHAPE.guard(__name__, 'CALL')

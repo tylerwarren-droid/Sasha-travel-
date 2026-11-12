@@ -74,6 +74,8 @@ class TheOneClassifier(unittest.TestCase):
         seen = []
 
         async def call(account, op, body, approval=None):
+            if op == "users.register":   # Sasha 374 · AgAPI's users.register answers the end user — never another op's fields
+                return {"ok": True, "result": {"end_user_id": "usr_test"}}
             if op == "venue.prepare_booking":   # Sasha 285 · the person (users.register) is asked for first
                 seen.append(body)
             return {"ok": True, "result": {"prepared_id": "vpr_" + "a" * 32}}

@@ -393,7 +393,7 @@ class TheWholeClass(unittest.TestCase):
         self.assertIn("CT.booking_email(account)", inspect.getsource(VN.booking_person))
 
     def test_prepare_booking_has_one_sender_and_one_named_patch(self):
-        hits = sorted(str(f.relative_to(ROOT)) for f, s in self._py() if re.search(r'(?:CALL|_call)\((?:account, )?"venue\.prepare_booking"', s))
+        hits = sorted(str(f.relative_to(ROOT)) for f, s in self._py() if re.search(r'(?:CALL|_call)\((?:account, )?OP\.VENUE_PREPARE_BOOKING', s))
         self.assertEqual(hits, ["agapi/venue_submit.py", "agapi/venue_truth.py"])   # venue_truth: the PATCH named in the doc
 
     # Sasha 329 · MOVED: "the walk's sentence read in one place" → read NOWHERE (CR 161's ask; test_s329.TheWholeClass), and "the platform

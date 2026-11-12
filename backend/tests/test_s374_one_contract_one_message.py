@@ -1,7 +1,7 @@
 """Sasha 374 · Sasha's half of CR 186 — ONE provider message id, ONE inbound call, and every AgAPI shape from the ONE generated contract.
 NO PATCHES. Spec: agapi cr/186 docs/agapi/cr186-sasha-half.md (mailbox row 1896).
 
-  · kanoe_contract 1.80.0 vendored byte-identical (VENDORED.json: AgAPI's commit + each file's sha256); OP.X / ERR.X, never the strings;
+  · kanoe_contract 1.80.1 vendored byte-identical (VENDORED.json: AgAPI's commit + each file's sha256); OP.X / ERR.X, never the strings;
     the ratchet (kanoe_contract.ratchet) at 0 over backend/ (tests excluded).
   · (a) ONE reader of the provider id — inbound_phone.provider_id: MessageSid, else SmsSid — read in the webhook, carried as _message_id.
   · (b) messages.whatsapp_inbound ALWAYS carries message_id.
@@ -37,7 +37,7 @@ class TheOneContract(unittest.TestCase):
         for name, sha in v["files"].items():
             self.assertEqual(hashlib.sha256((BACKEND / "kanoe_contract" / name).read_bytes()).hexdigest(), sha, name)
         agapi = json.loads((BACKEND / "kanoe_contract" / "AGAPI_MANIFEST.json").read_text())
-        self.assertEqual((KC.CONTRACT_VERSION, agapi["version"], v["version"]), ("1.80.0", "1.80.0", "1.80.0"))
+        self.assertEqual((KC.CONTRACT_VERSION, agapi["version"], v["version"]), ("1.80.1", "1.80.1", "1.80.1"))
 
     def test_the_ratchet_finds_no_hand_written_copy(self):
         r = subprocess.run([sys.executable, "-m", "kanoe_contract.ratchet", ".", "--exclude", "tests"], cwd=BACKEND, capture_output=True, text=True)

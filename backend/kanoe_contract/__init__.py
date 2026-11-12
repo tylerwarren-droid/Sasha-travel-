@@ -1,10 +1,10 @@
 """GENERATED from AgAPI's spec/ by tools/contract/generate.py (CR 186) — DO NOT EDIT. Change spec/, regenerate, bump the release.
-kanoe_contract 1.80.0 · AgAPI 1.80.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
+kanoe_contract 1.80.1 · AgAPI 1.80.1 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, TypedDict, Union  # noqa: F401
 
-CONTRACT_VERSION = "1.80.0"
+CONTRACT_VERSION = "1.80.1"
 
 
 class OP:
@@ -226,7 +226,7 @@ DOOR_ANSWERS: Dict[str, frozenset] = {
 AccessGetIn = TypedDict('AccessGetIn', {"end_user": str}, total=False)
 
 # access.get — output
-AccessGetOut = TypedDict('AccessGetOut', {"mode": Union[str, bool, int, None], "calls": Union[str, bool, int, None], "real_venue_sends": Union[str, bool, int, None], "mailbox": Union[str, bool, int, None], "demo": Union[str, bool, int, None], "founder": Union[str, bool, int, None], "real_money": Union[str, bool, int, None], "version": Union[str, bool, int, None], "source": Union[str, bool, int, None]}, total=False)
+AccessGetOut = TypedDict('AccessGetOut', {"mode": Union[str, bool, int, None], "calls": Union[str, bool, int, None], "real_venue_sends": Union[str, bool, int, None], "mailbox": Union[str, bool, int, None], "demo": Union[str, bool, int, None], "founder": Union[str, bool, int, None], "real_money": Union[str, bool, int, None], "version": Union[str, bool, int, None], "source": Union[str, bool, int, None], "platform_submit": Literal['off', 'beta'], "mailboxes": Any}, total=False)
 
 # activities.suggest — input
 ActivitiesSuggestIn = TypedDict('ActivitiesSuggestIn', {"city": str, "country": str, "dates": Dict[str, Any], "interests": List[str], "party": int, "near": str, "limit": int}, total=False)
@@ -286,25 +286,25 @@ CalendarAddEventOut = TypedDict('CalendarAddEventOut', {"event": Dict[str, Any],
 CardsAccidentNotifyIn = TypedDict('CardsAccidentNotifyIn', {"end_user": str, "case_id": str}, total=False)
 
 # cards.accident_notify — output
-CardsAccidentNotifyOut = TypedDict('CardsAccidentNotifyOut', {"case_id": str, "step": Literal['safety', 'duties', 'photos', 'statement', 'clocks', 'notify', 'claim'], "steps": List[Any], "say": str, "handoff": str}, total=False)
+CardsAccidentNotifyOut = TypedDict('CardsAccidentNotifyOut', {"ask_card": Any, "claim_case_id": Any, "clocks": Any, "evidence_id": Any, "outcome": Any, "state": Any, "case_id": Any, "say": Any, "step": Any, "steps": Any}, total=False)
 
 # cards.accident_photo — input
 CardsAccidentPhotoIn = TypedDict('CardsAccidentPhotoIn', {"end_user": str, "case_id": str, "shot": Literal['your_car_front', 'your_car_back', 'your_car_left', 'your_car_right', 'the_damage_close_up', 'the_other_car_and_its_plate', 'your_rental_cars_plate', 'the_road_and_signs', 'the_other_drivers_licence_and_insurance'], "media_type": Literal['image/png', 'image/jpeg', 'image/webp', 'image/heic'], "content_base64": str}, total=False)
 
 # cards.accident_photo — output
-CardsAccidentPhotoOut = TypedDict('CardsAccidentPhotoOut', {"case_id": str, "step": Literal['safety', 'duties', 'photos', 'statement', 'clocks', 'notify', 'claim'], "steps": List[Any], "say": str, "handoff": str}, total=False)
+CardsAccidentPhotoOut = TypedDict('CardsAccidentPhotoOut', {"case_id": str, "step": str, "steps": List[str], "handoff": Any, "say": str, "choices": List[str], "done": bool, "call": Any, "next": str, "lines": List[Any], "quotes": List[Any], "read_at_source": Any, "shots": List[Dict[str, Any]], "advice": Any, "facts": Dict[str, Any], "form": Any, "left_for_you": List[Any], "clocks": List[Any], "ask_card": Dict[str, Any], "claim_case_id": str, "saved": Any}, total=False)
 
 # cards.accident_start — input
 CardsAccidentStartIn = TypedDict('CardsAccidentStartIn', {"end_user": str, "country": str, "place": str, "at": str, "rental_company": str, "card_item_id": str, "facts": Dict[str, Any]}, total=False)
 
 # cards.accident_start — output
-CardsAccidentStartOut = TypedDict('CardsAccidentStartOut', {"case_id": str, "step": Literal['safety', 'duties', 'photos', 'statement', 'clocks', 'notify', 'claim'], "steps": List[Any], "say": str, "handoff": str}, total=False)
+CardsAccidentStartOut = TypedDict('CardsAccidentStartOut', {"case_id": str, "step": str, "steps": List[str], "handoff": Any, "say": str, "choices": List[str], "done": bool, "call": Any, "next": str, "lines": List[Any], "quotes": List[Any], "read_at_source": Any, "shots": List[Dict[str, Any]], "advice": Any, "facts": Dict[str, Any], "form": Any, "left_for_you": List[Any], "clocks": List[Any], "ask_card": Dict[str, Any], "claim_case_id": str}, total=False)
 
 # cards.accident_step — input
 CardsAccidentStepIn = TypedDict('CardsAccidentStepIn', {"end_user": str, "case_id": str, "answer": str, "flags": List[Literal['injuries', 'fault_disputed', 'police_charges', 'claim_against_me']], "facts": Dict[str, Any], "card_item_id": str}, total=False)
 
 # cards.accident_step — output
-CardsAccidentStepOut = TypedDict('CardsAccidentStepOut', {"case_id": str, "step": Literal['safety', 'duties', 'photos', 'statement', 'clocks', 'notify', 'claim'], "steps": List[Any], "say": str, "handoff": str}, total=False)
+CardsAccidentStepOut = TypedDict('CardsAccidentStepOut', {"case_id": str, "step": str, "steps": List[str], "handoff": Any, "say": str, "choices": List[str], "done": bool, "call": Any, "next": str, "lines": List[Any], "quotes": List[Any], "read_at_source": Any, "shots": List[Dict[str, Any]], "advice": Any, "facts": Dict[str, Any], "form": Any, "left_for_you": List[Any], "clocks": List[Any], "ask_card": Dict[str, Any], "claim_case_id": str}, total=False)
 
 # cards.ask — input
 CardsAskIn = TypedDict('CardsAskIn', {"end_user": str, "card_item_id": str, "product_id": str, "question": str}, total=False)
@@ -322,13 +322,13 @@ CardsClaimAttachOut = TypedDict('CardsClaimAttachOut', {"case_id": str, "state":
 CardsClaimFileIn = TypedDict('CardsClaimFileIn', {"end_user": str, "case_id": str}, total=False)
 
 # cards.claim_file — output
-CardsClaimFileOut = TypedDict('CardsClaimFileOut', {"case_id": str, "state": Literal['preparing', 'ready_for_portal', 'filed'], "card": str, "kind": Literal['baggage_delay', 'baggage_loss', 'trip_delay', 'trip_cancellation', 'rental_damage', 'purchase_damage_theft'], "route": Dict[str, Any], "deadlines": List[Any], "reminders": List[Any], "clause": List[Any], "evidence": List[Any], "files": List[Any], "replies": List[Any], "incident": Dict[str, Any]}, total=False)
+CardsClaimFileOut = TypedDict('CardsClaimFileOut', {"act_id": Any, "evidence_id": Any, "outcome": Any, "card": Any, "case_id": Any, "clause": Any, "deadlines": Any, "evidence": Any, "files": Any, "incident": Any, "kind": Any, "reminders": Any, "replies": Any, "route": Any, "state": Any}, total=False)
 
 # cards.claim_simulate_reply — input
 CardsClaimSimulateReplyIn = TypedDict('CardsClaimSimulateReplyIn', {"end_user": str, "case_id": str, "text": str}, total=False)
 
 # cards.claim_simulate_reply — output
-CardsClaimSimulateReplyOut = TypedDict('CardsClaimSimulateReplyOut', {"case_id": str, "state": Literal['preparing', 'ready_for_portal', 'filed'], "card": str, "kind": Literal['baggage_delay', 'baggage_loss', 'trip_delay', 'trip_cancellation', 'rental_damage', 'purchase_damage_theft'], "route": Dict[str, Any], "deadlines": List[Any], "reminders": List[Any], "clause": List[Any], "evidence": List[Any], "files": List[Any], "replies": List[Any], "incident": Dict[str, Any]}, total=False)
+CardsClaimSimulateReplyOut = TypedDict('CardsClaimSimulateReplyOut', {"act_id": Any, "evidence_id": Any, "outcome": Any, "card": Any, "case_id": Any, "clause": Any, "deadlines": Any, "evidence": Any, "files": Any, "incident": Any, "kind": Any, "reminders": Any, "replies": Any, "route": Any, "state": Any}, total=False)
 
 # cards.claim_start — input
 CardsClaimStartIn = TypedDict('CardsClaimStartIn', {"end_user": str, "card_item_id": str, "kind": Literal['baggage_delay', 'baggage_loss', 'trip_delay', 'trip_cancellation', 'rental_damage', 'purchase_damage_theft'], "incident_date": str, "amount_minor": int, "currency": str, "description": str}, total=False)
@@ -400,7 +400,7 @@ CardsWhichOut = TypedDict('CardsWhichOut', {"framing": Literal["Information from
 DiveOnboardIn = TypedDict('DiveOnboardIn', {"url": str, "replay": bool}, total=False)
 
 # dive.onboard — output
-DiveOnboardOut = TypedDict('DiveOnboardOut', {"url": str, "started_at": str, "seconds": float, "stages": List[Dict[str, Any]], "reached": List[Literal['read', 'understood', 'how_it_books', 'value']], "cant_read": Dict[str, Any], "name": Union[str, None], "kind": Union[str, None], "rung": Union[int, None], "channel": Union[str, None], "pacioli": Dict[str, Any], "copies": List[Any], "reader": Union[Dict[str, Any], None], "instruction_like": List[Any], "footer": str, "replay": Dict[str, Any]}, total=False)
+DiveOnboardOut = TypedDict('DiveOnboardOut', {"url": str, "started_at": str, "seconds": float, "stages": List[Dict[str, Any]], "reached": List[Literal['read', 'understood', 'how_it_books', 'value']], "cant_read": Dict[str, Any], "name": Union[str, None], "kind": Union[str, None], "rung": Union[int, None], "channel": Union[str, None], "pacioli": Dict[str, Any], "copies": List[Any], "reader": Union[Dict[str, Any], None], "instruction_like": List[Any], "footer": str, "replay": Dict[str, Any], "plain_read": Any, "venue_id": Any}, total=False)
 
 # entry.check — input
 EntryCheckIn = TypedDict('EntryCheckIn', {"end_user": str, "passport_item_id": str, "passport_country": str, "destinations": List[Dict[str, Any]]}, total=False)
@@ -430,7 +430,7 @@ EvidenceVerifyOut = TypedDict('EvidenceVerifyOut', {"valid": bool, "recomputed_b
 GroupBookIn = TypedDict('GroupBookIn', {"movement_id": str, "mandate_id": str, "end_user": str, "worker": Dict[str, Any], "items": List[Dict[str, Any]], "replaces": str}, total=False)
 
 # group.book — output
-GroupBookOut = TypedDict('GroupBookOut', {"booking_id": str, "worker": Dict[str, Any], "state": Literal['booked', 'swapped_out', 'cancelled', 'incomplete', 'unknown'], "parts": List[Any], "refund": Dict[str, Any], "difference": Dict[str, Any], "evidence_id": str, "test": bool, "replaces": str, "mandate_id": str, "replaced_by": str, "movement_id": str, "why": str}, total=False)
+GroupBookOut = TypedDict('GroupBookOut', {"booking_id": str, "worker": Dict[str, Any], "state": Literal['booked', 'swapped_out', 'cancelled', 'incomplete', 'unknown'], "parts": List[Any], "refund": Dict[str, Any], "difference": Dict[str, Any], "evidence_id": str, "test": bool, "replaces": str, "mandate_id": str, "replaced_by": str, "movement_id": str, "why": str, "replayed": Any}, total=False)
 
 # group.bookings — input
 GroupBookingsIn = TypedDict('GroupBookingsIn', {"end_user": str, "movement_id": str}, total=False)
@@ -442,13 +442,13 @@ GroupBookingsOut = TypedDict('GroupBookingsOut', {"bookings": List[Dict[str, Any
 GroupCancelIn = TypedDict('GroupCancelIn', {"end_user": str, "booking_id": str}, total=False)
 
 # group.cancel — output
-GroupCancelOut = TypedDict('GroupCancelOut', {"booking_id": str, "worker": Dict[str, Any], "state": Literal['booked', 'swapped_out', 'cancelled', 'incomplete', 'unknown'], "parts": List[Any], "refund": Dict[str, Any], "difference": Dict[str, Any], "evidence_id": str, "test": bool, "replaces": str, "replaced_by": str}, total=False)
+GroupCancelOut = TypedDict('GroupCancelOut', {"booking_id": str, "worker": Dict[str, Any], "state": Literal['booked', 'swapped_out', 'cancelled', 'incomplete', 'unknown'], "parts": List[Any], "refund": Dict[str, Any], "difference": Dict[str, Any], "evidence_id": str, "test": bool, "replaces": str, "replaced_by": str, "movement_id": Any}, total=False)
 
 # group.swap — input
 GroupSwapIn = TypedDict('GroupSwapIn', {"end_user": str, "booking_id": str, "flights": List[Dict[str, Any]], "worker": Dict[str, Any]}, total=False)
 
 # group.swap — output
-GroupSwapOut = TypedDict('GroupSwapOut', {"booking_id": str, "worker": Dict[str, Any], "state": Literal['booked', 'swapped_out', 'cancelled', 'incomplete', 'unknown'], "parts": List[Any], "refund": Dict[str, Any], "difference": Dict[str, Any], "evidence_id": str, "test": bool, "replaces": str, "replaced_by": str}, total=False)
+GroupSwapOut = TypedDict('GroupSwapOut', {"booking_id": str, "worker": Dict[str, Any], "state": Literal['booked', 'swapped_out', 'cancelled', 'incomplete', 'unknown'], "parts": List[Any], "refund": Dict[str, Any], "difference": Dict[str, Any], "evidence_id": str, "test": bool, "replaces": str, "replaced_by": str, "movement_id": Any}, total=False)
 
 # keep.activity — input
 KeepActivityIn = TypedDict('KeepActivityIn', {"end_user": str, "since": str, "limit": int}, total=False)
@@ -520,7 +520,7 @@ MessagesTypingOut = TypedDict('MessagesTypingOut', {"ok": bool, "status": Union[
 MessagesWhatsappInboundIn = TypedDict('MessagesWhatsappInboundIn', {"from": str, "to": str, "text": str, "received_at": str, "message_id": str, "button": Dict[str, Any], "guest": bool, "account_email": str, "space": str, "media": List[Dict[str, Any]], "replied_to": str}, total=False)
 
 # messages.whatsapp_inbound — output
-MessagesWhatsappInboundOut = TypedDict('MessagesWhatsappInboundOut', {"conversation_role": Dict[str, Any], "matched": bool, "kept": bool, "why": str, "reply_id": str, "received_at": str, "opted_out": bool, "window_open_until": Union[str, None], "booking": Union[Dict[str, Any], None], "ad": str, "replied": bool, "declined": bool, "ignored": str}, total=False)
+MessagesWhatsappInboundOut = TypedDict('MessagesWhatsappInboundOut', {"conversation_role": Dict[str, Any], "matched": bool, "kept": bool, "why": str, "reply_id": str, "received_at": str, "opted_out": bool, "window_open_until": Union[str, None], "booking": Union[Dict[str, Any], None], "ad": str, "replied": bool, "declined": bool, "ignored": str, "asked": Any, "message_id": Any, "released": Any}, total=False)
 
 # money.bag_check — input
 MoneyBagCheckIn = TypedDict('MoneyBagCheckIn', {"end_user": str, "booking_reference": str, "passengers": List[str], "bag": Dict[str, Any]}, total=False)
@@ -574,19 +574,19 @@ OutcomesMarkTestOut = TypedDict('OutcomesMarkTestOut', {"marked": int, "test": b
 OutcomesRecordIn = TypedDict('OutcomesRecordIn', {"kind": Literal['booking', 'change', 'late', 'cancel'], "ref": str, "end_user": str, "venue": str, "sector": str, "city": str, "rung": Literal['api', 'zero_touch', 'human_tap', 'request_reply', 'phone', 'person'], "channel": Literal['api', 'web_form', 'page_handover', 'whatsapp', 'instagram', 'email', 'phone', 'sms', 'none'], "state": Literal['asked', 'sent', 'confirmed', 'declined', 'failed', 'handed_to_person'], "asked_at": str, "sent_at": str, "at": str, "confirmation_quote": str, "failure_reason": str, "test": bool}, total=False)
 
 # outcomes.record — output
-OutcomesRecordOut = TypedDict('OutcomesRecordOut', {"outcome_id": str, "ref": str, "venue": str, "sector": Union[str, None], "city": Union[str, None], "rung": str, "channel": str, "state": str, "asked_at": str, "sent_at": Union[str, None], "decided_at": Union[str, None], "confirmation_quote": str, "failure_reason": str, "time_to_confirm_s": int, "test": bool}, total=False)
+OutcomesRecordOut = TypedDict('OutcomesRecordOut', {"outcome_id": str, "ref": str, "venue": str, "sector": Union[str, None], "city": Union[str, None], "rung": str, "channel": str, "state": str, "asked_at": str, "sent_at": Union[str, None], "decided_at": Union[str, None], "confirmation_quote": str, "failure_reason": str, "time_to_confirm_s": int, "test": bool, "kind": Any, "time_to_outcome_s": Any}, total=False)
 
 # outcomes.report — input
 OutcomesReportIn = TypedDict('OutcomesReportIn', {"from": str, "to": str, "by": List[Literal['rung', 'sector', 'city', 'kind', 'channel']]}, total=False)
 
 # outcomes.report — output
-OutcomesReportOut = TypedDict('OutcomesReportOut', {"window": Dict[str, Any], "overall": Dict[str, Any], "by_rung": List[Dict[str, Any]], "by_sector": List[Dict[str, Any]], "by_city": List[Dict[str, Any]], "say": str, "note": str, "excluded_test": int, "billing": Dict[str, Any]}, total=False)
+OutcomesReportOut = TypedDict('OutcomesReportOut', {"window": Dict[str, Any], "overall": Dict[str, Any], "by_rung": List[Dict[str, Any]], "by_sector": List[Dict[str, Any]], "by_city": List[Dict[str, Any]], "say": str, "note": str, "excluded_test": int, "billing": Dict[str, Any], "by_kind": List[Dict[str, Any]], "by_channel": List[Dict[str, Any]]}, total=False)
 
 # outcomes.update — input
 OutcomesUpdateIn = TypedDict('OutcomesUpdateIn', {"outcome_id": str, "ref": str, "state": Literal['sent', 'confirmed', 'declined', 'failed', 'handed_to_person'], "at": str, "confirmation_quote": str, "failure_reason": str}, total=False)
 
 # outcomes.update — output
-OutcomesUpdateOut = TypedDict('OutcomesUpdateOut', {"outcome_id": str, "ref": str, "venue": str, "sector": Union[str, None], "city": Union[str, None], "rung": str, "channel": str, "state": str, "asked_at": str, "sent_at": Union[str, None], "decided_at": Union[str, None], "confirmation_quote": str, "failure_reason": str, "time_to_confirm_s": int, "test": bool}, total=False)
+OutcomesUpdateOut = TypedDict('OutcomesUpdateOut', {"outcome_id": str, "ref": str, "venue": str, "sector": Union[str, None], "city": Union[str, None], "rung": str, "channel": str, "state": str, "asked_at": str, "sent_at": Union[str, None], "decided_at": Union[str, None], "confirmation_quote": str, "failure_reason": str, "time_to_confirm_s": int, "test": bool, "kind": Any, "time_to_outcome_s": Any}, total=False)
 
 # registry.change_list — input
 RegistryChangeListIn = TypedDict('RegistryChangeListIn', {"job_id": str}, total=False)
@@ -658,7 +658,7 @@ SandboxAdCaseOut = TypedDict('SandboxAdCaseOut', {"door_down_until": int, "case_
 SandboxAdOpenCaseIn = TypedDict('SandboxAdOpenCaseIn', {"email": str, "name": str, "interview": Dict[str, Any], "opened_at": str}, total=False)
 
 # sandbox.ad_open_case — output
-SandboxAdOpenCaseOut = TypedDict('SandboxAdOpenCaseOut', {"case_id": str, "name": str, "opened_at": str, "opened_on": Literal['desktop']}, total=False)
+SandboxAdOpenCaseOut = TypedDict('SandboxAdOpenCaseOut', {"case_id": str, "name": str, "opened_at": str, "opened_on": Literal['desktop'], "interview": Any}, total=False)
 
 # sandbox.link_proof — input
 SandboxLinkProofIn = TypedDict('SandboxLinkProofIn', {"url": str, "expect": List[str], "inspect": bool}, total=False)
@@ -682,7 +682,7 @@ SandboxPlatformPrepareOut = TypedDict('SandboxPlatformPrepareOut', {"prepared_id
 SandboxPlatformWalkIn = TypedDict('SandboxPlatformWalkIn', {"end_user": str, "url": str, "date": str, "time": str, "party": int, "first_name": str, "last_name": str, "phone": str, "email": str, "notes": str, "choices": Dict[str, Any], "press": bool}, total=False)
 
 # sandbox.platform_walk — output
-SandboxPlatformWalkOut = TypedDict('SandboxPlatformWalkOut', {"decision": str, "say": str, "walked": bool, "dry_run": bool, "state": str, "why": Union[str, None], "pressed": bool, "confirmation": Union[Dict[str, Any], None], "steps": List[Any], "shot": Union[str, None]}, total=False)
+SandboxPlatformWalkOut = TypedDict('SandboxPlatformWalkOut', {"decision": str, "say": str, "walked": bool, "dry_run": bool, "state": str, "why": Union[str, None], "pressed": bool, "confirmation": Union[Dict[str, Any], None], "steps": List[Any], "shot": Union[str, None], "final_button": Any, "hand_over": Any, "refused": Any, "stand_in": Any, "stopped_say": Any, "target": Any}, total=False)
 
 # sandbox.simulate_approval — input
 SandboxSimulateApprovalIn = TypedDict('SandboxSimulateApprovalIn', {"read_back_id": str, "said": str, "after_seconds": int}, total=False)
@@ -712,7 +712,7 @@ SandboxWaTemplateOut = TypedDict('SandboxWaTemplateOut', {"name": str, "lang": s
 SourcesGetIn = TypedDict('SourcesGetIn', {"copy_id": str, "claim_id": str, "format": Literal['original', 'pdf']}, total=False)
 
 # sources.get — output
-SourcesGetOut = TypedDict('SourcesGetOut', {"copy_id": str, "url": str, "expires_at": str, "sha256": str, "format": Literal['pdf', 'html'], "read_at": str, "source_url": str, "reader_kind": str, "role": str, "size": int}, total=False)
+SourcesGetOut = TypedDict('SourcesGetOut', {"copy_id": str, "url": str, "expires_at": str, "sha256": str, "format": Literal['pdf', 'html'], "read_at": str, "source_url": str, "reader_kind": str, "role": str, "size": int, "pdf_available": Any, "rendering": Any}, total=False)
 
 # subscriptions.cancel — input
 SubscriptionsCancelIn = TypedDict('SubscriptionsCancelIn', {"end_user": str, "subscription_id": str, "route": Literal['email', 'page'], "name": str, "account_email": str}, total=False)
@@ -766,13 +766,13 @@ TripHoldOut = TypedDict('TripHoldOut', {"hold_id": str, "intent_id": str, "read_
 TripPlanIn = TypedDict('TripPlanIn', {"person": Dict[str, Any], "party": int, "rooms": int, "start": str, "arrive": Dict[str, Any], "depart": Dict[str, Any], "legs": List[Dict[str, Any]], "activity": Dict[str, Any], "stay": Dict[str, Any], "dining": Dict[str, Any], "transfer": Dict[str, Any], "ask": str}, total=False)
 
 # trip.plan — output
-TripPlanOut = TypedDict('TripPlanOut', {"trip_id": Union[str, None], "status": Literal['planning', 'ready', 'failed', 'interrupted', 'needs'], "days": List[Any], "pacioli": Dict[str, Any], "how_far": Dict[str, Any], "nothing_sent": bool, "say": str, "next": Dict[str, Any], "ask": str, "defaults_used": List[Any], "understood": Dict[str, Any]}, total=False)
+TripPlanOut = TypedDict('TripPlanOut', {"trip_id": Union[str, None], "status": Literal['planning', 'ready', 'failed', 'interrupted', 'needs'], "days": List[Any], "pacioli": Dict[str, Any], "how_far": Dict[str, Any], "nothing_sent": bool, "say": str, "next": Dict[str, Any], "ask": str, "defaults_used": List[Any], "understood": Dict[str, Any], "bases": Any, "complete": Any, "limits": Any, "unavailable": Any, "version": Any}, total=False)
 
 # trip.plan_get — input
 TripPlanGetIn = TypedDict('TripPlanGetIn', {"trip_id": str}, total=False)
 
 # trip.plan_get — output
-TripPlanGetOut = TypedDict('TripPlanGetOut', {"trip_id": Union[str, None], "status": Literal['planning', 'ready', 'failed', 'interrupted', 'needs'], "days": List[Any], "pacioli": Dict[str, Any], "how_far": Dict[str, Any], "nothing_sent": bool, "say": str, "next": Dict[str, Any], "ask": str, "defaults_used": List[Any], "understood": Dict[str, Any]}, total=False)
+TripPlanGetOut = TypedDict('TripPlanGetOut', {"trip_id": Union[str, None], "status": Literal['planning', 'ready', 'failed', 'interrupted', 'needs'], "days": List[Any], "pacioli": Dict[str, Any], "how_far": Dict[str, Any], "nothing_sent": bool, "say": str, "next": Dict[str, Any], "ask": str, "defaults_used": List[Any], "understood": Dict[str, Any], "bases": Any, "complete": Any, "limits": Any, "version": Any}, total=False)
 
 # usage.get — input
 UsageGetIn = TypedDict('UsageGetIn', {"from": str, "to": str}, total=False)
@@ -784,7 +784,7 @@ UsageGetOut = TypedDict('UsageGetOut', {"account": str, "from": str, "to": str, 
 UsersConfirmWhatsappIn = TypedDict('UsersConfirmWhatsappIn', {"t": int, "nonce": str, "wa_id": str, "message_id": str, "text": str, "signature": str}, total=False)
 
 # users.confirm_whatsapp — output
-UsersConfirmWhatsappOut = TypedDict('UsersConfirmWhatsappOut', {"end_user_id": str, "number": str, "state": Literal['verified'], "destinations": List[Any], "say": str}, total=False)
+UsersConfirmWhatsappOut = TypedDict('UsersConfirmWhatsappOut', {"end_user_id": str, "number": str, "state": Literal['verified'], "destinations": List[Any], "say": str, "account": Any, "created_at": Any, "external_ref": Any}, total=False)
 
 # users.link_whatsapp — input
 UsersLinkWhatsappIn = TypedDict('UsersLinkWhatsappIn', {"end_user": str, "number": str}, total=False)
@@ -808,7 +808,7 @@ UsersVerifyDestinationOut = TypedDict('UsersVerifyDestinationOut', {"end_user_id
 VenueBookingStatusIn = TypedDict('VenueBookingStatusIn', {"act_id": str}, total=False)
 
 # venue.booking_status — output
-VenueBookingStatusOut = TypedDict('VenueBookingStatusOut', {"stay": Dict[str, Any], "change": Dict[str, Any], "at": str, "party": Union[int, str], "answers": Dict[str, Any], "act_id": str, "venue": str, "channel": str, "state": str, "outcome_id": Union[str, None], "venue_words": Dict[str, Any], "updated_at": str, "say": str, "next_call": Dict[str, Any], "no_answers": int, "ask": str, "choices": List[Any], "next_step": Dict[str, Any], "rules_version": str, "calls": Dict[str, Any], "booking": Dict[str, Any], "follow_up": Dict[str, Any], "watch": Dict[str, Any]}, total=False)
+VenueBookingStatusOut = TypedDict('VenueBookingStatusOut', {"stay": Dict[str, Any], "change": Dict[str, Any], "at": str, "party": Union[int, str], "answers": Dict[str, Any], "act_id": str, "venue": str, "channel": str, "state": str, "outcome_id": Union[str, None], "venue_words": Dict[str, Any], "updated_at": str, "say": str, "next_call": Dict[str, Any], "no_answers": int, "ask": str, "choices": List[Any], "next_step": Dict[str, Any], "rules_version": str, "calls": Dict[str, Any], "booking": Dict[str, Any], "follow_up": Dict[str, Any], "watch": Dict[str, Any], "opted_out": bool, "opted_out_at": Union[str, None], "calendar": Any}, total=False)
 
 # venue.bookings — input
 VenueBookingsIn = TypedDict('VenueBookingsIn', {"end_user": str, "from": str, "include_cancelled": bool}, total=False)
@@ -820,7 +820,7 @@ VenueBookingsOut = TypedDict('VenueBookingsOut', {"bookings": List[Dict[str, Any
 VenueCallAgainIn = TypedDict('VenueCallAgainIn', {"act_id": str, "reason": Literal['person_asked', 'R3', 'R5', 'R6'], "end_user": str}, total=False)
 
 # venue.call_again — output
-VenueCallAgainOut = TypedDict('VenueCallAgainOut', {"act_id": str, "status": Literal['calling', 'not_allowed'], "reason": str, "venue": str, "approval": Dict[str, Any], "call_plan": Dict[str, Any], "why": List[Any], "next_call": Dict[str, Any], "say": str}, total=False)
+VenueCallAgainOut = TypedDict('VenueCallAgainOut', {"act_id": str, "status": Literal['calling', 'not_allowed'], "reason": str, "venue": str, "approval": Dict[str, Any], "call_plan": Dict[str, Any], "why": List[Any], "next_call": Dict[str, Any], "say": str, "takeover": Dict[str, Any]}, total=False)
 
 # venue.call_attempt — input
 VenueCallAttemptIn = TypedDict('VenueCallAttemptIn', {"act_id": str, "outcome": Literal['confirmed', 'proposed', 'declined', 'no_answer'], "venue_words": str, "answered_by": Literal['human', 'machine', 'none']}, total=False)
@@ -832,7 +832,7 @@ VenueCallAttemptOut = TypedDict('VenueCallAttemptOut', {"act_id": str, "status":
 VenueCancelBookingIn = TypedDict('VenueCancelBookingIn', {"end_user": str, "act_id": str, "reason": str}, total=False)
 
 # venue.cancel_booking — output
-VenueCancelBookingOut = TypedDict('VenueCancelBookingOut', {"act_id": str, "status": Literal['sent', 'not_allowed', 'already_cancelled', 'cancelled', 'person_sends', 'held'], "route": str, "manage_url": str, "link": str, "message": Dict[str, Any], "venue": str, "channel": Union[str, None], "cancel_act_id": str, "evidence_id": str, "why": List[Any], "takeover": Union[str, None], "say": str}, total=False)
+VenueCancelBookingOut = TypedDict('VenueCancelBookingOut', {"act_id": str, "status": Literal['sent', 'not_allowed', 'already_cancelled', 'cancelled', 'person_sends', 'held'], "route": str, "manage_url": str, "link": str, "message": Dict[str, Any], "venue": str, "channel": Union[str, None], "cancel_act_id": str, "evidence_id": str, "why": List[Any], "takeover": Union[str, None], "say": str, "venue_words": Any}, total=False)
 
 # venue.change_booking — input
 VenueChangeBookingIn = TypedDict('VenueChangeBookingIn', {"check_in": str, "nights": int, "end_user": str, "act_id": str, "kind": Literal['change', 'late'], "at": str, "party": int, "arrive": str}, total=False)
@@ -874,13 +874,13 @@ VenuePersonReportOut = TypedDict('VenuePersonReportOut', {"act_id": str, "state"
 VenuePrepareBookingIn = TypedDict('VenuePrepareBookingIn', {"external_ref": str, "url": str, "place": Dict[str, Any], "person": Dict[str, Any], "date": str, "time": str, "party": int, "notes": str, "call": Dict[str, Any], "link": Dict[str, Any], "stay": Dict[str, Any], "answers": Dict[str, Any], "include_sensitive": bool, "clock": str, "end_user": str, "choices": Dict[str, Any], "open_slot": Literal['quote', 'whenever']}, total=False)
 
 # venue.prepare_booking — output
-VenuePrepareBookingOut = TypedDict('VenuePrepareBookingOut', {"venue_id": str, "venue": str, "status": str, "channel": Union[str, None], "rung": Union[int, None], "when": str, "party": int, "submitted": bool, "fills": List[Any], "missing": List[Any], "form": Union[Dict[str, Any], None], "human_step": str, "zero_touch_allowed": bool, "zero_touch_why": List[Any], "link": str, "expires_at": str, "say": str, "prepared_id": str, "routes": List[Literal['page', 'call']], "stay": Dict[str, Any], "decision": Dict[str, Any], "ask": Dict[str, Any], "hand_over": Dict[str, Any], "page_check": Dict[str, Any], "policy": Dict[str, Any], "checks": Dict[str, Any], "message": Dict[str, Any], "person_send": Dict[str, Any], "watch": Dict[str, Any]}, total=False)
+VenuePrepareBookingOut = TypedDict('VenuePrepareBookingOut', {"venue_id": str, "venue": str, "status": str, "channel": Union[str, None], "rung": Union[int, None], "when": str, "party": int, "submitted": bool, "fills": List[Any], "missing": List[Any], "form": Union[Dict[str, Any], None], "human_step": str, "zero_touch_allowed": bool, "zero_touch_why": List[Any], "link": str, "expires_at": str, "say": str, "prepared_id": str, "routes": List[Literal['page', 'call']], "stay": Dict[str, Any], "decision": Dict[str, Any], "ask": Dict[str, Any], "hand_over": Dict[str, Any], "page_check": Dict[str, Any], "policy": Dict[str, Any], "checks": Dict[str, Any], "message": Dict[str, Any], "person_send": Dict[str, Any], "watch": Dict[str, Any], "open_slot": Any}, total=False)
 
 # venue.profile — input
 VenueProfileIn = TypedDict('VenueProfileIn', {"call": Dict[str, Any], "url": str, "place": Dict[str, Any], "refresh": bool, "link": Dict[str, Any], "clock": str}, total=False)
 
 # venue.profile — output
-VenueProfileOut = TypedDict('VenueProfileOut', {"venue_id": str, "site": str, "url": str, "read_at": Union[str, None], "facts": Dict[str, Any], "kind": Union[str, None], "photos": List[Any], "booking": Dict[str, Any], "confirm": Dict[str, Any], "form": Union[Dict[str, Any], None], "form_note": str, "withheld": List[Any], "cant_read": Dict[str, Any], "cached": bool, "age_days": int, "robots": Union[str, None], "channels": List[Dict[str, Any]], "listing": Dict[str, Any], "reservable": Dict[str, Any], "decision": Dict[str, Any], "web_site_unreadable": Dict[str, Any], "web_search": Dict[str, Any]}, total=False)
+VenueProfileOut = TypedDict('VenueProfileOut', {"venue_id": str, "site": str, "url": str, "read_at": Union[str, None], "facts": Dict[str, Any], "kind": Union[str, None], "photos": List[Any], "booking": Dict[str, Any], "confirm": Dict[str, Any], "form": Union[Dict[str, Any], None], "form_note": str, "withheld": List[Any], "cant_read": Dict[str, Any], "cached": bool, "age_days": int, "robots": Union[str, None], "channels": List[Dict[str, Any]], "listing": Dict[str, Any], "reservable": Dict[str, Any], "decision": Dict[str, Any], "web_site_unreadable": Dict[str, Any], "web_search": Dict[str, Any], "alternatives": Any, "hours_now": Any, "identity": Any, "listing_whatsapp": Any, "read_rules": Any, "refresh": Any, "site_unreadable": Any, "social_link": Any}, total=False)
 
 # venue.recognition — input
 VenueRecognitionIn = TypedDict('VenueRecognitionIn', {"place": Dict[str, Any], "location": Dict[str, Any], "search": bool}, total=False)
@@ -892,7 +892,7 @@ VenueRecognitionOut = TypedDict('VenueRecognitionOut', {"place": Dict[str, Any],
 VenueSubmitBookingIn = TypedDict('VenueSubmitBookingIn', {"end_user": str, "prepared_id": str, "choices": Dict[str, Any], "route": Literal['auto', 'call']}, total=False)
 
 # venue.submit_booking — output
-VenueSubmitBookingOut = TypedDict('VenueSubmitBookingOut', {"prepared_id": str, "status": Literal['confirmed', 'sent', 'failed', 'not_allowed', 'calling'], "submitted": bool, "rung": str, "how": str, "venue": str, "act_id": str, "evidence_id": str, "outcome_id": Union[str, None], "reference": Union[str, None], "venue_words": Dict[str, Any], "why": List[Any], "say": str, "route": str, "call_plan": Dict[str, Any], "approval": Dict[str, Any]}, total=False)
+VenueSubmitBookingOut = TypedDict('VenueSubmitBookingOut', {"prepared_id": str, "status": Literal['confirmed', 'sent', 'failed', 'not_allowed', 'calling'], "submitted": bool, "rung": str, "how": str, "venue": str, "act_id": str, "evidence_id": str, "outcome_id": Union[str, None], "reference": Union[str, None], "venue_words": Dict[str, Any], "why": List[Any], "say": str, "route": str, "call_plan": Dict[str, Any], "approval": Dict[str, Any], "takeover": Dict[str, Any], "hand_over": Dict[str, Any], "ask": Dict[str, Any]}, total=False)
 
 # venue.unhandled — input
 VenueUnhandledIn = TypedDict('VenueUnhandledIn', {"since": str, "limit": int}, total=False)

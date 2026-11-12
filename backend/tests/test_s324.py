@@ -133,6 +133,8 @@ class TheWeek(unittest.TestCase):
         async def call(op, body):
             if op == "outcomes.list":
                 return {"ok": False, "error": {"code": "invalid_input", "message": "The input doesn't match outcomes.list's schema"}}
+            if op == "venue.unhandled":   # Sasha 377 · each op answers its own published fields (kanoe_contract)
+                return {"ok": True, "result": {"count": 0, "items": [], "table": []}}
             return {"ok": True, "result": {"overall": {"attempts": 3, "open": 3}, "by_kind": [{"kind": "booking", "attempts": 3, "open": 3}]}}
         with mock.patch.object(OW, "CALL", call), mock.patch.object(OW, "count_from", mock.AsyncMock(return_value="2026-11-01")):
             w = asyncio.run(OW.week(now=NOW))

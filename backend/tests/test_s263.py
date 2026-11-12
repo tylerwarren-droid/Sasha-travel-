@@ -1,9 +1,9 @@
 """Sasha 263 · T45 — "YES, SEND IT" SENDS EXACTLY THE CARD ON SCREEN (S2 item 10, row 914). EU 258's run: item 7 took Sasha Test Venue
-at 20:15 by "Prefilled form"; item 10 asked for 21:15 → "Handle it" → "Yes, send it." → "✅ Booked: … at 20:15". 262's second memory
-of "which booking the one question was about" (venues._ASKED_ROUTE) still held item 7's 20:15 and fed it to the read-back. It is gone:
-"Handle it" reads back the booking she was given, by the one path (hold_venue → the card); the in-app yes sends ONLY the latest
-unanswered card (_HELD: AgAPI's read_back_id + sha, by in_app_tap); no card → "There's nothing waiting to send." and nothing is sent.
-Offline.
+at 20:15; item 10 asked for 21:15 → "Yes, send it." → "✅ Booked: … at 20:15". A second memory of "which booking the question was
+about" fed the old one to the read-back. It is gone: every hold reads back the booking she was given, by the one path (hold_venue →
+AgAPI's card); the in-app yes sends ONLY the latest unanswered card (_HELD: AgAPI's read_back_id + sha, by in_app_tap); no card →
+"There's nothing waiting to send." and nothing is sent. Sasha 378 · CR 188: the route is AgAPI's decision (send_form here) — the ONE
+question of Sasha's own ("Prefilled form / Handle it") is gone with her decider. Offline.
 
     cd backend && python -m unittest tests.test_s263 -v
 """
@@ -50,23 +50,17 @@ def booking(t):
 
 
 class World:
-    """The one path, offline: the booking rules ask the ONE question with no route, "page" → their prefilled page (nothing held),
-    "form" → AgAPI's read-back card (prepare_booking → submit_booking without an approval). submit records what the yes sent."""
+    """The one path, offline: AgAPI's decision (send_form) → AgAPI's read-back card (prepare_booking → submit_booking without an
+    approval). submit records what the yes sent."""
+    DEC = {"route": "send_form", "channel": "their own booking form", "how_far": "zero_touch", "say_text": "I can send it — just say yes.",
+           "button": {"label": "Send my request", "link": "https://sashatest.example/", "sends": True}}
 
     def __init__(self):
         self.sent = []
 
-    async def rules_for(self, ctx, a, rd, res, at, eng, card, route, now=None):
-        act = {None: "ask_one_question", "page": "prepared_link", "form": "fill_form_zero_touch"}[route]
-        return {"action": act, "say": act, "say_text": "Prefilled form, or shall I handle it?", "takeover": {"say": ""}, "channels": []}
-
-    async def via_agapi(self, ctx, a, rd, res, at, now, d, card):
+    async def via_agapi(self, ctx, a, rd, res, at, now, d, card, **kw):
         return VN._hold(ctx, "agapi", "prep-" + at, {"lines": [f"· {at}"], "sha256": "sha-" + at}, rd, res,
                         extra={"prepared_id": "prep-" + at, "read_back_id": "rb-" + at, "end_user": "u"})
-
-    async def prepared_now(self, ctx, a, rd, res, at, now, eng, card, d):   # their page, prefilled: their go-ahead, nothing to send
-        VN._HELD.pop(ctx.account, None)
-        return {"status": "page_on_phone", "venue": VENUE, "booked": False}
 
     async def submit(self, account, held, said):
         self.sent.append({"when": held["when"], "read_back_id": held["read_back_id"], "sha": held["sha"]})
@@ -86,9 +80,8 @@ class World:
         return [mock.patch.object(TV, "vet", mock.AsyncMock(side_effect=lambda ctx, a: a)),
                 mock.patch.object(VN, "_API", lambda: GW), mock.patch.object(VN, "_read", self.read),
                 mock.patch.object(VN, "_reservation", self.reservation), mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)),
-                mock.patch.object(VN, "read_channel", lambda rd, card=None, **k: None), mock.patch.object(VN, "card_of", lambda *a, **k: None),
-                mock.patch.object(VN, "rules_for", self.rules_for), mock.patch.object(VN, "_said", lambda out, d, **k: out),
-                mock.patch.object(VN, "_via_agapi", self.via_agapi), mock.patch.object(VN, "_prepared_now", self.prepared_now),
+                mock.patch("agapi.venue_truth.decision", lambda p: dict(self.DEC)), mock.patch.object(VN, "card_of", lambda *a, **k: None),
+                mock.patch.object(VN, "_said", lambda out, d, **k: out), mock.patch.object(VN, "_via_agapi", self.via_agapi),
                 mock.patch.object(VS, "submit", self.submit), mock.patch.object(V0, "claim", mock.AsyncMock()),
                 mock.patch.object(OC, "booked", mock.AsyncMock()), mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value=None)),
                 mock.patch.dict(VN._HELD, {}, clear=True), mock.patch.dict(VN._PREV, {}, clear=True), mock.patch.dict(VN._SENT, {}, clear=True)]
@@ -118,31 +111,19 @@ def play(turns, in_app=True):
     return w, out
 
 
-ITEM_7 = [("Book Sasha Test Venue Thursday 22 October at 20:15 for 2", "hold_venue", booking("20:15")),
-          ("Prefilled form", "hold_venue", booking("20:15"))]
+ITEM_7 = [("Book Sasha Test Venue Thursday 22 October at 20:15 for 2", "hold_venue", booking("20:15"))]
 
 
 class TheYesSendsTheCardOnScreen(unittest.TestCase):
-    def test_gate_item_7_then_a_new_booking_handle_it_yes(self):
-        """THE GATE (row 914): fails on 262's code — "Handle it" read back item 7's 20:15 and the yes sent it."""
-        w, out = play(ITEM_7 + [("Handle it", "book_venue", booking("21:15")),        # the model answered the one question it asked
-                                ("Yes, send it.", "book_venue", {})])                  # for 21:15 (no new hold): the booking she was given
-        self.assertEqual(out[2]["status"], "awaiting_yes")
-        self.assertEqual(out[2]["read_back"], ["· 2026-10-22T21:15"])                  # the card on screen is 21:15
-        self.assertEqual(w.sent, [{"when": "2026-10-22T21:15", "read_back_id": "rb-2026-10-22T21:15", "sha": "sha-2026-10-22T21:15"}])
-        self.assertEqual(out[3]["status"], "confirmed")                                # 21:15 sent, 20:15 untouched
-        self.assertIn("21:15", out[3]["line"])
-
-    def test_gate_with_the_new_booking_held_first(self):
+    def test_gate_item_7_then_a_new_booking_then_yes(self):
+        """THE GATE (row 914): a new booking held after item 7 — the yes sends ONLY the card on screen (21:15)."""
         w, out = play(ITEM_7 + [("Thursday at 21:15 instead, for 2", "hold_venue", booking("21:15")),
-                                ("Handle it", "hold_venue", booking("21:15")), ("Yes, send it.", "book_venue", {})])
-        self.assertEqual([s["when"] for s in w.sent], ["2026-10-22T21:15"])
-
-    def test_a_prefilled_form_is_never_sent_by_a_later_yes(self):
-        w, out = play(ITEM_7 + [("Yes, send it.", "book_venue", {})])
-        self.assertEqual(w.sent, [])
-        self.assertEqual(out[2], {"status": "nothing_waiting", "booked": False, "in_app": True})
-        self.assertEqual(V.yes_line("book_venue", {"ok": True, "result": out[2]}), "There's nothing waiting to send.")
+                                ("Yes, send it.", "book_venue", {})])
+        self.assertEqual(out[1]["status"], "awaiting_yes")
+        self.assertEqual(out[1]["read_back"], ["· 2026-10-22T21:15"])                  # the card on screen is 21:15
+        self.assertEqual(w.sent, [{"when": "2026-10-22T21:15", "read_back_id": "rb-2026-10-22T21:15", "sha": "sha-2026-10-22T21:15"}])
+        self.assertEqual(out[2]["status"], "confirmed")                                # 21:15 sent, 20:15 untouched
+        self.assertIn("21:15", out[2]["line"])
 
     def test_no_card_waiting_nothing_is_sent(self):
         w, out = play([("Yes, send it.", "book_venue", {})])
@@ -153,27 +134,21 @@ class TheYesSendsTheCardOnScreen(unittest.TestCase):
         self.assertEqual((w.sent, out[0]), ([], {"error": "nothing_held"}))
 
     def test_a_card_is_answered_once(self):
-        w, out = play(ITEM_7[:1] + [("Handle it", "book_venue", booking("20:15")), ("Yes, send it.", "book_venue", {}),
-                                    ("Yes, send it.", "book_venue", {})])
+        w, out = play(ITEM_7 + [("Yes, send it.", "book_venue", {}), ("Yes, send it.", "book_venue", {})])
         self.assertEqual(len(w.sent), 1)
-        self.assertEqual(out[3]["status"], "already_sent")
+        self.assertEqual(out[2]["status"], "already_sent")
 
 
-class HandleItReadsBackByTheOnePath(unittest.TestCase):
-    """Rule 0b · 262's capability (book_venue on "Handle it" reads back as hold_venue does), moved onto the card path."""
+class NoQuestionOfHerOwn(unittest.TestCase):
+    """Sasha 378 · CR 188: 262's "Handle it" capability went with the ONE question — AgAPI decides one way; only a yes sends."""
 
-    def test_book_venue_on_handle_it_is_hold_venue_with_its_booking(self):
-        w, a = play(ITEM_7[:1] + [("Handle it", "book_venue", booking("21:15"))])
-        w, b = play(ITEM_7[:1] + [("Handle it", "hold_venue", booking("21:15"))])
-        self.assertEqual(a[1], b[1])
-        self.assertEqual(a[1]["ask"], V.READ_BACK_ASK.format(venue=VENUE))
-
-    def test_no_booking_given_hold_first_never_a_clear_yes(self):
-        w, out = play(ITEM_7[:1] + [("Handle it", "book_venue", {})])
-        self.assertEqual(out[1], {"error": "hold_first"})
+    def test_handle_it_is_not_a_yes(self):
+        w, out = play(ITEM_7 + [("Handle it", "book_venue", booking("21:15"))])
+        self.assertEqual(out[1], {"error": "no_explicit_yes"})
+        self.assertEqual(w.sent, [])
 
     def test_other_words_are_still_no_yes(self):
-        w, out = play(ITEM_7[:1] + [("hmm, maybe", "book_venue", booking("21:15"))])
+        w, out = play(ITEM_7 + [("hmm, maybe", "book_venue", booking("21:15"))])
         self.assertEqual(out[1], {"error": "no_explicit_yes"})
 
     def test_no_second_memory(self):
@@ -196,8 +171,9 @@ class HandleItReadsBackByTheOnePath(unittest.TestCase):
 
 class TheConfirmationIsTwoSentencesSaidByCode(unittest.TestCase):
     def test_booked_and_the_one_question(self):
-        w, out = play(ITEM_7[:1] + [("Handle it", "book_venue", booking("21:15")), ("Yes, send it.", "book_venue", {})])
-        line = V.yes_line("book_venue", {"ok": True, "result": out[2]})
+        w, out = play([("Book Sasha Test Venue Thursday 22 October at 21:15 for 2", "hold_venue", booking("21:15")),
+                       ("Yes, send it.", "book_venue", {})])
+        line = V.yes_line("book_venue", {"ok": True, "result": out[1]})
         # Sasha 279 · C: a completed booking — + the closing line (voice.closing_line; no email in the test → "it will follow")
         self.assertEqual(line, "✅ Booked: Sasha Test Venue, 2026-10-22 at 21:15 — reference TV-263. " + V.CLOSING_LATER
                          + " Shall I put it in your calendar?")

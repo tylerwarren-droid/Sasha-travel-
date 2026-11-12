@@ -159,24 +159,14 @@ def founder(account: Optional[str]) -> bool:
 
 
 def real_venue_sends(account: Optional[str]) -> bool:
-    """Sasha 254 · may this person's bookings reach a REAL venue: their record says mode live AND real_venue_sends on (Tyler and
-    Jon today). Until 254: the founder + SASHA_REAL_CONTACT_ACCOUNTS."""
+    """Sasha 254 · s2_tools.send_email's live switch ONLY (a person's own email to an address they give — never a venue booking): their
+    record says mode live AND real_venue_sends on. Sasha 378 · CR 188: no booking path reads it — a booking's reach is AgAPI's."""
     from app.services.accounts import has
     return has(account, "real_venue_sends")
-
-
-def real_contact_refusal(account: Optional[str], to_test_venue: bool) -> Optional[JSONResponse]:
-    """None when this account may contact this venue; else the refusal, said plainly. Our test venues: anyone. A real
-    venue: a person whose record allows real-venue sends (Sasha 254 · the one record)."""
-    if to_test_venue or real_venue_sends(account):
-        return None
-    return JSONResponse({"ok": False, "rule": "real_venue_not_open",
-                         # Sasha 158 · one plain sentence; the sign-in page is linked wherever this is shown
-                         "message": "To book real places, sign in — 10 seconds. Nothing was sent.", "sign_in": "/sign-in"}, status_code=403)
 
 
 INBOUND_CONSENT = ("You wrote to Sasha first on WhatsApp; she answers you here, in this chat. Reply STOP at any time. "
                    "No reminders or other first messages are sent to this number.")
 INBOUND_VERSION = "v0"   # the column takes ^v[0-9]+$; v0 = no consent to first messages: no proactive message ever goes to them
 
-__all__ = ["router", "create_guest", "first_session", "real_contact_refusal", "real_venue_sends", "allowed", "on", "INBOUND_CONSENT", "INBOUND_VERSION"]
+__all__ = ["router", "create_guest", "first_session", "real_venue_sends", "allowed", "on", "INBOUND_CONSENT", "INBOUND_VERSION"]

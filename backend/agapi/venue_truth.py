@@ -6,8 +6,7 @@ the channel and the card in several places of her own (inventory: docs/sasha/s24
   profile(place)   → PLACE: the one data shape every surface shows (S2, /next, WhatsApp) — name, type, hours, price, photos, site,
                      the booking channel — each fact with its source. A map/Places category is only a LABELLED fallback
                      ("listed on the map as …"), never stated as fact.
-  channel(prof)    → the venue's ONE booking channel, from the engine (its rung), and whether there's another way to ask.
-  ASK_FILL         → the one question, word for word, when a form AND another channel exist.
+  channel(prof)    → how they book = AgAPI's ONE decision (its route, channel and words) — Sasha 378 · CR 188.
 
 THE ENGINE is one adapter: ENGINE_OP. Today CR 83's dive.onboard (on the sandbox, agapi_route family "venues"); when CR 89's
 venue.profile is live, switching is this one line (and the family's route). Reads happen on AgAPI's server, never from Sasha's
@@ -30,8 +29,6 @@ ENGINE_OP = OP.VENUE_PROFILE           # CR 89 (agapi v1.6.0, 12 Oct) — was "d
 FAMILY = "venues"
 TTL_S = 24 * 3600
 ENGINE_TIMEOUT_S = 75.0
-from agapi.booking_rules import booking_rules as BR   # CR 129 · platform_of: a channel naming a platform is never "I'll book it"
-from app.agent.voice import ASK_BOOK as ASK_FILL   # Sasha 249 · the one booking question lives in her voice (app/agent/voice.py)
 FILLABLE = ("form", "own_engine", "widget")            # the venue's own booking form / engine: rung 2
 PREPARED = FILLABLE + ("whatsapp",)                    # prepared by venue.prepare_booking: a form to confirm, a WhatsApp to send
 REQUESTS = ("email", "whatsapp")                       # a request they answer
@@ -314,20 +311,20 @@ async def enrich(cards: List[dict], budget_s: float = 3.0) -> None:
 
 
 def channel(site: Optional[dict]) -> Optional[dict]:
-    """The venue's ONE booking channel (the engine's rung) — and its request alternative, for the one question."""
-    ks = (site or {}).get("channels") or []
-    first = next((k for k in ks if k["kind"] in FILLABLE), None) or next((k for k in ks if k["kind"] in REQUESTS), None) \
-        or next((k for k in ks if k["kind"] == "phone"), None)
-    if not first:
+    """How they book, for the card and its detail sheet = AgAPI's ONE decision (venue.profile's `decision`): its route, its channel and
+    its words. Sasha 378 · CR 188: never a channel Sasha picks from the channels it read, and no question of Sasha's own (ASK_FILL is
+    gone) — None when AgAPI decided nothing."""
+    d = (site or {}).get("decision") or {}
+    if not isinstance(d, dict) or d.get("route") in (None, "none"):
         return None
-    alt = next((k for k in ks if k["kind"] in REQUESTS), None) if first["kind"] in FILLABLE else None
-    # CR 129 · the ONE question ("I'll book it. Want a prefilled form…") follows the route AgAPI DECIDED (venue.profile's decision): only
-    # when Kanoe fills their own form. A platform's widget counted as "fillable" here, so La Mi Venta (CoverManager) heard "I'll book it"
-    # while AgAPI's decision said "you press Book there" (Sasha 298). With no decision kept: never for a channel that names a platform.
-    route = ((site or {}).get("decision") or {}).get("route")
-    fills = route in ("send_form", "ask_then_send") if route else not BR.platform_of(first)
-    return {**first, **({"alternative": alt} if alt else {}), "ask": ASK_FILL if alt and fills else None,
+    return {"route": d["route"], "channel": d.get("channel"), "say_text": d.get("say_text"), "how_far": d.get("how_far"),
             "confirm": ((site or {}).get("confirm") or {}).get("type"), "has_form": bool((site or {}).get("form"))}
+
+
+#: AgAPI's routes in plain words, for "Books: …" (display only)
+BOOKS_WORDS = {"send_form": "their own booking form", "ask_then_send": "their own booking form", "platform_book": "their booking page",
+               "platform": "their booking page", "call": "by phone", "call_at_opening": "by phone", "call_no_voice": "by phone",
+               "reserve_with_google": "on Google", "whatsapp_direct": "on WhatsApp"}
 
 
 def decision(place: Optional[dict]) -> Optional[dict]:
@@ -350,8 +347,8 @@ def text(p: dict) -> str:
         lines.append(f"★{p['rating']}" + (f" ({p['rating_count']} reviews on Google)" if p.get("rating_count") else " on Google"))
     ch = p.get("channel")
     if ch:
-        lines.append("Books: " + {"own_engine": "their own booking engine", "form": "their own booking form", "widget": "their booking page",
-                                   "email": "by email", "whatsapp": "on WhatsApp", "phone": "by phone"}.get(ch["kind"], ch["kind"]))
+        lines.append("Books: " + (f"by {str(ch.get('channel') or 'message').lower()}" if ch["route"] == "message"
+                                  else BOOKS_WORDS.get(ch["route"], ch["route"].replace("_", " "))))
     if p.get("website"):
         lines.append(p["website"])
     return "\n".join(lines)
@@ -369,7 +366,7 @@ def reservable_say(place: Optional[dict]) -> Optional[str]:
     return str(r["say"]) if isinstance(r, dict) and r.get("say") else None
 
 
-__all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "ASK_FILL", "ENGINE_OP", "CALL",
+__all__ = ["profile", "profiles", "enrich", "shape", "channel", "cached", "text", "type_words", "ENGINE_OP", "CALL",
            "link_profile", "person_channel", "reservable_say", "decision"]
 
 

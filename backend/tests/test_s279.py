@@ -281,15 +281,16 @@ class C_TheClosingLine(unittest.TestCase):
         """In the turn (both doors say book_venue's `line` word for word): the closing line follows the booked sentence."""
         from tests import test_s263 as T263
         with _World():
-            w, out = T263.play(T263.ITEM_7[:1] + [("Handle it", "book_venue", T263.booking("21:15")), ("Yes, send it.", "book_venue", {})])
-        line = out[2]["line"]
+            w, out = T263.play([("Book Sasha Test Venue Thursday 22 October at 21:15 for 2", "hold_venue", T263.booking("21:15")),
+                                ("Yes, send it.", "book_venue", {})])   # Sasha 378 · no "Handle it": AgAPI's decision, its card, the yes
+        line = out[1]["line"]
         self.assertTrue(line.startswith("✅ Booked: Sasha Test Venue, 2026-10-22 at 21:15 — reference TV-263."), line)
         self.assertTrue(line.endswith(V.CLOSING), line)
 
     def test_never_after_a_quote_a_hold_or_a_request(self):
         from tests import test_s263 as T263
         with _World():
-            w, out = T263.play(T263.ITEM_7[:1] + [("Handle it", "book_venue", T263.booking("21:15"))])
+            w, out = T263.play([("Book Sasha Test Venue Thursday 22 October at 21:15 for 2", "hold_venue", T263.booking("21:15"))])
         self.assertNotIn("24 hours a day", str(out))   # the read-back card: not past "book it"
         src = inspect.getsource(__import__("agapi.venues", fromlist=["x"])._finish)
         self.assertIn('if out.get("status") == "confirmed" and out.get("line"):', src)

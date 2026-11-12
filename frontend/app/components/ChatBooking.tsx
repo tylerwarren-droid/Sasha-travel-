@@ -23,7 +23,6 @@ import { PlaceCard } from './cards/PlaceCard'   // Sasha 248 · one place card
 import { GatedButton } from '../booking-helper/GatedButton'
 import { ChatBookingDo } from './ChatBookingDo'
 import ChatBookingCall from './ChatBookingCall'
-import ChatBookingLink from './ChatBookingLink'
 import { SignInToBook } from './SignedInLine'
 import { announce, failed, noted, observe, toConsole } from '@/lib/outcome'   // the ONE outcome path (Sasha 347/348)
 
@@ -31,7 +30,7 @@ type Find = { what: string; where?: string; country?: string; near?: string; ope
   bare_time?: { day: string; hour: number; minute: number } }
 type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null
   /** Sasha 161 · the server's decision and its one plain line (decide.py — the same words as WhatsApp) */
-  plan?: { route: string | null; line: string | null; ladder?: { line: string; options: { title: string; route: string }[] } | null } }
+  plan?: { route: string | null; line: string | null; channel?: string | null; link?: string | null; label?: string | null } }   // Sasha 378 · AgAPI's ONE decision
 type State =
   | { phase: 'finding' } | { phase: 'founder_only' } | { phase: 'refused'; words: string }
   | { phase: 'found'; cards: Candidate[]; near?: Near; ranking?: Ranking; all: Candidate[]; chip: string; show: number } | { phase: 'reading'; cards: Candidate[]; pick: Candidate }
@@ -125,9 +124,6 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
   // Sasha 88 · a site's picture that fails to load is simply not shown (no broken image, no stand-in)
   // Sasha 156 · Google's photo of the listing, shown while (or where) the venue's own picture isn't there
   const [gphotos, setGphotos] = useState<Record<string, string>>({})
-  // Sasha 95 · the slot link leads when a platform is their booking route; a call only if the guest asks for one
-  const [chosen, setChosen] = useState<string | null>(null)   // Sasha 195 · the ladder's choice
-  const [callInstead, setCallInstead] = useState(false)
   // Sasha 100 · the cards arrive after the message the chat scrolled to — bring them (and each next step) into view
   const listRef = useRef<HTMLOListElement | null>(null)
   const readRef = useRef<HTMLDivElement | null>(null)
@@ -304,13 +300,11 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
       {state.phase === 'read' && (
         <div ref={readRef} style={{ marginTop: 8 }}>
           {(() => {
-            // Sasha 158 · THE LADDER, chosen by Sasha and never explained: their own form → their email (no reply → a call,
-            // under the same yes) → a call → their booking platform's page (your press) → WhatsApp where that's their channel
+            // Sasha 158 · what they publish (the read): the executors below need its form / email / phone
             const r = state.read.rungs
             const fm = r.find((x) => x.rung === 'form' && x.available)
             const em = r.find((x) => x.rung === 'email' && x.available)
             const ph = r.find((x) => x.rung === 'phone' && x.available)
-            const ln = r.find((x) => x.rung === 'link' && x.available)
             const venue = / \(TEST stand-in\)$/.test(state.read.venue ?? '') ? state.read.venue : (state.pick.name ?? state.read.venue)   // Sasha 169 · the stand-in says so
             const draft = (find.draft ?? null) as { when?: { at?: string }; how_many?: { count?: number } } | null
             // Sasha 158 · "book Casa Lucio tomorrow at 9": at a restaurant, a bare 9 is 21:00 (12 is noon) — the same rule as WhatsApp
@@ -325,36 +319,17 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
             const callDraft = find.named && eatery && !parts.what
               ? { ...(draftAll ?? {}), parts: { ...parts, what: { activity: 'a table', activity_venue_lang: TABLE[state.read.country ?? ''] ?? 'a table', category: 'restaurant' } } }
               : find.draft
+            // Sasha 378 · CR 188 · THE ROUTE IS AgAPI'S DECISION (venue.profile → handoff.decide), shown with its own words — this card
+            // chooses no channel, offers no ladder and reads no "call instead": their form → AgAPI fills it; their email or WhatsApp →
+            // Kanoe's message; their phone → the call; a step only they can do → their page (AgAPI's button)
             const plan = state.read.plan ?? { route: null, line: null }
-            // Sasha 195 · THE LADDER'S WORDS: one question, its options as buttons; a tap acts at once (nothing read out again)
-            const lad = plan.ladder
-            if (lad && !chosen) return (
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>{lad.line}</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {lad.options.map((o) => (
-                    <button key={o.route} type="button" onClick={() => setChosen(o.route)}
-                      style={o.route === 'no' ? { background: 'transparent', color: 'inherit', border: '1px solid rgba(255,255,255,.35)', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }
-                        : { background: '#E8B923', color: '#111', border: 0, borderRadius: 8, padding: '6px 14px', fontWeight: 600, cursor: 'pointer' }}>{o.title}</button>
-                  ))}
-                </div>
-              </div>
-            )
-            if (chosen === 'no') return <div>OK — nothing was sent.</div>
-            if (chosen === 'form' && fm) return <ChatBookingDo key={state.read.read_id} route="form" auto readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={null} />
-            if (chosen === 'email' && em) return <ChatBookingDo key={state.read.read_id} route="email" auto readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={null} />
-            if (chosen === 'page') return <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln?.value ?? 'their booking page'} draft={(find.draft ?? null) as never} openAt={openAt} />
-            if (chosen === 'call' && ph) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
-              venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} line={null} />
             const pr = plan.route
-            // Sasha 248 · ONE BOOKING PATH: the server's route only — this card no longer picks a channel of its own (it had its own
-            // order: form → email → call → link → email → WhatsApp)
-            if (pr === 'form' && fm && !callInstead) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
-            if (pr === 'email' && em && !callInstead) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
-            if (ph && (pr === 'call' || pr === 'call_email' || callInstead)) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
-              venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} line={callInstead ? null : plan.line} />
-            if (pr === 'one_tap' && ln) return <>{plan.line ? <div style={{ fontWeight: 600, marginBottom: 4 }}>{plan.line}</div> : null}
-              <ChatBookingLink key={state.read.read_id} readId={state.read.read_id} platform={ln.value} draft={(find.draft ?? null) as never} openAt={openAt} /></>
+            if ((pr === 'send_form' || pr === 'ask_then_send') && fm) return <ChatBookingDo key={state.read.read_id} route="form" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
+            if (pr === 'message' && (plan.channel ?? '').toLowerCase() === 'email' && em) return <ChatBookingDo key={state.read.read_id} route="email" readId={state.read.read_id} venue={venue} what={find.what} openAt={openAt} draft={draft} line={plan.line} />
+            if (ph && (pr === 'call' || pr === 'call_at_opening' || pr === 'call_no_voice')) return <ChatBookingCall key={state.read.read_id} readId={state.read.read_id} country={state.read.country ?? find.country ?? null} phone={ph}
+              venue={venue} draft={(callDraft ?? null) as never} whatText={find.what} openAt={openAt} onContacted={setContacted} line={plan.line} />
+            if (plan.link && /^https:\/\//.test(plan.link)) return <div>{plan.line ? <div style={{ fontWeight: 600, marginBottom: 4 }}>{plan.line}</div> : null}
+              <a href={plan.link} target="_blank" rel="noopener noreferrer" style={{ color: '#E8B923', fontWeight: 600 }}>{plan.label ?? 'Open their booking page'}</a></div>
             return <div>{plan.line ?? `I can't find a way to book ${venue} — no online booking, phone or email. Want me to try somewhere similar nearby?`}</div>
           })()}
         </div>

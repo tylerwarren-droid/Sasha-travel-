@@ -100,7 +100,7 @@ def read_reuse_hours() -> float:
         return 6.0
 
 
-def _read_view(row: dict, read: Optional[dict] = None, at: Optional[str] = None, party: Optional[int] = None) -> dict:
+async def _read_view(row: dict, read: Optional[dict] = None, at: Optional[str] = None, party: Optional[int] = None) -> dict:
     """`read`: the read with its listing re-read (places_terms.hydrate_read) — shown, never stored."""
     read = read if read is not None else row["read"]
     chosen = L.choose(read, account=row.get("account_id"))
@@ -108,35 +108,28 @@ def _read_view(row: dict, read: Optional[dict] = None, at: Optional[str] = None,
     name = ((read.get("listing") or {}).get("name") or read["name"])
     return {"read_id": row["read_id"], "venue": name, "country": read.get("country"), "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
-            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": {**_plan_for({**read, "name": name}, chosen["rungs"], row.get("account_id")),
-                     "ladder": _ladder_for({**read, "name": name}, chosen["rungs"], at, party, row.get("account_id"))},
+            "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": await _plan_for({**read, "name": name}, row),
             **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
 
 
-def _ladder_for(read: dict, rungs: list, at: Optional[str], party: Optional[int], account: Optional[str] = None) -> Optional[dict]:
-    """Sasha 195 · the ladder's words for the web card — the same as WhatsApp's (decide.ladder): {line, options:[{title, route}]}."""
-    from . import guest_whatsapp as GW
+async def _plan_for(read: dict, row: dict) -> dict:
+    """Sasha 161 · Sasha 378 (CR 188) · the web card's route and its ONE plain line = AgAPI's ONE decision for this place (venue.profile
+    → handoff.decide, read once and cached: agapi.venue_truth) — the same decision WhatsApp and /s2 follow. Never Sasha's own decision
+    over its own read (decision_of / ladder_of / route_line_of are gone), and no ladder: AgAPI decides one way."""
+    from agapi import venue_truth as VT, venues as VN
+    q = row.get("query") or {}
+    place = {"place_id": q.get("place_id") or (read.get("listing") or {}).get("place_id"), "name": read.get("name"),
+             "website": q.get("website") or read.get("website")}
     try:
-        rd = {"venue": read.get("name"), "country": read.get("country"), "facts": read.get("facts") or [],
-              "rungs": {r["rung"]: {"value": r.get("value")} for r in rungs if r.get("available")}}
-        lad = GW.ladder_of(rd, {"when": {"mode": "at", "at": at} if at else {}, "how_many": {"count": party or 2}}, NOW(), account)
-        return {"line": lad["line"], "options": [{"title": t, "route": r} for t, r in lad["options"]]} if lad else None
-    except Exception as e:
-        log.info("[ladder_routes] no ladder: %s", type(e).__name__)
-        return None
-
-
-def _plan_for(read: dict, rungs: list, account: Optional[str] = None) -> dict:
-    """Sasha 161 · the route Sasha takes and its ONE plain line — the same decision and words as WhatsApp (decide.py)."""
-    from . import guest_whatsapp as GW
-    try:
-        rd = {"venue": read.get("name"), "country": read.get("country"), "facts": read.get("facts") or [],
-              "rungs": {r["rung"]: {"value": r.get("value")} for r in rungs if r.get("available")}, **GW._hours_of(read, NOW())}
-        dv = GW.decision_of(rd, None, None, NOW(), account)
-        return {"route": dv.route, "line": GW.route_line_of(rd, dv)}
+        if place["place_id"] or place["website"]:
+            await VN.engine_channel(place, budget_s=20.0, listing=bool(place["place_id"]))
+        dec = VT.decision(place) or {}
     except Exception as e:   # never a failed read for want of a sentence
-        log.info("[ladder_routes] no plan: %s", type(e).__name__)
-        return {"route": None, "line": None}
+        log.info("[ladder_routes] no decision: %s", type(e).__name__)
+        dec = {}
+    btn = dec.get("button") or {}
+    return {"route": dec.get("route") if dec.get("route") != "none" else None, "line": dec.get("say_text") or None,
+            "channel": dec.get("channel"), "link": btn.get("link"), "label": btn.get("label")}
 
 
 # ── Sasha 233 · the named-platform exception: what robots.txt allows, read on THIS server (a scratch fixture's check) ──────────
@@ -216,7 +209,7 @@ async def read_venue(request: Request):
         except StorageUnavailable:
             row = None
         if row and (not body.get("name") or (row.get("read") or {}).get("name") == body.get("name")):   # Sasha 161 · a read made
-            return _read_view(row, await PT.hydrate_read(HTTP, row["read"], now), body.get("at"), body.get("party"))   # under another name is not reused
+            return await _read_view(row, await PT.hydrate_read(HTTP, row["read"], now), body.get("at"), body.get("party"))   # under another name is not reused
     try:
         read = await V.read_venue(HTTP, name=body.get("name"), city=body.get("city"), country=body.get("country"),
                                   website=body.get("website") or None, now=now, resolve=RESOLVE,
@@ -234,7 +227,7 @@ async def read_venue(request: Request):
         await LADDER_STORE.put_read(row)
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
-    return _read_view(row, {**read.to_json(), "listing": {**(read.listing or {}), "attribution": "Google Maps"} if read.listing else None},
+    return await _read_view(row, {**read.to_json(), "listing": {**(read.listing or {}), "attribution": "Google Maps"} if read.listing else None},
                       body.get("at"), body.get("party"))
 
 
@@ -653,7 +646,7 @@ async def get_read(read_id: str, request: Request):
         return _refuse(503, e.rule, e.detail)
     if row is None:
         return _refuse(404, "read_unknown", "no venue read with that id for this account")
-    return _read_view(row, await PT.hydrate_read(HTTP, row["read"], NOW()))
+    return await _read_view(row, await PT.hydrate_read(HTTP, row["read"], NOW()))
 
 
 async def _optin_refusal(venue_ids, channel: str, scope: Optional[str] = None):

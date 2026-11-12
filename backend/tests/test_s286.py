@@ -3,7 +3,7 @@ paste the website here for further assistance… that's horrible"). The worst ca
 
 ROOT TEST (written before the code):
   (1) ONE place S2's last resort lives: agapi.venues.floor (and floor_out, its hand-over). Before: voice.NO_LINK / no_link_line
-      ("…if you can, send it to me and I'll fill it in.") in read_booking_route and _prepared_now's no_channel, and 284b's NO_WAY_YET in
+      ("…if you can, send it to me and I'll fill it in.") in read_booking_route and the old _prepared_now's no_channel (Sasha 378: deleted with the rules' executors), and 284b's NO_WAY_YET in
       follow() — all three now call floor().
   (2) One floor, not a string per reason, venue or language: AgAPI's own floor when it gives one (route none, CR 118c) unless it asks
       for a link; else their website (the place card S2 holds) as the button, else their listing; the listing's WhatsApp / number beside
@@ -98,7 +98,7 @@ class EveryLastResortEndsInTheFloor(unittest.TestCase):
         ctx = type("Ctx", (), {"account": ACCT, "surface": "s2"})()
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(RD))), mock.patch.object(VN, "card_of", lambda *a: OPULENCE), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VN, "read_channel", lambda r, c, **k: eng), \
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), \
                 mock.patch.object(VT, "decision", lambda p: dec):
             return run(VN.read_booking_route(ctx, {"name": "Opulence Thai Spa", "city": "London", "day": "2099-11-01"}))
 
@@ -116,18 +116,17 @@ class EveryLastResortEndsInTheFloor(unittest.TestCase):
         got = self._read(dec=NONE)
         self.assertEqual((got["how"], got["page_url"]), (NONE["say_text"], NONE["button"]["link"]))
 
-    def test_the_hold_with_no_channel_hands_over_the_floor(self):
+    def test_the_hold_with_no_decision_hands_over_the_floor(self):
+        # Sasha 378 · CR 188: no decision of AgAPI's → one_decision follows "none" → THE FLOOR (their website as the button)
         ctx = type("Ctx", (), {"account": ACCT, "surface": "s2"})()
-        d = {"action": "prepared_link", "say": "no_channel", "takeover": {"say": "You can take it over.", "link": None}}
-        with mock.patch.object(VT, "decision", lambda p: None), mock.patch.object(VN, "_rules", lambda d: {"say_key": "no_channel"}):
-            out = run(VN._prepared_now(ctx, {"name": "Opulence"}, dict(RD), {"how_many": {"count": 2}}, "2099-11-01T19:00", None, None,
-                                       OPULENCE, d))
+        with mock.patch.object(VN, "note_prepared", mock.AsyncMock()):
+            out = run(VN.one_decision(ctx, {"name": "Opulence"}, dict(RD), {"how_many": {"count": 2}}, "", None, OPULENCE, None))
         self.assertEqual(out["status"], "page_link")
-        self.assertTrue(out["say"].startswith(V.FLOOR))
         self.assertEqual(out["button"]["link"], OPULENCE["website"])
+        self.assertFalse(V.asks_for_link(out["say"]))
 
     def test_every_last_resort_calls_the_one_floor(self):
-        for fn in (VN.read_booking_route, VN._prepared_now, VN.follow):
+        for fn in (VN.read_booking_route, VN.follow):
             self.assertIn("floor_out(", inspect.getsource(fn), fn.__name__)
 
 
@@ -175,7 +174,7 @@ class NothingSheSaysAsksForALink(unittest.TestCase):
         ctx = type("Ctx", (), {"account": ACCT, "surface": "s2"})()
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(RD))), mock.patch.object(VN, "card_of", lambda *a: None), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), mock.patch.object(VN, "read_channel", lambda r, c, **k: None), \
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), \
                 mock.patch.object(VT, "decision", lambda p: asking), mock.patch.object(VN, "note_prepared", mock.AsyncMock()):
             got = run(VN.read_booking_route(ctx, {"name": "X"}))
         self.assertFalse(V.asks_for_link(got["how"]))

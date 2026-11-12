@@ -226,11 +226,12 @@ class ANotFilledFormIsSaidAsIt(unittest.TestCase):
         self.assertTrue(out["say"].startswith(V.DONE_FORM))
         self.assertEqual(V.page_line("book_venue", {"ok": True, "result": out}), "")
 
-    def test_the_rules_never_say_filled_in_over_an_empty_page(self):
-        src = inspect.getsource(VN._prepared_now)
-        self.assertIn('if (out.get("prepared") or {}).get("filled") is False:', src)
-        self.assertIn('line = V.not_filled_line(d.get("say") == "prepared_link_captcha")', src)
-        self.assertIn('out["rules"] = {**out["rules"], "say": line}', src)   # the rules' told words too: never "filled in for you"
+    def test_never_filled_in_over_an_empty_page(self):
+        # Sasha 378 · CR 188: the rules' executor (_prepared_now) is gone with Sasha's decider — the ONE place a prepared page is said is
+        # _book_inner (via _finish): AgAPI's words only over a FILLED page; an empty one is V.NOT_FILLED
+        src = inspect.getsource(VN._book_inner)
+        self.assertIn("if fw and filled:", src)
+        self.assertIn("if filled else V.NOT_FILLED", src)
 
     def test_the_card_names_it(self):
         tsx = _tsx(self, "app/components/cards/S2Cards.tsx")
@@ -283,9 +284,8 @@ class APlatformPageIsNeverStranded(unittest.TestCase):
         self.assertNotIn("filled", V.platform_line("X", 2, "tonight at 21:00", False, False))
 
     def test_in_the_app_a_platform_is_handed_over_at_once_no_read_back_no_yes(self):
-        src = inspect.getsource(VN._execute)
-        self.assertIn('out = _said(await _finish(ctx, _HELD[ctx.account]), d)', src)
-        self.assertIn('out["rules"] = {**out["rules"], "say": line}', src)
+        src = inspect.getsource(VN.follow)   # Sasha 378 · AgAPI's hand-over: prepared and finished at once, in the same hold
+        self.assertIn("out = await _finish(ctx, _HELD[ctx.account])", src)
 
     def test_whatsapp_and_old_s1_are_as_they_were(self):
         out = book("page", held_platform(), in_app=False, tap="not told: outside the 24-hour window")

@@ -53,14 +53,7 @@ class Creating(unittest.TestCase):
             self.assertIn("daily", run(GA.create_guest("web", "7.7.7.7"))[1])
 
 
-class RealVenues(unittest.TestCase):
-    def test_only_the_founder_contacts_a_real_venue(self):
-        with mock.patch.dict(os.environ, {"FOUNDER_ACCOUNT_ID": tests.founder_fixture.FOUNDER, "SASHA_REAL_CONTACT_ACCOUNTS": ""}):
-            self.assertIsNone(GA.real_contact_refusal(A, False))                 # the founder
-            self.assertIsNone(GA.real_contact_refusal("g-1", True))              # anyone, at our test venue
-            r = GA.real_contact_refusal("g-1", False)                            # a guest, a real venue
-            self.assertEqual(r.status_code, 403)
-            self.assertIn(b"Nothing was sent", r.body)
+# Sasha 378 · RealVenues retired: real_contact_refusal (a person's real-venue switch, read by no route) is deleted — a booking's reach is AgAPI's (CR 188).
 
 
 # Sasha 253 · item 5 — RETIRED by Tyler's decision (mailbox 807): WhatsAppNewNumber (a new number got its own guest account and its

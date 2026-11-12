@@ -44,40 +44,29 @@ class TheReadBackIsOneLineSaidByCode(unittest.TestCase):
         self.assertIn("if agapi_out or read_back_said:", src)
 
 
-class HandleItNeverAsksForAClearYes(unittest.TestCase):
+class OnlyAYesSends(unittest.TestCase):
+    """Sasha 378 · CR 188: "Handle it" answered Sasha's own ONE question — gone with her decider. book_venue sends only on a yes, and
+    holds nothing of its own (no route picked from their words, no second memory)."""
+
     def ctx(self, said):
         class Ctx:
             account, user_said, surface, session = ACCT, said, "s2", "s"
             started = datetime.now(timezone.utc)
         return Ctx()
 
-    def test_book_venue_on_their_answer_reads_it_back(self):
-        # Sasha 263 (row 914) · moved onto the card path: the booking is the one she was given (hold_venue's fields), never a
-        # booking remembered from an earlier question (262's _ASKED_ROUTE, deleted)
-        from agapi import venues as VN
-        hold = mock.AsyncMock(return_value=RB)
-        b = {"name": "Sasha Test Venue", "day": "2026-10-22", "time": "21:15", "party": 2}
-        with mock.patch.object(VN, "hold_venue", hold), mock.patch.object(VN, "one_path", lambda ctx: True):
-            out = asyncio.run(VN.book_venue(self.ctx("Handle it"), {**b, "approval": {"said": "Handle it"}}))
-        self.assertEqual(out, RB)
-        self.assertEqual(hold.call_args[0][1]["route"], "form")
-        self.assertEqual(hold.call_args[0][1]["name"], "Sasha Test Venue")
-
-    def test_without_the_question_it_is_still_no_yes(self):
+    def test_handle_it_and_other_words_are_no_yes(self):
         from agapi import venues as VN
         with mock.patch.object(VN, "one_path", lambda ctx: True):
-            with self.assertRaises(Exception) as cm:   # Sasha 263 · no booking given: hold it first — never "a clear yes first"
-                asyncio.run(VN.book_venue(self.ctx("Handle it"), {"approval": {"said": "Handle it"}}))
-            self.assertEqual(getattr(cm.exception, "code", ""), "hold_first")
-            with self.assertRaises(Exception) as cm:   # words that answer nothing: still no yes
-                asyncio.run(VN.book_venue(self.ctx("hmm"), {"name": "X", "party": 2, "approval": {"said": "hmm"}}))
-            self.assertEqual(getattr(cm.exception, "code", ""), "no_explicit_yes")
+            for said in ("Handle it", "hmm"):
+                with self.assertRaises(Exception) as cm:
+                    asyncio.run(VN.book_venue(self.ctx(said), {"name": "X", "party": 2, "approval": {"said": said}}))
+                self.assertEqual(getattr(cm.exception, "code", ""), "no_explicit_yes", said)
 
-    def test_the_question_remembers_its_booking(self):
-        # Sasha 263 · moved: the one question keeps NO second memory of its booking — the card (_HELD) is the one record
+    def test_no_route_from_their_words(self):
         from agapi import venues as VN
-        self.assertNotIn("_ASKED_ROUTE", inspect.getsource(VN._execute))
-        self.assertIn("hold_venue(ctx, {**booking, \"route\": picked})", inspect.getsource(VN.book_venue))
+        src = inspect.getsource(VN.book_venue)
+        self.assertNotIn('"route": picked', src)
+        self.assertNotIn("chosen_route", src)
 
 
 class TheOneTotalIsSaid(unittest.TestCase):

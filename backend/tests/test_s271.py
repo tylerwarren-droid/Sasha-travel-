@@ -109,7 +109,7 @@ class NoSecondCopy(unittest.TestCase):
         self.assertNotIn('held.get("r6")', src)
         self.assertIn('if r.get("call_plan") and r.get("act_id"):', src)
         # the one path: a stay never takes Sasha's own room email, call or "no act" refusal
-        ex = src[src.index("async def _execute("):src.index("async def _call_question(")]
+        ex = src[src.index("async def one_decision("):src.index("async def follow(")]   # Sasha 378: the one path
         self.assertNotIn("not at or open_slot or nights", ex)
         self.assertNotIn("if at and not open_slot and not nights:", ex)
 

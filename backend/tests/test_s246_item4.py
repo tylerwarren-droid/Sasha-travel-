@@ -18,7 +18,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
-from booking_signer import decide as D, guest_whatsapp as GW, ladder as L, venue_read as V
+from booking_signer import ladder as L, venue_read as V
 from tests import test_booking_ladder as TBL   # a module: its own tests are not collected twice
 
 run = asyncio.run
@@ -63,8 +63,6 @@ class Rung2Read(unittest.TestCase):
 
 class Rung2Ladder(unittest.TestCase):
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         self.env = mock.patch.dict(os.environ, ENV)
         self.env.start()
 
@@ -100,78 +98,7 @@ class Rung2Ladder(unittest.TestCase):
         self.assertEqual(L.own_page({"facts": [{**f, "source_url": "https://h.test/reservar"}]})[1], "https://h.test/reservar")
         self.assertIsNone(L.own_page({"facts": [{**f, "source_url": "https://h.test/"}]}))
 
-    def test_whatsapp_and_web_their_page_first_by_the_booking_rules(self):
-        # Sasha 254 · the old flow's / web card's ladder is the booking rules' answer (agapi.booking_decide.legacy_*): their own page
-        # behind a CAPTCHA is theirs to confirm (R13) — prepared, never zero-touch, no question; soon or not; a preference doesn't
-        # route around the rules
-        from agapi.booking_rules import booking_rules as BR
-        rd = rd_of(read_of(HAMMAM_SITE, "https://www.hammamalandalus.com/madrid/", "Hammam Al Ándalus"))
-        res = {"when": {"mode": "at", "at": "2026-10-20T17:00"}, "how_many": {"count": 2}}   # > 48 h
-        self.assertIsNone(GW.ladder_of(rd, res, NOW))
-        for at in ("2026-10-20T17:00", "2026-10-12T20:00"):
-            dv = GW.decision_of(rd, None, at, NOW)
-            self.assertEqual((dv.route, dv.decision["say"]), ("one_tap", "prepared_link_captcha"))
-            self.assertTrue(GW.route_line_of(rd, dv).startswith(BR.PHRASES["prepared_link_captcha"]))
-        self.assertEqual(GW.decision_of(rd, "email", "2026-10-12T20:00", NOW).route, "one_tap")
-
-    def test_a_platform_with_their_own_email_the_email_first(self):   # Sasha 254 · R1 / R14 (was decide.ladder's "email or page")
-        rd = {"venue": "X", "country": "ES", "rungs": {"link": {"value": "CoverManager"}, "email": {"value": "x@x.es"}, "phone": {"value": "+34910"}}}
-        with mock.patch("agapi.booking_decide.access_cached", lambda a: {"mode": "live", "calls": "on", "real_venue_sends": "on"}):
-            self.assertEqual(GW.decision_of(rd, None, "2026-10-20T17:00", NOW).route, "email")
-            self.assertIsNone(GW.ladder_of(rd, {"when": {"mode": "at", "at": "2026-10-20T17:00"}}, NOW))
-
-
-class Rung2Agent(unittest.TestCase):
-    """The agent's tools (read_booking_route / hold_venue): their page is a route, offered first, and prepared via /links."""
-
-    def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
-        self.env = mock.patch.dict(os.environ, ENV)
-        self.env.start()
-
-    def tearDown(self):
-        self.env.stop()
-
-    def test_routes_and_the_hold_prepare_their_page(self):
-        from agapi import v0 as API, venues as VN
-        rd = rd_of(read_of(HAMMAM_SITE, "https://www.hammamalandalus.com/madrid/", "Hammam Al Ándalus"))
-        self.assertEqual(VN._routes_of(rd)[0], "page")
-        self.assertLess(VN._routes_of(rd).index("page"), VN._routes_of(rd).index("instagram"))
-        calls = []
-
-        async def api(account, method, path, body=None, timeout=None):
-            calls.append(path)
-            if path == "/api/booking/links":
-                return 200, {"link_id": "l1", "url": "https://madrid.hammamalandalus.com/reservas/", "platform": "their own booking page",
-                             "slot_filled": False, "read_back": {"lines": ["I'll send you their own booking page."], "sha256": "a" * 64}}
-            return 404, {"rule": "no"}
-        ctx = API.Ctx(account="00000000-0000-4000-8000-000000000246", surface="s2")
-        res = {"who": {"name": "Ana", "contact": {"mobile_e164": "+34600000000"}}, "when": {"mode": "at", "at": "2026-10-20T17:00"},
-               "how_many": {"count": 2}, "what": {"category": "spa"}}
-        a = {"what": "Arab baths"}
-        # Sasha 254 · the booking rules decide (R13: their page behind a CAPTCHA is theirs) — prepared on their screen at once, nothing
-        # sent to the venue, no question first
-        from agapi.booking_rules import booking_rules as BR
-        from booking_signer import guest_receipt as GR, wa_brain as WB
-        from agapi import s2_outcomes as OC
-        with mock.patch.object(GW, "api", api), mock.patch("agapi.venue_truth.prepare", mock.AsyncMock(return_value=None)), \
-                mock.patch.object(GR, "address_of", mock.AsyncMock(return_value=None)), mock.patch.object(OC, "booked", mock.AsyncMock()), \
-                mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value="")), mock.patch.object(GW, "STORE", None):
-            # Sasha 270 · MOVED (CR 101): on the one path their own booking page — and its CAPTCHA, on evidence — is the venue engine's
-            # read (venue.profile), never Sasha's own read of their site
-            self.assertNotEqual((VN.read_channel(rd, None, one_path=True) or {}).get("kind"), "own_engine")
-            eng = {"kind": "own_engine", "name": "their own booking engine", "url": "https://madrid.hammamalandalus.com/reservas/",
-                   "engine_captcha": True}
-            d = run(VN.rules_for(ctx, a, rd, res, "2026-10-20T17:00", eng, None, None, NOW))
-            self.assertEqual((d["action"], d["say"]), ("prepared_link", "prepared_link_captcha"))
-            got = run(VN._execute(ctx, a, rd, res, "2026-10-20T17:00", NOW, d, eng, None))
-        self.assertEqual(got["status"], "page_link")
-        # Sasha 264 · item 2: venue.prepare_booking gave no filled page here (None) — said as not filled, the CAPTCHA's reason kept
-        from app.agent import voice as V
-        self.assertTrue(got["say"].startswith(V.not_filled_line(captcha=True)))
-        self.assertEqual(calls, [])                                    # nothing reached the venue
-        VN._HELD.pop(ctx.account, None)
+    # Sasha 378 · CR 188: how their page books (send_form, or the step only they may do) is AgAPI's decision — tests.test_s378_follows_agapi
 
 
 class Rung2LinkRoute(unittest.TestCase):
@@ -183,8 +110,6 @@ class Rung2LinkRoute(unittest.TestCase):
         return TBL.MemoryCallStore(), TBL.MemoryLadderStore()
 
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         TBL.LadderRoutes.setUp(self)
 
     def tearDown(self):
@@ -205,8 +130,6 @@ class Rung2LinkRoute(unittest.TestCase):
 
 class ChangeOptionsAreOneSource(unittest.TestCase):
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         from booking_signer import flight_manage as FM
         from tests import test_flight_manage_226 as TF
         self.FM, self.TF = FM, TF

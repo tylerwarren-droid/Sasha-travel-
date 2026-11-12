@@ -3,8 +3,9 @@ AgAPI, no venue contacted). Tyler's S2 test (12 Oct): (a) a Spanish restaurant l
 up; (c) the thumbnails didn't open.
 
   (a) a Spanish restaurant whose Google category is WRONG ("Korean Restaurant") → shown as Spanish, quoted from its own site
-  (b) "a spa for two tomorrow at 17:00" → Hammam Al Ándalus → the fill-or-request question, word for word → "fill it now" → their
-      own booking page with every detail, on the phone (the prepared card), recorded as human_tap
+  (b) "a spa for two tomorrow at 17:00" → Hammam Al Ándalus → AgAPI's ONE decision (Sasha 378 · CR 188: venue.profile →
+      handoff.decide — their own email, Kanoe sends) → followed: AgAPI's read-back held for the ONE yes; Sasha asks no question of
+      her own and chooses no channel
   (c) a tap on a place → its detail (the one place shape: what it is, hours, photos, site, Book) — /s2 and /next's sheet, and
       WhatsApp's text + link
 """
@@ -33,7 +34,7 @@ HAMMAM = {"place_id": "ChIJtesthammam", "name": "Hammam Al Ándalus (test)", "we
 async def main() -> bool:
     from scripts import venue_engine_fake
     venue_engine_fake.install()
-    from agapi import venue_truth as VT, venues as VN, s2_outcomes as OC
+    from agapi import venue_truth as VT, venues as VN
     print("VENUE TRUTH — the three demo paths (Sasha 248)", flush=True)
 
     # (a) ── the wrong Google category never stated; the site's own words are
@@ -50,71 +51,40 @@ async def main() -> bool:
     check("(a) no site read: nothing said about what it is — never the map's category (Sasha 250)", nosite[0]["type"] is None
           and nosite[0]["place"].get("map_says") == "Korean Restaurant", str(nosite[0].get("type")))
 
-    # (b) ── the fill-or-request question, then "fill it now" → the prepared page, recorded human_tap
+    # (b) ── Sasha 378 · CR 188: how they book is AgAPI's ONE decision (venue.profile → handoff.decide); Sasha follows it
     p = await VT.profile(dict(HAMMAM))
     ch = p.get("channel") or {}
-    check("(b) its own booking engine, from the engine", ch.get("kind") == "own_engine" and "madridreservas" in str(ch.get("url")), str(ch))
-    from app.agent import voice as V
-    check("(b) the question, word for word (her voice, Sasha 249)", ch.get("ask") == VT.ASK_FILL == V.ASK_BOOK
-          and V.ASK_BOOK == "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?")
+    check("(b) AgAPI's decision: their own email, Kanoe sends (CR 188's order)",
+          (ch.get("route"), str(ch.get("channel") or "").lower()) == ("message", "email") and "ask" not in ch, str(ch))
+    check("(b) no question of Sasha's own, no channel of Sasha's own (ASK_FILL / read_channel / rules_for are gone)",
+          not any(hasattr(m, n) for m, n in ((VT, "ASK_FILL"), (VN, "read_channel"), (VN, "rules_for"), (VN, "_execute"), (VN, "chosen_route"))))
 
-    class GW:
-        STORE = None
-        @staticmethod
-        def summary(res): return "tomorrow at 17:00, 2 people"
-        @staticmethod
-        def plain_venue(v): return str(v).replace(" (test)", "")
-    real_api, real_addr = VN._API, None
+    from agapi import venue_submit as VS
     from booking_signer import guest_receipt as GR
-    real_addr = GR.address_of
+    real_addr, real_call = GR.address_of, VS.CALL
 
     async def addr(account): return "guest@example.com"
-    VN._API, GR.address_of = (lambda: GW), addr
+    GR.address_of = addr
+    VS.CALL = venue_engine_fake.submit_answer   # AgAPI's sender, answered from the saved shape — nothing reaches AgAPI or the venue
+    acct = "00000000-0000-4000-8000-000000000248"
     try:
-        ctx = type("C", (), {"account": "00000000-0000-4000-8000-000000000248", "surface": "s2", "started": datetime.now(timezone.utc)})()
+        ctx = type("C", (), {"account": acct, "surface": "s2", "started": datetime.now(timezone.utc), "user_said": "a spa for two tomorrow at 17:00"})()
         rd = {"venue": HAMMAM["name"], "place_id": HAMMAM["place_id"], "rungs": {}, "country": "ES"}
         res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
                "when": {"at": (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT17:00")}, "what": {"category": "spa"}}
-        at = res["when"]["at"]
-        # Sasha 254 · the booking rules decide (agapi.booking_decide → booking_rules.decide), the executors run what they said
-        from agapi import booking_decide as BD
-        from agapi.booking_rules import booking_rules as BR
-        real_access = BD.access_of
-
-        async def live(account):
-            return {"mode": "live", "calls": "on", "real_venue_sends": "on"}
-        BD.access_of = live
-        try:
-            d = await VN.rules_for(ctx, {}, rd, res, at, ch, HAMMAM, None)
-            q = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), d, ch, HAMMAM)
-            check("(b) asks before acting — the rules' ONE question", q.get("status") == "choose_route" and q.get("ask") == VT.ASK_FILL
-                  == BR.PHRASES["ask_book"] and [o["route"] for o in q["options"]] == ["page", "form"], str(q)[:200])
-            check("(b) its two answers are her voice's", [o["title"] for o in q["options"]] == ["Prefilled form", "Handle it"])
-            d = await VN.rules_for(ctx, {}, rd, res, at, ch, HAMMAM, "page")
-            out = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), d, ch, HAMMAM)
-        finally:
-            BD.access_of = real_access
-        # Sasha 249 · ONE QUESTION: "prefilled form" is the go-ahead — the form goes on their screen, no second yes
-        check("(b) 'prefilled form' → on their screen at once, no second yes", out.get("status") in ("page_on_phone", "page_link")
-              and out.get("booked") is False and ctx.account not in VN._HELD, str(out)[:200])
-        check("(b) the short confirmation, the rules' words + the take-over", str(out.get("say", "")).startswith(BR.PHRASES["prepared_link"])
-              and BR.PHRASES["takeover"] in out["say"] and not V.check([out["say"]]), str(out.get("say")))
-        from app.agent import sasha as AG0
-        ev0 = AG0.render("hold_venue", out, {})   # Sasha 250 · "it's on your screen" only when it IS drawn (found live)
-        check("(b) the prefilled form is DRAWN from hold_venue (what she says is on screen, is)", (ev0 or {}).get("kind") == "prepared", str(ev0)[:120])
-        prep = out.get("prepared") or {}
-        check("(b) ready to confirm on the phone (venue.prepare_booking), every detail with it", "agapi.test/prepared/madrid.hammamalandalus.com" in str(prep.get("url"))
-              and prep.get("prepared_by") == OP.VENUE_PREPARE_BOOKING and {"Day", "Time", "People", "Name", "Mobile"} <= {f["label"] for f in prep.get("fields") or []}, str(prep)[:240])
-        from app.agent import sasha as AG
-        ev = AG.render("book_venue", out, {})
-        check("(b) the prepared card renders", (ev or {}).get("kind") == "prepared")
-        check("(b) recorded as human_tap", OC.RUNG.get("prepared") == ("human_tap", "page_handover"))
+        before = len(venue_engine_fake.CALLS)
+        out = await VN.one_decision(ctx, {}, rd, res, res["when"]["at"], datetime.now(timezone.utc), dict(HAMMAM), VT.decision(dict(HAMMAM)))
+        sent = [c for c in venue_engine_fake.CALLS[before:] if c == OP.VENUE_SUBMIT_BOOKING]
+        check("(b) followed: AgAPI's read-back, held for their ONE yes", out.get("status") == "awaiting_yes"
+              and (VN._HELD.get(acct) or {}).get("rung") == "agapi" and (VN._HELD.get(acct) or {}).get("read_back_id") == "rbk_gate", str(out)[:240])
+        check("(b) prepared by AgAPI (venue.prepare_booking), nothing submitted without the yes",
+              OP.VENUE_PREPARE_BOOKING in venue_engine_fake.CALLS[before:] and len(sent) <= 1, str(venue_engine_fake.CALLS[before:]))
     finally:
-        VN._API, GR.address_of = real_api, real_addr
-        VN._HELD.pop("00000000-0000-4000-8000-000000000248", None)
+        GR.address_of, VS.CALL = real_addr, real_call
+        VN._HELD.pop(acct, None)
 
     ch2 = (await VT.profile(dict(CASA))).get("channel") or {}
-    check("(b) a WhatsApp venue is prepared too (a message they send)", ch2.get("kind") == "whatsapp" and ch2.get("kind") in VT.PREPARED, str(ch2))
+    check("(b) a WhatsApp venue: AgAPI's decision — a message they send", (ch2.get("route"), ch2.get("channel")) == ("message", "WhatsApp"), str(ch2))
 
     # (c) ── a tap opens the detail: the one shape (sheet on /s2 and /next) and WhatsApp's text + link
     d = await VT.profile(dict(CASA))

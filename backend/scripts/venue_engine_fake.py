@@ -48,8 +48,12 @@ async def _submit_answer(op: str, body: dict, approval=None, account=None) -> di
     if op == OP.MESSAGES_WHATSAPP_INBOUND:   # Sasha 285 · CR 118 (b): a suite's numbers were never written to by Kanoe
         return {"ok": True, "result": {"matched": False, "kept": False}}
     if op == OP.VENUE_PREPARE_BOOKING:
+        # Sasha 378 · CR 188 · prepare answers with venue.profile's ONE decision for this place (as AgAPI does) — never one of the fake's
+        from agapi import venue_truth as VT
+        dec = VT.decision({k: v for k, v in (body.get("place") or {}).items() if k in ("place_id", "website", "name")})
         return {"ok": True, "result": {"venue_id": "v_gate", "venue": str((body.get("place") or {}).get("name") or "the venue"), "submitted": False,
-                                       "prepared_id": "vpr_gate", "zero_touch_allowed": True, "link": "https://agapi.test/prepared/gate", "say": "ready"}}
+                                       "prepared_id": "vpr_gate", "zero_touch_allowed": True, "link": "https://agapi.test/prepared/gate", "say": "ready",
+                                       **({"decision": dec} if dec else {})}}
     if op == OP.VENUE_SUBMIT_BOOKING and not approval:
         return {"ok": False, "error": {"code": "approval_required", "message": "the person's yes first", "retryable": False,
                                        "details": {"read_back_id": "rbk_gate", "read_back": {"lines": [

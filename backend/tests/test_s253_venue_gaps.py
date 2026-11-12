@@ -73,7 +73,7 @@ class Api(FakeApi):
 def reader(rungs, venue="Casa Gate", country="ES"):
     async def rd(ctx, a):
         return {"read_id": "r-1", "country": country, "venue": venue, "facts": [], "rungs": rungs, "open_now": True,
-                "opens_at": None, "say": "", "place_id": a.get("place_id")}
+                "opens_at": None, "say": "", "place_id": a.get("place_id") or "ChIJtest253"}   # Sasha 378 · its listing: AgAPI's venue.profile
     return rd
 
 
@@ -81,8 +81,6 @@ class Base(unittest.TestCase):
     surface, session = "s2", "s254"
 
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         VN._HELD.pop(ACCT, None)
         self.api = Api()
         self.taps, self.told = [], []
@@ -197,7 +195,7 @@ class G7NoSlot(Base):
         # Sasha 254 · the booking rules (R3): no form and no time (so not within 48 h) → no call now — a call closer to the day,
         # and with no day there is nothing to call closer to: she asks for one (the old flow's instant availability call is retired)
         out = self.hold({"phone": {"fact_index": 2}}, what="a 60-minute massage", open_slot="whenever")
-        self.assertEqual((out["status"], out["rules"]["action"]), ("need_day", "wait"))
+        self.assertEqual(out["status"], "need_day")   # Sasha 378 · AgAPI decided the call; no day: asked for, once
         self.assertEqual(self.api.bodies("/api/booking/calls"), [])
         # Sasha 269 · MOVED (CR 100): with a day but no time ("whenever they have space") the act has no slot to ask for — no call of
         # Sasha's own (the old availability call was /api/booking/calls, never placed without an act): said, with the take-over
@@ -338,8 +336,6 @@ class G8OnWhatsApp(ScriptedBrain):
     hotel's own engine with the stay, read back first, sent on the yes — the old flow's OnWhatsApp test, on the one brain."""
 
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         super().setUp()
         self.link()
         TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": TG.NOW, "link_tries": []}))
@@ -383,6 +379,19 @@ class G8OnWhatsApp(ScriptedBrain):
 ITEM = {"id": "v-1", "kind": "identifier", "provider": "club.kanoe.ai", "label": "Kanoe Test Club number"}
 
 
+def their_page():
+    """Sasha 378 · CR 188: AgAPI's decision — their own booking page, handed over (a step only they may do): it goes on their phone,
+    prefilled (venue.profile's decision; the fake in scripts/agapi_decides)."""
+    from scripts import agapi_decides as AD
+    dec = AD.decision("platform", "Sasha Test Venue", channel="their own booking page",
+                      button={"label": "Open their booking page", "link": "https://sashatest.es/reservar", "sends": False})
+
+    async def eng(card, budget_s=30.0, listing=False):
+        AD.seed(card, dec)
+        return None
+    return eng
+
+
 class G14Loyalty(Base):
     def setUp(self):   # Sasha 256 · Kanoe's test venue is held by a TEST person only (agapi/test_venues)
         super().setUp()
@@ -423,11 +432,10 @@ class G14Loyalty(Base):
         async def use(account, item_id, *, approval, approved_lines, action_kind, action_ref):
             opened.append((item_id, action_kind, approval["read_back_sha256"], list(approved_lines)))
             yield Secret()
-        eng = {"kind": "own_engine", "url": "https://sashatest.es/reservar", "from": "engine"}
-        with mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VC, "use", use), \
+        with mock.patch.object(VN, "engine_channel", their_page()), mock.patch.object(VC, "use", use), \
                 mock.patch("agapi.venue_truth.prepare", mock.AsyncMock(return_value=None)):
             out = self.hold({"own_page": {"value": "https://sashatest.es/reservar"}}, venue="Sasha Test Venue", day=LATER, time="21:00",
-                            route="page")   # Sasha 254 · "Prefilled form" — the answer to the rules' one question
+                            )   # Sasha 378 · AgAPI hands their page over (a step only they may do): it, prefilled
         said = json.dumps(out, ensure_ascii=False)
         self.assertNotIn("KTC-778899", said)                                                  # never in what she's given / says
         self.assertIn(LY.TOKEN, said)                                                         # the mask in the fields
@@ -442,10 +450,9 @@ class G14Loyalty(Base):
         async def refused(*a, **k):
             raise VC.UseRefused("vault_item_unavailable", "gone")
             yield
-        eng = {"kind": "own_engine", "url": "https://sashatest.es/reservar", "from": "engine"}
-        with mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VC, "use", refused), \
+        with mock.patch.object(VN, "engine_channel", their_page()), mock.patch.object(VC, "use", refused), \
                 mock.patch("agapi.venue_truth.prepare", mock.AsyncMock(return_value=None)):
-            self.hold({"own_page": {}}, venue="Sasha Test Venue", day=LATER, time="21:00", route="page")
+            self.hold({"own_page": {}}, venue="Sasha Test Venue", day=LATER, time="21:00")
         self.assertIn("Kanoe Test Club: (not added — it's in your Keep)", self.told[-1])
 
 
@@ -457,8 +464,6 @@ class G14Luxury(unittest.TestCase):
     """guest_whatsapp_s75 test_sasha104_luxury_puts_three_euro_signs_first, on the brain's venue search."""
 
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         async def api(account, method, path, body=None, timeout=90.0):
             return 200, {"candidates": CANDS, "ranking": {"default": "rated", "orders": {"rated": ["p1", "p0", "p2", "p3"]}}, "show": 3}
         for p in (mock.patch.object(GW, "api", api), mock.patch.object(VN, "photos_for", mock.AsyncMock())):
@@ -492,8 +497,6 @@ class OldS1Untouched(Base):
     surface = "s1"
 
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         super().setUp()
         p = mock.patch.dict(os.environ, PARITY_OFF)
         p.start()

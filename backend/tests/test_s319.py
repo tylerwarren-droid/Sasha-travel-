@@ -142,7 +142,7 @@ class TheCallersAreAgAPIsOrTylers(unittest.TestCase):
         self.assertEqual(VN.TO_TYLER, RT.TO_TYLER)
 
     def test_the_executors_reach_only_agapi(self):
-        src = inspect.getsource(VN._execute)
+        src = inspect.getsource(VN.one_decision)   # Sasha 378 · CR 188: AgAPI's decision, followed (the rules' _execute is gone)
         self.assertIn("_via_agapi", src)
         self.assertIn("_call_question", src)
         self.assertNotRegex(src, r"await _(email|form|call|call_and_email)\(")

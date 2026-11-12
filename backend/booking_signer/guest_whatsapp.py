@@ -1360,13 +1360,12 @@ async def _save_keeping_their_question(key: str, st: dict, loaded) -> None:
 
 
 # Sasha 252 · G3 — Sasha's OWN questions on the one brain: the ones she pushes (no-reply / page-not-pressed offers, a Gmail find,
-# the deposit, their page sent, an invitation's area / days / cards) and the questions they lead to (the route's choice — the
-# ladder —, the call's or the page's read-back).
-SASHAS_OWN = ("no_reply_call", "mailbox", "payment", "link", "handed", "invite_where", "invite_window", "cards", "ladder", "confirm", "plan_link")
-_YES_NO_KINDS = ("no_reply_call", "mailbox", "payment", "ladder", "confirm", "plan_link")
+# the deposit, their page sent, an invitation's area / days / cards) and the questions they lead to. The route's choice is
+# AgAPI's (Sasha 378 · CR 188): no ladder, no plan link.
+SASHAS_OWN = ("no_reply_call", "mailbox", "payment", "link", "handed", "invite_where", "invite_window", "cards", "confirm")
+_YES_NO_KINDS = ("no_reply_call", "mailbox", "payment", "confirm")
 _A_QUESTION = re.compile(r"\s*(?:what|what's|whats|where|when|how|who|why|which|can|could|would|will|is|are|do|does|did|should|"
                          r"qu[eé]|d[oó]nde|cu[aá]ndo|c[oó]mo|qui[eé]n|por qu[eé])\b", re.I)
-_ROUTE_SAID = re.compile(r"\s*(?:please\s+)?(?:call|email|phone)(?:\s+them)?(?:\s+please)?\s*[.!]*\s*", re.I)   # the ladder's own words
 
 
 def answers_sashas_question(st: dict, body: str, payload: str, now) -> bool:
@@ -1393,7 +1392,7 @@ def answers_sashas_question(st: dict, body: str, payload: str, now) -> bool:
     if pend.get("resume_asked"):   # "Still want …? Say yes to carry on" (Sasha 161) — asked by _answer_pending itself
         return bool(RESUME.fullmatch(t) or NO.fullmatch(t))
     if kind in _YES_NO_KINDS:
-        return YS.is_yes(t) or bool(_NO.match(t)) or (kind == "ladder" and bool(_ROUTE_SAID.fullmatch(t)))
+        return YS.is_yes(t) or bool(_NO.match(t))
     if kind in ("link", "handed"):   # Sasha 316 · "handed": a platform hand-over (no link record)
         return bool(re.match(r"^\s*booked\b", t, re.I))
     from . import invitations as IV
@@ -2234,41 +2233,6 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
         if _WB.PARK.search(body or ""):
             out.text(await _WB.park(ctx, pend))
             return True
-    if kind == "ladder":   # Sasha 195 · the ladder's choice → acted on at once (the choice IS the yes; nothing read out again)
-        opts = pend.get("options") or {}
-        route = payload.split(":", 2)[2] if payload.startswith(f"lad:{pend['nonce']}:") else None
-        if route is None:
-            t = (body or "").lower()
-            route = ("no" if re.search(r"\b(no|nope|not now|cancel)\b", t) else
-                     # Sasha 254 · the booking rules' ONE question's two answers: "handle it" (the form) / "prefilled form" (their page)
-                     "form" if re.search(r"\bhandle\b", t) and "form" in opts.values() else
-                     "page" if re.search(r"\bprefilled\b", t) and "page" in opts.values() else "email" if "email" in t else
-                     "call" if re.search(r"\bcall\b", t) else "page" if re.search(r"\b(now|page|send|link)\b", t) else
-                     next((r for r in opts.values() if r != "no"), None) if re.search(r"\b(yes|ok|okay|sure|go ahead|book it|please)\b", t) else None)
-        if route is None or (route != "no" and route not in opts.values()):
-            st["pending"] = None
-            return False
-        st["pending"] = None
-        try:   # the same 15-minute window as every yes: a late choice places nothing
-            if route != "no" and ctx["now"] - datetime.fromisoformat(pend["at"]) > APPROVAL_WINDOW:
-                out.text("That question has expired (15 minutes) — nothing was booked. Ask me again.")
-                return True
-        except (KeyError, ValueError):
-            pass
-        if route == "no":
-            out.text("OK — nothing was sent.")
-            return True
-        mark = len(out.items)
-        await _prepare_or_ask(ctx, {**(pend.get("saved") or {}), "ladder_route": route})
-        p2 = st.get("pending") or {}
-        if route in ("form", "email", "call") and p2.get("kind") == "confirm":
-            del out.items[mark:]
-            await _approve(ctx, p2, {"how": "button"})
-            if route == "email":
-                v = plain_venue(p2.get("venue"))
-                out.items = [(it[0], f"Done — I've emailed {v}. I'll update you as soon as I hear back.", *it[2:]) if it[0] == "text" and it[1] == DONE_ASKED else it
-                             for it in out.items]
-        return True
     if kind == "city_q":
         if await _WB.city_answer(ctx, pend, body, payload):
             return True
@@ -2478,329 +2442,6 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             return True
         out.text("Tap Yes or No — nothing is booked until you do.")
         return True
-    if kind == "plan_link":   # Sasha 132 · the one yes to the whole plan → the page, made with the plan in its read-back
-        if payload.startswith("no:") or (not payload and _NO.match(body)):
-            st["pending"] = None
-            out.text("OK — nothing sent.")
-            return True
-        if payload.startswith("yes:") or YS.is_yes(body):
-            st["pending"] = None
-            if not await _send_link(ctx, pend["read"], pend["reservation"], pend["contact_name"], pend["plan"],
-                                    {"read": pend["read"], "draft": pend["draft"], "invite_code": pend.get("invite_code")}):
-                out.text("I couldn't make their booking page just now. Nothing was sent.")
-            return True
-        return False
-    if kind == "no_reply_call":   # Sasha 130 · yes → the call's OWN read-back and yes; no → nothing
-        if payload.startswith("no:") or (not payload and _NO.match(body)):
-            st["pending"] = None
-            out.text("OK — nothing more. I'll show you their reply if one arrives.")
-            return True
-        if payload.startswith("yes:") or YS.is_yes(body):   # Sasha 269 · a question left from before 269: Sasha's own R5 call is gone
-            st["pending"] = None                              # (a call is the act's — venue.call_again); nothing is prepared or dialled
-            from app.agent import voice as V
-            out.text(V.NO_CALL_OPEN)
-            return True
-        return False
-    if kind in ("confirm", "cancel_confirm"):
-        return f"Your {'cancellation' if kind == 'cancel_confirm' else 'booking'} at {venue or 'the venue'} is waiting for your yes."
-    if venue:
-        return f"We were in the middle of your booking at {venue}."
-    return "We were in the middle of something."
-
-
-async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
-    """Sasha 253 · item 5 — on WhatsApp, reached only for Sasha's own open question (answers_sashas_question, the G3 resolver), a
-    demo's own question (until G11) and before an invitation request; the web voice avatar (voice_turn.py) calls it as before."""
-    out, st, now = ctx["out"], ctx["st"], ctx["now"]
-    pend = st.get("pending")
-    if payload and (not pend or not _payload_ok(pend, payload)):
-        out.text("That button was for an earlier question — nothing was sent. Ask me again and I'll start afresh.")
-        return True
-    if not pend:
-        return False
-    at = _dt(pend.get("at") or "")
-    kind = pend["kind"]
-    # Sasha 165 · "show me my itinerary" / "what was I doing?" is a QUESTION, never the answer to the open one: it's
-    # answered, and the open item stays open
-    from .itinerary_q import TRIP as _TRIP
-    if not payload and _TRIP.search(body or "") and not RESUME.fullmatch(body or ""):
-        return False
-    if kind == "booked":
-        if payload == f"cxl:{pend['nonce']}":   # the Cancel button: the same cancellation as typed, one yes before anything
-            st["pending"] = None
-            await _cancel_find(ctx, pend.get("venue"))
-            return True
-        st["pending"] = None
-        return False
-    from . import wa_brain as _WB
-    if not payload and kind in _WB.PARKABLE:   # Sasha 178 · PARK AND SWITCH
-        sm = _WB.START.match(body or "")
-        if sm:
-            out.text(await _WB.park(ctx, pend))
-            await _WB.start_another(ctx, sm["rest"])
-            return True
-        if _WB.PARK.search(body or ""):
-            out.text(await _WB.park(ctx, pend))
-            return True
-    if kind == "ladder":   # Sasha 195 · the ladder's choice → acted on at once (the choice IS the yes; nothing read out again)
-        opts = pend.get("options") or {}
-        route = payload.split(":", 2)[2] if payload.startswith(f"lad:{pend['nonce']}:") else None
-        if route is None:
-            t = (body or "").lower()
-            # Sasha 254 · the rules' one question's own answers, typed ("Handle it", "a prefilled form") — found by the gate: the
-            # typed answer matched nothing, the question was dropped and the message went elsewhere
-            named = next((r for title, r in (opts.items() if isinstance(opts, dict) else []) if title and title.lower() in t), None)
-            route = (named or ("form" if re.search(r"\bhandle\b", t) and "form" in opts.values() else None) or
-                     ("page" if re.search(r"\b(prefilled|pre-filled)\b", t) and "page" in opts.values() else None))
-        if route is None:
-            route = ("no" if re.search(r"\b(no|nope|not now|cancel)\b", t) else "email" if "email" in t else
-                     "call" if re.search(r"\bcall\b", t) else "page" if re.search(r"\b(now|page|send|link)\b", t) else
-                     next((r for r in opts.values() if r != "no"), None) if re.search(r"\b(yes|ok|okay|sure|go ahead|book it|please)\b", t) else None)
-        if route is None or (route != "no" and route not in opts.values()):
-            st["pending"] = None
-            return False
-        st["pending"] = None
-        try:   # the same 15-minute window as every yes: a late choice places nothing
-            if route != "no" and ctx["now"] - datetime.fromisoformat(pend["at"]) > APPROVAL_WINDOW:
-                out.text("That question has expired (15 minutes) — nothing was booked. Ask me again.")
-                return True
-        except (KeyError, ValueError):
-            pass
-        if route == "no":
-            out.text("OK — nothing was sent.")
-            return True
-        mark = len(out.items)
-        await _prepare_or_ask(ctx, {**(pend.get("saved") or {}), "ladder_route": route})
-        p2 = st.get("pending") or {}
-        if route in ("form", "email", "call") and p2.get("kind") == "confirm":
-            del out.items[mark:]
-            await _approve(ctx, p2, {"how": "button"})
-            if route == "email":
-                v = plain_venue(p2.get("venue"))
-                out.items = [(it[0], f"Done — I've emailed {v}. I'll update you as soon as I hear back.", *it[2:]) if it[0] == "text" and it[1] == DONE_ASKED else it
-                             for it in out.items]
-        return True
-    if kind == "city_q":
-        if await _WB.city_answer(ctx, pend, body, payload):
-            return True
-        st["pending"] = None
-        return False
-    if kind in ("trip_where", "trip_added", "contact_name", "demo_reset", "gate"):   # Sasha 167 · wa_brain's own questions
-        from . import wa_brain as WB
-        if await WB.answer(ctx, pend, body, payload):
-            return True
-        if kind != "trip_added":   # an added place stays bookable ("book it at 8") across other questions
-            st["pending"] = None
-        return False
-    # Sasha 161 · STALE: after a greeting or a gap, ASK whether to continue — never resume mid-question
-    if pend.get("resume_asked") and not payload:
-        if RESUME.fullmatch(body or ""):
-            pend.pop("resume_asked", None)
-            pend["at"] = ctx["now"].isoformat()
-            if kind == "need":
-                await _prepare_or_ask(ctx, pend)
-            else:
-                out.text("OK — where were we: " + _open_item(pend))
-            return True
-        if NO.fullmatch(body or ""):
-            st["pending"] = None
-            out.text("OK — dropped. What would you like instead?")
-            return True
-        st["pending"] = None
-        return False   # anything else is a new request: it starts afresh
-    gap = (ctx["now"] - at) > STALE_AFTER if at else False
-    if not payload and (GREETING.fullmatch(body or "") or (gap and kind in ("need", "cards", "confirm"))):
-        from .handoff import booking_handoff
-        if gap and not GREETING.fullmatch(body or "") and booking_handoff(body or "") is not None:
-            st["pending"] = None
-            return False   # a whole new request after a gap starts afresh
-        pend["resume_asked"] = True
-        out.text(f"{'Hi! ' if GREETING.fullmatch(body or '') else ''}{_still_want(pend)} Say “yes” to carry on, or tell me what you'd like now.")
-        return True
-    # Sasha 117 · "Cancel the Retiro dinner" while cards (or another open question) show is a CANCELLATION, never a
-    # refinement or an answer — live, it searched for "Cancel Retiro dinner dinner". Not for a yes/no on a booking or a
-    # cancel ("No, cancel" there means "don't"). A new cancel while the which-one list shows starts a fresh list.
-    if not payload and kind not in ("confirm", "cancel_confirm") and cancel_intent(body) is not None \
-            and not (kind == "cancel_pick" and re.fullmatch(r"\D*\d{1,2}\D*", body or "")):
-        st["pending"] = None
-        return False
-    if kind == "cards":
-        if now - at > CARDS_LIFE:
-            st["pending"] = None
-            return False
-        i = _picked(pend, body, payload)
-        if i is None and not payload:
-            # Sasha 167 · a WHOLE new request (a kind of place AND a place, said plainly) is a new search — never folded into
-            # these cards as a refinement (live: "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00"
-            # was searched as "romantic booking two October restaurant", and its 09:00 never asked about)
-            from . import wa_brain as WB
-            nh = HO.booking_handoff(body, [], ctx["now"]) or {}
-            nf, nparts = nh.get("booking_find") or {}, (nh.get("reservation_draft") or {}).get("parts") or {}
-            # its own place AND its own day/time or party — "Italian in Malasaña" alone stays a refinement (day and party kept)
-            old = pend.get("find") or {}
-            ow, nw = _fold(old.get("where") or ""), _fold(nf.get("where") or "")
-            # another CITY (Hoi An after Hanoi), never a neighbourhood of the same one ("Malasaña" → "Malasaña, Madrid" after Madrid)
-            other_place = bool(nw) and bool(ow) and ow.split(",")[-1].strip() not in nw and nw.split(",")[0].strip() not in ow
-            if nf.get("where") and (nf.get("open_at") or nparts.get("when") or nparts.get("how_many") or WB._ORD_DAY.search(body or "")
-                                    or other_place) \
-                    and WB.sasha_clear(body, [], ctx["now"]):   # Sasha 169/174 · its own day, place or kind: a new search
-                st["pending"] = None
-                return False
-        if i is None:
-            # Sasha 104 · while the cards show, anything that is not a pick is a REFINEMENT of this search: the area,
-            # day, time and party are kept unless the message changes them; the kind of place is replaced; every
-            # quality asked for is kept. A plain yes/no/thanks gets the question again.
-            merged = refine(pend, body, ctx["now"])
-            if merged is None and not payload:
-                # Sasha 156 · a whole new search ("restaurants in Lisbon tonight") is a NEW search, never "Which one?" again
-                from .handoff import booking_handoff
-                if ((booking_handoff(body) or {}).get("booking_find") or {}).get("where"):
-                    st["pending"] = None
-                    return False
-            if merged is None:
-                out.text("Which one? Tap a name, or send its number (1, 2 or 3) — or tell me what else to look for.")
-                return True
-            st["pending"] = None
-            await _find(ctx, merged[0], {"parts": merged[1]})
-            return True
-        await _picked_card(ctx, pend, pend["cards"][i])
-        return True
-    if kind == "need":
-        return await _answer_need(ctx, pend, body)
-    if kind == "invite_window":   # S-80 · the days, asked once
-        from . import invitations as IV
-        w = IV.window(body, now)
-        st["pending"] = None
-        if w is None:
-            return False
-        await _invite(ctx, {**pend["req"], "window": w})
-        return True
-    if kind == "invite_where":   # S-80 · the inviter names the area for the slot their guest picked
-        from . import invitations as IV
-        area = re.sub(r"^\s*(?:in|en|near|around)\s+", "", body or "", flags=re.I).strip(" .!?")
-        if not area or cancel_intent(body) is not None:
-            st["pending"] = None
-            return False
-        st["pending"] = None
-        await _find(ctx, IV.HO_find(pend["activity"], area, pend["open_at"]), {"parts": pend["draft"]})
-        if st.get("pending"):
-            st["pending"]["invite_code"] = pend["invite_code"]
-        return True
-    if kind == "cancel_pick":
-        m = re.fullmatch(r"\s*(\d)\s*[.)]?\s*", body or "")
-        i = int(m[1]) - 1 if m else next((k for k, r in enumerate(pend["rows"]) if body and _fold(body).strip() in _fold(r["venue"])), None)
-        if i is None or not 0 <= i < len(pend["rows"]):
-            if cancel_intent(body) is None and HO.booking_handoff(body, []) is not None:
-                st["pending"] = None
-                return False
-            out.text("Reply with the number of the booking to cancel.")
-            return True
-        st["pending"] = None
-        await _cancel_row(ctx, pend["rows"][i])
-        return True
-    if kind == "mailbox":   # S-82 · ONE find from their inbox, one yes
-        if payload.startswith(("yes:", "no:")) or YS.is_yes(body) or _NO.match(body or ""):
-            st["pending"] = None
-            yes = payload.startswith("yes:") or (not payload and YS.is_yes(body))
-            status, j = await api(ctx["account"], "POST", f"/api/booking/mailbox/finds/{pend['id']}", {"offer_sha256": pend["sha"], "yes": yes})
-            out.text(str(j.get("say")) if status == 200 else f"Not changed — {refusal_words(j, status)}.")
-            return True
-        return False
-    if kind == "payment":   # S-81 tier 0 · the deposit: one yes asks the venue for ITS link; the guest pays them directly
-        if payload.startswith("no:") or (not payload and _NO.match(body)):
-            st["pending"] = None
-            out.text(f"OK — I haven't asked {pend['venue']} for anything. The booking isn't confirmed without their deposit.")
-            return True
-        if payload.startswith("yes:") or YS.is_yes(body):
-            if now - at > APPROVAL_WINDOW:
-                st["pending"] = None
-                out.text("That question has expired (15 minutes) — nothing was asked. Tell me if you still want the link.")
-                return True
-            st["pending"] = None
-            how = {"how": "whatsapp_button", "said": ctx.get("button_text") or None} if payload else {"how": "whatsapp_text", "said": body}
-            status, j = await api(ctx["account"], "POST", f"/api/booking/payments/{pend['id']}/approve", {"read_back_sha256": pend["sha"], "approval": how})
-            out.text(str(j.get("say")) if status == 200 else f"Not asked — {refusal_words(j, status)}.")
-            return True
-        return False
-    if kind == "engine_check":   # Sasha 139 · the founder checks each hotel engine link: "filled" / "not filled" (+ "wrong page")
-        got = engine_check_answer(pend, body, now)
-        if got is None:
-            return False
-        if got is False:
-            st["pending"] = None
-            return False
-        line, st["pending"] = got
-        out.text(line)
-        return True
-    if kind == "engine_check_done":
-        return False
-    if kind == "hotel_choice":   # Sasha 135 · TEST booking, or the real request to the hotel
-        st["pending"] = None
-        if payload.startswith("test:") or re.search(r"\btest\b", body or "", re.I):
-            await _hotel_test_ask(ctx, pend)
-            return True
-        if payload.startswith("req:") or re.search(r"\b(request|ask|real|book with)\b", body or "", re.I):
-            await _picked_card(ctx, {**pend["cards_pend"], "real": True}, pend["card"])
-            return True
-        out.text("Tap “Test booking” or “Request from hotel”.")
-        st["pending"] = pend
-        return True
-    if kind == "hotel_test_confirm":
-        if payload.startswith("no:") or (not payload and _NO.match(body)):
-            st["pending"] = None
-            out.text("OK — no test booking made.")
-            return True
-        if payload.startswith("yes:") or YS.is_yes(body):
-            st["pending"] = None
-            await _hotel_test_pay(ctx, pend)
-            return True
-        out.text("Tap Yes or No.")
-        return True
-    if kind == "flight_cards":   # Sasha 132
-        i = _picked(pend, body, payload)
-        if i is None and re.fullmatch(r"\s*[123]\s*", body or ""):
-            i = int(body.strip()) - 1
-        if i is None or i >= len(pend["cards"]):
-            st["pending"] = None
-            return False
-        await _flight_pick(ctx, pend, pend["cards"][i])
-        return True
-    if kind == "flight_travellers":   # Sasha 369 · their answer: read, saved once, then the flight carries on (never a stand-in)
-        from . import passengers as PX
-        got = PX.parse(body or "")
-        if len(got["passengers"]) >= int(pend.get("adults") or 1):
-            await PX.save(ctx["account"], got["passengers"])
-            await _flight_pick(ctx, pend, pend["card"])
-            return True
-        out.text("I still need " + ("; ".join(got["missing"]) if got["missing"] else "each traveller's full name, Mr/Ms and date of birth") +
-                 " — as on the passport. Nothing has been held.")
-        return True
-    if kind == "flight_confirm":
-        if payload.startswith("no:") or (not payload and _NO.match(body)):
-            st["pending"] = None
-            out.text("OK — nothing booked.")
-            return True
-        if payload.startswith("yes:") or YS.is_yes(body):
-            st["pending"] = None
-            if now - at > APPROVAL_WINDOW:
-                out.text("That question has expired (15 minutes) — nothing was booked. Ask me again.")
-                return True
-            await _flight_approve(ctx, pend)
-            return True
-        out.text("Tap Yes or No — nothing is booked until you do.")
-        return True
-    if kind == "plan_link":   # Sasha 132 · the one yes to the whole plan → the page, made with the plan in its read-back
-        if payload.startswith("no:") or (not payload and _NO.match(body)):
-            st["pending"] = None
-            out.text("OK — nothing sent.")
-            return True
-        if payload.startswith("yes:") or YS.is_yes(body):
-            st["pending"] = None
-            if not await _send_link(ctx, pend["read"], pend["reservation"], pend["contact_name"], pend["plan"],
-                                    {"read": pend["read"], "draft": pend["draft"], "invite_code": pend.get("invite_code")}):
-                out.text("I couldn't make their booking page just now. Nothing was sent.")
-            return True
-        return False
     if kind == "no_reply_call":   # Sasha 130 · yes → the call's OWN read-back and yes; no → nothing
         if payload.startswith("no:") or (not payload and _NO.match(body)):
             st["pending"] = None
@@ -2828,13 +2469,6 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             await (_approve(ctx, pend, how) if kind == "confirm" else _cancel_approve(ctx, pend, how))
             return True
-        from . import decide as D
-        want = D.preference(body) if kind == "confirm" and pend.get("read") else None
-        if want and want != {"form": "form", "call": "call", "email": "email", "call_email": "call_email"}.get(pend.get("rung")):   # Sasha 130 · the override
-            st["pending"] = None
-            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
-                                        "invite_code": pend.get("invite_code"), "prefer": want})
-            return True
         if HO.booking_handoff(body, st.get("history") or []) is not None:
             st["pending"] = None
             return False
@@ -2857,13 +2491,6 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
                 return True
             out.text("Noted — booked on their page, by you. I'm looking for their confirmation email in your Gmail now.")
             _spawn(watch_gmail_confirmation(ctx["ch"], ctx["frm"], ctx["account"], pend.get("venue") or "", pend.get("when") or ""))
-            return True
-        from . import decide as D
-        want = D.preference(body)
-        if want and want != "one_tap" and pend.get("read"):   # Sasha 130 · "call them instead" — the guest's way
-            st["pending"] = None
-            await _prepare_or_ask(ctx, {"kind": "need", "at": now.isoformat(), "read": pend["read"], "draft": pend["draft"],
-                                        "invite_code": pend.get("invite_code"), "prefer": want})
             return True
         return False
     return False
@@ -2945,8 +2572,6 @@ def _payload_ok(pend: dict, payload: str) -> bool:
         return payload == f"cxl:{pend['nonce']}"
     if pend["kind"] == "gate":   # Sasha 167
         return payload.split(":", 1)[-1] == pend["nonce"] and payload.split(":", 1)[0] in ("am", "pm", "tripadd", "tripkeep")
-    if pend["kind"] == "ladder":   # Sasha 195
-        return payload.startswith(f"lad:{pend['nonce']}:")
     if pend["kind"] == "city_q":   # Sasha 178
         return payload in (f"oneoff:{pend['nonce']}", f"tripq:{pend['nonce']}")
     if pend["kind"] == "demo_reset":
@@ -3060,36 +2685,6 @@ async def _picked_card(ctx: dict, pend: dict, card: dict) -> None:
     await _prepare_or_ask(ctx, nxt)
 
 
-def dv_platform(rd: dict) -> str:
-    from . import venue_read as V
-    link = ((rd.get("rungs") or {}).get("link") or {}).get("value") or ""
-    return (V.platform_of(link) if link.startswith("http") else link) or "their booking platform"
-
-
-async def _send_link(ctx: dict, rd: dict, reservation: dict, name: str, plan: Optional[str], keep: dict) -> bool:
-    """The one-tap page, made (with the approved plan in its read-back, Sasha 132) and sent. Sasha 138 · a hotel stay: its own
-    booking engine, the dates in the link where the engine takes them — the guest pays there, in one tap."""
-    at = reservation["when"]["at"]
-    nights = (keep.get("draft") or {}).get("nights")
-    status, j = await api(ctx["account"], "POST", "/api/booking/links", {"read_id": rd["read_id"], "date": at[:10], "time": at[11:16],
-                                                                          "party": reservation["how_many"]["count"], "name": name,
-                                                                          "venue": plain_venue(rd.get("venue"))[:120],   # Sasha 187 · the name he picked, never the site's legal name
-                                                                          **({"plan_line": plan} if plan else {}),
-                                                                          **({"nights": int(nights)} if nights else {})})
-    if status != 200:
-        return False
-    ctx["st"]["pending"] = {"kind": "link", "at": ctx["now"].isoformat(), "link_id": j["link_id"], "venue": rd["venue"], "when": at, **keep}
-    await _outcome(ctx["account"], {**keep, "link_id": j["link_id"], "venue": rd["venue"], "read": rd}, "page", status="page_link", j=j)   # Sasha 247 · their page, sent
-    if nights:
-        ctx["out"].text(hotel_link_text(rd["venue"], j))
-        return True
-    from . import slot_link as SL   # Sasha 163 · the one platform message
-    dt = datetime.fromisoformat(at)
-    ctx["out"].text(SL.platform_message(rd["venue"], j.get("platform") or "their booking page", dt.date(), dt.time(),
-                                        reservation["how_many"]["count"], bool(j.get("slot_filled")), j["url"]))
-    return True
-
-
 def hotel_link_text(venue: str, j: dict) -> str:
     """Sasha 138 · a hotel's own booking engine, the stay in its link: one tap. Shared with the brain (Sasha 253, G8)."""
     lines = (j.get("read_back") or {}).get("lines") or []
@@ -3109,33 +2704,9 @@ def _hours_of(read: dict, now) -> dict:
     return {"open_now": s.get("open_now"), "opens_at": (s.get("opens_at") or "")[11:16] or None}
 
 
-OWN_PAGE = "their own booking page"   # Sasha 246 · rung 2's "platform" name: the venue's own site (ladder.own_page)
-
-
-def ladder_of(rd: dict, reservation: dict, now, account: Optional[str] = None) -> Optional[dict]:
-    """Sasha 254 · no longer a decider: the booking rules' ONE question (R2) when they ask it, from agapi.booking_decide (the old
-    flow's and the web card's shape: {"line", "options": [(title, route)]}), else None. decide.ladder is retired."""
-    from agapi import booking_decide as BD
-    return BD.legacy_ladder(rd, reservation, now, account)
-
-
-def route_line_of(rd: dict, dv) -> str:
-    """Sasha 254 · the decision's one plain line = the booking rules' say_text + the take-over (agapi.booking_decide.say), the same
-    words on every surface. decide.line is retired."""
-    return dv.reason
-
-
 def plain_venue(name: Optional[str]) -> str:
     """Sasha 171 · the venue as the guest knows it: the demo's stand-in mark is said once, in the read-back, not in every line."""
     return (name or "").replace(" (TEST stand-in)", "")
-
-
-def decision_of(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None, account: Optional[str] = None):
-    """Sasha 254 · no longer a decider: the booking rules' Decision (agapi.booking_decide.legacy_decision) in the old flow's shape
-    (.route, .reason, .then, .alternatives). decide.decide is retired; the founder-demo's own channel choices (Sasha 187/193) went
-    with it — the rules decide for every account."""
-    from agapi import booking_decide as BD
-    return BD.legacy_decision(rd, prefer, at, now, account)
 
 
 _NEED_Q = {"what": "What should I book there — a table, a massage, a class…?", "when": "Which day and time?",
@@ -3201,68 +2772,37 @@ async def _prepare_or_ask(ctx: dict, pend: dict) -> None:
         from . import wa_brain as WB   # Sasha 167 (5) · asked here, then straight on with this booking
         await WB.ask_contact(ctx, {**pend})
         return
-    d, rd = pend["draft"], pend["read"]
-    reservation = {"schema": "reservation/1",
-                   "flow": "availability" if d["when"]["mode"] == "venue_proposes" else (d.get("flow") or "book"),
-                   "who": {"name": contact["name"], "contact": {"mobile_e164": contact["mobile_e164"]}},
-                   "what": d["what"], "where": {}, "when": d["when"], "how_many": d["how_many"]}
-    if reservation["flow"] == "quote_first":
-        reservation["flow"] = "book"
-    rungs = rd["rungs"]
-    why = None
-    # Sasha 130 · THE DECISION (decide.py): the route, and its reason said to the guest first; the others in order after it
-    lr = pend.get("ladder_route")
-    dv = decision_of(rd, {"form": "form", "email": "email", "page": "one_tap", "call": "call"}.get(lr) or pend.get("prefer"),
-                     (reservation.get("when") or {}).get("at"), ctx["now"], ctx.get("account"))
-    if not d.get("nights") and not lr:   # Sasha 195 · THE LADDER'S WORDS, asked once
-        lad = ladder_of(rd, reservation, ctx["now"], ctx.get("account"))
-        if lad:
-            nonce = uuid.uuid4().hex[:6]
-            out.ask(lad["line"], [(t, f"lad:{nonce}:{r}") for t, r in lad["options"]])
-            st["pending"] = {"kind": "ladder", "at": ctx["now"].isoformat(), "nonce": nonce, "options": {t: r for t, r in lad["options"]},
-                             "saved": {k: pend[k] for k in ("read", "draft", "invite_code", "find", "venue") if k in pend}}
-            return
-    order = [r for r in [dv.route] + dv.alternatives if r]
-    log.info("[guest_whatsapp] route %s: %s", dv.route, dv.reason)   # Sasha 158 · the reasoning is the ops console's
-    # Sasha 161 · the route in ONE plain line, asked once (the read-back stays in the record and the logs)
-    ctx["route_line"] = route_line_of(rd, dv) if not d.get("nights") else None   # a hotel room keeps its own request sentence
-    if dv.route == "one_tap" and not lr:   # their page is sent next (no yes card): the line goes first, on its own
-        if not _founder_demo(ctx.get("account")):
-            out.text(route_line_of(rd, dv))
-        elif any(f.get("kind") == "challenge" for f in rd.get("facts") or []):   # Sasha 187 · the 175 flow: one message (+ the CAPTCHA beat)
-            out.text("Their page asks you to prove you're human — I've sent it to your phone.")
-    if not dv.route:
-        ctx["route_line"] = route_line_of(rd, dv)
-        st["pending"] = None
-        out.text(ctx["route_line"])
+    await one_path(ctx, pend)
+
+
+async def one_path(ctx: dict, pend: dict) -> None:
+    """Sasha 378 · CR 188 · THE ONE BOOKING PATH for this flow's venue too: the booking goes to the SAME tool the brain uses (hold_venue →
+    venues.one_decision → AgAPI's ONE decision: its act read back, then the person's yes; or AgAPI's hand-over for a step only they may do).
+    This flow's own route choice (decision_of / ladder_of / the one-tap page, _send_link) is deleted. The answer is drawn by WhatsApp's
+    renderer (wa_agent.render); the next words (their yes) are the brain's."""
+    from agapi import v0 as API
+    from app.agent import sasha as AG
+    from . import wa_agent as WA
+    out, st, d, rd = ctx["out"], ctx["st"], pend["draft"], pend["read"]
+    when = d.get("when") or {}
+    at = str(when.get("at") or "")
+    what = d.get("what")
+    args = {"name": rd["venue"], "city": rd.get("city") or (pend.get("find") or {}).get("where") or "", "party": int((d.get("how_many") or {}).get("count") or 1),
+            "day": at[:10] or str(when.get("day") or "")[:10], "time": at[11:16] or "", **({"place_id": rd["place_id"]} if rd.get("place_id") else {}),
+            **({"what": what if isinstance(what, str) else str((what or {}).get("text") or (what or {}).get("category") or "")} if what else {}),
+            **({"nights": int(d["nights"])} if d.get("nights") else {})}
+    st["pending"] = None   # the brain answers what comes next (their yes → book_venue, on the hold this made)
+    c = API.Ctx(account=ctx["account"], user_said="", surface="s2", via="wa" if ctx.get("ch") else "page")
+    r = await API.call(c, "hold_venue", args)
+    if not r.get("ok"):
+        out.text(str((r.get("error") or {}).get("message") or "I couldn't prepare that booking just now — nothing was sent."))
         return
-    keep = {"read": rd, "draft": d, "invite_code": pend.get("invite_code")}   # so "call them instead" can re-decide
-    for route in order:
-        if route == "one_tap" and ("link" in rungs or "own_page" in rungs or ("form" in rungs and lr == "page") or ("form" in rungs and _founder_demo(ctx.get("account"))
-                                                          and "(TEST stand-in)" not in str(rd.get("venue") or ""))) \
-                and reservation["when"]["mode"] == "at":   # Sasha 187 · or their own booking page, on the founder's phone
-            from . import proactive as PR
-            plan = dv.then if dv.route == "one_tap" and PR.tap_escalation_on() and not _founder_demo(ctx.get("account")) and not lr else None
-            if plan:   # Sasha 132 · ONE yes covers the plan: asked first, then the page
-                lines = [f"I'll send you {rd['venue']}'s booking page on {dv_platform(rd)} — you press their confirm button; I can't press it for you.",
-                         plan]
-                sha = hashlib.sha256("\n".join(lines).encode()).hexdigest()
-                rid = hashlib.sha256(f"{rd['read_id']}|{reservation['when']['at']}".encode()).hexdigest()[:8]
-                out.text("Exactly what I'll do:\n" + "\n".join("• " + ln for ln in lines))
-                out.ask(f"Send me their page? {SN.confirm_sentence(reservation, rd['venue'])}", [("Yes, send it", f"yes:{rid}:{sha[:16]}"), ("No", f"no:{rid}:{sha[:16]}")])
-                st["pending"] = {"kind": "plan_link", "at": ctx["now"].isoformat(), "id": rid, "sha": sha, "plan": plan, "reservation": reservation,
-                                 "contact_name": contact["name"], **keep}
-                return
-            if await _send_link(ctx, rd, reservation, contact["name"], None, keep):
-                return
-            log.info("[guest_whatsapp] one-tap link refused; trying the next route")
-        # Sasha 319 · the form, call, call+email and email routes were Sasha's own sends to the venue — gone (AgAPI is the one sender)
-    st["pending"] = None
-    if any(r in ("form", "call", "call_email", "email") for r in order):   # Sasha 319 · a route only Sasha's own sender took: Tyler's
-        out.text(RT.TO_TYLER)
-        return
-    said = f"I can't book {rd['venue']} from here right now" + (f" — {why}" if why else "")
-    out.text(said + ("" if said.endswith(("?", ".")) else ".") + " Nothing was sent.")
+    ev = AG.render("hold_venue", r["result"], args)
+    if ev:
+        WA.render(ev, out, st, ctx["now"])
+    said = str((r["result"] or {}).get("say") or "")
+    if said and not out.items:
+        out.text(said)
 
 
 def room_email_sentence(venue: str, count: int, day: str, n: int) -> str:

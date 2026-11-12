@@ -63,14 +63,17 @@ class ATestPerson(Base):
     def test_a_generic_search_is_unchanged(self):
         self.assertIsNone(run(TV.search(ctx("dinner in Madrid tonight"), {"what": "dinner", "where": "Madrid"})))
 
-    def test_its_hold_asks_the_one_question(self):
-        from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: its own form is the engine's read (CR 101)
-        rungs = {"link": {"value": "https://x.test/api/booking/test-venue/plain"}}
+    def test_its_hold_follows_agapis_decision_its_own_form(self):
+        # Sasha 378 · CR 188: its own form → AgAPI's send_form → the read-back for the ONE yes (no question of Sasha's own)
+        from tests.test_s254_one_decider import engine_from
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        use_fake_agapi(self)
+        rungs = {"link": {"value": "https://x.test/api/booking/test-venue/plain"}, "form": {}}
         with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             out = run(VN.hold_venue(ctx(), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid", "country": "ES",
                                             "what": "dinner", "party": 2, "day": LATER, "time": "20:00"}))
-        self.assertEqual(out["status"], "choose_route", out)
-        self.assertEqual(out["ask"], V.ASK_BOOK)
+        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"), out)
+        self.assertNotIn("options", out)
 
     def test_vet_gives_the_test_cards_own_form(self):
         a = run(TV.vet(ctx(), {"name": "Sasha Test Venue"}))
@@ -95,21 +98,13 @@ class ALivePerson(Base):
         self.assertEqual(run(TV.vet(ctx(), dict(a))), a)
 
 
-class TheirWordsPickTheOption(Base):
-    """Found live on production (/s2, the test venue): "Prefilled form" was sent by the model as route "form" and became Sasha sending
-    it (a read-back of a send). Their words naming ONE option decide the route in hold_venue (venues.chosen_route)."""
+class TheirWordsPickNoRoute(Base):
+    """Found live on production (/s2, the test venue): "Prefilled form" was sent by the model as route "form". Sasha 378 · CR 188: the
+    route is AgAPI's decision — neither their words nor the model's pick one (chosen_route is gone)."""
 
-    def test_the_words_map_to_the_rules_options(self):
-        self.assertEqual(VN.chosen_route("Prefilled form"), "page")
-        self.assertEqual(VN.chosen_route("prefilled form please"), "page")
-        self.assertEqual(VN.chosen_route("Handle it"), "form")
-        self.assertEqual(VN.chosen_route("handle it and let me know"), "form")
-        for said in ("Yes, send it.", "book it", "the prefilled one, or handle it?", ""):
-            self.assertIsNone(VN.chosen_route(said), said)
-
-    def test_prefilled_form_is_the_page_whatever_the_model_sent(self):
+    def test_no_route_from_words_or_the_model(self):
+        self.assertFalse(hasattr(VN, "chosen_route"))
         seen = []
-        real = VN._read
 
         async def rd(c, a):
             seen.append(a.get("route"))
@@ -120,9 +115,8 @@ class TheirWordsPickTheOption(Base):
                                                           "country": "ES", "what": "dinner", "party": 2, "day": LATER, "time": "20:00",
                                                           "route": "form"}))
             except Exception:
-                pass   # the page's preparation is AgAPI's (not faked here) — what matters is the route it was held with
-        self.assertIn("page", seen)
-        self.assertNotIn("form", seen)
+                pass
+        self.assertNotIn("page", seen)                                               # their words never re-route it
 
 
 class ShortConfirmations(Base):

@@ -117,7 +117,7 @@ class SaidFromTheRecord(Base):
         with mock.patch.object(VC, "dial", mock.AsyncMock(side_effect=AssertionError("dialled with no plan"))):
             self.hold({"email": ALL4["email"], "phone": {"value": LISTED}}, hours=10, what="a room", venue="Hotel Gate", nights=1,
                       facts=LISTING_FACTS, place_id=PID)
-            self.assertIn("call", VN._HELD[ACCT]["rules_say"].lower())                       # what her own rules would have said
+            self.assertNotIn("call", VN._HELD[ACCT]["rules_say"].lower())                    # Sasha 378: AgAPI's email decision — no call of hers
             got = self.yes()
         self.assertEqual(got["line"], BR.PHRASES["sent"] + " " + BR.PHRASES["takeover"])
         self.assertNotIn("call", got["line"].lower())

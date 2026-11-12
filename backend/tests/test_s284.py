@@ -103,7 +103,7 @@ class TheDecisionIsKeptWhole(unittest.TestCase):
         with mock.patch.object(VT, "cached", lambda p: {"decision": {"say_text": "x"}}):
             self.assertIsNone(VT.decision(place))   # no route: no decision
         for src in (inspect.getsource(VN.read_booking_route), inspect.getsource(VN.hold_venue)):
-            self.assertIn("VT.decision(card or listing_card(rd))", src)
+            self.assertIn("VT.decision(place)", src)   # Sasha 378 · place = card or listing_card(rd): AgAPI's one decision
 
 
 class SheSaysAgAPIsWords(unittest.TestCase):
@@ -111,7 +111,7 @@ class SheSaysAgAPIsWords(unittest.TestCase):
         rd = {"venue": "Spa & Massage", "say": "", "rungs": {}, "place_id": "ChIJ284"}
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=rd)), mock.patch.object(VN, "card_of", lambda *a: None), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VN, "read_channel", lambda r, c, **k: eng), \
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), \
                 mock.patch.object(VT, "decision", lambda p: dec), mock.patch.object(VT, "reservable_say", lambda c: None):
             return run(VN.read_booking_route(Ctx(), {"name": "Spa & Massage", "city": "London"}))
 
@@ -135,9 +135,8 @@ class SheSaysAgAPIsWords(unittest.TestCase):
         self.assertTrue(self._route(None)["how"].startswith("Here's their "))
         self.assertEqual(self._route(dec_of("platform"))["how"], DECISIONS["platform"]["say_text"])
 
-    def test_old_s1_unchanged(self):
-        self.assertIn('return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": _routes_of(rd), "how": rd.get("say"),',
-                      inspect.getsource(VN.read_booking_route))
+    def test_every_surface_says_the_same(self):   # Sasha 378 · CR 188: old S1 follows AgAPI's decision too (its _routes_of is gone)
+        self.assertNotIn("_routes_of", inspect.getsource(VN.read_booking_route))
 
 
 class Memory:
@@ -244,34 +243,16 @@ class TheHoldFollows(unittest.TestCase):
 class NeverCantWhileAgAPIFoundARoute(unittest.TestCase):
     """THE RATCHET (3): every route × with/without a slot × every refusal of the booking rules → what S2 does with it."""
 
-    def test_who_finishes_it_is_agapis_button(self):
-        for name in DECISIONS:
-            dec = dec_of(name)
-            for at in ("2099-11-01T18:00", ""):
-                expect = dec["route"] != "none" and dec["how_far"] != "call" and not dec["button"]["sends"] \
-                    and (bool(at) or dec["how_far"] != "request")
-                self.assertEqual(VN.follows(dec, at), expect, (name, at))
-        self.assertFalse(VN.follows(None, "2099-11-01T18:00"))
-
-    def test_the_hold_asks_agapi_first_and_never_ends_on_a_refusal(self):
+    def test_the_hold_follows_agapis_decision_and_never_ends_on_a_refusal_of_sashas(self):
+        # Sasha 378 · CR 188: Sasha's own rules (rules_for / REFUSED / follows) are gone — every route of AgAPI's is followed by ONE
+        # function (one_decision): an act, the call, or AgAPI's own hand-over; there is no refusal of Sasha's to end on
         src = inspect.getsource(VN.hold_venue)
-        i_dec, i_follow, i_rules, i_refused = (src.index(x) for x in (
-            "dec = VT.decision(card or listing_card(rd)) if path else None", "if follows(dec, at):",
-            "d = await rules_for(", 'if dec and dec["route"] != "none" and d.get("say") in REFUSED:'))
-        self.assertLess(i_dec, i_follow)
-        self.assertLess(i_follow, i_rules)
-        self.assertLess(i_rules, i_refused)
-        self.assertIn("refused=True", src[i_refused:i_refused + 400])
-
-    def test_every_refusal_of_the_rules_is_caught(self):
-        # every "Kanoe may not act" key the rules can return (booking_rules._call_allowed and the access gate)
-        src = inspect.getsource(BR)
-        for key in ("no_real_sends", "calls_cap", "too_soon"):
-            self.assertIn(f'"{key}"', src)
-            self.assertIn(key, VN.REFUSED)
-        self.assertIn("no_channel", VN.REFUSED)
-        for key in VN.REFUSED:   # each of these, said as the rules say it, is a "can't" (or nothing to hand over) — never on /s2 with a route
-            self.assertTrue(key == "no_channel" or CANT.search(BR.PHRASES.get(key, "can't")) or "won't" in BR.PHRASES.get(key, ""), key)
+        self.assertLess(src.index("dec = VT.decision(place)"), src.index("one_decision("))
+        for gone in ("rules_for", "REFUSED", "follows("):
+            self.assertNotIn(gone, src)
+        od = inspect.getsource(VN.one_decision)
+        self.assertIn("follow(", od)
+        self.assertNotIn("BD.", od)
 
     def test_her_follow_lines_never_say_cant(self):
         for line in (V.FINISH_IT, V.OPEN_THEIR_PAGE, V.CALL_IT, V.REACH_THEM, V.FLOOR):

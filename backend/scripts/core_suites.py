@@ -121,31 +121,13 @@ async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
 
 
 async def restaurant(a: str) -> None:
-    # Sasha 254 · the routing rules are the vendored BOOKING RULES (agapi/booking_rules), asked through the one adapter — the old
-    # decide.decide / decide.ladder (and their words) are retired
+    # Sasha 378 · CR 188 · the route is AgAPI's ONE decision (venue.profile → handoff.decide), followed — Sasha decides none
+    # (booking_rules.decide is AgAPI's; its vendored vectors run in agapi/booking_rules/test_booking_rules.py)
     from booking_signer import slot_link as SL, voice_turn as VT, guest_whatsapp as GW
-    from agapi import booking_decide as BD
+    from agapi import booking_decide as BD, venues as VN
     from agapi.booking_rules import booking_rules as BR
-    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
-    LIVE = {"mode": "live", "calls": "on", "real_venue_sends": "on"}
-
-    def R(chans, hours, pref=None, vtype="restaurant"):
-        now = _dt.now(_tz.utc)
-        return BR.decide(BD.ctx_for(channels=chans, vtype=vtype, test=False, booking_at_utc=(now + _td(hours=hours)).isoformat(), now=now,
-                                    access=LIVE, preference=pref, state={"server_cap": BD.SERVER_CALLS_PER_DAY}))
-    F, P, E, T = {"kind": "form", "value": "https://casa.example/reservas"}, {"kind": "platform"}, {"kind": "email", "value": "r@casa.example"}, {"kind": "phone", "value": "+34910000000"}
-    d = R([F, P, E, T], 200)
-    ok("REST rules: their own form first — the ONE question", d["action"] == "ask_one_question" and d["say_text"] == BR.PHRASES["ask_book"], d["action"])
-    d = R([P, T], 200)
-    ok("REST rules: a platform (no own form, WhatsApp or email) → its page handed over, never booked", d["action"] == "hand_over_platform_link", d["action"])
-    d = R([E, T], 72)
-    ok("REST 48 h rule: more than 48 h away, no form → a request (email), never a call", d["action"] == "request_email", d["action"])
-    d = R([E, T], 30)   # Sasha 265 · booking-rules/2 (CR 99): within 48 h the call IS the ONE question; their OK makes it the call
-    ok("REST 48 h rule: within 48 h → a call, asked as the ONE question (booking-rules/2)", d["action"] == "ask_call"
-       and R([E, T], 30, pref="call")["action"] == "call", d["action"])
-    d = R([E, T], 18, vtype="hotel")
-    ok("REST hotel within 24 h → call and email at once", d["action"] == "call_and_email", d["action"])
-    ok("REST every answer carries the take-over", all(R(c, h)["takeover"]["say"] == BR.PHRASES["takeover"] for c, h in (([F], 72), ([P], 72), ([T], 72), ([], 72))))
+    ok("REST no decider of Sasha's own: no booking_rules.decide call, no rules_for / read_channel / chosen_route",
+       not any(hasattr(m, n) for m, n in ((BD, "decide_for"), (BD, "ctx_for"), (VN, "rules_for"), (VN, "read_channel"), (VN, "chosen_route"))), "")
     read = {"facts": [{"kind": "platform", "value": "CoverManager", "source_label": "their website", "source_url": "https://example.test/",
                        "detail": {"link": "https://www.covermanager.com/reservation/module_restaurant/restaurante-ejemplo/spanish"}}]}
     page = SL.platform_page(read)
@@ -184,12 +166,6 @@ async def spa(a: str) -> None:
         ok("SPA live: never our test venue among real spas", not any(x.get("place_id") == LR.REHEARSAL_ID for x in c), "")
     finally:
         LR.standin = real_s
-    from agapi import booking_decide as BD   # Sasha 254 · R13: a CAPTCHA page is theirs — prepared, never zero-touch
-    from agapi.booking_rules import booking_rules as BR
-    d = BR.decide(BD.ctx_for(channels=[{"kind": "form", "value": "https://spa.example", "captcha": True}], vtype="spa", test=False,
-                             booking_at_utc=None, access={"mode": "live", "calls": "on", "real_venue_sends": "on"}, preference="form"))
-    ok("SPA a CAPTCHA page → their page, prepared — never zero-touch, even when asked to handle it",
-       (d["action"], d["say"]) == ("prepared_link", "prepared_link_captcha"), str((d["action"], d["say"])))
     ok("SPA “send me the captcha test” still answered", CT.asked("send me the captcha test"), "")
 
 

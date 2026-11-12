@@ -103,7 +103,7 @@ class TheDecisionIsKeptWhole(unittest.TestCase):
         with mock.patch.object(VT, "cached", lambda p: {"decision": {"say_text": "x"}}):
             self.assertIsNone(VT.decision(place))   # no route: no decision
         for src in (inspect.getsource(VN.read_booking_route), inspect.getsource(VN.hold_venue)):
-            self.assertIn("VT.decision(place)", src)   # Sasha 378 · place = card or listing_card(rd): AgAPI's one decision
+            self.assertIn("VT.decision(place)", src)   # Sasha 378 · place = place_of(rd, card, a): AgAPI's one decision
 
 
 class SheSaysAgAPIsWords(unittest.TestCase):

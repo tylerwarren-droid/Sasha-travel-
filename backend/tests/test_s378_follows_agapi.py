@@ -129,6 +129,50 @@ class EveryReaderReadsAgapisDecision(unittest.TestCase):
             self.assertNotIn(gone, code_of(body), gone)
 
 
+class AVenueNamedByItsWebsite(unittest.TestCase):
+    """Found by the deploy gate (VENUE 1–7, 12 Nov): "Sasha Test Venue" held by its website alone — no card on screen, no listing — had
+    no decision (the place asked about was card or listing only) and fell to the floor. ONE place (venues.place_of): the card, else the
+    venue by its listing AND the website the booking names — the same place venue.prepare_booking is given."""
+
+    def test_the_gates_test_venue_by_its_website(self):
+        from scripts import venue_engine_fake as F
+        from booking_signer.form_rung import test_venue_url
+        from agapi import v0 as API, venue_submit as VS
+        from booking_signer import guest_receipt as GR
+        acct = "00000000-0000-4000-8000-000000000378"
+        real_vt, real_vs = VT.CALL, VS.CALL
+
+        async def rd(ctx, a):   # the read through the booking API: no listing (a website only)
+            return {"read_id": "r-g", "venue": "Sasha Test Venue", "country": "ES", "facts": [], "rungs": {"form": {}}, "open_now": True,
+                    "opens_at": None, "say": ""}
+        res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+447700900211"}}, "how_many": {"count": 2},
+               "when": {"mode": "at", "at": "2099-11-16T21:00"}, "what": {"category": "restaurant"}}
+        F.install(submit=True)
+        try:
+            with mock.patch.object(VN, "_read", rd), mock.patch.object(VN, "_reservation", mock.AsyncMock(return_value=res)), \
+                    mock.patch.object(GR, "address_of", mock.AsyncMock(return_value="g@example.test")), \
+                    mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
+                    mock.patch.object(VS, "target", mock.AsyncMock(return_value="sandbox")), \
+                    mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=True)), \
+                    mock.patch("agapi.s2_memory.kind", mock.AsyncMock(return_value=None)):
+                v = {"name": "Sasha Test Venue", "city": "Madrid", "country": "ES", "website": test_venue_url("plain"), "what": "dinner"}
+                ctx = API.Ctx(account=acct, mode="test", user_said="Book it", surface="s1")
+                r = run(VN.read_booking_route(ctx, dict(v)))
+                h = run(VN.hold_venue(ctx, {**v, "day": "2099-11-16", "time": "21:00", "party": 2}))
+        finally:
+            VT.CALL, VS.CALL = real_vt, real_vs
+            VT._CACHE.clear()
+            VN._HELD.pop(acct, None)
+        self.assertEqual((r["routes"], r["decision"]["route"]), (["send_form"], "send_form"))     # AgAPI's decision, by the website
+        self.assertEqual((h["status"], h["route"]), ("awaiting_yes", "agapi"))                    # its read-back, held for the yes
+
+    def test_one_place_for_the_decision_and_the_prepare(self):
+        self.assertEqual(VN.place_of({"venue": "X"}, None, {"website": "https://x.example"}), {"name": "X", "website": "https://x.example"})
+        self.assertEqual(VN.place_of({"venue": "X", "place_id": "p"}, None, {}), {"name": "X", "place_id": "p"})
+        self.assertIsNone(VN.place_of({"venue": "X"}, None, {}))
+        self.assertEqual(VN.place_of({}, {"name": "C"}, {"website": "https://x"}), {"name": "C"})
+
+
 class EachRouteFollowed(unittest.TestCase):
     """one_decision over each of AgAPI's routes: an act → its read-back for the ONE yes; the call → its card; a hand-over (their WhatsApp,
     a closed platform, a step only they may do) → AgAPI's own button; none → the floor. Never a channel of Sasha's choosing."""

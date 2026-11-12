@@ -391,7 +391,7 @@ async def read_booking_route(ctx, a: dict) -> dict:
     # hold_venue follows. Never Sasha's own read of their channels; no decision → THE FLOOR.
     from agapi import venue_truth as VT
     from app.agent import voice as V
-    place = card or listing_card(rd)
+    place = place_of(rd, card, a)
     if place:
         await engine_channel(place, listing=True)
     dec = VT.decision(place)
@@ -433,9 +433,16 @@ def one_path(ctx) -> bool:
     return s1_parity()
 
 
-def listing_card(rd: dict) -> Optional[dict]:
-    """Sasha 270 · a venue not on screen: its listing (place_id) for the venue engine — its reservable and its website, if Places has one."""
-    return {"place_id": rd["place_id"], "name": rd.get("venue")} if rd.get("place_id") else None
+def place_of(rd: dict, card: Optional[dict], a: dict) -> Optional[dict]:
+    """Sasha 378 · THE ONE place AgAPI's venue.profile is asked about (its `decision` is the route) — the same place venue.prepare_booking
+    is given: the card on screen; else the venue being booked, by its listing (place_id) and the website the booking names. Found by
+    the deploy gate: a venue named by its website alone (no card, no listing) had no decision, so it fell to the floor."""
+    if card:
+        return card
+    pid, site = rd.get("place_id") or a.get("place_id"), a.get("website") or rd.get("website")
+    if not pid and not site:
+        return None
+    return {"name": rd.get("venue") or a.get("name"), **({"place_id": pid} if pid else {}), **({"website": site} if site else {})}
 
 
 
@@ -848,7 +855,7 @@ async def hold_venue(ctx, a: dict) -> dict:
     if link:   # Sasha 270 · CR 101 · a link THEY handed over: the venue engine's one classifier says whose it is
         return _with_card(card, await _person_link(ctx, a, rd, res, at, now, card, link))
     from agapi import venue_truth as VT
-    place = card or listing_card(rd)
+    place = place_of(rd, card, a)
     if place:   # Sasha 378 · AgAPI's venue.profile, read once and cached — its `decision` is the ONE route (never Sasha's own read)
         await engine_channel(place, listing=True)
     dec = VT.decision(place)   # Sasha 377 · CR 188: AgAPI's ONE decision (venue.profile → handoff.decide), every surface

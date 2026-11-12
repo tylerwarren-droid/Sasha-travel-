@@ -170,6 +170,13 @@ class Webhook(Base):
         form = {"MessageSid": sid, "From": f"whatsapp:{sender}", "To": f"whatsapp:{to}", "Body": body}
         return self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": TIP.sign("sms", form)})
 
+    def heard(self, sid, sender, body, to) -> str:
+        """Sasha 379a · Twilio is answered at once (empty TwiML); what this message said went by REST, from the number written to."""
+        n = len(GW.SENDER.sent)
+        r = self.wa(sid, sender, body, to)
+        self.assertTrue(r.text.endswith("<Response></Response>"), r.text)
+        return "\n".join(m["body"] or "" for m in GW.SENDER.sent[n:] if m["to"] == sender)
+
     def test_on_sashas_own_number_a_venue_is_filed_exactly_as_before_and_never_answered(self):
         r = self.wa("SM1", TIP.SITE_NUMBER, "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00.", "+447915914215")
         self.assertTrue(r.text.endswith("<Response></Response>"))
@@ -182,12 +189,12 @@ class Webhook(Base):
         self.assertIn("SM2", IP.STORE.rows)
 
     def test_an_unknown_sender_gets_one_sentence_and_only_their_hash_is_kept(self):
-        r = self.wa("SM3", GUEST, "hello?", SANDBOX)
-        self.assertIn("link this number once at https://sasha.test/you", r.text)   # Sasha 253 · the one short /you line
+        said = self.heard("SM3", GUEST, "hello?", SANDBOX)
+        self.assertIn("link this number once at https://sasha.test/you", said)   # Sasha 253 · the one short /you line
         self.assertNotIn("SM3", IP.STORE.rows)                                    # not filed as a venue's message
         self.assertNotIn(GUEST, json.dumps(GW.STORE.state, default=str))          # never the digits
         self.assertNotIn("hello", json.dumps(GW.STORE.state, default=str))        # nor the words
-        self.assertFalse(self.wa("SM4", GUEST, "anyone?", SANDBOX).text.count("<Message>"))   # not again within ten minutes
+        self.assertEqual(self.heard("SM4", GUEST, "anyone?", SANDBOX), "")   # not again within ten minutes
 
     # Sasha 269 (CR 100 §E/§F) · MOVED: a link is VERIFIED by AgAPI (users.confirm_whatsapp, Sasha-signed, from that number) before
     # anything is sent to it — a used, stale or wrong code, or too many tries, now sends NOTHING (was "didn't work" / "Too many tries")
@@ -201,15 +208,15 @@ class Webhook(Base):
         run(GW.STORE.put_code({"code": "123456", "account_id": ACCOUNT, "consent_at": NOW,
                                "consent_wording_version": "v2", "consent_text_sha256": c["sha256"], "created_at": NOW}))
         with mock.patch("agapi.venue_submit.confirm_whatsapp", confirm):
-            self.assertIn("Linked.", self.wa("SM5", GUEST, "Kanoe link 123456", SANDBOX).text)   # AgAPI's text
+            self.assertIn("Linked.", self.heard("SM5", GUEST, "Kanoe link 123456", SANDBOX))   # AgAPI's text
             self.assertEqual(seen, [(ACCOUNT, GUEST, "SM5", "Kanoe link 123456")])
             ch = run(GW.STORE.channel_for(GW.wa_key(GUEST)))
             self.assertEqual((ch["account_id"], ch["consent_wording_version"]), (ACCOUNT, "v2"))
             other = "+447700900999"
-            self.assertNotIn("<Message>", self.wa("SM6", other, "LINK 123456", SANDBOX).text)       # used: once only — nothing sent
+            self.assertEqual(self.heard("SM6", other, "LINK 123456", SANDBOX), "")       # used: once only — nothing sent
             run(GW.STORE.put_code({"code": "654321", "account_id": ACCOUNT, "consent_at": NOW, "consent_wording_version": "v2",
                                    "consent_text_sha256": c["sha256"], "created_at": NOW - timedelta(minutes=11)}))
-            self.assertNotIn("<Message>", self.wa("SM7", other, "LINK 654321", SANDBOX).text)       # ten minutes, then gone
+            self.assertEqual(self.heard("SM7", other, "LINK 654321", SANDBOX), "")       # ten minutes, then gone
         self.assertEqual(len(seen), 1)
 
     def test_not_verified_by_agapi_links_nothing_and_sends_nothing(self):
@@ -217,13 +224,13 @@ class Webhook(Base):
                                "consent_text_sha256": GW.consent()["sha256"], "created_at": NOW}))
         with mock.patch("agapi.venue_submit.confirm_whatsapp",
                         mock.AsyncMock(return_value={"ok": False, "error": {"code": "approval_untrusted_origin"}})):
-            self.assertNotIn("<Message>", self.wa("SM9", GUEST, "Kanoe link 222222", SANDBOX).text)
+            self.assertEqual(self.heard("SM9", GUEST, "Kanoe link 222222", SANDBOX), "")
         self.assertIsNone(run(GW.STORE.channel_for(GW.wa_key(GUEST))))
         self.assertEqual(GW.SENDER.sent, [])
 
     def test_link_tries_are_limited(self):
         for i in range(6):
-            self.assertNotIn("<Message>", self.wa(f"SMx{i}", GUEST, "LINK 000000", SANDBOX).text)   # nothing sent, ever
+            self.assertEqual(self.heard(f"SMx{i}", GUEST, "LINK 000000", SANDBOX), "")   # nothing sent, ever
         st = run(GW.STORE.get_state(GW.wa_key(GUEST)))
         self.assertEqual(len(st["link_tries"]), 5)                                               # counted, then refused
 

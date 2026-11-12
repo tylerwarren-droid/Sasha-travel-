@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -243,16 +244,46 @@ async def sms(request: Request):
     if not sid:
         return Response("no message id", status_code=400)
     p = {**p, "_message_id": sid}   # Sasha 374 · CR 186 (a): the provider's id, read ONCE here and carried — every reader reads p["_message_id"]
-    # Sasha 350 · EVERY WhatsApp message shows it's being worked on, from here until its reply leaves (wa_working — the ONE place)
-    held = None
-    if channel == "whatsapp" and sender:
-        from . import guest_whatsapp as _GWk, wa_working as WK
-        held = sid if WK.start(_GWk.wa_key(sender), sid) else None
+    if channel != "whatsapp" or not sender:
+        return await _sms(p, channel, sender, body, sid)   # an SMS: answered in-band, exactly as before (a 503 is Twilio's retry)
+    # Sasha 379a · A WHATSAPP MESSAGE IS ACKNOWLEDGED AT ONCE (empty TwiML), and its ONE decision runs after it, in the background —
+    # AgAPI first, then the router — replying by REST. Found live (12 Nov 14:48, "es"): AgAPI → AD took ~19 s, Twilio gave up at 15 s and
+    # posted the same message to a fallback (an old service, retired since) that answered it again. Twilio never waits on Sasha now, so
+    # no fallback can fire, and the message has ONE answer.
+    from . import guest_whatsapp as _GWk, wa_working as WK
+    held = sid if WK.start(_GWk.wa_key(sender), sid) else None   # Sasha 350 · the dots, from here until its reply leaves
+    t = asyncio.ensure_future(_whatsapp(p, channel, sender, body, sid, held))
+    _INBOUND.add(t)
+    t.add_done_callback(_INBOUND.discard)
+    if ACK_WAIT_S:   # tests only: see the message's outcome before the answer (production answers Twilio at once)
+        await asyncio.wait({t}, timeout=ACK_WAIT_S)
+    return _twiml()
+
+
+#: Sasha 379a · how long the webhook waits for a WhatsApp message's work before it answers Twilio. Production: 0 (at once — Twilio's
+#: 15 s can never pass). Tests set it to see the outcome before the answer; it never changes WHAT is answered, or how (always REST).
+ACK_WAIT_S = 0.0
+_INBOUND: set = set()   # the WhatsApp messages being worked on (held so they finish; never awaited by the webhook's answer)
+
+
+async def settled() -> None:
+    """Every WhatsApp message being worked on, finished (tests; a graceful shutdown)."""
+    while True:
+        pending = [t for t in list(_INBOUND) if not t.done()]
+        if not pending:
+            return
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
+async def _whatsapp(p: dict, channel: str, sender: str, body: str, sid: str, held: Optional[str]) -> None:
+    """Sasha 379a · THE WhatsApp message's ONE decision and ONE answer, after Twilio has been answered: _sms as before (AgAPI's inbound
+    first — CR 118/186 — then Sasha's own paths); whatever it would have said in-band goes by REST instead (reply_by_rest). Its failure
+    is TOLD (Sasha 357), never dropped."""
+    from . import wa_working as WK
     try:
-        return await _sms(p, channel, sender, body, sid)
-    except Exception as e:   # Sasha 357 · THE webhook's boundary: a WhatsApp message that failed is TOLD, never dropped (inbound_outcome)
-        if channel != "whatsapp" or not sender:
-            raise
+        r = await _sms(p, channel, sender, body, sid)
+        await reply_by_rest(p, sender, said_in(r))
+    except Exception as e:   # Sasha 357 · THE boundary: a WhatsApp message that failed is TOLD, never dropped (inbound_outcome)
         from . import guest_whatsapp as _GWo, inbound_outcome as OC
         line = OC.words_for(e, body, where="the webhook")
         ch = None
@@ -261,10 +292,46 @@ async def sms(request: Request):
         except Exception:
             pass   # the record is what failed: the line is still said (its cause is already named)
         await OC.record((ch or {}).get("account_id"), line)
-        return _twiml(_GWo._twiml_message(line))
+        try:
+            await reply_by_rest(p, sender, [line])
+        except Exception as e2:
+            log.error("[inbound_phone] the failed line couldn't be sent either: %s", type(e2).__name__)
     finally:
         if held:
-            WK.settle(held)   # the webhook's answer has left (a background turn's hold stays until its reply leaves: deliver)
+            WK.settle(held)   # its answer has left (a guest's background turn keeps the hold until its own reply leaves: deliver)
+
+
+def said_in(r: Any) -> List[str]:
+    """What a TwiML answer would have said: its <Message> texts, unescaped. A non-2xx (a store that failed) is logged — the message is
+    AgAPI's record already (CR 118), and Twilio, answered at once, has nothing to retry."""
+    import re
+    from xml.sax.saxutils import unescape
+    if not isinstance(r, Response):
+        return []
+    if r.status_code >= 300:
+        log.error("[inbound_phone] a WhatsApp message's own record failed (HTTP %s) — AgAPI's record holds it", r.status_code)
+        return []
+    xml = r.body.decode("utf-8", "replace") if isinstance(r.body, (bytes, bytearray)) else str(r.body)
+    return [unescape(m) for m in re.findall(r"<Message>(.*?)</Message>", xml, re.S)]
+
+
+async def reply_by_rest(p: dict, sender: str, lines: List[str]) -> None:
+    """Sasha 379a · the in-band answer, sent by REST from the number they wrote to (GW.SENDER — the ONE sender; recorded on the
+    conversation by deliver when the number is linked)."""
+    if not lines:
+        return
+    from . import guest_whatsapp as GW
+    frm = _channel_and_number(p.get("To", ""))[1] or ""
+    try:
+        ch = await GW.STORE.channel_for(GW.wa_key(sender)) if GW.STORE is not None else None
+    except Exception as e:   # the record is what failed (Sasha 357): the line still goes — to the number that just wrote
+        log.warning("[inbound_phone] the channel wasn't read for the reply (%s) — sent to the number that wrote", type(e).__name__)
+        ch = None
+    for line in lines:
+        if ch:
+            await GW.deliver(ch, frm, GW.Out().text(line), NOW())
+        else:
+            await GW.answer_who_wrote(frm, sender, line)
 
 
 async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str):

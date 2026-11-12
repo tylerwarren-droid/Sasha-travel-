@@ -65,7 +65,7 @@ class Through(Base):
 
     def heard(self, r: str) -> list:
         """What the person received for that message: the webhook's own reply, and what the background turn sent."""
-        said = re.findall(r"<Message>(.*?)</Message>", r, re.S)
+        said = re.findall(r"<Message>(.*?)</Message>", r, re.S)   # Sasha 379a · always none now: Twilio is answered at once (empty), the rest by REST
         return [s.replace("&#x27;", "'").replace("&quot;", '"').replace("&amp;", "&") for s in said] + self.bodies()
 
     def brain(self, fn):

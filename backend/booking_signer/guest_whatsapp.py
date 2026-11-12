@@ -439,6 +439,13 @@ class Sender:
 SENDER: Any = Sender()
 
 
+async def answer_who_wrote(frm: str, to: str, text: str) -> str:
+    """Sasha 379a · the answer a WhatsApp message used to carry in Twilio's reply (TwiML), sent by REST instead — to the number that
+    JUST wrote (its 24-hour window is open): a person talking to Sasha on her number (a guest not linked yet, told how; the line a failed
+    message is told with). A venue is never answered: its path says nothing (inbound_phone.said_in finds no line)."""
+    return await SENDER.send(frm, to, body=text)
+
+
 class Out:
     """What one turn says, in order. Each item: ('text', body) · ('media', body, url) · ('ask', body, [(title, id)])."""
 

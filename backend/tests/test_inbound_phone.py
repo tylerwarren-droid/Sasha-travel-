@@ -44,6 +44,8 @@ class InboundPhone(unittest.TestCase):
             self.calls.calls[cid] = {"call_id": cid, "trip_item_id": item, "dialled_number": dialled, "status": "answered",
                                      "created_at": now - timedelta(hours=1), "brief": {"venue_ids": ["places:x"], "followup": {"request": O}}}
         self.saved = (IP.STORE, S.STOP_STORE)
+        self._ack = IP.ACK_WAIT_S   # Sasha 379a · a WhatsApp message is answered by REST after Twilio's ack: wait for it here
+        IP.ACK_WAIT_S = 30.0
         IP.STORE = IP.MemoryInboundStore(self.calls)
         from booking_signer import guest_whatsapp as _GW   # Sasha 357 · the message's steps in memory (no database here): a step that
         self.gw_store = _GW.STORE                         # can't be recorded now fails CLOSED and is told — never the venue path
@@ -57,6 +59,7 @@ class InboundPhone(unittest.TestCase):
         from booking_signer import guest_whatsapp as _GW
         _GW.STORE = self.gw_store
         IP.STORE, S.STOP_STORE = self.saved
+        IP.ACK_WAIT_S = self._ack
         self.env.stop()
 
     def post(self, path, form, signed=True):

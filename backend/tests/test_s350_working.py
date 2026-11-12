@@ -193,9 +193,10 @@ class TheAcknowledgementIsNotTheReply(unittest.TestCase):
 
 class OnePlace(unittest.TestCase):
     def test_every_whatsapp_message_starts_its_hold_where_it_arrives(self):
-        src = inspect.getsource(IP.sms)
-        self.assertLess(src.index("WK.start(_GWk.wa_key(sender), sid)"), src.index("await _sms(p, channel, sender, body, sid)"))
-        self.assertIn("WK.settle(held)", src[src.index("finally:"):])
+        src = inspect.getsource(IP.sms)   # Sasha 379a · the hold starts where it arrives; the work (and its settle) runs after Twilio's ack
+        self.assertLess(src.index("WK.start(_GWk.wa_key(sender), sid)"), src.index("_whatsapp(p, channel, sender, body, sid, held)"))
+        bg = inspect.getsource(IP._whatsapp)
+        self.assertIn("WK.settle(held)", bg[bg.index("finally:"):])
         body = inspect.getsource(IP._sms)
         self.assertLess(body.index("TL.switch_tap(p)"), body.index("VS.whatsapp_inbound(sender, body"))
 

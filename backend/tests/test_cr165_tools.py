@@ -85,18 +85,8 @@ class OnWhatsApp(Base):
         self.assertTrue(GW.SENDER.lists[-1]["body"].startswith(TL.CAN))
         self.assertEqual([r[2] for r in GW.SENDER.lists[-1]["rows"]], [TL.TOOL_ID + t["id"] for t in TL.TOOLS])
 
-    def test_a_tool_tap_enters_it_through_the_one_switch(self):
-        self.link()
-        seen = {}
-
-        async def inbound(number, t, **kw):
-            seen.update(kw)
-            return {"matched": True, "ad": "not_linked", "replied": True}
-        with mock.patch("agapi.venue_submit.whatsapp_inbound", inbound):
-            self.say("🔍 Diligence", payload="kanoe:tool:diligence")
-            self.say("Show my cases")
-        self.assertEqual(seen.get("space"), "diligence")                  # in AD's space: AgAPI's door (and its tap-to-link)
-        self.assertIn("account_email", seen)                              # handed for "Is this you?" (None without a store)
+    # Sasha 379b · test_a_tool_tap_enters_it_through_the_one_switch retired: AD's row reaches AgAPI's ONE call as AD's word, with the
+    # guest's email (tests.test_s379b_one_decision) — never AD's space
 
     def test_a_new_number_gets_the_welcome_and_the_tools_as_taps(self):
         async def not_a_venue(_):

@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import os
 import re
+import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+log = logging.getLogger("products.tools")
 
 BACK = {"title": "← Everything I can do", "id": "kanoe:tools", "description": "Everything Sasha can help you with"}   # Sasha 343 (Tyler)
 TOOL_ID = "kanoe:tool:"   # a tool's row id: kanoe:tool:<id>
@@ -172,13 +175,10 @@ def go(tool_id: str) -> str:
     return f"tap Menu → {title(BY_ID[tool_id])}"
 
 
-# ── Sasha 361 · THE ONE PRODUCT ROUTER: which product every WhatsApp message is for (Sasha · AD · later others) ─────────────────────
-# Tyler, 9 Nov: the router lives in Sasha, in this registry (the Menu reads the same). Found (EU 282 N7): "do 1-3 on Halfords" from an AD
-# user was answered by Sasha — the old router read word lists and the space. Now, over the number's ROLES (Sasha's: hers; AD's: AgAPI's
-# inbound conversation_role, passed through — AgAPI decides nothing):
-#   1 an explicit keyword or Menu tap (a tap reaches here as its tool's keyword) wins — and is recorded as their choice;
-#   2 else the product they last CHOSE (this record — written ONLY here, by a keyword or a tap);
-#   3 else, a number with both roles: ONE question with buttons (ask_which). A Sasha-only number is always Sasha's.
+# ── Sasha 361 → Sasha 379b (CR 192) · WHICH PRODUCT a WhatsApp message is for is decided ONCE, by AgAPI, on the webhook's first call ─
+# (messages.whatsapp_inbound): AD's own reading of THESE words (conversation_role.ad_intent), read with every question of AD's still open —
+# AD's → AgAPI routes it to AD (matched: true) and nothing of Sasha's answers; anything else is Sasha's. Sasha decides nothing about AD:
+# no memory of a "choice" (rule 2, `chose`), no ONE question of her own, no `space`. Her own tools are still picked by their word (route).
 
 #: the products another service answers (their tools' ids); every other tool is Sasha's own
 OTHER_PRODUCTS = ("diligence",)
@@ -204,29 +204,15 @@ def product_of(tool: Dict[str, Any]) -> str:
     return tool["id"] if tool["id"] in OTHER_PRODUCTS else "sasha"
 
 
-def roles(conversation_role: Optional[Dict[str, Any]]) -> set:
-    """The number's roles: Sasha's (always — a linked guest is hers) and AD's when AD named any conversation for it."""
+def route(body: str, conversation_role: Optional[Dict[str, Any]]) -> str:
+    """Sasha 379b · a message AgAPI did NOT take (unmatched) → the product of Sasha's that answers it: one of her own tools named by its
+    word, else Sasha (travel). AD's words never reach here — AgAPI took them on the first call; one that did ("ad" yet unmatched) is a
+    contract breach: logged loudly, never rerouted by Sasha."""
     cr = conversation_role if isinstance(conversation_role, dict) else {}
-    return {"sasha"} | ({"diligence"} if cr.get("roles") or cr.get("role") else set())
-
-
-def route(body: str, conversation_role: Optional[Dict[str, Any]], chose: Optional[str]) -> Tuple[str, Optional[str]]:
-    """→ (the product: "sasha" · "diligence" · "ask", the record of their choice after this message)."""
+    if cr.get("ad_intent") == "ad":
+        log.error("[tools] AgAPI left a message unmatched that AD read as AD's (ad_intent \"ad\") — never rerouted here (CR 192)")
     kw = _keyword_tool(body)
-    if kw is not None:
-        p = product_of(kw)
-        return p, p
-    if chose in ("sasha",) + OTHER_PRODUCTS:   # 2 · their last choice (only ever written by a keyword or a tap)
-        return chose, chose
-    if "diligence" not in roles(conversation_role):   # 3 · never chosen: a Sasha-only number is Sasha's; both → ONE question
-        return "sasha", chose
-    return "ask", chose
-
-
-def ask_which() -> Tuple[str, List[Tuple[str, str]]]:
-    """The ONE question, in the registry's own words, with its two taps (each a tool's row: the tap IS the keyword — and the choice)."""
-    ad, tr = BY_ID["diligence"], BY_ID["travel"]
-    return (f"Is this for {title(ad)} or {title(tr)}?", [(title(ad), TOOL_ID + "diligence"), (title(tr), TOOL_ID + "travel")])
+    return product_of(kw) if kw is not None else "sasha"
 
 
 def keyword_rest(body: str) -> str:
@@ -237,18 +223,3 @@ def keyword_rest(body: str) -> str:
         return body or ""
     rx = PW._EXIT if t["id"] == "travel" else PW._KEYWORD[t["product"]]
     return rx.sub("", body or "", count=1).strip(" :,")
-
-
-def remember(st: dict, chose: Optional[str], held: Any = ...) -> None:
-    """The router's own record (with the brain's state, per number): their choice, and the words waiting for the question's answer."""
-    from booking_signer import wa_agent as WA
-    kw = {"chose": chose}
-    if held is not ...:
-        kw["route_held"] = held
-    WA.set_agent_state(st, **kw)
-
-
-def recalled(st: dict) -> Tuple[Optional[str], Optional[str]]:
-    from booking_signer import wa_agent as WA
-    s = WA.agent_state(st)
-    return s.get("chose"), s.get("route_held")

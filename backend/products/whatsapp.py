@@ -298,31 +298,18 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
     media = media if media is not None else _media(p)   # CR 30 · the web passes its photos' bytes; WhatsApp's come from Twilio
     pend = st.get("pending") or {}
     if frm != "web" and not payload:
-        # Sasha 361 · THE ONE PRODUCT ROUTER (products/tools.py, the registry the Menu reads): which product this message is for — an
-        # explicit keyword or tap, else their last choice, else ONE question. AD's role is AgAPI's conversation_role, passed through.
-        chose, held = _TL.recalled(st)
-        to, chose_now = _TL.route(body, p.get("_conversation_role"), chose)
-        if pend.get("product") == "diligence":   # an older record's AD space: the router decides now, never the pending question
+        # Sasha 379b · CR 192 · WHICH PRODUCT this message is for was decided ONCE, by AgAPI, on the webhook's first call: AD's words were
+        # taken there (matched) and never reach this turn. What reaches it is Sasha's: her own tools by their word, else travel (TL.route).
+        # No memory of a choice, no question of her own, no `space`.
+        to = _TL.route(body, p.get("_conversation_role"))
+        if pend.get("product") == "diligence":   # an older record's AD space: it decides nothing now
             st["pending"] = pend = {}
-        if to == "ask":
-            q, buttons = _TL.ask_which()
-            _TL.remember(st, chose_now, held=body)
-            out.ask(q, buttons)
-            return True
+        if to == "diligence":   # AD's own word, NOT taken by AgAPI (AD couldn't say whose this is): told, never travel's answer
+            from booking_signer.inbound_outcome import Failed
+            raise Failed("AgAPI didn't take a message for Applied Diligence on the first call (CR 192): "
+                         + str((p.get("_conversation_role") or {}).get("reason") or "no answer"))
         named = _TL._keyword_tool(body) is not None
         rest = _TL.keyword_rest(body) if named else body
-        if named and not rest and held:      # the question's tap (or the word alone): the words he sent, as he sent them
-            rest = held
-        _TL.remember(st, chose_now, held=None)
-        if to == "diligence":
-            from . import diligence as DG
-            files = [m for m in (media or []) if isinstance(m, dict) and str(m.get("url") or "").startswith("http")]
-            if not rest and not files:
-                DG.asks(out)                     # the word alone: AD's question, from the registry
-                return True
-            return await DG.hand_over({"ch": ch, "frm": frm, "out": out, "sid": __import__("booking_signer.inbound_phone", fromlist=["x"]).provider_id(p),   # Sasha 374 · CR 186 (a)
-                                       "replied_to": p.get("OriginalRepliedMessageSid"), "twilio": p, "account": ch.get("account_id")},
-                                      rest, files)
         if named and _TL._keyword_tool(body)["id"] == "travel":
             if not rest:                       # her word alone: Travel's own question, from the registry (the switch)
                 if pend.get("kind") == "product":   # a tool left open is kept, parked (CR 40): only its own word brings it back

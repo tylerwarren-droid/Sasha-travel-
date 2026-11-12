@@ -1,10 +1,10 @@
 """GENERATED from AgAPI's spec/ by tools/contract/generate.py (CR 186) — DO NOT EDIT. Change spec/, regenerate, bump the release.
-kanoe_contract 1.84.0 · AgAPI 1.84.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
+kanoe_contract 1.86.0 · AgAPI 1.86.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, TypedDict, Union  # noqa: F401
 
-CONTRACT_VERSION = "1.84.0"
+CONTRACT_VERSION = "1.86.0"
 
 
 class OP:
@@ -204,15 +204,15 @@ DOOR_ANSWERS: Dict[str, frozenset] = {
     'cancel_order': frozenset(['case_id', 'charge', 'detail', 'error', 'intent', 'intent_why', 'order_reference', 'parts', 'queue_item', 'reply']),
     'case_events': frozenset(['case_id', 'cases_truncated', 'cursor', 'detail', 'error', 'events', 'from', 'intent', 'intent_why', 'more', 'parts', 'reply']),
     'case_list': frozenset(['case_id', 'cases', 'detail', 'error', 'intent', 'intent_why', 'parts', 'reply', 'truncated']),
-    'case_status': frozenset(['case_id', 'checks', 'complete', 'contradictions', 'detail', 'error', 'findings', 'intent', 'intent_why', 'next_steps_token', 'parties', 'parties_total', 'parts', 'poll_after_seconds', 'ready', 'reply', 'running', 'screened', 'steps', 'stopped', 'stopped_at', 'work_line']),
-    'conversation_role': frozenset(['ask', 'case_id', 'detail', 'error', 'intent', 'intent_why', 'parts', 'reason', 'reply', 'resolved', 'role', 'roles', 'why']),
+    'case_status': frozenset(['as_of', 'case_id', 'checks', 'complete', 'contradictions', 'detail', 'error', 'findings', 'held_checks', 'intent', 'intent_why', 'lists', 'next_steps_token', 'open', 'parties', 'parties_total', 'parts', 'poll_after_seconds', 'ready', 'reply', 'running', 'screened', 'steps', 'stopped', 'stopped_at', 'verdict', 'work_line']),
+    'conversation_role': frozenset(['ad_intent', 'ask', 'case_id', 'detail', 'error', 'intent', 'intent_why', 'open', 'parts', 'reason', 'reply', 'resolved', 'role', 'roles', 'why']),
     'interview': frozenset(['case_id', 'created', 'detail', 'error', 'intent', 'intent_why', 'interview_number', 'interview_request', 'interview_token', 'needs', 'parts', 'reply']),
     'interview_declined': frozenset(['case_id', 'detail', 'error', 'intent', 'intent_why', 'parts', 'recorded', 'reply']),
     'interview_due': frozenset(['cannot_invite', 'case_id', 'detail', 'error', 'intent', 'intent_why', 'invite', 'parts', 'remind', 'reply', 'waiting']),
     'interview_offer': frozenset(['case_id', 'created', 'detail', 'error', 'intent', 'intent_why', 'interview_number', 'interview_request', 'interview_token', 'needs', 'parts', 'reply']),
     'interview_sent': frozenset(['case_id', 'detail', 'error', 'intent', 'intent_why', 'interview_number', 'parts', 'recorded', 'reply']),
     'interview_transcript': frozenset(['already_filed', 'case_id', 'corpus_id', 'detail', 'disclosure_problem', 'error', 'intent', 'intent_why', 'interview_number', 'parts', 'recorded', 'reply', 'rescore_failed', 'rescored']),
-    'message': frozenset(['actions', 'already_filed', 'already_sent', 'approved', 'ask', 'cannot_invite', 'case_id', 'cases', 'cases_truncated', 'charge', 'checks', 'complete', 'contradictions', 'corpus_id', 'created', 'cursor', 'detail', 'disclosure_problem', 'error', 'events', 'findings', 'from', 'identity_token', 'intent', 'intent_why', 'interview_number', 'interview_request', 'interview_token', 'invite', 'lines', 'more', 'needs', 'next_steps_token', 'order_reference', 'parties', 'parties_total', 'parts', 'party_id', 'party_token', 'person', 'phone_refused', 'phone_saved', 'poll_after_seconds', 'questionnaire_token', 'queue_item', 'quote_token', 'ready', 'reason', 'recorded', 'refused', 'remind', 'replaced', 'reply', 'report', 'rescore_failed', 'rescored', 'resolved', 'role', 'roles', 'round', 'running', 'screened', 'sent', 'steps', 'stopped', 'stopped_at', 'stored_path', 'truncated', 'waiting', 'why', 'work_line']),
+    'message': frozenset(['actions', 'ad_intent', 'already_filed', 'already_sent', 'approved', 'as_of', 'ask', 'cannot_invite', 'case_id', 'cases', 'cases_truncated', 'charge', 'checks', 'complete', 'contradictions', 'corpus_id', 'created', 'cursor', 'detail', 'disclosure_problem', 'error', 'events', 'findings', 'from', 'held_checks', 'identity_token', 'intent', 'intent_why', 'interview_number', 'interview_request', 'interview_token', 'invite', 'lines', 'lists', 'more', 'needs', 'next_steps_token', 'open', 'order_reference', 'parties', 'parties_total', 'parts', 'party_id', 'party_token', 'person', 'phone_refused', 'phone_saved', 'poll_after_seconds', 'questionnaire_token', 'queue_item', 'quote_token', 'ready', 'reason', 'recorded', 'refused', 'remind', 'replaced', 'reply', 'report', 'rescore_failed', 'rescored', 'resolved', 'role', 'roles', 'round', 'running', 'screened', 'sent', 'steps', 'stopped', 'stopped_at', 'stored_path', 'truncated', 'verdict', 'waiting', 'why', 'work_line']),
     'next_steps': frozenset(['approved', 'case_id', 'created', 'detail', 'error', 'intent', 'intent_why', 'interview_number', 'interview_request', 'next_steps_token', 'parts', 'refused', 'reply']),
     'questionnaire': frozenset(['already_sent', 'case_id', 'detail', 'error', 'intent', 'intent_why', 'needs', 'parts', 'questionnaire_token', 'reply', 'round', 'sent']),
     'questionnaire_offer': frozenset(['already_sent', 'case_id', 'detail', 'error', 'intent', 'intent_why', 'needs', 'parts', 'questionnaire_token', 'reply', 'round', 'sent']),

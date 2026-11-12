@@ -1066,9 +1066,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
     heard = None
     st = await STORE.get_state(key)
     _pend = st.get("pending") or {}
-    from products import tools as _TLr   # CR 136 · a message for AD (the ONE router's choice): the AUDIO is the evidence
-    in_ad = _TLr.recalled(st)[0] == "diligence"
-    if not body and not _tap_id(p) and not in_ad:
+    # Sasha 379b · a voice note reaching this turn is Sasha's (AgAPI's one call took AD's, its audio with it — CR 136): its words, as typed
+    if not body and not _tap_id(p):
         heard = await voice_text(p)   # Sasha 165 (5) · a voice note: its words, as if typed
         if heard:
             body = heard

@@ -61,6 +61,9 @@ class Ctx:
     space: str = "sasha"               # Sasha 249 · the account's space (products/space.py), read at the start of sasha.turn
     via: str = "page"                  # Sasha 276 · "wa" when WhatsApp's brain runs as s2 (its list cards keep find's shape until 277)
     lang: str = field(default_factory=lambda: PAGE_LANG.get())   # Sasha 298 · the page's browser language (its turn body's `lang`)
+    # Sasha 372 · THIS instruction's own id: every turn (and every tap) builds its own Ctx, so two instructions in one conversation are two
+    # ids, and a mandate's in-app proof is keyed by it — never by the conversation (agapi_mandate.proof_from)
+    turn: str = field(default_factory=lambda: "turn_" + __import__("uuid").uuid4().hex)
 
 
 class ToolError(Exception):

@@ -36,7 +36,9 @@ def proof_from(ctx: Any) -> Optional[Dict[str, str]]:
         wa_id, mid = re.sub(r"\D", "", str(w.get("wa_id") or "")), str(w.get("message_id") or "")
         return {"kind": "whatsapp", "wa_id": wa_id, "message_id": mid} if wa_id and mid else None
     sid = str(getattr(ctx, "session", "") or "")
-    return {"kind": "in_app", "session_id": sid} if sid else None
+    turn = str(getattr(ctx, "turn", "") or "")
+    # Sasha 372 · the INSTRUCTION's own id (this turn), with the conversation it was said in — two instructions, two proofs
+    return {"kind": "in_app", "session_id": sid, "instruction_id": turn} if sid and turn else None
 
 
 def _minor(eur: Optional[float]) -> Optional[Dict[str, Any]]:
@@ -87,9 +89,12 @@ def mandate_sha256(end_user: str, words: str, scope: dict, limits: dict, expires
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
-def sign(proof: Dict[str, str], account: str, sha: str, t: Optional[int] = None, nonce: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """The proof as AgAPI checks it (1866): kind whatsapp — id the message id, who the wa_id digits; in_app — id the session id, who
-    the person (<person> of their end user "sasha:<person>", AgAPI cr/182 access.person_of). None: no secret here (nothing is sent unsigned)."""
+def sign(proof: Dict[str, str], account: str, sha: str, t: Optional[int] = None, nonce: Optional[str] = None,
+         per_instruction: bool = True) -> Optional[Dict[str, Any]]:
+    """The proof as AgAPI checks it (1866): kind whatsapp — id the message id, who the wa_id digits; in_app — id the INSTRUCTION's id
+    (Sasha 372: the turn / tap it was given in), who the person (<person> of their end user "sasha:<person>", AgAPI access.person_of).
+    per_instruction False: AgAPI's published contract has no instruction_id yet (CR's half not live) → today's form, id = the session id
+    (DEBT, Sasha 372: deleted the day CR's half is live). None: no secret here (nothing is sent unsigned)."""
     secret = os.getenv("SASHA_AGAPI_TAP_SECRET", "")
     if not secret or not proof:
         return None
@@ -98,11 +103,44 @@ def sign(proof: Dict[str, str], account: str, sha: str, t: Optional[int] = None,
     if proof["kind"] == "whatsapp":
         ident, who = proof["message_id"], proof["wa_id"]
         extra = {"wa_id": who, "message_id": ident}
+    elif per_instruction and proof.get("instruction_id"):
+        ident, who = proof["instruction_id"], account   # Sasha 372 · the instruction signs it; cr/182 access.person_of → <person>
+        extra = {"session_id": proof.get("session_id") or "", "instruction_id": ident}
     else:
-        ident, who = proof["session_id"], account   # cr/182 access.person_of: the end user "sasha:<person>" → <person>
+        ident, who = proof["session_id"], account   # today's contract (CR's half not live): the session id
         extra = {"session_id": ident}
     sig = hmac.new(secret.encode(), f"{t}.{nonce}.mandate.{proof['kind']}.{ident}.{who}.{sha}".encode(), hashlib.sha256).hexdigest()
     return {"kind": proof["kind"], "t": t, "nonce": nonce, **extra, "signature": sig}
+
+
+CONTRACT = None   # tests replace it: (account) → bool — does AgAPI's published approvals.mandate take proof.instruction_id?
+_CONTRACT_SEEN: Dict[str, Any] = {}   # AgAPI's url → (takes it, when read)
+CONTRACT_S = 600
+
+
+async def takes_instruction(account: str) -> bool:
+    """Sasha 372 · AgAPI's OWN published contract (its /openapi.json: approvals.mandate's proof) decides the proof's form — never a flag of
+    Sasha's. Read once per 10 minutes per AgAPI; unreadable → today's form (which today's AgAPI accepts)."""
+    if CONTRACT is not None:
+        return bool(await CONTRACT(account))
+    from . import group_book as GB
+    from agapi import agapi_route as AR
+    url, _ = await AR.client_for(GB.FAMILY, account)
+    seen = _CONTRACT_SEEN.get(url)
+    if seen and time.time() - seen[1] < CONTRACT_S:
+        return seen[0]
+    takes = False
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as c:
+            r = await c.get(f"{url}/openapi.json")
+        sch = r.json()["paths"]["/v1/approvals.mandate"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+        takes = "instruction_id" in ((sch.get("properties") or {}).get("proof") or {}).get("properties", {})
+    except Exception as e:
+        log.warning("[mandate] AgAPI's contract wasn't read: %s", type(e).__name__)
+        return False
+    _CONTRACT_SEEN[url] = (takes, time.time())
+    return takes
 
 
 async def register(account: str, words: str, mv: dict, members: List[dict], proof: Optional[Dict[str, str]]) -> Dict[str, Any]:
@@ -122,7 +160,7 @@ async def register(account: str, words: str, mv: dict, members: List[dict], proo
     scope = await scope_for(mv, members)
     words = (words or "")[:500]
     sha = mandate_sha256(end_user, words, scope, limits, EXPIRES_MIN)
-    signed = sign(proof, account, sha)
+    signed = sign(proof, account, sha, per_instruction=await takes_instruction(account))
     if not signed:
         return {"code": "not_configured", "why": "Booking on your word isn't switched on here — nothing was booked."}
     r = await GB._call(account, "approvals.mandate", {"end_user": end_user, "words": words, "scope": scope, "limits": limits,
@@ -135,4 +173,4 @@ async def register(account: str, words: str, mv: dict, members: List[dict], proo
     return {"code": code, "why": "The booking system didn't accept your instruction as the yes — nothing was booked."}
 
 
-__all__ = ["proof_from", "limits_for", "scope_for", "mandate_sha256", "sign", "register", "EXPIRES_MIN"]
+__all__ = ["proof_from", "limits_for", "scope_for", "mandate_sha256", "sign", "register", "takes_instruction", "EXPIRES_MIN"]

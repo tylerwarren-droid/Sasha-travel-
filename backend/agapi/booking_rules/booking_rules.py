@@ -7,15 +7,25 @@ Tyler's answers (12 Oct; mailbox rows 791, 798):
   · calls: at most 3 per PERSON per day (the server cap stays as a net) and at least 30 minutes between two calls to the SAME venue
   · deposits are REFUSED, never asked about · "the person can always take it over" is on EVERY answer · nothing is cancelled silently
   · never book on a platform — Booksy, Fresha, Treatwell, CoverManager and Zenchef included
-    (booking-rules/2.5, CR 160 · Tyler 2 Nov 17:21: EXCEPT for a person in the platform beta — person_access platform_submit = beta — on a
+    (booking-rules/2.5, CR 160 · Tyler 2 Nov 17:21: EXCEPT for a person in the platform beta (a switch on their access record) — on a
     platform the channel policy permits for the beta (CoverManager, DISH), with no challenge, sign-in or card step: filled and submitted
-    after the ONE yes)
+    after the ONE yes) — SUPERSEDED by booking-rules/3.0 below (CR 188: every person; the platform after their own channels)
+
+booking-rules/3.0 (CR 188 · Tyler, 12 Nov 2026 11:07: "all users can book real restaurants") · ONE booking decision for EVERY person:
+  · no person's switch decides a booking any more — the platform beta, real-venue sends and the calls switch are gone;
+    a REAL venue is reached for any LIVE person (access.mode), never for a test one. access.calls is the CALLER's (off only where the caller
+    can't place calls: an outside agent's send, EU 249), never a person's.
+  · own channels first, then the platform: form → WhatsApp → email → phone (R1) → the platform, booked BY Sasha on the person's ONE yes
+    (fill_platform_form) where the channel policy permits it (the caller reads it: channel.submit_ok).
+  · a hand-over to the person ONLY for what the person alone may do: a CAPTCHA, a sign-in, a card or deposit (that step only, the rest
+    filled), a consent box of theirs — or a platform the channel policy doesn't let Sasha book on (OpenTable, TheFork …: as counsel set it).
 
 ctx (all optional except venue and when):
   venue:  {type: restaurant|spa|hotel|activity|service|other, test: bool,
-           channels: [{kind: form|own_engine|widget|whatsapp|email|phone|platform, value, host, captcha, required_consent}], open_now}
+           channels: [{kind: form|own_engine|widget|whatsapp|email|phone|platform, value, host, captcha, required_consent,
+                       needs_sign_in, card, submit_ok, cancel_ok}], open_now}
   when:   {booking_at: ISO, now: ISO}
-  person: {access: {mode: test|live, calls: on|off, real_venue_sends: on|off}, preference: none|link|myself|handle|call|email|whatsapp}
+  person: {access: {mode: test|live, calls: on|off (the caller's)}, preference: none|link|myself|handle|call|email|whatsapp}
   state:  {calls_today_person, server_calls_today, server_cap, last_call_to_venue_at, request_sent_at, venue_replied, prepared_link}
   booking: {venue, party, day, time} — the read-back's own words for the ONE question (booking-rules/2); missing parts come from venue.name and
            when.booking_at. venue.opens_at "HH:MM" (+ venue.open_now) says when a call can be made.
@@ -47,7 +57,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-VERSION = "booking-rules/2.6 · 2026-11-03"
+VERSION = "booking-rules/3.0 · 2026-11-12"
 
 # ── the constants, as data (never env vars) ──────────────────────────────────────────────────────────────────────────────
 URGENT_HOURS = 48                           # R3/R4 · more than this → request and wait; within it → call or their own page
@@ -78,7 +88,8 @@ PHRASES = {
     "request_wait": "I've asked them. It's a request until they reply — I'll tell you when they do.",
     "calling": "I'll call them now and tell you what they say.",
     "call_and_email": "It's soon, so I'll call them and email them too, and tell you what they say.",
-    "platform": "They book on {platform}: their page is ready for you — you press Book there. I never book on a platform for you.",
+    "platform": "They book on {platform}, which doesn't let me book for you — their page is ready: you press Book there.",
+    "platform_step": "They book on {platform}: I've filled in your booking — the last step there is yours ({step}), which only you can do.",
     "platform_book": "They book on {platform} — I'll fill in their booking and press Book for you.",
     "platform_cancel": "I'll open {platform}'s own cancellation for your booking and press cancel for you.",
     "platform_cancel_hand_over": "It was booked on {platform} — you cancel it there: here's their own link.",
@@ -298,21 +309,21 @@ def _decision(action: str, say: str, channel: Optional[dict], link: Optional[str
 
 
 def decide_cancel(ctx: Dict[str, Any]) -> Dict[str, Any]:
-    """booking-rules/2.6 (CR 161 · Tyler, 3 Nov 11:51) · may Kanoe press the venue's OWN cancel for a booking made on a platform? Only for a
-    person in the platform beta (person_access platform_submit = beta), on a platform the channel policy permits a beta cancel on (the
-    caller reads it: beta_cancel), with the venue's own cancel link on the booking's record (state.cancel_link), no challenge, sign-in or
-    fee seen, and Kanoe's own test venue or a live person with real-venue sends on. Everyone else: their link, handed over. The person's
-    explicit yes is the act's (the read-back), as it is for every act."""
+    """booking-rules/3.0 (CR 161 · CR 188) · may Kanoe press the venue's OWN cancel for a booking made on a platform? For EVERY person: on a
+    platform the channel policy permits a cancel on (the caller reads it: cancel_ok), with the venue's own cancel link on the booking's
+    record (state.cancel_link), no challenge, sign-in or fee seen, and Kanoe's own test venue or a live person. Else: their link, handed
+    over. The person's explicit yes is the act's (the read-back), as it is for every act."""
     venue, person, state = ctx.get("venue") or {}, ctx.get("person") or {}, ctx.get("state") or {}
-    access = person.get("access") or {"mode": "test", "calls": "off", "real_venue_sends": "off"}
+    access = person.get("access") or {"mode": "test"}
     link = state.get("cancel_link")
     c = next((x for x in venue.get("channels") or [] if x.get("kind") == "platform"), None)
     p = (c and (platform_of(c) and platform_words(c, platform_of(c)) or c.get("host"))) or "the booking platform"
-    if c and link and access.get("platform_submit") == "beta" and c.get("beta_cancel") is True and \
-            not (c.get("captcha") or c.get("needs_sign_in") or c.get("fee")) and \
-            (venue.get("test") or (access.get("mode") == "live" and access.get("real_venue_sends") == "on")):
+    if c and link and c.get("cancel_ok") is True and not (c.get("captcha") or c.get("needs_sign_in") or c.get("fee")) and \
+            (venue.get("test") or access.get("mode") == "live"):
         return _decision("cancel_on_platform", "platform_cancel", c, link, fmt={"platform": p})
-    why = "no cancel link of theirs on the booking" if not link else f"{p}: cancelled only for persons in the platform beta, on their own page"
+    why = ("no cancel link of theirs on the booking" if not link else
+           f"{p}: its cancel needs a step only the person can do" if c and (c.get("captcha") or c.get("needs_sign_in") or c.get("fee")) else
+           f"{p}: the channel policy doesn't let Kanoe cancel there" if c and c.get("cancel_ok") is not True else "a test person: never a real venue")
     return _decision("hand_over_cancel_link", "platform_cancel_hand_over", c, link, fmt={"platform": p},
                      refusals=[{"rule": "R14", "reason": why}])
 
@@ -320,7 +331,7 @@ def decide_cancel(ctx: Dict[str, Any]) -> Dict[str, Any]:
 def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
     venue, when, person, state = ctx.get("venue") or {}, ctx.get("when") or {}, ctx.get("person") or {}, ctx.get("state") or {}
     hd = head(ctx)
-    access = person.get("access") or {"mode": "test", "calls": "off", "real_venue_sends": "off"}   # no record → fail closed
+    access = person.get("access") or {"mode": "test"}   # no record → fail closed (a test person: never a real venue)
     pref = (person.get("preference") or "none").lower()
     link = state.get("prepared_link")
     hotel = (venue.get("type") or "") == "hotel"
@@ -328,31 +339,33 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
     hours = (at - now).total_seconds() / 3600 if (now and at) else None
     chans = list(venue.get("channels") or [])
 
-    # R14 · a platform: read and hand over its link, never press Book
+    # R14 · booking-rules/3.0 (CR 188) · a platform comes AFTER the venue's own channels (form, WhatsApp, email, phone); then Sasha books it
+    # herself on the ONE yes, for EVERY person — the person is handed only the step only they may do (a CAPTCHA, a sign-in, a card or deposit)
+    own_first = any(x.get("kind") in CHANNEL_ORDER and not platform_of(x) for x in chans)
     for c in chans:
         named = platform_of(c)
         p = c.get("kind") == "platform" and ((named and platform_words(c, named)) or c.get("host") or "a booking platform") or \
             (c.get("kind") in ("form", "own_engine", "widget") and named and platform_words(c, named))
-        own_first = any(x.get("kind") in ("form", "whatsapp", "email") and not platform_of(x) for x in chans)
-        if p and not own_first and access.get("platform_submit") == "beta" and c.get("beta_submit") is True and \
-                not (c.get("captcha") or c.get("needs_sign_in") or c.get("card")) and \
-                (venue.get("test") or (access.get("mode") == "live" and access.get("real_venue_sends") == "on")):
-            # booking-rules/2.5 (CR 160 · Tyler, 2 Nov 17:21) · a person in the platform beta (person_access platform_submit = beta) on a
-            # platform the channel policy permits for the beta (the caller reads it: beta_submit): Kanoe fills AND submits, after the
-            # ONE yes. A challenge, a sign-in or a card/deposit step → the hand-over below, filled. Everyone else: R14 as it was.
-            return _decision("fill_platform_form", "platform_book", c, link or (c.get("value") if str(c.get("value") or "").startswith("http") else c.get("url")),
-                             fmt={"platform": p})
-        if p and not own_first:   # R1 · their own form / WhatsApp / email come first; a platform is never submitted to
-            return _decision("hand_over_platform_link", "platform", c, link or (c.get("value") if str(c.get("value") or "").startswith("http") else c.get("url")),
-                             fmt={"platform": p},
-                             refusals=[{"rule": "R14", "reason": f"{p} is a booking platform — never booked for anyone"}])
+        if not p or own_first:
+            continue
+        page = link or (c.get("value") if str(c.get("value") or "").startswith("http") else c.get("url"))
+        step = ("a check that you're human" if c.get("captcha") else "signing in" if c.get("needs_sign_in") else
+                "a card or deposit" if c.get("card") else None)
+        if step:   # R13 · the person's step only: everything else filled
+            return _decision("hand_over_platform_link", "platform_step", c, page, fmt={"platform": p, "step": step},
+                             refusals=[{"rule": "R13", "reason": f"{p} asks for {step} — only the person can"}])
+        if c.get("submit_ok") is not True:   # the channel policy (per platform, as counsel set it — never per person)
+            return _decision("hand_over_platform_link", "platform", c, page, fmt={"platform": p},
+                             refusals=[{"rule": "R14", "reason": f"{p}: the channel policy doesn't let Kanoe book there"}])
+        if not venue.get("test") and access.get("mode") != "live":
+            return _decision("prepared_link", "not_live", c, link, refusals=[{"rule": "access", "reason": "test mode"}])
+        return _decision("fill_platform_form", "platform_book", c, page, fmt={"platform": p})
 
     own = {k: next((c for c in chans if c.get("kind") == k and not platform_of(c)), None) for k in CHANNEL_ORDER}
     real = not venue.get("test")
     # access gates (§B): a real venue is contacted only for a LIVE person with real-venue sends ON
     if real and access.get("mode") != "live":
         return _decision("prepared_link", "not_live", own["form"] or next((c for c in chans), None), link, refusals=[{"rule": "access", "reason": "test mode"}])
-    sends_ok = (not real) or access.get("real_venue_sends") == "on"
 
     form = own["form"]
     if form:
@@ -362,8 +375,6 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
                              refusals=[{"rule": "R13", "reason": "a CAPTCHA or a required consent box — only the person can"}])
         if pref in ("link", "myself"):
             return _decision("prepared_link", "prepared_link", form, link)
-        if not sends_ok:
-            return _decision("prepared_link", "no_real_sends", form, link, refusals=[{"rule": "access", "reason": "real-venue sends are off"}])
         phone_ = own["phone"]
         urgent = hours is not None and hours <= (HOTEL_ARRIVAL_CALL_HOURS if hotel else URGENT_HOURS)
         call_ok_, _ = _call_allowed(access, state, now) if phone_ else (False, None)
@@ -379,8 +390,6 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
     phone = own["phone"]
     if not (msg or phone):
         return _decision("prepared_link", "no_channel", None, link)
-    if not sends_ok:
-        return _decision("prepared_link", "no_real_sends", msg or phone, link, refusals=[{"rule": "access", "reason": "real-venue sends are off"}])
 
     call_ok, why_not = _call_allowed(access, state, now)
     threshold = HOTEL_ARRIVAL_CALL_HOURS if hotel else URGENT_HOURS
@@ -414,8 +423,9 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _call_allowed(access: dict, state: dict, now: Optional[datetime]) -> tuple:
-    """R10 · calls: this person's switch, at most 3 a day per person, the server net, and 30 minutes between calls to the same venue."""
-    if access.get("calls") != "on":
+    """R10 · calls: the CALLER can place calls (access.calls: off only for an outside agent's send, EU 249 — never a person's switch, CR 188),
+    at most 3 a day per person, the server net, and 30 minutes between calls to the same venue."""
+    if access.get("calls") == "off":
         return False, "no_real_sends"
     if int(state.get("calls_today_person") or 0) >= CALLS_PER_PERSON_PER_DAY:
         return False, "calls_cap"

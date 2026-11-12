@@ -899,11 +899,9 @@ async def in_app_tap(account: str, read_back_id: str, read_back_sha256: str) -> 
     return {"ok": True, "result": (r.get("result") or {}).get("result") or {}, "approval_id": (r.get("result") or {}).get("approval_id")}
 
 
-def whatsapp_session(read_back_id: str, read_back_sha256: str, wa: Optional[dict] = None, t: Optional[int] = None,
-                     nonce: Optional[str] = None) -> Optional[dict]:
-    """Sasha 265 · item 4 (CR 99 §4d) · the WhatsApp tap's session for approvals.in_app_tap: signed with SASHA_AGAPI_TAP_SECRET over
-    "t.nonce.whatsapp.<wa_id digits>.<message_id>.<read_back_id>.<read_back_sha256>" (AgAPI's in_app.whatsapp_signature, byte for
-    byte), t = now, a fresh nonce, the reply's own message id. None: no signed WhatsApp message in this turn, or no secret here."""
+def _wa_signed(tail: str, wa: Optional[dict] = None, t: Optional[int] = None, nonce: Optional[str] = None) -> Optional[dict]:
+    """THE ONE WhatsApp signer: "t.nonce.whatsapp.<wa_id digits>.<message_id>.<tail>" with SASHA_AGAPI_TAP_SECRET (AgAPI's in_app
+    signatures, byte for byte), t = now, a fresh nonce, the reply's own message id. None: no signed WhatsApp message here, or no secret."""
     import hmac as _hmac
     import os
     import re
@@ -916,8 +914,55 @@ def whatsapp_session(read_back_id: str, read_back_sha256: str, wa: Optional[dict
         return None
     t = int(t if t is not None else time.time())
     nonce = nonce or secrets.token_hex(16)
-    sig = _hmac.new(secret.encode(), f"{t}.{nonce}.whatsapp.{wa_id}.{mid}.{read_back_id}.{read_back_sha256}".encode(), hashlib.sha256).hexdigest()
+    sig = _hmac.new(secret.encode(), f"{t}.{nonce}.whatsapp.{wa_id}.{mid}.{tail}".encode(), hashlib.sha256).hexdigest()
     return {"kind": "whatsapp", "t": t, "nonce": nonce, "wa_id": wa_id, "message_id": mid, "signature": sig}
+
+
+def whatsapp_session(read_back_id: str, read_back_sha256: str, wa: Optional[dict] = None, t: Optional[int] = None,
+                     nonce: Optional[str] = None) -> Optional[dict]:
+    """Sasha 265 · item 4 (CR 99 §4d) · the WhatsApp tap's session for ONE read-back: signed over "<read_back_id>.<read_back_sha256>"."""
+    return _wa_signed(f"{read_back_id}.{read_back_sha256}", wa, t, nonce)
+
+
+def card_canonical(read_backs: List[dict]) -> str:
+    """CR 190 · the card's canonical list: sorted by read_back_id, each {read_back_id, read_back_sha256}, sorted keys, no spaces, UTF-8
+    (kanoe_contract/vectors/whatsapp_card.json). The order on the card never changes it."""
+    import json as _json
+    rows = sorted(({"read_back_id": str(x["read_back_id"]), "read_back_sha256": str(x["read_back_sha256"])} for x in read_backs),
+                  key=lambda x: x["read_back_id"])
+    return _json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def card_sha256(read_backs: List[dict]) -> str:
+    return hashlib.sha256(card_canonical(read_backs).encode("utf-8")).hexdigest()
+
+
+def whatsapp_card_session(read_backs: List[dict], wa: Optional[dict] = None, t: Optional[int] = None,
+                          nonce: Optional[str] = None) -> Optional[dict]:
+    """Sasha 378 · CR 190 · ONE WhatsApp yes on ONE card: the session signs the card's sha256 (its read-backs, together)."""
+    return _wa_signed(card_sha256(read_backs), wa, t, nonce)
+
+
+async def whatsapp_card_tap(account: str, read_backs: List[dict]) -> Dict[str, Any]:
+    """Sasha 378 · CR 190 · their ONE WhatsApp reply to a card of several read-backs IS the approval of each: ONE approvals.in_app_tap
+    {read_backs, session} (the message id is used once at AgAPI). → {ok, approvals {read_back_id: approval_id}, refused [{read_back_id,
+    code, why}], say} — each read-back checked on its own by AgAPI."""
+    rbs = [{"read_back_id": x["read_back_id"], "read_back_sha256": x["read_back_sha256"]} for x in read_backs]
+    sess = whatsapp_card_session(rbs)
+    if not sess:
+        return {"ok": False, "error": {"code": "approval_untrusted_origin", "message": "no signed WhatsApp reply to confirm it's them"}}
+    reg = await _call(account, OP.USERS_REGISTER, {"external_ref": f"sasha:{account}",
+                                                  "destinations": [{"channel": "whatsapp", "value": "+" + sess["wa_id"]}]})
+    if not reg.get("ok"):
+        log.info("[venue_submit] WhatsApp destination not registered: %s", (reg.get("error") or {}).get("code"))
+    r = await _call(account, OP.APPROVALS_IN_APP_TAP, {"read_backs": rbs, "session": sess})
+    if not r.get("ok"):
+        e = _err(r)
+        log.info("[venue_submit] WhatsApp card yes refused: %s", e["code"])   # the code only — never the session
+        return {"ok": False, "error": e}
+    res = r.get("result") or {}
+    return {"ok": True, "approvals": {a["read_back_id"]: a.get("approval_id") for a in res.get("approvals") or [] if a.get("read_back_id")},
+            "refused": list(res.get("refused") or []), "say": res.get("say")}
 
 
 async def whatsapp_tap(account: str, read_back_id: str, read_back_sha256: str) -> Dict[str, Any]:

@@ -1,0 +1,31 @@
+{
+ "version": "kanoe-whatsapp-card.1",
+ "note": "CR 190 (Sasha 376 option a) · approvals.in_app_tap read_backs: ONE WhatsApp yes on ONE card. card_sha256 = sha256(canonical list: sorted by read_back_id, each {read_back_id, read_back_sha256}, sorted keys, no spaces, UTF-8); signature = hex HMAC-SHA256(SASHA tap secret, \"t.nonce.whatsapp.wa_id.message_id.<card_sha256>\"). The order the card lists them in doesn't change the hash.",
+ "vectors": [
+  {
+   "secret": "vector-secret-not-a-real-one",
+   "t": 1762945200,
+   "nonce": "n0nce-cr190-0000",
+   "wa_id": "15005550375",
+   "message_id": "SM00000000000000000000000000000000",
+   "read_backs": [
+    {
+     "read_back_id": "rbk_01M0EXAMPLEC0000000000000002",
+     "read_back_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+     "read_back_id": "rbk_01M0EXAMPLEA0000000000000000",
+     "read_back_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+     "read_back_id": "rbk_01M0EXAMPLEB0000000000000001",
+     "read_back_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+   ],
+   "canonical": "[{\"read_back_id\":\"rbk_01M0EXAMPLEA0000000000000000\",\"read_back_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},{\"read_back_id\":\"rbk_01M0EXAMPLEB0000000000000001\",\"read_back_sha256\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"},{\"read_back_id\":\"rbk_01M0EXAMPLEC0000000000000002\",\"read_back_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}]",
+   "card_sha256": "80d668641d5ef6e3b487cfeb4f6ee24f8fc476cec787b193532077ec6dc4f3e4",
+   "signed": "1762945200.n0nce-cr190-0000.whatsapp.15005550375.SM00000000000000000000000000000000.80d668641d5ef6e3b487cfeb4f6ee24f8fc476cec787b193532077ec6dc4f3e4",
+   "signature": "99429fcfa095cf52a0449cd7b1658a2bd90c390d13e233f2bbf7e25d8d405f1f"
+  }
+ ]
+}

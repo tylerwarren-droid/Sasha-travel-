@@ -1,10 +1,10 @@
 """GENERATED from AgAPI's spec/ by tools/contract/generate.py (CR 186) — DO NOT EDIT. Change spec/, regenerate, bump the release.
-kanoe_contract 1.80.1 · AgAPI 1.80.1 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
+kanoe_contract 1.84.0 · AgAPI 1.84.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, TypedDict, Union  # noqa: F401
 
-CONTRACT_VERSION = "1.80.1"
+CONTRACT_VERSION = "1.84.0"
 
 
 class OP:
@@ -253,10 +253,10 @@ ActsStatusIn = TypedDict('ActsStatusIn', {"act_id": str, "intent_id": str}, tota
 ActsStatusOut = TypedDict('ActsStatusOut', {"acts": List[Dict[str, Any]], "coverage": Dict[str, Any]}, total=False)
 
 # approvals.in_app_tap — input
-ApprovalsInAppTapIn = TypedDict('ApprovalsInAppTapIn', {"read_back_id": str, "read_back_sha256": str, "session": Dict[str, Any]}, total=False)
+ApprovalsInAppTapIn = TypedDict('ApprovalsInAppTapIn', {"read_back_id": str, "read_back_sha256": str, "session": Dict[str, Any], "read_backs": List[Dict[str, Any]]}, total=False)
 
 # approvals.in_app_tap — output
-ApprovalsInAppTapOut = TypedDict('ApprovalsInAppTapOut', {"approval_id": str, "method": str, "operation": str, "result": Dict[str, Any], "say": Union[str, None]}, total=False)
+ApprovalsInAppTapOut = TypedDict('ApprovalsInAppTapOut', {"approval_id": str, "method": str, "operation": str, "result": Dict[str, Any], "say": Union[str, None], "approvals": List[Dict[str, Any]], "refused": List[Dict[str, Any]]}, total=False)
 
 # approvals.mandate — input
 ApprovalsMandateIn = TypedDict('ApprovalsMandateIn', {"end_user": str, "words": str, "scope": Dict[str, Any], "limits": Dict[str, Any], "expires_in_minutes": int, "proof": Dict[str, Any]}, total=False)
@@ -957,12 +957,9 @@ REQUIRED: Dict[str, List[str]] = {
   "coverage"
  ],
  "ApprovalsInAppTapIn": [
-  "read_back_id",
-  "read_back_sha256",
   "session"
  ],
  "ApprovalsInAppTapOut": [
-  "approval_id",
   "method",
   "say"
  ],

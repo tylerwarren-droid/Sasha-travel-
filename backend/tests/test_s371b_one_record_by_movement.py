@@ -142,5 +142,21 @@ class Ratchet(unittest.TestCase):
         self.assertEqual(acts, [])                                                            # every act goes through _send (one key, re-sent)
 
 
+class FoundLive(unittest.TestCase):
+    def test_a_fare_condition_is_said_once_for_both_legs(self):
+        with T367.World() as w:
+            mv = run(G.store().movement(OWNER))
+            leg = {"kind": "flight", "cancel_by": "airline"}
+            fin = run(GB.finish(OWNER, mv["id"], [{"name": "Carmen Castro", "conditions": [leg, dict(leg)]}], []))
+        self.assertEqual(fin["say"].count("Carmen Castro's flight: only the airline can cancel it."), 1)
+
+    def test_only_an_approved_act_takes_the_acts_timeout(self):
+        with mock.patch.dict("os.environ", {"SASHA_GROUP_ACT_TIMEOUT_S": "4"}):
+            self.assertEqual(GB.act_timeout(), 4.0)
+        with mock.patch.dict("os.environ", {"SASHA_GROUP_ACT_TIMEOUT_S": ""}):
+            self.assertEqual(GB.act_timeout(), 60.0)
+        self.assertIn("act_timeout() if (op in GROUP_ACTS and approval) else TIMEOUT_S", (BS / "group_book.py").read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

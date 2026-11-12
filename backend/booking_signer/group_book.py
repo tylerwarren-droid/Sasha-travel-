@@ -73,7 +73,7 @@ async def _call(account: str, op: str, body: dict, approval: Optional[str] = Non
         return {"ok": False, "error": {"code": "not_configured", "message": "AgAPI's sandbox key isn't set here"}}
     h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": idem or "s334_" + secrets.token_hex(12),
          **({"AgAPI-Approval-Id": approval} if approval else {})}
-    return await AR.post(url, key, op, body, h, TIMEOUT_S)
+    return await AR.post(url, key, op, body, h, act_timeout() if (op in GROUP_ACTS and approval) else TIMEOUT_S)
 
 
 async def _send(account: str, op: str, body: dict, idem: str, approval: Optional[str] = None) -> Dict[str, Any]:
@@ -114,6 +114,15 @@ def recorded(e: Dict[str, Any]) -> Dict[str, Any]:
 CALL = None   # tests replace it: (op, body, approval) → envelope
 KEYS: List[Tuple[str, Optional[str]]] = []   # tests read it: every (op, Idempotency-Key) sent through CALL
 TIMEOUT_S = 60.0
+
+
+def act_timeout() -> float:
+    """How long Sasha waits for AgAPI's answer to an approved act before the connection is dropped and the SAME request re-sent (_send).
+    The transport's own setting (SASHA_GROUP_ACT_TIMEOUT_S, default 60 s) — a drill sets it short to drop mid-order on the real path."""
+    try:
+        return max(1.0, float(os.getenv("SASHA_GROUP_ACT_TIMEOUT_S", "") or TIMEOUT_S))
+    except ValueError:
+        return TIMEOUT_S
 
 
 async def _organiser(account: str) -> Optional[str]:
@@ -947,12 +956,15 @@ async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], fai
         if inv.get("number") and inv.get("total"):
             parts.append(f"The invoice {inv['number']}: {inv['total']}.")
     for d in done:   # Sasha 367 · each booked fare's own conditions (CR 181: parts[].conditions / cancel_by), said plainly
+        said_for: set = set()
         for c in d.get("conditions") or []:
             words = [w for w in (("only the airline can cancel it" if c.get("cancel_by") == "airline" else ""),
                                  ("it can't be refunded" if c.get("refund") in (False, "none", "no") else ""),
                                  ("it can't be changed" if c.get("change") in (False, "none", "no") else "")) if w]
-            if words:
-                parts.append(f"{d['name']}'s {c.get('kind') or 'booking'}: " + ", ".join(words) + ".")
+            line = f"{d['name']}'s {c.get('kind') or 'booking'}: " + ", ".join(words) + "."
+            if words and line not in said_for:   # Sasha 371b · found live: both legs said the same line twice — once per fact
+                said_for.add(line)
+                parts.append(line)
     if confirming:
         parts.append(f"{_names(confirming)}: the airline hasn't confirmed yet — I'm checking, and nothing will be ordered twice.")
     for r in incomplete:

@@ -156,11 +156,6 @@ async def worker_of(m: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "keep": {"passport": v["refs"]["passport"], "loyalty": airline[:4], "hotel_loyalty": hotel[:4]}}
 
 
-def _refs(w: Dict[str, Any]) -> List[str]:
-    k = w.get("keep") or {}
-    return [k.get("passport")] + list(k.get("loyalty") or []) + list(k.get("hotel_loyalty") or [])
-
-
 def _minor(row: Optional[dict]) -> Optional[Dict[str, Any]]:
     """A trip row's price as AgAPI's money ({amount_minor, currency}) — None when the row has none (nothing invented)."""
     if not row or row.get("price_amount") is None:
@@ -335,16 +330,9 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
         body = {"end_user": org, "movement_id": str(mv["id"]), "worker": {**w, **contact_of(m)}, "items": _wire(its),
                 **({"mandate_id": mandate_id} if mandate_id else {})}   # Sasha 371b · CR 184: the movement on the record; worker.key = member id
         idem = act_key(OP.GROUP_BOOK, mv["id"], m["id"], body)   # the read-back, the act and every retry of it: ONE key
-        if mandate_id:   # Sasha 367 · under the mandate THIS call is the act: THIS worker's references granted for it only (as _act_one does)
-            from . import keep_resolver as KR
-            refs = [x for x in _refs(w) if x]
-            KR.grant(owner_of(m), refs)
-            try:
-                r = await _read_back(account, OP.GROUP_BOOK, body, idem)
-            finally:
-                KR.revoke(refs)
-        else:
-            r = await _read_back(account, OP.GROUP_BOOK, body, idem)
+        # Sasha 378 · CR 189: the references open ONLY through AgAPI's signed call, bound to THIS movement and member and checked against
+        # Sasha's own records (keep_resolver.resolve) — no allow-list of Sasha's own
+        r = await _read_back(account, OP.GROUP_BOOK, body, idem)
         e = r.get("error") or {}
         if mandate_id and r.get("ok"):   # Sasha 367 · INSIDE the mandate: booked on the manager's instruction (no read-back to answer)
             return "booked", {"name": m["name"], "member_id": m["id"], "result": r.get("result") or {}}
@@ -1064,19 +1052,13 @@ def _card_for(account: str, action: str, it: dict, movement_id: str) -> Dict[str
 
 
 async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, done: list, failed: list, reasked: Optional[list] = None) -> None:
-    """ONE worker's act after the organiser's yes: the approval of THAT read-back, the references granted for this act only, the act,
-    then the worker's ONE trip settled from AgAPI's answer."""
-    from . import keep_resolver as KR
+    """ONE worker's act after the organiser's yes: the approval of THAT read-back, the act (its references open only through AgAPI's signed,
+    bound call — CR 189), then the worker's ONE trip settled from AgAPI's answer."""
     apv = await _approval(account, it, said or "Yes, go ahead.")
     if not apv:
         failed.append({"name": it["name"], "code": "approval_refused", "why": FACTS["approval_refused"]})   # Sasha 366 · named, never "just now"
         return
-    refs = [r for r in _refs(it.get("worker") or {}) if r]
-    KR.grant(it.get("owner") or it.get("member"), refs)   # THIS worker's references (their vault: the PERSON's, Sasha 351), for THIS act only
-    try:
-        r = await _send(account, it["op"], it["body"], it["idem"], approval=apv)   # Sasha 371b · its ONE key, re-sent unchanged
-    finally:
-        KR.revoke(refs)
+    r = await _send(account, it["op"], it["body"], it["idem"], approval=apv)   # Sasha 371b · its ONE key, re-sent unchanged
     e = r.get("error") or {}
     d = e.get("details") or {}
     if e.get("code") in ON_RECORD + NO_ANSWER:   # Sasha 371b · AgAPI's record holds (or may hold) it: a state from the record, never "failed"

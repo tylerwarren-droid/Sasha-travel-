@@ -34,8 +34,12 @@ class FakeAgAPI:
         self.n += 1
         return f"{p}_{self.n:04d}"
 
-    async def _open(self, ref):
-        body = json.dumps({"ref": ref, "at": int(time.time())}).encode()
+    ACCOUNT = "acc_test_sasha"   # Sasha's own AgAPI account (keep_resolver asks usage.get; the World answers it)
+
+    async def _open(self, ref, member, movement_id, booking_id, purpose="group.book"):
+        """CR 189 · AgAPI's signed, BOUND call to Sasha's resolver: keep-resolve/1, canonical bytes, the binding in them."""
+        body = KR.canonical({"account": self.ACCOUNT, "at": int(time.time()), "booking_id": booking_id, "member": member,
+                             "movement_id": movement_id, "person": OWNER, "purpose": purpose, "ref": ref, "v": KR.VERSION})
         return (await KR.resolve(body, KR.sign(body)))["values"]
 
     def _price(self, kind):
@@ -117,15 +121,20 @@ class FakeAgAPI:
         raise AssertionError(op)
 
     async def _book(self, w, items, stay=None, movement_id=None):
-        pp = await self._open(w["keep"]["passport"])          # INSIDE the supplier call
+        bid = self._id("gbk")
+        pp = await self._open(w["keep"]["passport"], w["key"], movement_id, bid)   # INSIDE the supplier call, bound to THIS booking
         self.supplier.append(pp["number"])
         pp = None
         parts = [{"kind": "flight", "reference": self._id("PNR"), "price": self._price("flight")} for i in items if i["kind"] == "flight"]
         parts.append(stay or {"kind": "stay", "reference": self._id("HTL"), "price": self._price("stay")})
-        b = {"booking_id": self._id("gbk"), "worker": {"key": w["key"], "name": f"{w['given_name']} {w['family_name']}"}, "state": "booked", "parts": parts,
+        b = {"booking_id": bid, "worker": {"key": w["key"], "name": f"{w['given_name']} {w['family_name']}"}, "state": "booked", "parts": parts,
              "movement_id": movement_id}
         self.records.append(b)
         return dict(b)
+
+
+async def _own_accounts():
+    return {FakeAgAPI.ACCOUNT}
 
 
 class World(W.World):
@@ -155,7 +164,8 @@ class World(W.World):
             p.start()
             self.p.append(p)
         for p in (mock.patch.object(GB, "CALL", self.agapi), mock.patch.object(GB, "SETTLE", settle),
-                  mock.patch.dict(os.environ, {"SASHA_KEEP_RESOLVE_SECRET": SECRET}), mock.patch.dict(GB._CARDS, {}, clear=True)):
+                  mock.patch.dict(os.environ, {"SASHA_KEEP_RESOLVE_SECRET": SECRET}), mock.patch.dict(GB._CARDS, {}, clear=True),
+                  mock.patch.object(KR, "ACCOUNTS", _own_accounts)):
             p.start()
             self.p.append(p)
         for i, m in enumerate(self.members()):
@@ -224,28 +234,49 @@ class BookSwapCancelInvoice(unittest.TestCase):
 
 
 class TheResolver(unittest.TestCase):
-    def test_refuses_unsigned_stale_and_not_in_the_booking(self):
+    """Sasha 378 · CR 189: a reference opens ONLY for its own traveller, bound in AgAPI's signed call and checked against Sasha's records."""
+
+    def _body(self, w, m, ref, **over):
+        mv = run(G.store().movement(OWNER))
+        b = {"account": FakeAgAPI.ACCOUNT, "at": int(time.time()), "booking_id": "gbk_378", "member": m["id"], "movement_id": str(mv["id"]),
+             "person": OWNER, "purpose": "group.book", "ref": ref, "v": KR.VERSION, **over}
+        return KR.canonical(b)
+
+    def _refused(self, body, sig=None):
+        with self.assertRaises(KR.Refused) as e:
+            run(KR.resolve(body, KR.sign(body) if sig is None else sig))
+        return e.exception.rule
+
+    def test_only_its_own_traveller_on_its_own_movement_for_sashas_own_account(self):
         with World() as w:
-            m = w.members()[0]
+            m, other = w.members()[0], w.members()[1]
             ref = run(TV.vault_view(m))["refs"]["passport"]
-            body = json.dumps({"ref": ref, "at": int(time.time())}).encode()
-            for sig, want in ((None, "bad_signature"), ("0" * 64, "bad_signature")):
-                with self.assertRaises(KR.Refused) as e:
-                    run(KR.resolve(body, sig))
-                self.assertEqual(e.exception.rule, want)
-            with self.assertRaises(KR.Refused) as e:   # no grant: not a worker Sasha is booking right now
-                run(KR.resolve(body, KR.sign(body)))
-            self.assertEqual(e.exception.rule, "not_in_this_booking")
-            KR.grant(m["person_id"], [ref])   # Sasha 351 · the vault is the person's
-            old = json.dumps({"ref": ref, "at": int(time.time()) - 600}).encode()
-            with self.assertRaises(KR.Refused) as e:
-                run(KR.resolve(old, KR.sign(old)))
-            self.assertEqual(e.exception.rule, "stale")
+            body = self._body(w, m, ref)
+            self.assertEqual(self._refused(body, "0" * 64), "bad_signature")
+            self.assertEqual(self._refused(self._body(w, m, ref, at=int(time.time()) - 600)), "stale")
+            self.assertEqual(self._refused(self._body(w, m, ref, account="acc_someone_else")), "not_this_account")
+            self.assertEqual(self._refused(self._body(w, m, ref, person="00000000-0000-4000-8000-0000000000ff")), "not_this_movement")
+            self.assertEqual(self._refused(self._body(w, m, ref, movement_id="00000000-0000-4000-8000-0000000000fe")), "not_this_movement")
+            self.assertEqual(self._refused(self._body(w, m, ref, member="nobody")), "not_this_member")
+            self.assertEqual(self._refused(self._body(w, other, ref)), "not_this_member")    # Ana's reference bound to Bruno: never opened
+            self.assertEqual(self._refused(self._body(w, m, ref, purpose="group.cancel")), "bad_body")
+            self.assertEqual(self._refused(self._body(w, m, ref, v="keep-resolve/0")), "bad_body")
             got = run(KR.resolve(body, KR.sign(body)))
-            KR.revoke([ref])
         self.assertEqual(got["type"], "passport")
         self.assertEqual(got["values"]["number"], W.PASSPORTS["Worker0"])
-        self.assertFalse(any(W.PASSPORTS["Worker0"] in l for l in w.logs))                         # passed through, never logged
+        self.assertFalse(any(W.PASSPORTS["Worker0"] in l or ref in l for l in w.logs))          # never logged — not the value, not the reference
+
+    def test_crs_vector_verifies(self):
+        import pathlib as _pl
+        v = json.loads((_pl.Path(KR.__file__).parent / "vectors" / "keep_resolve.json").read_text())["vectors"][0]
+        self.assertEqual(KR.canonical({**v["bind"], "at": v["at"], "ref": v["ref"], "v": "keep-resolve/1"}).decode(), v["body"])
+        self.assertEqual(KR.sign(v["body"].encode(), v["secret"]), v["signature"])
+
+    def test_no_allow_list_left(self):
+        import inspect
+        src = inspect.getsource(KR) + inspect.getsource(GB)
+        for gone in ("_GRANTS", "def grant", "def revoke", "KR.grant(", "KR.revoke("):
+            self.assertNotIn(gone, src)
 
     def test_the_route_is_gate_exempt_only_for_its_signature(self):
         import inspect
@@ -261,8 +292,7 @@ class TheOneRecords(unittest.TestCase):
         src = inspect.getsource(GB)
         self.assertNotIn("create table", src.lower())                                                # AgAPI's record, never a copy
         self.assertIn("OP.GROUP_BOOKINGS", src)   # Sasha 374 · the contract's name, never the string                                                       # read from it, each time
-        self.assertIn("KR.grant(", src)                                                             # the references: for this act only
-        self.assertIn("KR.revoke(", src)
+        self.assertNotIn("KR.grant(", src)                                                          # Sasha 378 · CR 189: bound in AgAPI's signed call
         from agapi import agapi_route as AR
         self.assertEqual(AR.route("group"), "sandbox")                                               # TEST only: the sandbox, by name
         with mock.patch.dict(os.environ, {"SASHA_AGAPI_ROUTE": "all=live"}):

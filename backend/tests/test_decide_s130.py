@@ -1,7 +1,6 @@
-"""Sasha 130 (2) · once the decision workflow (booking_signer/decide.py). Sasha 254 · RETIRED as a decider: every venue booking is
-decided by the vendored booking rules (agapi/booking_rules) through agapi.booking_decide — pinned in tests/test_s254_one_decider.py.
-What stays here: the words parser (decide.preference), the no-reply sweep's gates on the rules' timing, the Gmail filing, and the
-platform hand-over said without naming it.
+"""Sasha 130 (2) · once the decision workflow (booking_signer/decide.py). Sasha 378 · CR 188: DELETED — decide.py (its words parser
+"call them instead" was a person's switch over the route) is gone; every venue booking follows AgAPI's ONE decision
+(tests/test_s378_follows_agapi.py). What stays here: the no-reply sweep's gates, the Gmail filing, the tap sweep retired.
 
     cd backend && python -m unittest tests.test_decide_s130 -v
 """
@@ -10,24 +9,6 @@ from __future__ import annotations
 import os
 import unittest
 from unittest import mock
-
-from booking_signer.decide import preference
-
-
-class Decide(unittest.TestCase):
-    def test_the_decider_is_retired_only_the_words_parser_stays(self):
-        from booking_signer import decide as D
-        for gone in ("decide", "ladder", "line", "Venue", "urgent_hours", "reply_hours", "tap_window_min"):
-            self.assertFalse(hasattr(D, gone), gone)
-
-    def test_preference_words(self):
-        self.assertEqual(preference("call them instead"), "call")
-        self.assertEqual(preference("llámales"), "call")
-        self.assertEqual(preference("just email them"), "email")
-        self.assertEqual(preference("call and email them"), "call_email")
-        self.assertEqual(preference("send me the link, I'll book it myself"), "one_tap")
-        self.assertIsNone(preference("yes"))
-
 
 from booking_signer import guest_whatsapp as GW  # noqa: E402
 from tests import test_guest_whatsapp_s75 as TG  # noqa: E402
@@ -62,16 +43,14 @@ class NoReplyCall(TG.Base):
     def test_not_while_they_are_closed_nor_while_the_rules_say_wait(self):
         from booking_signer import proactive as PR
         from datetime import datetime, timezone
-        from agapi import booking_decide as BD
-        live = {"mode": "live", "calls": "on", "real_venue_sends": "on"}
-        with mock.patch.object(BD, "access_of", mock.AsyncMock(return_value=live)):
-            self.now = datetime(2026, 10, 3, 17, 0, tzinfo=timezone.utc)                  # 19:00 Madrid: closed
-            TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": self.now, "link_tries": []}))
-            self.assertEqual(TG.run(PR.no_reply_offers(self.now)), [])
-            # Sasha 254 · the TIMING is the booking rules': a restaurant five days away is still a request (R3) — never a call
-            self.now = datetime(2026, 10, 3, 18, 10, tzinfo=timezone.utc)
-            self.row.update(date="2026-10-08", requested_at="2026-10-01T16:10:00+00:00")
-            self.assertEqual(TG.run(PR.no_reply_offers(self.now)), [])
+        # Sasha 378 · no access of Sasha's reading: the act's follow-up timing is AgAPI's
+        self.now = datetime(2026, 10, 3, 17, 0, tzinfo=timezone.utc)                  # 19:00 Madrid: closed
+        TG.run(GW.STORE.put_state(GW.wa_key(TG.GUEST), {"history": [], "pending": None, "last_inbound_at": self.now, "link_tries": []}))
+        self.assertEqual(TG.run(PR.no_reply_offers(self.now)), [])
+        # Sasha 254 · the TIMING is the booking rules': a restaurant five days away is still a request (R3) — never a call
+        self.now = datetime(2026, 10, 3, 18, 10, tzinfo=timezone.utc)
+        self.row.update(date="2026-10-08", requested_at="2026-10-01T16:10:00+00:00")
+        self.assertEqual(TG.run(PR.no_reply_offers(self.now)), [])
 
 
 class OneTapFiling(unittest.TestCase):
@@ -82,13 +61,6 @@ class OneTapFiling(unittest.TestCase):
                        {"venue": "Sasha Test Venue", "status": "guest_booked"})
         self.assertEqual(off[0], "confirm")
         self.assertIn("(ref TV-30D27C). Mark it confirmed?", off[1])
-
-    def test_the_platform_is_handed_over_never_named(self):   # Sasha 254 · R14 + her voice
-        from agapi.booking_rules import booking_rules as BR
-        d = GW.decision_of({"rungs": {"link": {"fact_index": 1, "value": "CoverManager"}}, "country": "ES"})
-        self.assertEqual(d.route, "one_tap")
-        self.assertTrue(d.reason.startswith(BR.PHRASES["platform"].format(platform="a booking platform")), d.reason)
-        self.assertNotIn("CoverManager", d.reason)
 
 
 class TapExpired(unittest.TestCase):

@@ -179,9 +179,9 @@ class TheSend(HandleIt):
             return {"ok": False, "error": {"code": "not_configured", "message": "off"}}
         with mock.patch.object(VS, "CALL", off):
             out = self.handle_it()
-        # Sasha 270 · MOVED (CR 101: one form engine): on the one path no AgAPI here is their page, prepared — never Sasha's own
-        # form sender (old S1 keeps it)
-        self.assertEqual((out["status"], out["rules"]["say_key"]), ("not_contacted", "prepared_link"))
+        # Sasha 319 · Sasha 378 (CR 188): AgAPI's send_form with no booking service here → Tyler's, nothing sent — never Sasha's own
+        # form sender, and never a page of Sasha's choosing in its place
+        self.assertEqual((out["status"], out["sent"]), ("to_tyler", False))
         self.assertNotIn("/api/booking/forms", self.api.paths())
 
 

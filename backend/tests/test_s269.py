@@ -56,7 +56,7 @@ def _src(case, rel):
 
 class TheRules21(unittest.TestCase):
     def test_gate_the_engine_s_words(self):
-        self.assertTrue(BR.VERSION.startswith(("booking-rules/2.5", "booking-rules/2.6")))   # Sasha 329 · CR 161 · 2.6 (+ decide_cancel)   # CR 160 · 2.5 (the same words)   # CR 129 · was 2.1: the same rules, R14 reading every field
+        self.assertTrue(BR.VERSION.startswith("booking-rules/3."))   # Sasha 378 · CR 188: 3.0 (re-vendored byte for byte)   # Sasha 329 · CR 161 · 2.6 (+ decide_cancel)   # CR 160 · 2.5 (the same words)   # CR 129 · was 2.1: the same rules, R14 reading every field
         self.assertEqual(BR.PHRASES["no_answer_first"], "They didn't pick up.")
         self.assertEqual(BR.PHRASES["no_answer"], "They didn't pick up again — the form is the fastest way.")
         self.assertEqual(BR.no_answer(PAGE, n=1)["ask_text"], BR.PHRASES["ask_try_again"])
@@ -87,7 +87,7 @@ class NoSecondCopy(unittest.TestCase):
 
     def test_one_path_never_makes_sashas_own_call(self):
         src = pathlib.Path(VN.__file__).read_text()
-        block = src[src.index("    if key == \"ask_page_or_call\" or action in"):src.index("    if action == \"ask_one_question\":")]   # Sasha 319: every surface
+        block = src[src.index("async def one_decision("):src.index("async def follow(")]   # Sasha 378: AgAPI's decision, every surface
         self.assertIn("_call_question", block)
         self.assertNotIn("await _call(", block)
 
@@ -262,23 +262,24 @@ class NeverNoOnlineForm(unittest.TestCase):
         self.assertFalse(V.asks_for_link(V.RULES))
         self.assertIn('Never say a place has "no online booking form"', V.RULES)
 
-    def _route(self, eng, card=None):
+    def _route(self, dec, card=None):
+        """Sasha 378 · CR 188: how they book is AgAPI's decision (VT.decision) — never a channel of Sasha's own reading."""
         ctx = type("Ctx", (), {"account": ACCT, "surface": "s2"})()
-        rd = {"venue": "Casa Gate", "rungs": {"phone": {"value": "+34910000000"}}}
+        rd = {"venue": "Casa Gate", "rungs": {"phone": {"value": "+34910000000"}}, "place_id": "ChIJcasagate269"}
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), mock.patch.object(VN, "_read", mock.AsyncMock(return_value=rd)), \
                 mock.patch.object(VN, "card_of", lambda *a: card), mock.patch.object(VN, "one_path", lambda c: True), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VN, "read_channel", lambda r, c, **k: eng), \
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), mock.patch("agapi.venue_truth.decision", lambda p: dec), \
                 mock.patch("agapi.venue_truth.reservable_say", lambda c: "They take reservations." if (c or {}).get("reservable") else None):
             return run(VN.read_booking_route(ctx, {"name": "Casa Gate", "city": "Madrid"}))
 
     def test_gate_no_own_form_says_it_never_no_form(self):
-        got = self._route({"kind": "phone"})
-        self.assertEqual(got["how"], V.BOOK_IT)                                            # Sasha 286 · a way of hers: she does it
+        from scripts import agapi_decides as AD
+        got = self._route(AD.decision("call", "Casa Gate"))
+        self.assertEqual(got["how"], V.CALL_IT)                                            # a way of hers: she does it
         self.assertNotIn("no online booking form", got["how"].lower())
         self.assertTrue(self._route(None)["how"].startswith("Here's their "))               # Sasha 286 · nothing: THE FLOOR
         self.assertFalse(V.asks_for_link(self._route(None)["how"]))
-        self.assertEqual(self._route({"kind": "email"}, {"reservable": True})["how"], V.BOOK_IT)
-        self.assertNotIn("Here's their", self._route({"kind": "own_engine"})["how"])      # their own form: as before
+        self.assertEqual(self._route(AD.decision("email", "Casa Gate"))["how"], AD.decision("email", "Casa Gate")["say_text"])
 
 
 if __name__ == "__main__":

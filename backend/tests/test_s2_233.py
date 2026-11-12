@@ -46,8 +46,6 @@ class Named(unittest.TestCase):
 
 class Robots(unittest.TestCase):
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         PR._ROBOTS.clear()
         p = mock.patch.object(PR.V, "public_url", lambda u, *a: u)
         p.start()
@@ -230,8 +228,6 @@ class AccidentPlace234(unittest.TestCase):
     the city won and reached the rental company's read-back. The facts' own place wins; the opening city is never re-sent."""
 
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         from unittest import mock
         from agapi import s2_fine_print as FP
         from tests.test_s2_fine_print import FakeAgAPI

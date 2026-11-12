@@ -59,27 +59,30 @@ class ChannelNeverLimited(unittest.TestCase):
             if n.isupper() and isinstance(v, str):
                 self.assertFalse(V.limits_channel(v), n)
 
-    def _route(self, eng, one=True):
+    def _route(self, dec, one=True):
+        """Sasha 378 · CR 188: how they book is AgAPI's decision (VT.decision) — said as hers to do, never limited."""
         ctx = type("Ctx", (), {"account": ACCT, "surface": "s2" if one else "s1"})()
-        rd = {"venue": "Periplo", "say": "By phone.", "rungs": {"phone": {"value": "+15005550184"}}}
+        rd = {"venue": "Periplo", "say": "By phone.", "rungs": {"phone": {"value": "+15005550184"}}, "place_id": "ChIJperiplo"}
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), mock.patch.object(VN, "_read", mock.AsyncMock(return_value=rd)), \
                 mock.patch.object(VN, "card_of", lambda *a: None), mock.patch.object(VN, "one_path", lambda c: one), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=eng)), mock.patch.object(VN, "read_channel", lambda r, c, **k: eng), \
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), \
+                mock.patch("agapi.venue_truth.decision", lambda p: dec), \
                 mock.patch("agapi.venue_truth.reservable_say", lambda c: None):
             return run(VN.read_booking_route(ctx, {"name": "Periplo", "city": "Madrid"}))
 
     def test_how_they_book_is_said_as_hers_to_do(self):
-        for kind in ("phone", "whatsapp", "email", "instagram"):
-            how = self._route({"kind": kind})["how"]
-            self.assertIn(V.BOOK_IT, how, kind)
+        from scripts import agapi_decides as AD
+        for kind in ("call", "whatsapp", "email", "send_form", "platform_book", "platform"):
+            how = self._route(AD.decision(kind, "Periplo"))["how"]
             self.assertNotIn("By phone", how)
             self.assertNotIn("By a message", how)
-            self.assertFalse(V.limits_channel(how), how)
-        self.assertNotIn(V.BOOK_IT, self._route({"kind": "own_engine"})["how"])   # their own form: as before (the form question)
-        self.assertTrue(self._route(None)["how"].startswith("Here's their "))   # Sasha 286 · no way seen: THE FLOOR (never a link ask)
+            self.assertFalse(V.limits_channel(how), (kind, how))
+        self.assertEqual(self._route(AD.decision("call", "Periplo"))["how"], V.CALL_IT)   # a call: her own offer
+        self.assertTrue(self._route(None)["how"].startswith("Here's their "))           # Sasha 286 · no decision: THE FLOOR
 
-    def test_old_s1_unchanged(self):
-        self.assertEqual(self._route({"kind": "phone"}, one=False)["how"], "By phone.")   # parity off: Sasha's own read, as it was
+    def test_old_s1_says_the_same(self):   # Sasha 378 · old S1 follows AgAPI's decision too: never "By phone."
+        from scripts import agapi_decides as AD
+        self.assertEqual(self._route(AD.decision("call", "Periplo"), one=False)["how"], V.CALL_IT)
         self.assertEqual(BR.PHRASES["wait_to_call"],
                          "Their only way to book is by phone, and it's still a while away — I'll call them closer to the day.")
 
@@ -87,7 +90,7 @@ class ChannelNeverLimited(unittest.TestCase):
         src = inspect.getsource(AG)
         self.assertIn("if honest and _V.limits_channel(x) and not _V.is_told(x, told):", src)
         self.assertIn('internal_log.append(f"channel limited: {x[:60]}")', src)
-        ex = inspect.getsource(VN._execute)   # Sasha 319 · R3's wait is the call act's on every surface: Sasha's own scheduled call is gone
+        ex = inspect.getsource(VN.one_decision)   # Sasha 319 · the call is the act's on every surface: Sasha's own call is gone
         self.assertNotIn("await _call(", ex)
 
 

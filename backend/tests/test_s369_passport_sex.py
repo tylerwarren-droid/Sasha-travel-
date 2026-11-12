@@ -104,7 +104,7 @@ class NoDefaultAnywhere(unittest.TestCase):
         """Found by the deploy gate (W1, V1): the single-flight doors ordered with the stand-in after payment. Now: asked BEFORE any hold."""
         gw = (ROOT / "backend" / "booking_signer" / "guest_whatsapp.py").read_text()
         self.assertIn('ctx["st"]["pending"] = {"kind": "flight_travellers"', gw)                 # WhatsApp / the voice page: asked, then carried on
-        self.assertEqual(gw.count('if kind == "flight_travellers":'), 2)                         # both dispatchers read the answer
+        self.assertEqual(gw.count('if kind == "flight_travellers":'), 1)                         # the ONE dispatcher reads the answer (Sasha 378: its dead duplicate deleted)
         self.assertIn('"travellers_needed"', (ROOT / "backend" / "booking_signer" / "travel.py").read_text())   # the web: refused by name
         pw = (ROOT / "backend" / "booking_signer" / "paid_watch.py").read_text()
         self.assertIn("people=people", pw)                                                         # the order: their own saved details

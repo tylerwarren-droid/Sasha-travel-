@@ -30,7 +30,7 @@ import { join } from "node:path";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /** Pages where a person acts and must learn what happened. Add a page here when it becomes one. */
-export const OUTCOME_SURFACES = ["app/booking-helper/page.tsx", "app/booking-helper/PhoneCall.tsx", "app/booking-helper/Ladder.tsx", "app/booking-helper/FounderGate.tsx", "app/components/workspace/SashaReservations.tsx", "app/components/ChatBooking.tsx", "app/components/ChatBookingCall.tsx", "app/booking-helper/FormSend.tsx", "app/components/ChatBookingLink.tsx", "app/components/ChatCancel.tsx"];
+export const OUTCOME_SURFACES = ["app/booking-helper/page.tsx", "app/booking-helper/PhoneCall.tsx", "app/booking-helper/Ladder.tsx", "app/booking-helper/FounderGate.tsx", "app/components/workspace/SashaReservations.tsx", "app/components/ChatBooking.tsx", "app/components/ChatBookingCall.tsx", "app/booking-helper/FormSend.tsx", "app/components/ChatCancel.tsx"];
 // CR 1 · CampusMe and relocation pages (their own line, so the Sasha tab's list above never conflicts)
 OUTCOME_SURFACES.push("app/campus-handover/[id]/page.tsx", "app/campus-handover/[id]/CopyAnswer.tsx", "app/relocation-file/[id]/page.tsx", "app/health-handover/[id]/page.tsx", "app/officer/[id]/page.tsx", "app/officer/[id]/ReturnButton.tsx");
 // CR 63 · the Keep (its own line, so the Sasha tab's list above never conflicts)

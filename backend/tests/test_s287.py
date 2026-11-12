@@ -161,8 +161,7 @@ class Base(unittest.TestCase):
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(RD))), \
                 mock.patch.object(VN, "_reservation", mock.AsyncMock(return_value=RES)), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), \
-                mock.patch.object(VN, "rules_for", mock.AsyncMock(side_effect=AssertionError("S2's own rules never decide a Kanoe send"))):
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)):   # Sasha 378 · AgAPI's decision only (VT.decision)
             out = run(VN.hold_venue(ctx(words), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
                                                  "time": "21:00", "party": 2}))
         if ACCT in VN._HELD:
@@ -423,10 +422,9 @@ class TheRatchet(unittest.TestCase):
         for bad in ("getenv", "environ", "founder", "@", "allow", "rules_for", "BD.", "_twilio", "send_whatsapp"):
             self.assertNotIn(bad, src, bad)                              # no flag, no list, no rules of its own, no second sender
 
-    def test_the_kanoe_card_comes_before_s2s_own_rules(self):
+    def test_the_kanoe_card_comes_before_the_one_decision(self):
         src = inspect.getsource(VN.hold_venue)
-        self.assertLess(src.index("kanoe_route(dec)"), src.index("follows(dec, at)"))
-        self.assertLess(src.index("kanoe_route(dec)"), src.index("rules_for("))
+        self.assertLess(src.index("kanoe_route(dec)"), src.index("one_decision("))   # Sasha 378 · S2's own rules are gone (CR 188)
         va = inspect.getsource(VN._via_agapi)   # S2's own read finding a WhatsApp (no AgAPI decision): AgAPI's send, the same question
         self.assertIn('d["action"] in MESSAGE_ACTIONS', va)   # Sasha 288 · every message request, WhatsApp among them
         self.assertIn("request_whatsapp", VN.MESSAGE_ACTIONS)

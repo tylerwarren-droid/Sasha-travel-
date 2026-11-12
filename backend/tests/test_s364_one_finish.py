@@ -241,38 +241,22 @@ class OneAsk(unittest.TestCase):
 
 
 class TheRulesQuestionIsTheirs(unittest.TestCase):
-    """Found by the recording gate (10 Nov, REST typed): after the guest gave a name and number, the model sent hold_venue route
-    "page" — it answered the rules' ONE question ("a prefilled form you just confirm, or shall I handle it?") for them, and the test
-    venue was never booked through AgAPI. Its options are the person's to choose: their own words this turn, or their tap."""
+    """Found by the recording gate (10 Nov, REST typed): the model answered the rules' ONE question for the guest. Sasha 378 · CR 188:
+    the question is gone with Sasha's decider — the route is AgAPI's decision; the door passes the hold through as given (hold_venue
+    reads only "no" from it), and keeps no memory of anyone's pick."""
 
-    def run_door(self, said, route):
+    def test_the_door_picks_nothing(self):
         from agapi import v0 as API, venues as VN
         seen = []
 
         async def hold(ctx, a):
             seen.append(a.get("route"))
             return {"status": "awaiting_yes"}
-        with mock.patch.object(VN, "hold_venue", hold), mock.patch.object(VN, "one_path", lambda ctx: True):
-            run(API.hold_venue(API.Ctx(account=OWNER, user_said=said, surface="s2"), {"name": "Sasha Test Venue", "route": route}))
-        return seen[0]
-
-    def test_the_models_pick_is_dropped_their_words_keep_it(self):
-        from agapi import v0 as API
-        API._ROUTE_CHOSEN.clear()
-        self.assertIsNone(self.run_door("Suite Guest +34 600 000 000", "page"))          # the model chose: dropped → the rules ask
-        self.assertIsNone(self.run_door("yes", "form"))
-        self.assertEqual(self.run_door("Prefilled form, please", "page"), "page")        # their words: kept
-        self.assertEqual(self.run_door("Handle it", "form"), "form")
-        self.assertEqual(self.run_door("yes", "call"), "call")                           # the call's OK is not this question
-        self.assertEqual(self.run_door("no thanks", "no"), "no")
-
-    def test_their_earlier_answer_carries_the_booking_on(self):
-        from agapi import v0 as API
-        API._ROUTE_CHOSEN.clear()
-        self.assertEqual(self.run_door("Handle it", "form"), "form")                     # they chose …
-        self.assertEqual(self.run_door("Tyler Warren, +34 600 111 222", "form"), "form")  # … the contact, then the hold as they chose
-        self.assertIsNone(self.run_door("Tyler Warren, +34 600 111 222", "page"))        # never another option for them
-        API._ROUTE_CHOSEN.clear()
+        with mock.patch.object(VN, "hold_venue", hold):
+            for said, route in (("Prefilled form", "page"), ("Handle it", "form"), ("no thanks", "no")):
+                run(API.hold_venue(API.Ctx(account=OWNER, user_said=said, surface="s2"), {"name": "Sasha Test Venue", "route": route}))
+        self.assertEqual(seen, ["page", "form", "no"])
+        self.assertFalse(hasattr(API, "_ROUTE_CHOSEN"))
 
 
 class TheAirlinesNeedBeforeTheCard(unittest.TestCase):

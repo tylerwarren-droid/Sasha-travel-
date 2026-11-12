@@ -206,16 +206,7 @@ class WarmAtEntry(Base):
 
 
 class TheRulesAccess(Base):
-    def test_a_granted_person_reaches_an_allowed_real_venue(self):
-        from agapi import booking_decide as BD
-        from booking_signer import guest_accounts as GA
-        self.read(JON, SCRATCH)
-        self.assertEqual(run(BD.access_of(JON)), {"mode": "live", "calls": "on", "real_venue_sends": "on"})
-        self.assertEqual(BD.access_cached(JON), {"mode": "live", "calls": "on", "real_venue_sends": "on"})
-        self.assertIsNone(GA.real_contact_refusal(JON, to_test_venue=False))
-        self.assertEqual(GA.real_contact_refusal(SCRATCH, to_test_venue=False).status_code, 403)
-        self.assertIsNone(GA.real_contact_refusal(SCRATCH, to_test_venue=True))   # our test venues: anyone
-        self.assertEqual(run(BD.access_of(SCRATCH)), {"mode": "test", "calls": "off", "real_venue_sends": "off"})
+    # Sasha 378 · CR 188: a booking's reach (access, real-venue sends) is AgAPI's — Sasha reads none of it (tests.test_s378_follows_agapi)
 
     def test_a_test_record_reaches_the_sandbox(self):
         from agapi import agapi_route as AR

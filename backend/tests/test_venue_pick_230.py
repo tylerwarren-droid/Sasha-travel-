@@ -36,14 +36,12 @@ class FormApi(FakeApi):
 def reader(rungs):
     async def rd(ctx, a):
         return {"read_id": "r-1", "country": "ES", "venue": "Casa Gate", "facts": [], "rungs": rungs, "open_now": True,
-                "opens_at": None, "say": ""}
+                "opens_at": None, "say": "", "place_id": a.get("place_id") or "ChIJtest230"}   # Sasha 378 · its listing: AgAPI's venue.profile
     return rd
 
 
 class APick(unittest.TestCase):
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         VN._HELD.pop(ACCT, None)
         self.api = FormApi()
         for p in (mock.patch.object(GW, "api", self.api), mock.patch.object(GA, "founder", lambda a: False),
@@ -59,8 +57,8 @@ class APick(unittest.TestCase):
             return run(VN.hold_venue(ctx, {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": "dinner", "party": 2,
                                            "day": LATER, "time": "21:00", **extra}))
 
-    # Sasha 254 · the booking rules decide (agapi/booking_rules via agapi.booking_decide): a form is the ONE question (R2) — "Handle
-    # it" (route form) is the form's read-back, the yes in a later turn books it; own channels before a platform (R1/R14)
+    # Sasha 378 · CR 188 · AgAPI decides (venue.profile → handoff.decide; scripts/agapi_decides is its fake): a form is its send — the
+    # read-back, the yes in a later turn books it; own channels before a platform
     def agapi(self, submit=None):
         """Sasha 270 · MOVED (CR 101: one form engine): on /s2 "Handle it" is AgAPI's send (venue.prepare_booking → the read-back →
         venue.submit_booking) — Sasha's own form sender is old S1's only. AgAPI faked as CR 90 answers (test_s254_handle_it_live)."""
@@ -76,14 +74,13 @@ class APick(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_on_s2_a_form_is_the_one_question_then_handle_it_is_the_read_back(self):
+    def test_on_s2_a_form_is_agapis_send_its_read_back_at_once(self):
+        # Sasha 378 · CR 188: their own form → AgAPI's send_form → its read-back for the ONE yes — no question of Sasha's own first
         self.agapi()
         out = self.pick("s2", {"form": {}})
-        self.assertEqual((out["status"], out["ask"]), ("choose_route", V.ASK_BOOK))
-        self.assertNotIn(ACCT, VN._HELD)
-        out = self.pick("s2", {"form": {}}, route="form")
         self.assertEqual(out["status"], "awaiting_yes")                       # the read-back, not "shall I?"
-        self.assertEqual(out["route"], "agapi")                                # Sasha 270 · MOVED: AgAPI's send (was Sasha's "form")
+        self.assertEqual(out["route"], "agapi")
+        self.assertNotIn("options", out)
         self.assertTrue(out["read_back"])
         self.assertEqual(VN._HELD[ACCT]["rung"], "agapi")                      # held: the yes (a later turn) books it
         self.assertNotIn("/api/booking/forms", [c[1] for c in self.api.calls])
@@ -93,11 +90,11 @@ class APick(unittest.TestCase):
         out = self.pick("s2", {"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
         self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "request_email"))
 
-    def test_old_s1_asks_the_same_rules(self):   # Sasha 254 · old S1 (parity off): the same decision (its schema unchanged)
+    def test_old_s1_follows_the_same_decision(self):   # Sasha 378 · old S1 (parity off): AgAPI's decision too (its schema unchanged)
+        self.agapi()
         with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):
             out = self.pick("s1", {"form": {}})
-        self.assertEqual((out["status"], out["ask"]), ("choose_route", V.ASK_BOOK))
-        self.assertNotIn(ACCT, VN._HELD)
+        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
 
     def test_the_yes_in_a_later_turn_books_it(self):
         self.agapi({"status": "confirmed", "reference": "TV-230"})   # Sasha 270 · MOVED: AgAPI's send

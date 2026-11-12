@@ -35,10 +35,6 @@ LINES = [f"Sasha writes to Casa Gate by email from Kanoe's address, asking for: 
 EMAIL_DEC = {"route": "message", "channel": "email", "how_far": "request", "sender": "kanoe",
              "say_text": "Casa Gate: I can send it for you and tell you when they answer.",
              "button": {"label": "Send the request", "link": None, "sends": True}}
-#: the booking rules' answer for an email venue (booking_rules R4 · request_email), as rules_for returns it
-RULES = {"action": "request_email", "say": "request_email", "say_text": "I'll ask them for you and tell you when they reply.",
-         "takeover": {"say": "Or take it over yourself.", "link": "https://casagate.example/"}, "channels": [{"kind": "email", "value": TO}],
-         "refusals": [], "ctx": {}, "follow_ups": []}
 
 
 class FakeAgAPI(T.FakeAgAPI):
@@ -85,8 +81,7 @@ class Base(T.Base):
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(T.RD, rungs={"email": {"value": TO}}))), \
                 mock.patch.object(VN, "_reservation", mock.AsyncMock(return_value=RES)), \
-                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)), \
-                mock.patch.object(VN, "rules_for", mock.AsyncMock(return_value=dict(RULES))):   # Sasha 319: no S2 email sender exists
+                mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)):   # Sasha 378 · AgAPI's EMAIL_DEC, followed
             out = T.run(VN.hold_venue(T.ctx(words), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
                                                      "time": "21:00", "party": 2}))
         if ACCT in VN._HELD:

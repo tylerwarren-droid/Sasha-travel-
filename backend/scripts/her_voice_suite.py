@@ -3,8 +3,8 @@ contacted). Fails on a channel named in anything she is handed to say, and on a 
 
   1. the persona carries the voice on /s2, on WhatsApp and on /next under parity — and /next with parity off is untouched
   2. the transcript check itself: it catches a channel name and a re-ask, and passes the demo path's own words
-  3. the booking path's words (D3/D4): the question word for word, both choices, the prefilled form's confirmation, the request's
-     confirmation, the message they send themselves — every one clean
+  3. the booking path's words (Sasha 378 · CR 188: AgAPI's decision, followed): AgAPI's words, the read-back, the take-over, the
+     hand-over of the message they send themselves — every one clean, and no question of her own
   4. Sasha 251 · HONEST RESULTS: a scripted turn where search_venues FAILS and the model claims cards → the reply that reaches
      the person says it didn't work (on /s2, WhatsApp and /next under parity; /next with parity off untouched), and the check
      itself catches a claim after a failed tool
@@ -66,49 +66,39 @@ async def main() -> bool:
     from booking_signer import guest_receipt as GR
     from scripts.venue_truth_suite import CASA, HAMMAM
 
-    class GW:
-        STORE = None
-        @staticmethod
-        def summary(res): return "Thursday at 21:00, 2 people"
-        @staticmethod
-        def plain_venue(v): return str(v).replace(" (test)", "")
-
-        @staticmethod
-        def guest_lines(rung, lines): return list(lines)   # Sasha 254 · the one path's read-back reads it
-    real_api, real_addr = VN._API, GR.address_of
-    from agapi import booking_decide as BD
+    # Sasha 378 · CR 188 · the route is AgAPI's ONE decision (venue.profile → handoff.decide); every line she's handed on the way
+    # (AgAPI's words, the read-back, the take-over, the hand-over) is checked — no question of her own, no channel named
     from agapi.booking_rules import booking_rules as BR
-    real_access = BD.access_of
+    real_addr = GR.address_of
 
     async def addr(account): return "guest@example.com"
-
-    async def live(account): return {"mode": "live", "calls": "on", "real_venue_sends": "on"}
-    VN._API, GR.address_of, BD.access_of = (lambda: GW), addr, live
+    GR.address_of = addr
     said: list = []
+    takeovers: list = []
     acct = "00000000-0000-4000-8000-000000000250"
     try:
-        for venue, surface in ((HAMMAM, "s2"), (CASA, "wa")):
-            ctx = type("C", (), {"account": acct, "surface": "s2", "started": datetime.now(timezone.utc), "act_name": None, "idem": None})()
-            ch = (await VT.profile(dict(venue))).get("channel") or {}
+        for venue in (HAMMAM, CASA):
+            ctx = type("C", (), {"account": acct, "surface": "s2", "started": datetime.now(timezone.utc), "act_name": None, "idem": None,
+                                 "user_said": "a table for two on Thursday at 9pm"})()
+            await VT.profile(dict(venue))   # AgAPI's venue.profile (saved): its decision, cached
             rd = {"venue": venue["name"], "place_id": venue["place_id"], "rungs": {}, "country": "ES"}
             res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
                    "when": {"at": (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%dT21:00")}, "what": {"category": "restaurant"}}
-            at = res["when"]["at"]
-            # Sasha 254 · the booking rules decide (agapi.booking_decide), the executors run what they said — the words are theirs
-            q = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), await VN.rules_for(ctx, {}, rd, res, at, ch, venue, None), ch, venue)
-            said += [q.get("ask") or "", q.get("say") or ""] + [o["title"] for o in q.get("options") or []] + list(q.get("read_back") or [])
-            got = await VN._execute(ctx, {}, rd, res, at, datetime.now(timezone.utc), await VN.rules_for(ctx, {}, rd, res, at, ch, venue, "page"), ch, venue)
-            said += [got.get("say") or "", got.get("line") or ""] + list(got.get("read_back") or [])
+            q = await VN.one_decision(ctx, {}, rd, res, res["when"]["at"], datetime.now(timezone.utc), dict(venue), VT.decision(dict(venue)))
+            said += [q.get("ask") or "", q.get("say") or "", q.get("line") or ""] + [o.get("title", "") for o in q.get("options") or []] \
+                + list(q.get("read_back") or [])
+            takeovers.append(q)
             VN._HELD.pop(acct, None)
-        check("3 the question, word for word", V.ASK_BOOK in said, str(said[:2]))
-        check("3 both choices", "Prefilled form" in said and "Handle it" in said)
-        check("3 the prefilled form's confirmation — the rules' words + the take-over",
-              any(s.startswith(BR.PHRASES["prepared_link"]) and BR.PHRASES["takeover"] in s for s in said))
+        check("3 no question of her own: never \"prefilled form or handle it\"", V.ASK_BOOK not in said and "Handle it" not in said, str(said[:3]))
+        check("3 every answer leaves them a way to do it themselves: the take-over on a read-back, AgAPI's button on a hand-over (R11)",
+              len(takeovers) == 2 and all(((q.get("takeover") or {}).get("say") == BR.PHRASES["takeover"]) if q.get("status") == "awaiting_yes"
+                                          else str((q.get("button") or {}).get("link") or q.get("open") or (q.get("prepared") or {}).get("url") or "").startswith("https://")
+                                          for q in takeovers), str(takeovers[-1])[:600])
         lines = [s for s in said if s]
         check("3 nothing she's handed names a channel", V.check(lines) == [], str(V.check(lines)))
         check("3 the request's confirmation is her voice", V.SENT == "Sent. I'll tell you when they reply." and V.check([V.SENT, V.DONE_FORM, V.DONE_FORM_WA]) == [])
     finally:
-        VN._API, GR.address_of, BD.access_of = real_api, real_addr, real_access
+        GR.address_of = real_addr
         VN._HELD.pop(acct, None)
 
     # 4 ── Sasha 251 · honest results: a failed tool is never followed by a claim of what it would have shown

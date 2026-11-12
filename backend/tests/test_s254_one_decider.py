@@ -1,11 +1,12 @@
-"""Sasha 254 · item 2 — ONE DECIDER. Every venue booking chooser (/s2, WhatsApp's brain, /next under parity — and old S1) asks the
-vendored booking rules (agapi/booking_rules: decide) through ONE adapter (agapi/booking_decide), and the executors run exactly the
-action it returned, saying its phrase + the take-over. One end-to-end hold per rule (R1–R14 + access), through the one path
-(hold_venue → book_venue), against a recorder for the booking API; the hotel's 24 h no-reply call from the sweep; a deposit asked on a
-call (the call ends, the person is told, no payment question); the 3 a day and 30 minute limits; a source scan that the retired
-deciders and env vars are read nowhere.
+"""Sasha 254 → Sasha 378 (CR 188's Sasha half) · ONE DECISION, AND IT IS AgAPI's. Every venue booking (/s2, WhatsApp's brain, /next
+under parity — and old S1) follows venue.profile's `decision` (AgAPI's handoff.decide) through ONE path (venues.one_decision): its act
+(Kanoe's form / email, or the call) → venue.prepare_booking → its read-back → the ONE yes; the platform → Sasha books it on the yes
+(platform_book) or hands over the step only they may do (platform); nothing → the floor. Sasha decides no route, asks no question of her
+own and reads no person's switch (access, real-venue sends, the platform beta). The rules' call conduct (R7–R9), the 30-minute / 3-a-day
+limits at the dial (R10) and the take-over line (R11/R12) stay as words and constants.
 
-Offline: the booking API is a recorder (nothing leaves the process); no model, no Places, no Twilio/Bland, no database.
+Offline: the booking API is a recorder (nothing leaves the process); AgAPI's decision is scripts/agapi_decides (its own shapes); no model,
+no Places, no Twilio/Bland, no database.
 
     cd backend && python -m unittest tests.test_s254_one_decider -v
 """
@@ -31,13 +32,6 @@ ACCT = "00000000-0000-4000-8000-000000000254"
 run = asyncio.run
 LIVE = {"mode": "live", "calls": "on", "real_venue_sends": "on"}
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
-
-
-def live_access(test: unittest.TestCase, access: dict = None):
-    """For tests of the EXECUTORS behind the rules: this person may reach real venues (the founder's / Jon's access)."""
-    p = mock.patch.object(BD, "access_of", mock.AsyncMock(return_value=dict(access or LIVE)))
-    p.start()
-    test.addCleanup(p.stop)
 
 
 def local(hours: float) -> tuple:
@@ -76,27 +70,15 @@ class Api(FakeApi):
 def reader(rungs, venue="Casa Gate", country="ES", facts=None):
     async def rd(ctx, a):
         return {"read_id": "r-1", "country": country, "venue": venue, "facts": facts or [], "rungs": rungs, "open_now": True,
-                "opens_at": None, "say": "", "place_id": a.get("place_id")}
+                "opens_at": None, "say": "", "place_id": a.get("place_id") or "ChIJcasagate254"}
     return rd
 
 
 def engine_from(rungs, facts=None, url=None):
-    """Sasha 270 · MOVED (CR 101: one classifier): on the one path a FORM is the venue engine's to find (venue.profile), never Sasha's
-    own read. The same venue as `rungs`: its own form / booking page (a form, their own page, a link that isn't a platform's) — and
-    its CAPTCHA, on the engine's evidence — read by the engine, its messages as the engine's other ways. engine_channel is asked with
-    listing=True only on the one path: old S1 (parity off) is unchanged."""
-    from agapi import venues as _VN
-    own = next((r for r in ("form", "own_page", "link") if r in rungs and not _VN._read_rung_kept(r, rungs[r])), None)
-
-    async def eng(card, budget_s=30.0, listing=False):
-        if not listing or not own:
-            return None
-        v = str((rungs[own] or {}).get("value") or "")
-        also = [{"kind": k, "value": (rungs[k] or {}).get("value")} for k in ("whatsapp", "email") if k in rungs]
-        return {"kind": {"form": "form", "own_page": "own_engine", "link": "widget"}[own], "url": v if v.startswith("http") else url,
-                "engine_captcha": any(f.get("kind") == "challenge" for f in facts or []), "all": also,
-                **({"alternative": also[0]} if also else {})}   # (venue_truth.channel: their request way, for the one question)
-    return eng
+    """Sasha 378 · venue.profile, faked: AgAPI's decision for this venue (scripts/agapi_decides.for_rungs — CR 188's order), cached as
+    venue_truth keeps it — the ONE route hold_venue follows (VT.decision). Nothing is fetched."""
+    from scripts import agapi_decides as AD
+    return AD.engine_for(rungs, facts, url)
 
 
 # Sasha 265 · item 4: the phone is the venue's OWN published number (a call act may carry it; a Google listing's never is — Sasha 64)
@@ -138,7 +120,6 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
 
 class Base(unittest.TestCase):
     surface = "s2"
-    access = LIVE
 
     def setUp(self):
         VN._HELD.pop(ACCT, None)
@@ -168,7 +149,6 @@ class Base(unittest.TestCase):
                   mock.patch.object(CR, "CALL_STORE", self.calls_store)):
             p.start()
             self.addCleanup(p.stop)
-        live_access(self, self.access)
         fake_act(self)   # Sasha 265 · item 4: a call is an AgAPI act
         self.addCleanup(VN._HELD.pop, ACCT, None)
 
@@ -180,7 +160,8 @@ class Base(unittest.TestCase):
 
     def hold(self, rungs, hours=72.0, venue="Casa Gate", what="dinner", facts=None, **a):
         day, hhmm = local(hours)
-        args = {"name": venue, "city": "Madrid", "country": "ES", "what": what, "party": 2, "day": day, "time": hhmm, **a}
+        args = {"name": venue, "city": "Madrid", "country": "ES", "what": what, "party": 2, "day": day, "time": hhmm,
+                "place_id": "ChIJcasagate254", **a}   # Sasha 378 · its listing: venue.profile (AgAPI's decision) is asked by it
         with mock.patch.object(VN, "_read", reader(rungs, venue, facts=facts)), mock.patch.object(VN, "engine_channel", engine_from(rungs, facts)):
             return run(VN.hold_venue(self.ctx("book it"), args))
 
@@ -188,161 +169,67 @@ class Base(unittest.TestCase):
         return run(VN.book_venue(self.ctx("yes, go ahead", later=True), {"approval": {"said": "yes, go ahead"}}))
 
     def expect(self, out, action, say_key, say_now=True, **fmt):
+        """The executors' words (agapi_d over AgAPI's decision): its action, its say key, the take-over on EVERY answer (R11)."""
         self.assertEqual(out["rules"]["action"], action, out)
         self.assertEqual(out["rules"]["say_key"], say_key, out)
-        self.assertEqual(out["takeover"]["say"], BR.PHRASES["takeover"])          # R11 · on EVERY answer
-        if not say_now:   # the read-back first; the rules' words follow the send
-            self.assertTrue(VN._HELD[ACCT]["rules_say"].startswith(BR.PHRASES[say_key].format(**fmt)))
-        elif out.get("say"):
-            self.assertTrue(out["say"].startswith(BR.PHRASES[say_key].format(**fmt)), out["say"])
-            self.assertIn("take it over", out["say"].lower())
+        self.assertEqual(out["takeover"]["say"], BR.PHRASES["takeover"])
 
 
-# ── R1 · own channels in this order: form → WhatsApp → email → phone ───────────────────────────────────────────────────────────
+# ── Sasha 378 · CR 188 · each of AgAPI's routes, followed — never re-decided ──────────────────────────────────────────────────
 
-class R1ChannelOrder(Base):
-    def test_form_first_the_one_question(self):
-        out = self.hold(ALL4)
-        self.assertEqual(out["status"], "choose_route")
-        self.expect(out, "ask_one_question", "ask_book")
+class FollowsAgapi(Base):
+    """hold_venue follows AgAPI's decision exactly: an act it sends → its read-back for the ONE yes (no booking service here → Tyler's,
+    never Sasha's own send); a call → the call's card; their WhatsApp (they send it) / a closed platform / a step only they may do →
+    AgAPI's hand-over; nothing → the floor. No question of Sasha's own, whatever the venue publishes."""
 
-    def test_whatsapp_before_email_and_phone(self):
-        out = self.hold({k: v for k, v in ALL4.items() if k != "form"})
-        self.expect(out, "request_whatsapp", "request_wait")
-        self.assertEqual(out["status"], "draft_message")                         # (until item 3: the message they send)
-        self.assertNotIn("/api/booking/emails", self.api.paths())
+    def setUp(self):
+        super().setUp()
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        self.agapi = use_fake_agapi(self)
 
-    def test_email_before_phone(self):
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]})
-        self.expect(out, "request_email", "request_wait")
-        self.assertEqual(out["status"], "to_tyler")   # Sasha 319 · the request is AgAPI's send; no venues key in this test → Tyler's
-        self.assertNotIn("/api/booking/calls", self.api.paths())
-        self.assertNotIn("/api/booking/emails", self.api.paths())                # never Sasha's own email
+    def test_their_own_form_is_kanoes_send_read_back_first(self):
+        out = self.hold(ALL4)                                                           # a form AND every other way: still ONE decision
+        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
+        self.assertNotIn("options", out)                                                # no "prefilled form or handle it?"
+        self.assertEqual(out["rules"]["action"], "fill_form_zero_touch")
+        self.assertIn("venue.prepare_booking", self.agapi.ops())
+        self.assertFalse(any(p in ("/api/booking/forms", "/api/booking/emails") for p in self.api.paths()))
 
-    def test_phone_only_far_away_waits_to_call(self):
-        # Sasha 269 · MOVED (CR 100): R3's call is the ACT's — its card (venue.submit_booking route "call"), never Sasha's own
-        # /api/booking/calls (a call no act opened is never placed)
-        out = self.hold({"phone": ALL4["phone"]})
-        self.assertEqual(out["rules"]["action"], "wait")
-        self.assertEqual(out["route"], "agapi_call")
-        got = self.yes()
-        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
-        self.assertEqual(got["status"], "calling")
-
-
-# ── R2 · a form → the ONE question; its two answers ──────────────────────────────────────────────────────────────────────────
-
-class R2TheOneQuestion(Base):
-    def test_the_question_is_the_rules_phrase_and_her_voice(self):
-        self.assertEqual(V.ASK_BOOK, BR.PHRASES["ask_book"])
-        self.assertEqual(V.SENT, BR.PHRASES["sent"])
-        self.assertEqual(V.DONE_FORM, BR.PHRASES["done_form"])
-        out = self.hold({"form": {}, "email": ALL4["email"]})
-        self.assertEqual(out["ask"], V.ASK_BOOK)
-        self.assertEqual([o["title"] for o in out["options"]], ["Prefilled form", "Handle it"])
-        self.assertNotIn(ACCT, VN._HELD)                                           # nothing prepared before the answer
-
-    def test_handle_it_fills_and_sends_the_form_on_the_yes(self):
-        # Sasha 270 · MOVED (CR 101: one form engine): on the one path "Handle it" is AgAPI's send (test_s254_handle_it_live.TheSend:
-        # the read-back, the yes, venue.submit_booking). Sasha's own form sender (/api/booking/forms) is old S1's only — with no AgAPI
-        # here, their page, prepared; never a send of Sasha's own
-        decided = []
-
-        async def via(ctx, a, rd, res, at, now, d, card, r6=False, link=None):
-            decided.append(d["action"])
-            return None
-        with mock.patch.object(VN, "_via_agapi", via):
-            out = self.hold({"form": {}, "email": ALL4["email"]}, route="form")
-        self.assertEqual(decided, ["fill_form_zero_touch"])                         # the rules: handle it
-        self.expect(out, "prepared_link", "prepared_link")
-        self.assertNotIn("/api/booking/forms", self.api.paths())
-
-    def test_a_prefilled_form_is_their_page_never_sent(self):
-        out = self.hold({"form": {}, "email": ALL4["email"]}, route="page", website="https://casagate.es")
-        self.expect(out, "prepared_link", "prepared_link")
-        self.assertNotIn("/api/booking/forms", self.api.paths())                  # nothing reaches the venue
-
-
-# ── R3 / R4 · 48 h: a request and wait; within it a call, or their page ─────────────────────────────────────────────────────
-
-class R3R4FortyEightHours(Base):
-    def test_49_hours_is_still_a_request_never_a_call(self):
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=49)
-        self.expect(out, "request_email", "request_wait")
+    def test_their_own_email_is_kanoes_request(self):
+        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)    # within 48 h: still AgAPI's email, never a call of Sasha's
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "request_email"))
         self.assertNotIn("/api/booking/calls", self.api.paths())
 
-    def test_20_hours_calls_on_is_a_call_on_the_yes(self):
-        # Sasha 265 · item 4 (booking-rules/2, CR 99): the call is the ONE question — its read-back on a card with one "OK" — and the yes
-        # (the tap) is its approval: the act, then ONLY "On it — …". Sasha's own /api/booking/calls is never used (no act, no call).
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "ask_call", "ask_call_now")
+    def test_their_phone_is_the_calls_card(self):
+        out = self.hold({"phone": ALL4["phone"]}, hours=20)
         self.assertEqual((out["status"], out["route"], out["choices"]), ("awaiting_yes", "agapi_call", list(BD.OK_CHOICES)))
-        self.assertEqual(out["ask"], BR.PHRASES["ask_call_now"].format(head=out["ask"].split(" — ")[0]))
         got = self.yes()
         self.assertEqual(got["status"], "calling")
-        self.assertEqual(got["line"], "On it — I'll call them now and let you know.")
-        self.assertNotIn("/api/booking/calls", self.api.paths())
+        self.assertEqual(self.api.bodies("/api/booking/calls"), [])                    # the act's call, never Sasha's own
 
+    def test_their_whatsapp_they_send_is_agapis_hand_over(self):
+        out = self.hold({"whatsapp": ALL4["whatsapp"]})
+        self.assertNotEqual(out.get("route"), "agapi")                                  # nothing Kanoe sends: AgAPI said the person does
+        self.assertFalse(any(p.startswith("/api/booking/") and p.endswith("/send") for p in self.api.paths()))
 
-class R4CallsOff(Base):
-    access = {**LIVE, "calls": "off"}
+    def test_a_platform_is_booked_by_sasha_on_the_yes(self):
+        out = self.hold({"link": {"value": "CoverManager"}})
+        self.assertIn(out["status"], ("awaiting_yes", "page_link", "page_on_phone"), out)
+        self.assertIn("venue.prepare_booking", self.agapi.ops())                        # AgAPI's prepare decides platform_book or the hand-over
 
-    def test_20_hours_calls_off_is_their_page_and_no_call(self):
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "prepared_link", "no_real_sends")
-        self.assertNotIn("/api/booking/calls", self.api.paths())
+    def test_nothing_is_agapis_floor_their_page_never_a_send(self):
+        out = self.hold({})                                                             # AgAPI: none — their website, the floor
+        self.assertIn(out["status"], ("page_on_phone", "page_link"), out)
+        self.assertFalse(out.get("booked"))
+        self.assertNotIn(ACCT, VN._HELD if out["status"] == "page_link" else {})
+        self.assertFalse(any(p.endswith("/send") for p in self.api.paths()))
 
-
-# ── R5 / R6 · hotels ────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-class R6Hotel(Base):
-    R6_SAY = "On it — I've emailed Hotel Gate, and I'll call them now too and let you know."
-
-    def test_arriving_in_18_hours_call_and_email_at_once_one_yes(self):
-        # Sasha 269 · MOVED (CR 100). Sasha 271 · MOVED (CR 102): a hotel STAY is an AgAPI act like a table — venue.prepare_booking with
-        # the stay and the hotel's own number; on the ONE yes venue.submit_booking emails it AND returns the engine's call_plan (R6) under
-        # that same approval; Sasha dials ONLY that plan and says the act's own words. Never Sasha's own call or email.
-        from agapi import venue_calls as VC
-        from tests.test_s254_handle_it_live import use_fake_agapi
-        plan = {"call_id": "vcp_r6", "reason": "R6", "phone": "+34910000000", "source": "venue", "when": "now", "simulate": True}
-        fake = use_fake_agapi(self, {"call_plan": plan, "say": self.R6_SAY,
-                                     "approval": {"inherited": True, "approval_id": "apv_1", "asked_again": False}})
-        dialled = []
-
-        async def dial(account, res, held):
-            dialled.append(res["call_plan"])
-            return {"status": "simulated"}
-        with mock.patch.object(VC, "dial", dial):
-            out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=18, what="a room", venue="Hotel Gate", nights=2, room="twin")
-            self.assertEqual(out["rules"]["action"], "call_and_email")
-            self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
-            prep = fake.body("venue.prepare_booking")
-            self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2, "room": "twin"}, {"phone": "+34910000000", "source": "venue"}))
-            self.assertEqual(self.api.bodies("/api/booking/calls"), [])
-            self.assertEqual(self.api.bodies("/api/booking/emails"), [])
-            got = self.yes()
-        self.assertEqual((got["status"], got["line"], got["call"]["reason"]), ("requested", self.R6_SAY, "R6"))
-        self.assertEqual(dialled, [plan])                                                   # the engine's plan, dialled once
-        self.assertEqual(fake.ops().count("sandbox.simulate_approval"), 1)                 # ONE yes for the email and the call
-        self.assertNotIn("venue.call_again", fake.ops())                                    # no call of Sasha's own deciding
-        self.assertFalse(any(p.startswith("/api/booking/calls") for p in self.api.paths()))
-
-    def test_a_hotel_request_carries_the_24_hour_call_in_its_read_back(self):
-        # Sasha 271 · MOVED (CR 102): more than 24 h out, a stay is the engine's request act — its read-back, and its R5 call later
-        # (booking_status.follow_up), are the engine's: the hotel's number goes with the act; Sasha writes no plan line of her own
-        from tests.test_s254_handle_it_live import use_fake_agapi
-        fake = use_fake_agapi(self)
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=30, what="a room", venue="Hotel Gate", nights=2)
-        self.expect(out, "request_email", "request_wait", say_now=False)
-        self.assertEqual(out["route"], "agapi")
-        prep = fake.body("venue.prepare_booking")
-        self.assertEqual((prep["stay"], prep["call"]), ({"nights": 2}, {"phone": "+34910000000", "source": "venue"}))
-        self.assertEqual(self.api.bodies("/api/booking/emails"), [])                       # no plan_line of Sasha's
-
-    def test_a_restaurant_request_carries_no_call(self):
-        self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=72)
-        self.assertEqual(self.api.bodies("/api/booking/emails"), [])            # Sasha 319 · never Sasha's own email, so never its plan line
-        self.assertEqual(self.api.bodies("/api/booking/calls"), [])
+    def test_the_decision_is_read_never_made(self):
+        src = (BACKEND / "agapi" / "venues.py").read_text()
+        hv = src[src.index("async def hold_venue(ctx, a: dict)"):src.index("#: Sasha 377 · CR 188 · the routes AgAPI ACTS on")]
+        self.assertIn("dec = VT.decision(place)", hv)
+        for gone in ("rules_for", "_execute", "read_channel", "chosen_route", "decide_for", "BR.decide", "redecide"):
+            self.assertNotIn(gone, src, gone)
 
 
 class R5HotelNoReplySweep(unittest.TestCase):
@@ -401,7 +288,6 @@ class R5HotelNoReplySweep(unittest.TestCase):
 
     def test_25_hours_without_a_reply_a_hotel_is_called_under_the_yes(self):
         from booking_signer import proactive as PR
-        live_access(self)
         done = run(PR.no_reply_offers(self.now))
         self.assertEqual(self.calls, [("act_h", "R5")])                           # the act's own follow-up call (venue.call_again R5)
         self.assertEqual(done[0]["follow_up"], "R5")                              # because booking_status said it's due
@@ -410,7 +296,6 @@ class R5HotelNoReplySweep(unittest.TestCase):
 
     def test_23_hours_still_waits(self):
         from booking_signer import proactive as PR
-        live_access(self)
         due_at = (self.now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         self.follow_up = {"reason": "R5", "due": False, "due_at": due_at, "call": "venue.call_again"}   # the engine: not yet
         self.assertEqual(run(PR.no_reply_offers(self.now)), [])
@@ -423,14 +308,12 @@ class R5HotelNoReplySweep(unittest.TestCase):
 
     def test_no_follow_up_no_call(self):
         from booking_signer import proactive as PR
-        live_access(self)
         self.follow_up = None   # the venue replied, a call is open, or the rules attach none
         self.assertEqual(run(PR.no_reply_offers(self.now)), [])
         self.assertEqual(self.calls, [])
 
     def test_calls_off_the_stop_is_told(self):
         from booking_signer import proactive as PR
-        live_access(self, {**LIVE, "calls": "off"})
         self.again_says = {"status": "not_allowed", "say": BR.PHRASES["no_real_sends"]}   # the ACT refuses it, in its words
         done = run(PR.no_reply_offers(self.now))
         self.assertEqual(done[0]["outcome"], "not_allowed")
@@ -514,41 +397,10 @@ class R8DepositAsked(unittest.TestCase):
 # ── R10 · 3 calls a person a day; 30 minutes between calls to one venue ─────────────────────────────────────────────────────
 
 class R10Limits(Base):
-    def dialled(self, n, minutes_ago=120, account=ACCT, venue_key="read:other"):
-        now = datetime.now(timezone.utc)
-        for i in range(n):
-            cid = str(uuid.uuid4())
-            self.calls_store.calls[cid] = {"call_id": cid, "account_id": account, "status": "answered", "venue_key": venue_key,
-                                           "dialled_number": f"+3491000000{i}", "approved_at": now - timedelta(minutes=minutes_ago + i)}
-
-    def test_a_4th_call_today_is_refused_calls_cap(self):
-        self.dialled(3)
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "prepared_link", "calls_cap")
-        self.assertNotIn("/api/booking/calls", self.api.paths())
-
-    def test_2_other_peoples_calls_dont_count(self):
-        self.dialled(2, account="00000000-0000-4000-8000-0000000000aa")
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "ask_call", "ask_call_now")   # Sasha 265 · booking-rules/2: the call, asked as the ONE question
-
-    def test_the_server_net_still_holds(self):
-        self.dialled(BD.SERVER_CALLS_PER_DAY, account="00000000-0000-4000-8000-0000000000aa")
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "prepared_link", "calls_cap")
-
-    def test_the_same_venue_within_30_minutes_is_too_soon(self):
-        self.dialled(1, minutes_ago=10, venue_key="read:r-1")
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-        self.expect(out, "prepared_link", "too_soon")
-
-    def test_31_minutes_later_a_call_again(self):
-        self.dialled(1, minutes_ago=31, venue_key="read:r-1")
-        self.expect(self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20), "ask_call", "ask_call_now")   # Sasha 265
+    """R10 is the ACT's (CR 99), and the dial's (R10CallRoutes): Sasha keeps no count of her own to decide a route by."""
 
     def test_refused_at_the_dial_the_stop_is_said_in_the_turn(self):
-        # Sasha 265 · item 4: R10 is the ACT's (CR 99): a call it won't open (today's calls made) is said in the turn, nothing dialled
-        self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
+        self.hold({"phone": ALL4["phone"]}, hours=20)
         fake_act(self, answer={"ok": True, "status": "not_allowed", "route": "call", "say": BR.PHRASES["calls_cap"]})
         got = self.yes()
         self.assertEqual(got["status"], "not_allowed")
@@ -602,7 +454,9 @@ class R10CallRoutes(unittest.TestCase):
 
 class R11R12(Base):
     def test_every_answer_carries_the_takeover(self):
-        for rungs, hours in ((ALL4, 72), ({"email": ALL4["email"]}, 72), ({"phone": ALL4["phone"]}, 20), ({"link": {"value": "TheFork"}}, 72), ({}, 72)):
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        use_fake_agapi(self)
+        for rungs, hours in ((ALL4, 72), ({"email": ALL4["email"]}, 72), ({"phone": ALL4["phone"]}, 20)):
             VN._HELD.pop(ACCT, None)
             out = self.hold(rungs, hours=hours)
             self.assertEqual(out["takeover"]["say"], BR.PHRASES["takeover"], rungs)
@@ -619,110 +473,29 @@ class R11R12(Base):
         self.assertEqual(st["stopped"], [d["say_text"]])
 
 
-# ── R13 / R14 · a CAPTCHA is theirs; a platform is handed over, never booked ────────────────────────────────────────────────
+# ── a CAPTCHA is theirs; every surface follows the same decision ──────────────────────────────────────────────────────────────
 
-class R13R14(Base):
-    def test_a_captcha_is_never_zero_touch_even_when_asked_to_handle_it(self):
-        out = self.hold({"form": {}}, route="form", facts=[{"kind": "challenge", "value": "captcha"}], website="https://casagate.es")
-        self.expect(out, "prepared_link", "prepared_link_captcha")
-        self.assertNotIn("/api/booking/forms/f-9/send", self.api.paths())
+class StepsOnlyTheyMayDo(Base):
+    def test_a_captcha_is_agapis_hand_over_never_a_send(self):
+        out = self.hold({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}], website="https://casagate.es")
+        self.assertNotEqual(out.get("route"), "agapi")
+        self.assertFalse(any(p.endswith("/send") for p in self.api.paths()))
 
-    def test_a_platform_is_handed_over_never_named_never_booked(self):
-        out = self.hold({"link": {"value": "TheFork"}})
-        self.expect(out, "hand_over_platform_link", "platform", platform="a booking platform")
-        self.assertEqual(V.channel_words(out["say"]), [])                           # her voice never names it
-        self.yes()
-        self.assertEqual(self.taps, ["https://www.thefork.es/restaurante/x-r1"])    # their page, to the person
-        self.assertFalse(any(p.endswith("/send") or p.endswith("/place") for p in self.api.paths()))
-
-    def test_own_channels_come_before_a_platform(self):
-        out = self.hold({"link": {"value": "TheFork"}, "email": ALL4["email"]})
-        self.expect(out, "request_email", "request_wait")
-
-
-# ── access (§B) — booking_decide.access_of, the ONE function: the record (item 5) ──────────────────────────────────────────────────
-
-class AccessTest(Base):
-    access = {"mode": "test", "calls": "on", "real_venue_sends": "on"}
-
-    def setUp(self):   # Sasha 256 · Kanoe's test venue is held by a TEST person only (agapi/test_venues)
-        super().setUp()
-        from agapi import test_venues as TV
-        p = mock.patch.object(TV, "mode_of", mock.AsyncMock(return_value="test"))
-        p.start()
-        self.addCleanup(p.stop)
-
-    def test_a_test_person_never_reaches_a_real_venue(self):
-        out = self.hold(ALL4, hours=20)
-        self.expect(out, "prepared_link", "not_live")
-        self.assertFalse([p for p in self.api.paths() if p in ("/api/booking/forms", "/api/booking/emails", "/api/booking/calls")])
-
-    def test_a_test_venue_is_fine_in_test_mode(self):
-        # Sasha 270 · MOVED: the decision is the same (handle it — never "not_live"); the send is AgAPI's (none here → their page)
-        decided = []
-
-        async def via(ctx, a, rd, res, at, now, d, card, r6=False, link=None):
-            decided.append((d["action"], d["say"]))
-            return None
-        with mock.patch.object(VN, "_via_agapi", via):
-            out = self.hold({"form": {}}, venue="Sasha Test Venue", route="form")
-        self.assertEqual(decided, [("fill_form_zero_touch", "sent")])
-        self.assertNotEqual(out["rules"]["say_key"], "not_live")
-
-
-class AccessSendsOff(Base):
-    access = {"mode": "live", "calls": "off", "real_venue_sends": "off"}
-
-    def test_real_sends_off_is_their_page_said_kindly(self):
-        out = self.hold({"email": ALL4["email"]})
-        self.expect(out, "prepared_link", "no_real_sends")
-
-
-class AccessOf(unittest.TestCase):
-    def test_the_record_in_one_function(self):
-        """Sasha 254 item 5 · access_of IS the person's record (agapi.person_access): mode, calls, real-venue sends — nothing added."""
-        from agapi import person_access as PA
-        other = "00000000-0000-4000-8000-0000000000bb"
-        with mock.patch.object(PA, "RESOLVER", None), PA.records({ACCT: PA.LIVE_PERSON, other: {"mode": "live"}}):
-            self.assertEqual(run(BD.access_of(ACCT)), LIVE)
-            self.assertEqual(BD.access_cached(ACCT), LIVE)
-            self.assertEqual(run(BD.access_of(other)), {"mode": "live", "calls": "off", "real_venue_sends": "off"})
-        with mock.patch.object(PA, "RESOLVER", None), PA.records({ACCT: {**PA.LIVE_PERSON, "mode": "test"}}):
-            self.assertEqual(run(BD.access_of(ACCT))["mode"], "test")
-        with mock.patch.object(PA, "RESOLVER", None), mock.patch.dict(os.environ, {"SASHA_AGAPI_KEY": ""}):
-            PA.clear()
-            self.assertEqual(run(BD.access_of(other)), {"mode": "test", "calls": "off", "real_venue_sends": "off"})   # no row: closed
-
-    def test_utc_from_the_venues_local_time(self):
-        self.assertEqual(BD.utc_of("2026-07-01T21:00", "ES"), "2026-07-01T19:00:00+00:00")   # Madrid in summer: UTC+2
-        self.assertEqual(BD.utc_of("2026-12-01T21:00", "PT"), "2026-12-01T21:00:00+00:00")   # Lisbon in winter: UTC
-
-
-# ── every surface, the one path ─────────────────────────────────────────────────────────────────────────────────────────────
 
 class EverySurface(Base):
-    def test_s2_whatsapp_next_and_old_s1_all_ask_the_rules(self):
+    def test_s2_whatsapp_next_and_old_s1_all_follow_agapis_decision(self):
         for surface, parity in (("s2", "on"), ("wa", "on"), ("s1", "on"), ("s1", "off")):
             VN._HELD.pop(ACCT, None)
             self.surface = surface
-            with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": parity}), \
-                    mock.patch.object(BD, "decide_for", wraps=BD.decide_for) as spy:
-                out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)
-            self.assertEqual(spy.call_count, 1, (surface, parity))
-            if parity == "off":   # old S1: booking-rules/1's answer, byte-identical (booking_decide.as_v1)
-                self.expect(out, "call", "calling")
-            else:                 # Sasha 265 · the one path: booking-rules/2 — the call IS the ONE question (its card)
-                self.expect(out, "ask_call", "ask_call_now")
+            with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": parity}):
+                out = self.hold({"phone": ALL4["phone"]}, hours=20)
+            self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi_call"), (surface, parity))
 
-    def test_the_old_flow_and_the_web_card_ask_the_same_rules(self):
-        rd = {"venue": "Casa Gate", "country": "ES", "rungs": {"email": {"value": "x@casagate.es"}, "phone": {"value": "+34910000000"}}}
-        day, hhmm = local(20)
-        with mock.patch.object(BD, "access_cached", lambda a: dict(LIVE)):
-            dv = GW.decision_of(rd, None, f"{day}T{hhmm}", datetime.now(timezone.utc), ACCT)
-            self.assertEqual((dv.route, dv.then, dv.alternatives), ("call", None, []))
-            self.assertTrue(dv.reason.startswith(BR.PHRASES["calling"]))
-            lad = GW.ladder_of({**rd, "rungs": {"form": {}, **rd["rungs"]}}, {"when": {"at": f"{day}T{hhmm}"}}, datetime.now(timezone.utc), ACCT)
-            self.assertEqual(lad["line"], BR.PHRASES["ask_book"])
+
+class UtcOf(unittest.TestCase):
+    def test_utc_from_the_venues_local_time(self):
+        self.assertEqual(BD.utc_of("2026-07-01T21:00", "ES"), "2026-07-01T19:00:00+00:00")   # Madrid in summer: UTC+2
+        self.assertEqual(BD.utc_of("2026-12-01T21:00", "PT"), "2026-12-01T21:00:00+00:00")   # Lisbon in winter: UTC
 
 
 # ── the source scan: the retired deciders and env vars are read nowhere ─────────────────────────────────────────────────────
@@ -742,18 +515,19 @@ class Retired(unittest.TestCase):
                 self.assertIsNone(re.search(rf"getenv\(\s*[\"']{name}[\"']|environ(?:\.get)?\(?\[?\s*[\"']{name}[\"']", src), f"{rel} reads {name}")
 
     def test_the_old_deciders_are_gone(self):
-        from booking_signer import decide as D
-        for gone in ("decide", "ladder", "line", "urgent_hours", "reply_hours", "tap_window_min", "available", "urgent", "Venue", "Decision"):
-            self.assertFalse(hasattr(D, gone), gone)
+        with self.assertRaises(ImportError):
+            __import__("booking_signer.decide")
         vn = (BACKEND / "agapi" / "venues.py").read_text()
-        for gone in ("_hold_inner", "_engine_route", "ladder_of", "decision_of", "wa_first", "ROUTE_TO_PREFER"):
+        for gone in ("_hold_inner", "_engine_route", "ladder_of", "decision_of", "wa_first", "ROUTE_TO_PREFER", "rules_for", "_execute",
+                     "read_channel", "chosen_route"):
             self.assertNotIn(gone, vn)
-        for rel, src in self.sources():
-            self.assertNotRegex(src, r"\bD\.(decide|ladder|urgent_hours|reply_hours|tap_window_min)\(", rel)
+        for gone in ("decide_for", "redecide", "ctx_for", "channels_of", "legacy_decision", "legacy_ladder", "access_of", "CHOICES"):
+            self.assertFalse(hasattr(BD, gone), gone)
 
-    def test_one_decider_call_site(self):
-        hits = [rel for rel, src in self.sources() if re.search(r"\bBR\.decide\(|booking_rules\.decide\(", src) and not rel.startswith("scripts/")]
-        self.assertEqual(sorted(set(hits)), ["agapi/booking_decide.py"], hits)
+    def test_no_booking_decide_call_site(self):
+        """Sasha 378 · CR 188: booking_rules.decide is AgAPI's — called nowhere in Sasha (its vendored vectors run in its own test)."""
+        hits = [rel for rel, src in self.sources() if re.search(r"\bBR\.decide\(|booking_rules\.decide\(", src)]
+        self.assertEqual(hits, [])
 
 
 if __name__ == "__main__":

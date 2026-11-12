@@ -63,8 +63,6 @@ class Base(unittest.TestCase):
     session = "s253"
 
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         VN._HELD.pop(ACCT, None)
         VN._ASKED.pop(ACCT, None)
         self.api = ContactApi()

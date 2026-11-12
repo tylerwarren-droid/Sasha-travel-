@@ -85,5 +85,33 @@
  "form_note": "their booking engine builds its form in the browser: no fields in its page's HTML (it is opened for the person instead)",
  "cached": false,
  "age_days": 0,
- "fixture": "Sasha 248 · a saved venue.profile answer (agapi-live v1.6.0, 12 Oct 2026) — the venue engine's answer for the gate; nothing is fetched"
+ "fixture": "Sasha 248 · a saved venue.profile answer (agapi-live v1.6.0, 12 Oct 2026) — the venue engine's answer for the gate; nothing is fetched · Sasha 378: channels + decision computed by AgAPI's own venue.site_channels + handoff.decide (agapi cr/190 e590043, which carries CR 188) over this saved profile",
+ "channels": [
+  {
+   "kind": "email",
+   "source": "site",
+   "value": "madridreservas@hammamalandalus.com",
+   "owner": "kanoe"
+  },
+  {
+   "kind": "phone",
+   "source": "site",
+   "value": "91 429 90 20",
+   "owner": "kanoe"
+  }
+ ],
+ "decision": {
+  "route": "message",
+  "channel": "email",
+  "how_far": "request",
+  "say_text": "Hammam Al Ándalus: I can send it for you and tell you when they answer.",
+  "button": {
+   "label": "Send the request",
+   "link": "https://madrid.hammamalandalus.com/",
+   "sends": true
+  },
+  "version": "handoff/2.4 · 2026-11-12",
+  "sender": "kanoe",
+  "options": []
+ }
 }

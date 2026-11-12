@@ -1,9 +1,9 @@
-"""Sasha 251 · ONE BOOKING PATH + BOOK UNDER ANOTHER NAME — offline (the booking API is a recorder; Sasha's read is given).
+"""Sasha 251 → Sasha 378 · ONE BOOKING PATH + BOOK UNDER ANOTHER NAME — offline (the booking API is a recorder; AgAPI's decision is
+scripts/agapi_decides, its own shapes).
 
-  D4, found live: a branch the venue engine couldn't read (Hammam Al Ándalus Salesas) went down Sasha's older page path ("Shall I
-  send it to your phone?"). Now what Sasha's own read found is the engine path's channel: the one question, word for word.
-  read_booking_route says the same channel. Old S1 (SASHA_S1_PARITY=off) keeps its ladder, and its schema.
-  "Book it under Alex Gate": the name goes to the one path's person (who.name) — the prefilled form, the request, the call.
+  D4, found live: a branch the venue engine couldn't read went down Sasha's older page path. Sasha 378 · CR 188: every surface (/s2,
+  /next under parity, old S1) follows AgAPI's ONE decision — no question of Sasha's own ("prefilled form or handle it?" is gone).
+  read_booking_route says the same decision. "Book it under Alex Gate": the name goes to the one path's person (who.name).
 
     cd backend && python -m unittest tests.test_s251_one_path -v
 """
@@ -28,8 +28,6 @@ HAMMAM = {"link": {"value": "https://hammamalandalus.com/es/madrid/reservas"}, "
 
 class Base(unittest.TestCase):
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         VN._HELD.pop(ACCT, None)
         self.api = FormApi()
         for p in (mock.patch.object(GW, "api", self.api), mock.patch.object(GA, "founder", lambda a: False),
@@ -48,38 +46,32 @@ class Base(unittest.TestCase):
 
 
 class OnePath(Base):
-    def test_d4_the_one_question_word_for_word(self):
-        out = self.hold("s2", HAMMAM)
-        self.assertEqual(out["status"], "choose_route")
-        self.assertEqual(out["ask"], V.ASK_BOOK)
-        self.assertEqual(out["ask"], "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?")
-        self.assertEqual([o["title"] for o in out["options"]], ["Prefilled form", "Handle it"])
+    def test_d4_agapis_decision_no_question_of_her_own(self):
+        out = self.hold("s2", HAMMAM)                                   # their page, their email, their phone: AgAPI decides ONE way
+        self.assertEqual(out["rules"]["action"], "request_email")
+        self.assertNotIn("options", out)
+        self.assertNotEqual(out.get("ask"), V.ASK_BOOK)
 
     def test_next_under_parity_is_the_same_path(self):
-        self.assertEqual(self.hold("s1", HAMMAM)["ask"], V.ASK_BOOK)
+        self.assertEqual(self.hold("s1", HAMMAM)["rules"]["action"], "request_email")
 
-    def test_old_s1_asks_the_same_rules(self):   # Sasha 254 · one decider for every surface (old S1's schema unchanged)
+    def test_old_s1_follows_the_same_decision(self):
         with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "off"}):
             out = self.hold("s1", HAMMAM)
-        self.assertEqual(out.get("ask"), V.ASK_BOOK)
+        self.assertEqual(out["rules"]["action"], "request_email")
 
-    def test_how_it_books_is_the_same_channel(self):
+    def test_how_it_books_is_the_same_decision(self):
         ctx = API.Ctx(account=ACCT, mode="test", user_said="", session="s251", surface="s2")
-        from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: their own booking page is the engine's read
+        from tests.test_s254_one_decider import engine_from
         with mock.patch.object(VN, "_read", reader(HAMMAM)), mock.patch.object(VN, "engine_channel", engine_from(HAMMAM)):
             r = asyncio.run(VN.read_booking_route(ctx, {"name": "Hammam Al Ándalus Salesas", "city": "Madrid"}))
-        self.assertEqual(r["routes"], ["page", "email"])
+        self.assertEqual((r["routes"], r["decision"]["route"]), (["message"], "message"))
 
-    def test_nothing_to_book_by_is_said_so(self):   # Sasha 254 · the rules' own words (no_channel) + the take-over, nothing sent
-        from agapi.booking_rules import booking_rules as BR
+    def test_nothing_to_book_by_is_the_floor(self):   # AgAPI: none — their website handed over, never "send me their link"
         out = self.hold("s2", {})
-        self.assertEqual((out["status"], out["rules"]["say_key"]), ("page_link", "no_channel"))
-        # Sasha 270 · MOVED (Tyler, 15 Oct): never "no form". Sasha 286 · MOVED (Tyler, 24 Oct): never "send me their link" — THE FLOOR,
-        # their website (else their listing) handed over with the way back
-        self.assertTrue(out["say"].startswith("Here's their "))
-        self.assertFalse(V.asks_for_link(out["say"]))
-        self.assertTrue(out["page_url"].startswith("https://"))
-        self.assertEqual(self.api.calls[-1][1], "/api/booking/contact")
+        self.assertIn(out["status"], ("page_link", "page_on_phone"))
+        self.assertFalse(V.asks_for_link(out.get("say") or ""))
+        self.assertFalse(out.get("booked"))
 
 
 class UnderAnotherName(Base):

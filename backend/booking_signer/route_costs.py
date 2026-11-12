@@ -17,7 +17,7 @@ from fastapi import APIRouter, Request
 
 router = APIRouter(prefix="/ops", tags=["booking-ops"])
 CONFIRMED = ("confirmed", "guest_booked")
-RATE_ENV = {"email": "SASHA_COST_EMAIL_EUR", "one_tap": "SASHA_COST_WHATSAPP_EUR", "form": "SASHA_COST_FORM_EUR"}
+RATE_ENV = {"email": "SASHA_COST_EMAIL_EUR", "link": "SASHA_COST_WHATSAPP_EUR", "form": "SASHA_COST_FORM_EUR"}   # Sasha 378: "link" (the old page link record), never a route
 
 
 def rate(route: str) -> Optional[float]:
@@ -37,7 +37,7 @@ def usd_eur() -> Optional[float]:
 def booking_cost(b: dict) -> dict:
     """b = {id, venue, status, forms, emails, links, calls: [price_usd|None, …]} → its routes, each with its cost and source."""
     routes: List[dict] = []
-    for route, n in (("form", b.get("forms") or 0), ("email", b.get("emails") or 0), ("one_tap", b.get("links") or 0)):
+    for route, n in (("form", b.get("forms") or 0), ("email", b.get("emails") or 0), ("link", b.get("links") or 0)):
         if n:
             r = rate(route)
             routes.append({"route": route, "count": n, "eur": round(r * n, 4) if r is not None else None,

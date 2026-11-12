@@ -1,26 +1,21 @@
-"""Sasha 254 · item 2 — ONE DECIDER. Every venue booking chooser (/s2, WhatsApp's brain, /next — and old S1, the old WhatsApp flow,
-the web card's words, the no-reply sweep) asks the vendored booking rules (agapi/booking_rules: decide(ctx) → Decision) and nothing
-else. This module is only the ADAPTER: Sasha's records → the rules' ctx, and the Decision → what she says. It decides nothing.
+"""Sasha 254 · Sasha 378 (CR 188's Sasha half) · WORDS AND CONSTANTS ONLY. The booking decision is AgAPI's — venue.profile's
+`decision` (handoff.decide), then venue.prepare_booking for this person — and Sasha follows it (agapi.venues.one_decision). Nothing here
+chooses a channel, reads a person's switch (preference, real_venue_sends, platform_submit) or calls booking_rules.decide.
 
-  ctx_for(...)          the rules' ctx: venue {type, test, channels}, when {booking_at, now} in UTC, person {access, preference}, state
-  channels_of(eng, rd)  THE ONE CHANNEL READER, in the rules' kinds (form / own_engine / widget / whatsapp / email / phone / platform)
-  access_of(account)    the person's access {mode, calls, real_venue_sends} — ONE function: the record (agapi.person_access, CR's access.get)
-  state_of(...)         calls_today_person / server_calls_today + server_cap / last_call_to_venue_at, from the call store
-  decide_for(...)       the above, then booking_rules.decide — the Decision, untouched
-  say(decision)         decide()'s say_text + the take-over line (R11: on EVERY answer)
-  tell_stopped(...)     R12 · an automatic stop → booking_rules.stopped() → the person is told (WhatsApp if linked; get_status says it)
-  legacy_decision / legacy_ladder   the old flow's and the web card's shapes, from the SAME Decision (their words are its phrases)
+  say(decision) / out_of(decision)   AgAPI's say_text + the take-over line (R11), as it goes into a tool result
+  booking_words(...)                 the read-back's day and time in the venue's own clock
+  tell_stopped(...) / stops_of(...)  R12 · an automatic stop → the person is told (WhatsApp if linked; get_status says it)
+  is_test_venue(...)                 Kanoe's own TEST venue (its marks)
+  SERVER_CALLS_PER_DAY / OK_CHOICES  constants: the server's call net, the call card's one button
 
-Retired by this (Sasha 254): booking_signer/decide.py's decide / ladder / line / urgent_hours / reply_hours / tap_window_min /
-available / urgent / _then; venues._hold_inner's own route order and the /s2 WhatsApp-first decider; GW.ladder_of / decision_of as
-deciders (they call legacy_* here); proactive's own timing (D.reply_hours, D.urgent_hours, D.tap_window_min; tap_offers);
-call_routes.cap()'s SASHA_CALLS_PER_DAY and account_cap()'s SASHA_CALLS_PER_ACCOUNT_PER_DAY (the rules' 3/person + the net below).
+Deleted by Sasha 378: decide_for / redecide / ctx_for / channels_of / page_of / access_of / access_cached / state_of / PREFERENCE /
+CHOICES / CALL_CHOICES / legacy_decision / legacy_ladder / as_v1 — Sasha's own decider over its own channel read.
 """
 from __future__ import annotations
 
 import logging
 import time as _time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from agapi.booking_rules import booking_rules as BR
@@ -33,16 +28,6 @@ SERVER_CALLS_PER_DAY = 3
 
 TEST_VENUE_MARKS = ("(TEST stand-in)", "Sasha Test Venue")
 
-# the hold's route word (the tool's enum, unchanged: the S1 fingerprint) → the rules' preference
-PREFERENCE = {"page": "link", "link": "link", "myself": "myself", "form": "handle", "handle": "handle",
-              "email": "email", "call": "call", "whatsapp": "whatsapp"}
-
-# the ONE question's two answers (R2: PHRASES["ask_book"]) as hold routes: a prefilled form (their page) / she handles it (the form)
-CHOICES = ({"title": "Prefilled form", "route": "page"}, {"title": "Handle it", "route": "form"})
-# Sasha 265 · item 4 (CR 99, booking-rules/2): the ONE question that IS the call's read-back, as the card's buttons. ask_page_or_call:
-# "Fill in their page" (their prepared page — nothing sent, no approval) or "Call them" (the tap on the call read-back = the approval);
-# ask_call (no page): one "OK" (the tap)
-CALL_CHOICES = ({"title": "Fill in their page", "route": "page"}, {"title": "Call them", "route": "call"})
 OK_CHOICES = ({"title": "OK", "route": "call"},)
 
 
@@ -66,90 +51,6 @@ def venue_type(category: Optional[str], nights: Optional[int] = None) -> str:
 def is_test_venue(rd: Optional[dict], card: Optional[dict] = None) -> bool:
     name = str((rd or {}).get("venue") or "") + " " + str((card or {}).get("name") or "")
     return any(m in name for m in TEST_VENUE_MARKS) or bool((card or {}).get("test"))
-
-
-def _host(v: Optional[str]) -> Optional[str]:
-    from agapi import venue_truth as VT
-    return VT._host(v) if v and ("." in str(v) or "://" in str(v)) else None
-
-
-def _one(kind: str, value: Optional[str], url: Optional[str] = None, captcha: bool = False) -> dict:
-    """A channel in the rules' shape. A booking platform is passed ANONYMOUSLY (kind platform, no host): the rules never book on it
-    (R14) and her voice never names it (voice.CHANNEL_NAMES) — the platform's own page stays in `url`, the take-over link."""
-    target = url or value
-    if kind in ("form", "own_engine", "widget", "platform") and (kind == "platform" or BR.is_platform(target) or BR.is_platform(_host(target))):
-        return {"kind": "platform", "url": target if str(target or "").startswith("http") else None}
-    if kind in ("own_engine", "widget"):
-        # their OWN booking engine / widget is their own form to the rules (R1: "form" first; decide reads own channels by kind)
-        c = {"kind": "form", "engine": kind, "value": value or url}
-        if url:
-            c["url"] = url
-        if captcha:
-            c["captcha"] = True
-        return c
-    c = {"kind": kind, "value": value or url}
-    if url:
-        c["url"] = url
-    if captcha:
-        c["captcha"] = True
-    return c
-
-
-def channels_of(eng: Optional[dict], rd: Optional[dict] = None, card: Optional[dict] = None, one_path: bool = False) -> List[dict]:
-    """THE ONE CHANNEL READER (the rules' venue.channels). The venue engine's read of their own site when it has one (its channel,
-    its request alternative, and every other way it read — engine_channel attaches them as `all`); else Sasha's own read
-    (venue_read's rungs). A phone from Sasha's read is added only when the engine found none (R4 needs it within 48 h).
-    Sasha 270 · one_path: a CAPTCHA only as the venue engine read it (CR 101: on evidence), never Sasha's own "challenge" guess; and
-    never a form of Sasha's own reading (venues.read_channel) — old S1 (parity off) keeps both, byte-identical."""
-    rd = rd or {}
-    rungs = rd.get("rungs") or {}
-    captcha = (not one_path) and any(f.get("kind") == "challenge" for f in rd.get("facts") or [])
-    out: List[dict] = []
-    if eng and eng.get("from") != "read":
-        seen = [eng] + ([eng["alternative"]] if eng.get("alternative") else []) + list(eng.get("all") or [])
-        for k in seen:
-            kind = k.get("kind")
-            if kind in ("form", "own_engine", "widget", "whatsapp", "email", "phone", "platform"):
-                out.append(_one(kind, k.get("value") or k.get("name"), k.get("url") or (card or {}).get("website") if kind in ("form", "own_engine", "widget") else k.get("url"),
-                                captcha=bool(k.get("captcha") or (one_path and k.get("engine_captcha"))
-                                             or (kind in ("form", "own_engine", "widget") and captcha))))
-        if not any(c["kind"] == "phone" for c in out) and "phone" in rungs:
-            out.append({"kind": "phone", "value": str((rungs["phone"] or {}).get("value") or "read")})
-    else:
-        for rung, kind in (("form", "form"), ("own_page", "own_engine"), ("link", "widget"), ("whatsapp", "whatsapp"),
-                           ("email", "email"), ("phone", "phone")):
-            if rung not in rungs:
-                continue
-            if one_path:   # Sasha 270 · whether they have a form is the engine's to say (venues._read_rung_kept)
-                from agapi import venues as _VN
-                if not _VN._read_rung_kept(rung, rungs[rung]):
-                    continue
-            v = str((rungs[rung] or {}).get("value") or "")
-            if rung == "link" and not v.startswith("http"):
-                # the link rung's value is a platform's NAME ("TheFork", "CoverManager"): a booking platform, never submitted to
-                out.append({"kind": "platform", "url": None})
-                continue
-            url = v if v.startswith("http") else ((card or {}).get("website") if kind in ("form", "own_engine") else None)
-            out.append(_one(kind, v or None, url, captcha=captcha and kind in ("form", "own_engine", "widget")))
-    # one of each kind, in the order read (the rules' R1 order is the rules' own)
-    seen_k: set = set()
-    uniq = []
-    for c in out:
-        key = (c["kind"], c.get("url") or c.get("value"))
-        if key not in seen_k:
-            seen_k.add(key)
-            uniq.append(c)
-    return uniq
-
-
-def page_of(channels: List[dict], card: Optional[dict] = None) -> Optional[str]:
-    """The prepared / take-over link: their own booking page (or the platform's), else their site."""
-    for k in ("form", "platform"):
-        c = next((c for c in channels if c["kind"] == k and str(c.get("url") or "").startswith("http")), None)
-        if c:
-            return c["url"]
-    w = (card or {}).get("website")
-    return w if str(w or "").startswith("http") else None
 
 
 # ── when ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -177,74 +78,6 @@ def _iso(d: Optional[datetime]) -> Optional[str]:
     return (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat()
 
 
-# ── the person ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-#: no person named (an old-flow read with no account): the family's route, as agapi_route.person_mode(None) says — and no powers
-NOBODY = {"mode": "live", "calls": "off", "real_venue_sends": "off"}
-
-
-def _access(rec: dict) -> Dict[str, str]:
-    """The rules' person.access — the record's mode, calls and real-venue sends, nothing added."""
-    return {"mode": "live" if rec.get("mode") == "live" else "test", "calls": "on" if rec.get("calls") == "on" else "off",
-            "real_venue_sends": "on" if rec.get("real_venue_sends") == "on" else "off"}
-
-
-async def access_of(account: Optional[str]) -> Dict[str, str]:
-    """THE person's access, for the rules (§B) — ONE function. Sasha 254 item 5: AgAPI's person_access record, through access.get
-    (agapi.person_access.get; cached ≤ 60 s; a failed read, or no row, is closed: test, everything off)."""
-    from agapi import person_access as PA
-    return _access(await PA.get(account)) if account else dict(NOBODY)
-
-
-def access_cached(account: Optional[str]) -> Dict[str, str]:
-    """access_of for the SYNC legacy callers (the old flow's and the web card's words): the same record, as last read (≤ 60 s;
-    warmed where the account is resolved) — closed when unread."""
-    from agapi import person_access as PA
-    return _access(PA.cached(account)) if account else dict(NOBODY)
-
-
-# ── state ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-async def state_of(account: Optional[str], venue_key: Optional[str] = None, number: Optional[str] = None,
-                   now: Optional[datetime] = None) -> Dict[str, Any]:
-    """The rules' state from the call store: this person's calls in 24 h, the server's (and its net), the last call to THIS venue."""
-    from booking_signer import call_routes as CR
-    now = now or datetime.now(timezone.utc)
-    st: Dict[str, Any] = {"calls_today_person": 0, "server_calls_today": 0, "server_cap": SERVER_CALLS_PER_DAY, "last_call_to_venue_at": None}
-    store = CR.CALL_STORE
-    if store is None or not account or not hasattr(store, "call_counts"):
-        return st
-    try:
-        c = await store.call_counts(str(account), venue_key, number, now - timedelta(hours=24))
-    except Exception as e:   # unreadable: the server's own claim still refuses a call over the caps
-        log.warning("[booking_decide] call counts not read: %s", type(e).__name__)
-        return st
-    st.update(calls_today_person=int(c.get("person") or 0), server_calls_today=int(c.get("server") or 0),
-              last_call_to_venue_at=_iso(c.get("last_to_venue")))
-    return st
-
-
-def ctx_for(*, channels: List[dict], vtype: str, test: bool, booking_at_utc: Optional[str], now: Optional[datetime] = None,
-            access: Optional[dict] = None, preference: Optional[str] = None, state: Optional[dict] = None,
-            booking: Optional[dict] = None, opening: Optional[dict] = None) -> Dict[str, Any]:
-    """Sasha 265 · item 4 (booking-rules/2): + booking {venue, party, day, time} — the read-back's own words, LOCAL ("today", "21:00")
-    — and the venue's opening {opens_at "HH:MM", open_now}, when they are known (the call's "when they open at 13:00")."""
-    now = now or datetime.now(timezone.utc)
-    v: Dict[str, Any] = {"type": vtype, "test": bool(test), "channels": channels}
-    if opening and opening.get("opens_at"):
-        v["opens_at"] = opening["opens_at"]
-    if opening and opening.get("open_now") is not None:
-        v["open_now"] = bool(opening["open_now"])
-    out = {"venue": v,
-           "when": {"booking_at": booking_at_utc, "now": _iso(now)},
-           "person": {"access": access or {"mode": "test", "calls": "off", "real_venue_sends": "off"},
-                      "preference": PREFERENCE.get(str(preference or ""), "none")},
-           "state": dict(state or {})}
-    if booking:
-        out["booking"] = {k: x for k, x in booking.items() if x not in (None, "")}
-    return out
-
-
 def booking_words(venue: Optional[str], party: Any, local_at: Optional[str], country: Optional[str],
                   now: Optional[datetime] = None) -> Dict[str, Any]:
     """booking-rules/2's ctx.booking: the venue, the party, the day in plain local words ("today", "tomorrow", "Thu 15 Oct") and the
@@ -266,34 +99,6 @@ def booking_words(venue: Optional[str], party: Any, local_at: Optional[str], cou
     except (TypeError, ValueError):
         party = None
     return {"venue": venue, "party": party, "day": day, "time": time_}
-
-
-async def decide_for(account: Optional[str], *, channels: List[dict], vtype: str, test: bool, local_at: Optional[str],
-                     country: Optional[str], preference: Optional[str] = None, venue_key: Optional[str] = None,
-                     number: Optional[str] = None, link: Optional[str] = None, now: Optional[datetime] = None,
-                     extra_state: Optional[dict] = None, booking: Optional[dict] = None, opening: Optional[dict] = None,
-                     sandbox_calls: bool = False) -> Dict[str, Any]:
-    """The Decision for one booking — booking_rules.decide, nothing added. The ctx goes with it (`ctx`), for the record."""
-    now = now or datetime.now(timezone.utc)
-    st = await state_of(account, venue_key, number, now)
-    st.update(prepared_link=link, **(extra_state or {}))
-    access = await access_of(account)
-    if sandbox_calls and test and access.get("mode") != "live":
-        # Sasha 265 · item 4 · AgAPI's own sandbox rule (CR 99, venue_submit._call_access): a TEST person with Kanoe's own TEST venue may be
-        # called — the act's call_plan says simulate, and nothing is ever dialled. Never a real venue, never a live person; the one
-        # path only (sandbox_calls: venues.rules_for), never old S1.
-        access = {**access, "calls": "on"}
-    ctx = ctx_for(channels=channels, vtype=vtype, test=test, booking_at_utc=utc_of(local_at, country), now=now,
-                  access=access, preference=preference, state=st, booking=booking, opening=opening)
-    d = BR.decide(ctx)
-    log.info("[booking_decide] %s → %s (%s)", vtype, d["action"], d["say"])
-    return {**d, "ctx": ctx}
-
-
-def redecide(d: Dict[str, Any], preference: str) -> Dict[str, Any]:
-    """The same booking asked again with another preference (the hold's route word) — still booking_rules.decide, the same ctx."""
-    ctx = {**d["ctx"], "person": {**d["ctx"]["person"], "preference": PREFERENCE.get(preference, "none")}}
-    return {**BR.decide(ctx), "ctx": ctx, "channels": d.get("channels")}
 
 
 def say(d: Dict[str, Any]) -> str:
@@ -351,57 +156,5 @@ def stops_of(account: Optional[str]) -> List[str]:
     return [s["say"] for s in _STOPPED.get(account or "", []) if now - s["at"] < STOP_KEEP_S]
 
 
-# ── the legacy shapes (the old WhatsApp flow / voice avatar, and the web card's words), from the SAME Decision ─────────────────
-
-class LegacyDecision:
-    """The old flow's dv: .route ∈ form | one_tap | email | call | call_email | None, .reason (said), .then (None: the rules' own
-    follow-ups replace the old escalation plans), .alternatives ([]: the rules decide one way)."""
-
-    def __init__(self, route: Optional[str], reason: str, decision: Dict[str, Any]):
-        self.route, self.reason, self.then, self.alternatives, self.decision = route, reason, None, [], decision
-
-
-_ROUTE = {"fill_form_zero_touch": "form", "ask_one_question": "form", "hand_over_platform_link": "one_tap",
-          "request_email": "email", "call": "call", "call_and_email": "call_email"}
-
-
-def as_v1(d: Dict[str, Any]) -> Dict[str, Any]:
-    """Sasha 265 · item 4 · OLD S1 BYTE-IDENTICAL: booking-rules/2 made the call the ONE question (ask_call) and offered "or shall I call
-    them?" (ask_page_or_call). The old flows (old S1, the old WhatsApp flow, the web card) keep booking-rules/1's answer exactly: the
-    call on their yes ("calling"), and the ONE question's two answers (ask_book). booking-rules/2 is for the one path only."""
-    if d.get("action") == "ask_call" or (d.get("action") == "call" and d.get("say") == "on_it"):
-        return {**d, "action": "call", "say": "calling", "say_text": BR.PHRASES["calling"], "rung": "phone"}
-    if d.get("say") == "ask_page_or_call":
-        return {**d, "say": "ask_book", "say_text": BR.PHRASES["ask_book"], "ask_once": ["prefilled_form_or_handle_it"]}
-    return d
-
-
-def _legacy_rd(rd: dict, at: Optional[str], prefer: Optional[str], account: Optional[str], now) -> Dict[str, Any]:
-    chans = channels_of(None, rd)
-    nights = None
-    return as_v1(BR.decide(ctx_for(channels=chans, vtype=venue_type((rd.get("what") or {}).get("category") if isinstance(rd.get("what"), dict) else rd.get("type"), nights),
-                             test=is_test_venue(rd), booking_at_utc=utc_of(at, rd.get("country")), now=now,
-                             access=access_cached(account), preference={"one_tap": "page", "call_email": "call"}.get(prefer or "", prefer),
-                             state={"server_cap": SERVER_CALLS_PER_DAY, "prepared_link": page_of(chans)})))
-
-
-def legacy_decision(rd: dict, prefer: Optional[str] = None, at: Optional[str] = None, now=None, account: Optional[str] = None) -> LegacyDecision:
-    d = _legacy_rd(rd, at, prefer, account, now or datetime.now(timezone.utc))
-    route = _ROUTE.get(d["action"])
-    if d["action"] == "prepared_link" and d["say"] in ("prepared_link", "prepared_link_captcha") and \
-            {"link", "own_page", "form"} & set((rd.get("rungs") or {})):
-        route = "one_tap"   # their page, prefilled where it can be — the person confirms it there
-    return LegacyDecision(route, say(d), d)
-
-
-def legacy_ladder(rd: dict, reservation: dict, now, account: Optional[str] = None) -> Optional[dict]:
-    """The old flow's / web card's {line, options}: the rules' one question (R2) with its two answers, else the one way it decided."""
-    d = _legacy_rd(rd, (reservation.get("when") or {}).get("at"), None, account, now or datetime.now(timezone.utc))
-    if d["action"] == "ask_one_question":
-        return {"line": d["say_text"], "options": [(o["title"], o["route"]) for o in CHOICES]}
-    return None
-
-
-__all__ = ["decide_for", "ctx_for", "channels_of", "access_of", "access_cached", "state_of", "say", "out_of", "tell_stopped", "stops_of",
-           "venue_type", "is_test_venue", "utc_of", "page_of", "legacy_decision", "legacy_ladder", "SERVER_CALLS_PER_DAY", "CHOICES",
-           "PREFERENCE", "CALL_STOPS", "CALL_CHOICES", "OK_CHOICES", "booking_words", "as_v1"]
+__all__ = ["say", "out_of", "tell_stopped", "stops_of", "venue_type", "is_test_venue", "utc_of", "SERVER_CALLS_PER_DAY", "CALL_STOPS",
+           "OK_CHOICES", "booking_words"]

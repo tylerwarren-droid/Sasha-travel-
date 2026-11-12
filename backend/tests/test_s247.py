@@ -67,16 +67,7 @@ class OldFlowRecordsAtTheMomentItsSent(unittest.TestCase):
                 run(GW._approve(ctx, {**self.PEND, "rung": rung}, {"said": "yes"}))
             self.assertEqual((calls, [b for op, b in self.sent if op == "outcomes.record"]), ([], []), rung)
 
-    def test_their_page_sent(self):
-        async def api(account, method, path, body=None, timeout=None):
-            return 200, {"link_id": "l1", "url": "https://example.com/book", "platform": "their own booking page", "trip_item_id": "ti-2"}
-        ctx = {"out": _Out(), "account": ACCOUNT, "st": {}, "now": datetime.now(timezone.utc)}
-        rd = {"read_id": "r1", "venue": "Bar Gate", "city": "Madrid"}
-        res = {"when": {"at": "2026-10-17T21:00"}, "how_many": {"count": 2}}
-        with mock.patch.object(GW, "api", api):
-            self.assertTrue(run(GW._send_link(ctx, rd, res, "Alex", None, {"draft": {"what": {"category": "restaurant"}}})))
-        b = [b for op, b in self.sent if op == "outcomes.record"][0]
-        self.assertEqual((b["ref"], b["rung"], b["channel"], b["state"]), ("sasha:ti-2", "human_tap", "page_handover", "sent"))
+    # Sasha 378 · CR 188: test_their_page_sent retired with GW._send_link (the old flow's one-tap page — a channel of Sasha's own)
 
     def test_a_ledger_that_doesnt_answer_never_stops_the_booking(self):
         async def down(op, body):

@@ -92,19 +92,14 @@ class PersonLink(unittest.TestCase):
     def setUp(self):
         VN._HELD.pop(ACCT, None)
         self.addCleanup(VN._HELD.pop, ACCT, None)
-        self.prepared, self.ruled = [], []
+        self.prepared = []
 
         async def via(ctx, a, rd, res, at, now, d, card, r6=False, link=None):
             self.prepared.append(link)
             VN._HELD[ACCT] = {"out": {}}
             return {"status": "awaiting_yes", "route": "agapi", "ask": V.READ_BACK_ASK.format(venue="Mandrake"), "read_back": ["…"]}
 
-        async def rules(ctx, a, rd, res, at, eng, card, route, now=None):
-            self.ruled.append((eng, route))
-            return {"action": self.action, "say": "sent", "takeover": {"link": None, "say": "You can take it over at any point."},
-                    "say_text": "Sent.", "channels": [eng]}
-        self.action = "fill_form_zero_touch"
-        for p in (mock.patch.object(VN, "_via_agapi", via), mock.patch.object(VN, "rules_for", rules),
+        for p in (mock.patch.object(VN, "_via_agapi", via),
                   mock.patch.object(VN, "_API", lambda: type("G", (), {"plain_venue": staticmethod(lambda v: v)}))):
             p.start()
             self.addCleanup(p.stop)
@@ -123,7 +118,7 @@ class PersonLink(unittest.TestCase):
     def test_gate_our_form_is_the_read_back_and_one_yes_said_short(self):
         out = self.go("own_form", "kanoe", FORM)
         self.assertEqual(self.prepared, [FORM])                                                   # prepared on THAT link
-        self.assertEqual(self.ruled[0], ({"kind": "form", "url": FORM, "from": "person"}, "form"))   # the rules decide (handle it)
+        # Sasha 378 · CR 188: AgAPI's classifier (venue.profile on THAT link: owner kanoe) decides it — no rules of Sasha's asked
         self.assertEqual(out["status"], "awaiting_yes")
         self.assertTrue(out["ask"].startswith(V.LINK_ON_IT + " "))                                # "OK, I'm on it."
         self.assertEqual(V.LINK_ON_IT, "OK, I'm on it.")
@@ -136,12 +131,6 @@ class PersonLink(unittest.TestCase):
         self.assertEqual((fork["page_url"], fork["say"]), (FORK, "Here's their page — you finish it there."))
         self.assertNotIn("thefork", fork["say"].lower())                                          # her voice never names it
         self.assertEqual(self.prepared, [])                                                       # never prepared, never sent
-
-    def test_the_rules_saying_no_hands_the_link_over_in_their_words(self):
-        self.action = "prepared_link"
-        out = self.go("own_form", "kanoe", FORM)
-        self.assertEqual((out["status"], out["page_url"]), ("page_link", FORM))
-        self.assertEqual(self.prepared, [])
 
     def test_a_new_link_is_never_the_same_held_booking(self):
         VN._HELD[ACCT] = {"out": {"x": 1}, "at": datetime.now(timezone.utc) - timedelta(minutes=1), "rung": "agapi", "link_handed": FORM}
@@ -190,29 +179,14 @@ class TheirListingSays(unittest.TestCase):
 
 
 class NoSecondCopy(unittest.TestCase):
-    """✗ On the one path, whether a place has a FORM (or a CAPTCHA) is the venue engine's — never Sasha's own reading."""
+    """✗ Whether a place has a FORM (or a CAPTCHA) is the venue engine's — AgAPI's decision; Sasha 378 · CR 188: Sasha has no channel
+    reader of her own at all (booking_decide.channels_of / venues.read_channel are deleted)."""
 
-    RD = {"rungs": {"form": {"value": ""}, "own_page": {"value": "https://casagate.es/reservas"}, "email": {"value": "r@casagate.es"},
-                    "link": {"value": "https://widget.example/book"}, "phone": {"value": "+34910000000"}},
-          "facts": [{"kind": "challenge", "source_kind": "site"}]}
-
-    def test_gate_sashas_form_and_captcha_reading_is_off_the_one_path(self):
-        kinds = [c["kind"] for c in BD.channels_of(None, self.RD, None, one_path=True)]
-        self.assertNotIn("form", kinds)
-        self.assertEqual(kinds, ["email", "phone"])
-        old = BD.channels_of(None, self.RD, None)                                                # old S1: as it was
-        self.assertTrue(any(c["kind"] == "form" and c.get("captcha") for c in old))
-        self.assertEqual(VN.read_channel(self.RD, None, one_path=True)["kind"], "email")
-        self.assertEqual(VN.read_channel(self.RD, None)["kind"], "form")
-        fork = {"rungs": {"link": {"value": "https://www.thefork.es/r/x"}}}
-        self.assertEqual([c["kind"] for c in BD.channels_of(None, fork, None, one_path=True)], ["platform"])   # a platform: handed over
+    def test_gate_sasha_reads_no_channel_of_her_own(self):
+        self.assertFalse(hasattr(BD, "channels_of"))
+        self.assertFalse(hasattr(VN, "read_channel"))
 
     def test_the_captcha_is_the_engines(self):
-        eng = {"kind": "form", "url": "https://casagate.es/reservas", "engine_captcha": True}
-        self.assertTrue(BD.channels_of(eng, {"facts": []}, None, one_path=True)[0].get("captcha"))
-        no = {"kind": "form", "url": "https://casagate.es/reservas", "engine_captcha": False}
-        self.assertFalse(BD.channels_of(no, self.RD, None, one_path=True)[0].get("captcha"))     # Sasha's "challenge" fact: ignored
-        self.assertTrue(BD.channels_of(no, self.RD, None)[0].get("captcha"))                     # old S1: as it was
         p = VT._from_profile({"facts": {}, "booking": {"rung": 2, "channel": "their own booking form", "evidence": "https://x.es/r"},
                               "form": {"captcha": True}})
         self.assertTrue(p["channels"][0]["engine_captcha"])

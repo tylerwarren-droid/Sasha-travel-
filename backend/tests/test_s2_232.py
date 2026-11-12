@@ -80,10 +80,9 @@ class GateCost(unittest.TestCase):
 
 
 class DirectFirstEveryKind(unittest.TestCase):
-    """/s2: their own form or booking page → their own WhatsApp (drafted, they send it) → email → phone; any kind of place."""
+    """/s2: their own form or booking page → their own WhatsApp → email → phone; any kind of place. Sasha 378 · CR 188: that order is
+    AgAPI's (venue.profile → handoff.decide); Sasha follows the decision on every surface (scripts/agapi_decides is AgAPI's fake)."""
     def setUp(self):
-        from tests.test_s254_one_decider import live_access   # Sasha 254 · the executors behind the booking rules: a person who may reach real venues
-        live_access(self)
         from agapi import venues as VN
         from booking_signer import guest_accounts as GA, guest_receipt as GR, guest_whatsapp as GW
         from tests.test_venue_pick_230 import FormApi
@@ -106,26 +105,22 @@ class DirectFirstEveryKind(unittest.TestCase):
             return asyncio.run(VN.hold_venue(ctx, {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": what, "party": 1,
                                                    "day": (date.today() + timedelta(days=6)).isoformat(), "time": "10:00"}))
 
-    def test_s2_their_whatsapp_before_email_and_phone(self):
-        out = self.pick("s2", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
-        self.assertEqual((out["status"], out["route"]), ("draft_message", "whatsapp"))
-        self.assertTrue(out["open_in_whatsapp"].startswith("https://wa.me/34600111222?text="))
-        self.assertIn("(a dog walk)", out["message"])                         # the service they asked for is in it
+    def test_s2_their_whatsapp_they_send_is_agapis_hand_over(self):
+        out = self.pick("s2", {"whatsapp": {"value": "+34600111222"}})
+        self.assertEqual(out["route"], "message")                             # AgAPI's decision: a message they send
+        self.assertFalse(out.get("booked"))
+        self.assertTrue(str((out.get("button") or {}).get("link") or out.get("page_url") or (out.get("prepared") or {}).get("url") or "")
+                        .startswith("https://"), out)
 
     def test_s2_their_own_form_still_first(self):
         out = self.pick("s2", {"form": {}, "whatsapp": {"value": "+34600111222"}, "email": {}})
-        self.assertNotEqual(out.get("route"), "whatsapp")
+        self.assertNotEqual(out.get("route"), "message")
 
-    def test_s2_a_platform_page_is_not_their_form_their_own_whatsapp_first(self):   # Sasha 254 · R1 / R14 (the booking rules)
-        out = self.pick("s2", {"link": {"value": "https://www.fresha.com/a/casa-gate"}, "whatsapp": {"value": "+34600111222"}, "email": {}})
-        self.assertEqual((out.get("route"), out["rules"]["action"]), ("whatsapp", "request_whatsapp"))
-
-    def test_every_surface_the_same_rules(self):   # Sasha 254 · old S1 (parity off) and /next: the same decision as /s2
+    def test_every_surface_the_same_decision(self):   # old S1 (parity off), /next and /s2: AgAPI's one decision, followed alike
+        rungs = {"whatsapp": {"value": "+34600111222"}}
         with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):
-            out = self.pick("s1", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
-        self.assertEqual(out.get("status"), "draft_message")
-        out = self.pick("s1", {"whatsapp": {"value": "+34600111222"}, "email": {}, "phone": {"fact_index": 0}})
-        self.assertEqual(out.get("status"), "draft_message")
+            off = self.pick("s1", rungs)
+        self.assertEqual({off.get("route"), self.pick("s1", rungs).get("route"), self.pick("s2", rungs).get("route")}, {"message"})
 
 
 class FounderRealOnS2(unittest.TestCase):

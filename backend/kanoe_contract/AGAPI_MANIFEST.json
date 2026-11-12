@@ -1,6 +1,6 @@
 {
  "package": "@kanoe/contract / kanoe-contract",
- "version": "1.80.1",
+ "version": "1.84.0",
  "ad_door": "kanoe-ad-door.1",
  "operations": 116,
  "door_kinds": 21,
@@ -8,10 +8,10 @@
  "sources_sha256": {
   "spec/ext/ad-door.json": "d12e581ca5854740b6392dd7ef2f34a136b8186812c3da91cc2be45e079e468b",
   "spec/v1/operations.json": "df31f0606a84c2c8a7399d69cc29bde747877ff0d82c5740efa93cab4e6bbf1c",
-  "spec/ext/operations.ext.json": "7a56b935d6a056dbbfafeb3d3c9bb9faa504861276f3589555d77c90970286b5",
+  "spec/ext/operations.ext.json": "41aa1a3a76b08d7946e9523c952e919702d620ada8297020f7517710285853e3",
   "spec/v1/error-codes.json": "a53800f58ec80c9934e27881b1a88470c87cfeb8cccc58ebb9baf82064e42447",
   "spec/ext/error-codes.ext.json": "d28c69c72fbcdbc281d05da47e950184c1c38907bd65d97de0125dbea81452ed",
-  "spec/ext/kanoe-sandbox.schema.json": "12fe72f623836a0982c9de8773f27a6c8e0b410508d6780867b68bec6f312dbc",
+  "spec/ext/kanoe-sandbox.schema.json": "4d84d91cfb28dff4f9fd8ea403c94165b9c06363a07ec3cd6e9028e6fcdfa6d4",
   "spec/v1/schemas/approval.schema.json": "fb9ac95b7b5659d3691c403d4352c8c9ff3a941dd193150c3a5de4cc5a84ab16",
   "spec/v1/schemas/common.schema.json": "e1f56551f3719fe24c908d8498f6c4909e70ddcdbb7766133c4923a67be6bb4b",
   "spec/v1/schemas/error.schema.json": "8a760897840318e120665df2fb334b0c1b54c1fe13c3d10a64f17235d7b9173d",

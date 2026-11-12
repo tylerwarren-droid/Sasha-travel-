@@ -803,10 +803,16 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     if progress:
         progress(0, len(c["items"]))
 
+    card_apv = await _card_approvals(account, c["items"], done, failed)   # Sasha 378 · CR 190: ONE WhatsApp yes approves the card
+
     async def act(it: dict) -> None:
+        if card_apv is not None and it["read_back_id"] not in card_apv:   # refused by AgAPI on the card: said (or a state), never acted
+            n[0] += 1
+            return
         async with sem:
             try:
-                await _act_one(account, it, said, mv, members, done, failed, reasked)
+                await _act_one(account, it, said, mv, members, done, failed, reasked,
+                               apv=card_apv.get(it["read_back_id"]) if card_apv is not None else None)
             except Exception as e:   # one worker's failure is that worker's, said
                 log.warning("[group_book] %s not done: %s", it["name"], type(e).__name__)
                 failed.append({"name": it["name"], "why": "couldn't be completed just now — nothing was changed for them"})
@@ -1051,10 +1057,36 @@ def _card_for(account: str, action: str, it: dict, movement_id: str) -> Dict[str
             "ask": f"Book {it['name']} at the new fare? Everything is on the card (TEST — nothing is charged now).", "verb": "Book"}
 
 
-async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, done: list, failed: list, reasked: Optional[list] = None) -> None:
-    """ONE worker's act after the organiser's yes: the approval of THAT read-back, the act (its references open only through AgAPI's signed,
-    bound call — CR 189), then the worker's ONE trip settled from AgAPI's answer."""
-    apv = await _approval(account, it, said or "Yes, go ahead.")
+async def _card_approvals(account: str, items: List[dict], done: list, failed: list) -> Optional[Dict[str, str]]:
+    """Sasha 378 · CR 190 · on WhatsApp, a card of SEVERAL read-backs: their ONE reply approves the card — ONE approvals.in_app_tap
+    {read_backs, session} (VS.whatsapp_card_tap), never one tap per item (AgAPI keeps the message id once). → {read_back_id: approval_id};
+    each read-back AgAPI refused is said with ITS why — one already done is a STATE (ON_RECORD), never "failed". None: not that case
+    (S2's in-app tap, a one-person card, the sandbox's simulated yes) — _approval, per read-back, as before."""
+    from agapi import agapi_route as AR, venue_submit as VS
+    if VS.WA.get() is None or VS.TAP.get() is not None or len(items) < 2:
+        return None
+    with AR.using(await AR.target_for(FAMILY, account)):   # the read-backs are the group family's target — their approval goes there too
+        r = await VS.whatsapp_card_tap(account, [{"read_back_id": it["read_back_id"], "read_back_sha256": it["sha"]} for it in items])
+    names = {it["read_back_id"]: it["name"] for it in items}
+    if not r.get("ok"):
+        for it in items:
+            failed.append({"name": it["name"], "code": "approval_refused", "why": FACTS["approval_refused"]})
+        return {}
+    for x in r["refused"]:
+        name = names.get(x.get("read_back_id"), "")
+        if x.get("code") in ON_RECORD + (ERR.APPROVAL_CONSUMED,):   # already done on AgAPI's record: its state, never "failed"
+            y = recorded({"code": x.get("code"), "details": {"state": "booked" if x.get("code") == ERR.ALREADY_COMPLETED else "unknown"}})
+            done.append({"name": name, "state": y["state"], "parts": []})
+        else:
+            failed.append({"name": name, "code": x.get("code"), "why": x.get("why") or FACTS["approval_refused"]})   # AgAPI's own why
+    return {k: v for k, v in r["approvals"].items() if v}
+
+
+async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, done: list, failed: list, reasked: Optional[list] = None,
+                   apv: Optional[str] = None) -> None:
+    """ONE worker's act after the organiser's yes: the approval of THAT read-back (the card's, when ONE WhatsApp yes approved the card —
+    CR 190), the act (its references open only through AgAPI's signed, bound call — CR 189), then the worker's ONE trip settled."""
+    apv = apv or await _approval(account, it, said or "Yes, go ahead.")
     if not apv:
         failed.append({"name": it["name"], "code": "approval_refused", "why": FACTS["approval_refused"]})   # Sasha 366 · named, never "just now"
         return
@@ -1088,7 +1120,7 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
         org = (it.get("body") or {}).get("end_user")
         kind, x = await _prepare_worker(account, m, None, [m["name"]], bool(it.get("over")), org, mv) if m and org else ("skip", {})
         if kind == "item":
-            return await _act_one(account, {**x, "_retried": True}, said, mv, members, done, failed, reasked)
+            return await _act_one(account, {**x, "_retried": True}, said, mv, members, done, failed, reasked)   # its OWN read-back: its own approval
     if not r.get("ok"):
         why = decision(e)
         if it.get("_retried") and e.get("code") in RETRY_ONCE:

@@ -972,6 +972,14 @@ async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], fai
                 parts.append(line)
     if confirming:
         parts.append(f"{_names(confirming)}: the airline hasn't confirmed yet — I'm checking, and nothing will be ordered twice.")
+    # Sasha 371b · found by the live drill: no answer after every re-send, and AgAPI's record has NOTHING for them (no order was made) —
+    # said from the record, never left out of the finish and never "booked"
+    on_record = set(booked) | set(confirming) | {r["name"] for r in incomplete}
+    unanswered = [d["name"] for d in done if d.get("state") == "unknown" and d["name"] not in on_record]
+    if unanswered:
+        parts.append(f"{_names(unanswered)}: the booking system didn't answer, and it has no order for "
+                     f"{'them' if len(unanswered) > 1 else unanswered[0].split()[0]} — nothing was booked or charged, and nothing will be ordered "
+                     f"twice. Say \"book {unanswered[0].split()[0]}\" to try again.")
     for r in incomplete:
         parts.append(f"{r['name']}: part of the trip is booked and the rest isn't"
                      + (f" ({FACTS.get(r.get('record_why') or '', str(r.get('record_why')).replace('_', ' '))})" if r.get("record_why") else "") + ".")

@@ -150,6 +150,13 @@ class FoundLive(unittest.TestCase):
             fin = run(GB.finish(OWNER, mv["id"], [{"name": "Carmen Castro", "conditions": [leg, dict(leg)]}], []))
         self.assertEqual(fin["say"].count("Carmen Castro's flight: only the airline can cancel it."), 1)
 
+    def test_no_answer_and_no_record_is_said_never_left_out(self):
+        with T367.World() as w:
+            mv = run(G.store().movement(OWNER))
+            fin = run(GB.finish(OWNER, mv["id"], [{"name": "Ana Sample", "state": "unknown", "parts": []}], []))
+        self.assertIn("Ana Sample: the booking system didn't answer, and it has no order for Ana", fin["say"])
+        self.assertIn('Say "book Ana" to try again.', fin["say"])
+
     def test_only_an_approved_act_takes_the_acts_timeout(self):
         with mock.patch.dict("os.environ", {"SASHA_GROUP_ACT_TIMEOUT_S": "4"}):
             self.assertEqual(GB.act_timeout(), 4.0)

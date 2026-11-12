@@ -55,7 +55,7 @@ class BookAll(unittest.TestCase):
 
             async def both():
                 q = LE.subscribe(OWNER)
-                out = await GO.run(OWNER, "book", {"said": "Book all", "proof": {"kind": "in_app", "session_id": "group-page-s346"}})   # 367: the page's proof
+                out = await GO.run(OWNER, "book", {"said": "Book all", "proof": {"kind": "in_app", "session_id": "tap_s346", "instruction_id": "tap_s346"}})   # 367: the page's proof
                 await M.finished(OWNER)
                 evs = []
                 while not q.empty():

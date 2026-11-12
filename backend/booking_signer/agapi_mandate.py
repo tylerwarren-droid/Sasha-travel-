@@ -36,7 +36,9 @@ def proof_from(ctx: Any) -> Optional[Dict[str, str]]:
         wa_id, mid = re.sub(r"\D", "", str(w.get("wa_id") or "")), str(w.get("message_id") or "")
         return {"kind": "whatsapp", "wa_id": wa_id, "message_id": mid} if wa_id and mid else None
     sid = str(getattr(ctx, "session", "") or "")
-    return {"kind": "in_app", "session_id": sid} if sid else None
+    turn = str(getattr(ctx, "turn", "") or "")
+    # Sasha 372 · the INSTRUCTION's own id (this turn), with the conversation it was said in — two instructions, two proofs
+    return {"kind": "in_app", "session_id": sid, "instruction_id": turn} if sid and turn else None
 
 
 def _minor(eur: Optional[float]) -> Optional[Dict[str, Any]]:
@@ -88,8 +90,9 @@ def mandate_sha256(end_user: str, words: str, scope: dict, limits: dict, expires
 
 
 def sign(proof: Dict[str, str], account: str, sha: str, t: Optional[int] = None, nonce: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """The proof as AgAPI checks it (1866): kind whatsapp — id the message id, who the wa_id digits; in_app — id the session id, who
-    the person (<person> of their end user "sasha:<person>", AgAPI cr/182 access.person_of). None: no secret here (nothing is sent unsigned)."""
+    """The proof as AgAPI checks it (1866; Sasha 372 + CR 187): kind whatsapp — id the message id, who the wa_id digits; in_app — id the
+    INSTRUCTION's id (the turn / tap it was given in), who the person (<person> of their end user "sasha:<person>", AgAPI access.person_of);
+    session_id rides along as context. ONE form. None: no secret here, or an in-app proof without its instruction (nothing is sent)."""
     secret = os.getenv("SASHA_AGAPI_TAP_SECRET", "")
     if not secret or not proof:
         return None
@@ -99,8 +102,10 @@ def sign(proof: Dict[str, str], account: str, sha: str, t: Optional[int] = None,
         ident, who = proof["message_id"], proof["wa_id"]
         extra = {"wa_id": who, "message_id": ident}
     else:
-        ident, who = proof["session_id"], account   # cr/182 access.person_of: the end user "sasha:<person>" → <person>
-        extra = {"session_id": ident}
+        if not proof.get("instruction_id"):
+            return None   # ⛔ an in-app proof names its instruction — never the conversation in its place
+        ident, who = proof["instruction_id"], account   # Sasha 372 · the instruction signs it; access.person_of → <person>
+        extra = {"session_id": proof.get("session_id") or "", "instruction_id": ident}
     sig = hmac.new(secret.encode(), f"{t}.{nonce}.mandate.{proof['kind']}.{ident}.{who}.{sha}".encode(), hashlib.sha256).hexdigest()
     return {"kind": proof["kind"], "t": t, "nonce": nonce, **extra, "signature": sig}
 

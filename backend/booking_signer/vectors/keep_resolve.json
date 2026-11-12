@@ -1,0 +1,21 @@
+{
+ "version": "keep-resolve/1",
+ "note": "CR 189 · AgAPI → Sasha POST /api/booking/keep/resolve. The body is canonical JSON (sorted keys, no spaces, UTF-8) and x-agapi-signature = hex HMAC-SHA256(SASHA_KEEP_RESOLVE_SECRET, those exact bytes). Sasha opens the reference ONLY when: the account is Sasha's own AgAPI account; the movement is the person's; the member is on that movement; the reference is that member's — else 403 {rule} and a log line, nothing opened.",
+ "vectors": [
+  {
+   "secret": "vector-secret-not-a-real-one",
+   "ref": "keep:kpi_01M0EXAMPLEPASSPORT000000",
+   "at": 1762945200,
+   "bind": {
+    "account": "acc_01M0EXAMPLEACCOUNT0000000000",
+    "person": "aaaaaaaa-0000-4000-8000-000000000189",
+    "member": "ana-garcia",
+    "movement_id": "mv_lisbon_2026_12",
+    "booking_id": "gbk_01M0EXAMPLEBOOKING00000000",
+    "purpose": "group.book"
+   },
+   "body": "{\"account\":\"acc_01M0EXAMPLEACCOUNT0000000000\",\"at\":1762945200,\"booking_id\":\"gbk_01M0EXAMPLEBOOKING00000000\",\"member\":\"ana-garcia\",\"movement_id\":\"mv_lisbon_2026_12\",\"person\":\"aaaaaaaa-0000-4000-8000-000000000189\",\"purpose\":\"group.book\",\"ref\":\"keep:kpi_01M0EXAMPLEPASSPORT000000\",\"v\":\"keep-resolve/1\"}",
+   "signature": "56596c0252b12cfd4db7b0d3012ec6155a31bf872c4686997cd6d9f7325fa2b3"
+  }
+ ]
+}

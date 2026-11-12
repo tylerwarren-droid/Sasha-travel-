@@ -10,8 +10,10 @@ import unittest
 
 class DemoPaths(unittest.TestCase):
     def test_the_three_demo_paths(self):
+        from unittest import mock
         from scripts import venue_truth_suite as VTS
-        self.assertTrue(asyncio.run(VTS.main()))
+        with mock.patch("booking_signer.basket._run", lambda: None):   # Sasha 381 · claims in-process here (the gate: Postgres)
+            self.assertTrue(asyncio.run(VTS.main()))
 
     def test_in_the_gate(self):
         from scripts import gate

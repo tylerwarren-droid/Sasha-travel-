@@ -43,7 +43,7 @@ class FakeAgAPI(T.FakeAgAPI):
     async def __call__(self, op, body, approval=None, account=None):
         if op == "venue.prepare_booking":
             self.ops.append(op)
-            return {"ok": True, "result": {"prepared_id": PID, "submitted": False, "link": "https://agapi.test/prepared/x", "decision": EMAIL_DEC}}
+            return {"ok": True, "result": {"prepared_id": PID, "venue": "Casa Gate", "submitted": False, "link": "https://agapi.test/prepared/x", "decision": EMAIL_DEC}}
         if op == "venue.submit_booking" and self.gate_at_read:
             self.ops.append(op)
             return {"ok": False, "error": {"code": "approval_required", "message": "read it back first",
@@ -77,12 +77,12 @@ class Base(T.Base):
         for p in reversed(self.p):   # these patch over 287's: stopped last-first, so nothing of either leaks into the next test
             p.stop()
 
-    def _hold(self, words):
+    def _hold(self, words, before=""):
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(T.RD, rungs={"email": {"value": TO}}))), \
                 mock.patch.object(VN, "_reservation", mock.AsyncMock(return_value=RES)), \
                 mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)):   # Sasha 378 · AgAPI's EMAIL_DEC, followed
-            out = T.run(VN.hold_venue(T.ctx(words), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
+            out = T.run(VN.hold_venue(T.ctx(words, before=before), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
                                                      "time": "21:00", "party": 2}))
         if ACCT in VN._HELD:
             VN._HELD[ACCT]["at"] -= T.timedelta(minutes=1)
@@ -92,7 +92,7 @@ class Base(T.Base):
         return super().tap(rid, choice)
 
 
-DONE = "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you when they reply."
+DONE = "Booking now: Casa Gate, 2 people, Fri 30 Oct at 21:00. Requested — I'll tell you when they reply."   # Sasha 381 · Tyler's line
 
 
 class FullRequestSendsNoQuestion(Base):
@@ -105,63 +105,29 @@ class FullRequestSendsNoQuestion(Base):
         self.assertNotIn("ask", out)
         act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_288")
         self.assertEqual((act["channel"], act["reference"]), ("email", "em_288"))
-        self.assertEqual(act["consent"], {"kind": "their_words", "said": T.FULL})
+        self.assertEqual(act["consent"], {"kind": "instruction", "said": T.FULL})
         self.assertNotIn("email", out["line"].lower())
 
 
-class OneDetailInferredAsksOnce(Base):
-    """Offline 2 · one detail S2 filled in → ONE line, no message text → sent on the tap or a spoken yes."""
+class AMissingTermIsAsked(Base):
+    """Sasha 381 · a term they didn't give is asked — only that term — and their answer completes the instruction: the email goes."""
 
-    def test_asks_once(self):
+    def test_asked_then_sent(self):
         out = self.hold("Book Casa Gate on Friday at 9pm")
-        self.assertEqual((out["status"], out["ask"], out["read_back"]), ("awaiting_yes", "Casa Gate, Friday 21:00 for 2. Send?", []))
-        self.assertEqual((out["filled_in"], out["message_if_asked"]), (["people"], LINES))
-        self.assertEqual(self.agapi.sends, [])
-
-    def test_the_tap_sends(self):
-        self.hold("Book Casa Gate on Friday at 9pm")
-        evs = self.tap()
-        self.assertEqual(self.agapi.sends, ["rbk_288"], evs)
-        self.assertEqual(T._said(evs), DONE)
-        act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_288")
-        self.assertEqual((act["channel"], act["consent"]["kind"]), ("email", "in_app_tap"))
-
-    def test_the_spoken_yes_sends(self):
-        self.hold("Book Casa Gate for 2 on Friday")
-        tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})
-        try:
-            out = T.run(VN.book_venue(T.ctx("yes, send it"), {"name": "Casa Gate", "approval": {"said": "yes, send it"}}))
-        finally:
-            VS.TAP.reset(tok)
+        self.assertEqual((out["status"], out["ask"], self.agapi.sends), ("need_term", "For how many people?", []))
+        out = self.hold("for 2", before="Book Casa Gate on Friday at 9pm")
         self.assertEqual((out["status"], out["line"], self.agapi.sends), ("requested", DONE, ["rbk_288"]))
-
-
-class NoYesNoSend(Base):
-    """Offline 3 · no yes → nothing."""
-
-    def test_no_yes_no_send(self):
-        self.hold("Book Casa Gate on Friday")
-        from agapi import v0 as API
-        with self.assertRaises(API.ToolError):
-            T.run(VN.book_venue(T.ctx("hmm, maybe later"), {"name": "Casa Gate", "approval": {"said": "hmm, maybe later"}}))
-        self.assertEqual(T._said(self.tap(rid="rbk_other")), V.NOTHING_WAITING)
-        self.assertEqual(self.agapi.sends, [])
-        self.assertNotIn("approvals.in_app_tap", self.agapi.ops)
+        act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_288")
+        self.assertEqual((act["channel"], act["consent"]["kind"]), ("email", "instruction"))
 
 
 class RetryNoSecondSend(Base):
-    """Offline 4 · the same request again, a double tap → never a second email."""
+    """Offline 4 · the same request again → never a second email."""
 
     def test_the_same_request_again(self):
         self.hold(T.FULL)
         out = self.hold(T.FULL)
         self.assertEqual((self.agapi.sends, out["status"]), (["rbk_288"], "already_sent"))
-
-    def test_a_double_tap(self):
-        self.hold("Book Casa Gate on Friday at 9pm")
-        self.tap()
-        self.tap()
-        self.assertEqual(self.agapi.sends, ["rbk_288"])
 
 
 class NotAllowedAtTheSendIsAHandOver(Base):
@@ -170,9 +136,9 @@ class NotAllowedAtTheSendIsAHandOver(Base):
     def test_never_cant(self):
         out = self.hold(T.FULL)
         self.assertEqual(self.agapi.sends, [])
-        self.assertEqual(out["status"], "page_link")
-        self.assertTrue(out["line"])
-        self.assertNotIn("can't", (out["line"] + out["say"]).lower())
+        self.assertEqual(out["status"], "not_allowed")                                          # Sasha 380's hand-over (the one act path)
+        self.assertTrue(out["say"])
+        self.assertNotIn("can't", out["say"].lower())
 
 
 class AnAmbiguousReplyIsNeverConfirmed(Base):
@@ -210,15 +176,12 @@ class AnAmbiguousReplyIsNeverConfirmed(Base):
 class TheRatchet(unittest.TestCase):
     """ROOT TEST (1)–(3), in the code."""
 
-    def test_one_card_for_every_message_request(self):
-        self.assertEqual(VN.MESSAGE_ACTIONS, ("request_whatsapp", "request_email"))
+    def test_one_act_path_for_every_message_request(self):
         self.assertEqual(VS.MESSAGE_CHANNELS, ("whatsapp", "email"))
-        va = inspect.getsource(VN._via_agapi)
-        self.assertIn('d["action"] in MESSAGE_ACTIONS', va)
-        self.assertEqual(va.count("kanoe_card("), 1)
+        self.assertIn("_act(ctx,", inspect.getsource(VN._via_agapi))   # Sasha 381 · email and WhatsApp: the same act on the instruction
 
     def test_no_email_branch_no_second_sender(self):
-        for fn in (VN.kanoe_card, VN._kanoe_now, VN._kanoe_sent, VN._agapi_send, VN._via_agapi):
+        for fn in (VN._act, VN._kanoe_sent, VN._agapi_send, VN._via_agapi):
             code = inspect.getsource(fn).replace(fn.__doc__ or "", "")
             code = "\n".join(re.sub(r"#.*$", "", x) for x in code.splitlines())
             self.assertNotRegex(code, r"""(?:==|!=|\bin)\s*\(?["']email["']""", fn.__name__)   # no `if channel == "email"` copy
@@ -226,13 +189,8 @@ class TheRatchet(unittest.TestCase):
                 self.assertNotIn(bad, code, (fn.__name__, bad))
         self.assertIn("VS.submit(", inspect.getsource(VN._agapi_send))   # the ONE send: venue.submit_booking
 
-    def test_the_send_unasked_needs_all_four(self):
-        src = inspect.getsource(VN.kanoe_card)
-        self.assertLess(src.index("if all(got.values()):"), src.index("_kanoe_now("))
-        self.assertEqual(src.count("_kanoe_now("), 1)
-
     def test_her_voice_never_names_the_channel(self):
-        lines = [V.kanoe_ask("X", "Friday", "21:00", 2), V.wa_done_line("X", "Friday", "21:00", 2), V.wa_sent_line("21:00", "X"),
+        lines = [V.acted_line("X", 2, "2099-10-30T21:00", False), V.wa_sent_line("21:00", "X"),
                  V.wa_replied_line("X", "ok, we'll check")]
         self.assertEqual(V.check(lines), [])
         for x in lines:

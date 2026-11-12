@@ -66,6 +66,9 @@ class Ctx:
     # Sasha 372 · THIS instruction's own id: every turn (and every tap) builds its own Ctx, so two instructions in one conversation are two
     # ids, and a mandate's in-app proof is keyed by it — never by the conversation (agapi_mandate.proof_from)
     turn: str = field(default_factory=lambda: "turn_" + __import__("uuid").uuid4().hex)
+    # Sasha 381 · the person's OWN earlier words in this conversation (their user turns, oldest first): with user_said, the instruction a
+    # venue booking is made on — a term in neither is asked (only that term), never guessed (Tyler, 12 Nov 20:20)
+    said_before: str = ""
 
 
 class ToolError(Exception):

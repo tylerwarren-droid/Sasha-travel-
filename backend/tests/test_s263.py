@@ -43,6 +43,8 @@ class Ctx:
 
     def __init__(self, said, at):
         self.account, self.user_said, self.started = ACCT, said, at
+        self.idem = self.act_name = self.claimed = None
+        self.turn, self.said_before = "turn_" + __import__("uuid").uuid4().hex, ""   # Sasha 381 · the instruction's own id
 
 
 def booking(t):
@@ -58,11 +60,11 @@ class World:
     def __init__(self):
         self.sent = []
 
-    async def via_agapi(self, ctx, a, rd, res, at, now, d, card, **kw):
-        return VN._hold(ctx, "agapi", "prep-" + at, {"lines": [f"· {at}"], "sha256": "sha-" + at}, rd, res,
-                        extra={"prepared_id": "prep-" + at, "read_back_id": "rb-" + at, "end_user": "u"})
+    async def via_agapi(self, ctx, a, rd, res, at, now, d, card, **kw):   # Sasha 381 · AgAPI's prepared booking, acted on the instruction
+        return await VN._act(ctx, "agapi", {"prepared_id": "prep-" + at, "venue": VENUE},
+                             {"read_back_id": "rb-" + at, "sha256": "sha-" + at, "lines": [f"· {at}"], "end_user": "u"}, rd, res)
 
-    async def submit(self, account, held, said):
+    async def submit(self, account, held, said, instruction=None):   # Sasha 381 · + the instruction (the approval)
         self.sent.append({"when": held["when"], "read_back_id": held["read_back_id"], "sha": held["sha"]})
         return {"ok": True, "status": "confirmed", "reference": "TV-263"}
 
@@ -114,16 +116,13 @@ def play(turns, in_app=True):
 ITEM_7 = [("Book Sasha Test Venue Thursday 22 October at 20:15 for 2", "hold_venue", booking("20:15"))]
 
 
-class TheYesSendsTheCardOnScreen(unittest.TestCase):
-    def test_gate_item_7_then_a_new_booking_then_yes(self):
-        """THE GATE (row 914): a new booking held after item 7 — the yes sends ONLY the card on screen (21:15)."""
-        w, out = play(ITEM_7 + [("Thursday at 21:15 instead, for 2", "hold_venue", booking("21:15")),
-                                ("Yes, send it.", "book_venue", {})])
-        self.assertEqual(out[1]["status"], "awaiting_yes")
-        self.assertEqual(out[1]["read_back"], ["· 2026-10-22T21:15"])                  # the card on screen is 21:15
-        self.assertEqual(w.sent, [{"when": "2026-10-22T21:15", "read_back_id": "rb-2026-10-22T21:15", "sha": "sha-2026-10-22T21:15"}])
-        self.assertEqual(out[2]["status"], "confirmed")                                # 21:15 sent, 20:15 untouched
-        self.assertIn("21:15", out[2]["line"])
+class EachInstructionBooksItsOwnSlot(unittest.TestCase):
+    def test_gate_item_7_then_a_new_booking(self):
+        """THE GATE (row 914), Sasha 381: no card — each instruction books the slot IT gave (21:15 is 21:15, never item 7's 20:15)."""
+        w, out = play(ITEM_7 + [("Thursday 22 October at 21:15 for 2 too", "hold_venue", booking("21:15"))])
+        self.assertEqual([x["when"] for x in w.sent], ["2026-10-22T20:15", "2026-10-22T21:15"])
+        self.assertEqual(out[1]["status"], "confirmed")
+        self.assertIn("at 21:15", out[1]["line"])
 
     def test_no_card_waiting_nothing_is_sent(self):
         w, out = play([("Yes, send it.", "book_venue", {})])
@@ -133,11 +132,6 @@ class TheYesSendsTheCardOnScreen(unittest.TestCase):
         w, out = play([("Yes, send it.", "book_venue", {})], in_app=False)
         self.assertEqual((w.sent, out[0]), ([], {"error": "nothing_held"}))
 
-    def test_a_card_is_answered_once(self):
-        w, out = play(ITEM_7 + [("Yes, send it.", "book_venue", {}), ("Yes, send it.", "book_venue", {})])
-        self.assertEqual(len(w.sent), 1)
-        self.assertEqual(out[2]["status"], "already_sent")
-
 
 class NoQuestionOfHerOwn(unittest.TestCase):
     """Sasha 378 · CR 188: 262's "Handle it" capability went with the ONE question — AgAPI decides one way; only a yes sends."""
@@ -145,7 +139,7 @@ class NoQuestionOfHerOwn(unittest.TestCase):
     def test_handle_it_is_not_a_yes(self):
         w, out = play(ITEM_7 + [("Handle it", "book_venue", booking("21:15"))])
         self.assertEqual(out[1], {"error": "no_explicit_yes"})
-        self.assertEqual(w.sent, [])
+        self.assertEqual(len(w.sent), 1)                                               # item 7's own instruction only (Sasha 381)
 
     def test_other_words_are_still_no_yes(self):
         w, out = play(ITEM_7 + [("hmm, maybe", "book_venue", booking("21:15"))])
@@ -171,13 +165,11 @@ class NoQuestionOfHerOwn(unittest.TestCase):
 
 class TheConfirmationIsTwoSentencesSaidByCode(unittest.TestCase):
     def test_booked_and_the_one_question(self):
-        w, out = play([("Book Sasha Test Venue Thursday 22 October at 21:15 for 2", "hold_venue", booking("21:15")),
-                       ("Yes, send it.", "book_venue", {})])
-        line = V.yes_line("book_venue", {"ok": True, "result": out[1]})
-        # Sasha 279 · C: a completed booking — + the closing line (voice.closing_line; no email in the test → "it will follow")
-        self.assertEqual(line, "✅ Booked: Sasha Test Venue, 2026-10-22 at 21:15 — reference TV-263. " + V.CLOSING_LATER
-                         + " Shall I put it in your calendar?")
-        self.assertEqual(len(re.split(r"(?<=[.?!])\s+", line)), 4)
+        w, out = play([("Book Sasha Test Venue Thursday 22 October at 21:15 for 2", "hold_venue", booking("21:15"))])
+        line = V.yes_line("hold_venue", {"ok": True, "result": {**out[0], "in_app": True}})
+        # Sasha 381 · Tyler's ONE line, then (Sasha 279 · C) the closing line and the one question
+        self.assertTrue(line.startswith("Booking now: Sasha Test Venue, 2 people, Thu 22 Oct at 21:15. Booked — reference TV-263. "), line)
+        self.assertTrue(line.endswith(" Shall I put it in your calendar?"), line)   # (279's closing between them when it's its first time)
 
     def test_not_in_the_app_she_says_it_as_before(self):
         self.assertEqual(V.yes_line("book_venue", {"ok": True, "result": {"status": "confirmed", "line": "✅ Booked: X."}}), "")

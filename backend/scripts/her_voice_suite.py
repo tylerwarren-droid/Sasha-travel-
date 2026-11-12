@@ -76,10 +76,18 @@ async def main() -> bool:
     said: list = []
     takeovers: list = []
     acct = "00000000-0000-4000-8000-000000000250"
+    import os
+    import uuid
+    from agapi import venue_submit as VS
+    tok = VS.TAP.set({"kind": "supabase", "token": "her-voice"})   # Sasha 381 · a signed-in turn: the instruction is the approval (CR 196)
+    scratch = not os.getenv("SASHA_AGAPI_TAP_SECRET")
+    if scratch:
+        os.environ["SASHA_AGAPI_TAP_SECRET"] = "her-voice-" + uuid.uuid4().hex
     try:
         for venue in (HAMMAM, CASA):
             ctx = type("C", (), {"account": acct, "surface": "s2", "started": datetime.now(timezone.utc), "act_name": None, "idem": None,
-                                 "user_said": "a table for two on Thursday at 9pm"})()
+                                 "claimed": None, "user_said": "a table for two on Thursday at 9pm", "said_before": "",
+                                 "session": "her-voice-" + uuid.uuid4().hex, "turn": "turn_" + uuid.uuid4().hex})()
             await VT.profile(dict(venue))   # AgAPI's venue.profile (saved): its decision, cached
             rd = {"venue": venue["name"], "place_id": venue["place_id"], "rungs": {}, "country": "ES"}
             res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
@@ -90,8 +98,8 @@ async def main() -> bool:
             takeovers.append(q)
             VN._HELD.pop(acct, None)
         check("3 no question of her own: never \"prefilled form or handle it\"", V.ASK_BOOK not in said and "Handle it" not in said, str(said[:3]))
-        check("3 every answer leaves them a way to do it themselves: the take-over on a read-back, AgAPI's button on a hand-over (R11)",
-              len(takeovers) == 2 and all(((q.get("takeover") or {}).get("say") == BR.PHRASES["takeover"]) if q.get("status") == "awaiting_yes"
+        check("3 every answer leaves them a way to do it themselves: the take-over on an act, AgAPI's button on a hand-over (R11)",
+              len(takeovers) == 2 and all(((q.get("takeover") or {}).get("say") == BR.PHRASES["takeover"]) if q.get("acted")
                                           else str((q.get("button") or {}).get("link") or q.get("open") or (q.get("prepared") or {}).get("url") or "").startswith("https://")
                                           for q in takeovers), str(takeovers[-1])[:600])
         lines = [s for s in said if s]
@@ -100,6 +108,9 @@ async def main() -> bool:
     finally:
         GR.address_of = real_addr
         VN._HELD.pop(acct, None)
+        VS.TAP.reset(tok)
+        if scratch:
+            os.environ.pop("SASHA_AGAPI_TAP_SECRET", None)
 
     # 4 ── Sasha 251 · honest results: a failed tool is never followed by a claim of what it would have shown
     from unittest import mock

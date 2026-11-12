@@ -50,7 +50,7 @@ class APick(unittest.TestCase):
             self.addCleanup(p.stop)
         self.addCleanup(VN._HELD.pop, ACCT, None)
 
-    def pick(self, surface, rungs, said="Casa Gate, please.", **extra):
+    def pick(self, surface, rungs, said=f"Casa Gate, please, for 2 on {LATER} at 21:00.", **extra):   # Sasha 381 · every term theirs
         ctx = API.Ctx(account=ACCT, mode="test", user_said=said, session="s230", surface=surface)
         from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: on the one path their form is the engine's read
         with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
@@ -63,8 +63,9 @@ class APick(unittest.TestCase):
         """Sasha 270 · MOVED (CR 101: one form engine): on /s2 "Handle it" is AgAPI's send (venue.prepare_booking → the read-back →
         venue.submit_booking) — Sasha's own form sender is old S1's only. AgAPI faked as CR 90 answers (test_s254_handle_it_live)."""
         from agapi import venue_submit as VS
-        from tests.test_s254_handle_it_live import FakeAgapi
+        from tests.test_s254_handle_it_live import FakeAgapi, signed_in
         self.fake = FakeAgapi()
+        signed_in(self)   # Sasha 381 · their verified session: the instruction is the approval
         if submit:
             self.fake.submit.update(submit)
         VS._USERS.clear()
@@ -74,40 +75,36 @@ class APick(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def test_on_s2_a_form_is_agapis_send_its_read_back_at_once(self):
-        # Sasha 378 · CR 188: their own form → AgAPI's send_form → its read-back for the ONE yes — no question of Sasha's own first
+    def test_on_s2_a_form_is_agapis_send_on_the_instruction(self):
+        # Sasha 381 · their own form → AgAPI's send_form → sent on the instruction: no card, no question of Sasha's own
         self.agapi()
         out = self.pick("s2", {"form": {}})
-        self.assertEqual(out["status"], "awaiting_yes")                       # the read-back, not "shall I?"
-        self.assertEqual(out["route"], "agapi")
+        self.assertEqual((out["status"], out["route"]), ("requested", "agapi"))
         self.assertNotIn("options", out)
-        self.assertTrue(out["read_back"])
-        self.assertEqual(VN._HELD[ACCT]["rung"], "agapi")                      # held: the yes (a later turn) books it
+        self.assertNotIn(ACCT, VN._HELD)                                         # nothing waits for a yes
         self.assertNotIn("/api/booking/forms", [c[1] for c in self.api.calls])
 
     def test_on_s2_their_own_email_comes_before_a_platform(self):
         self.agapi()   # Sasha 319 · the email request is AgAPI's send (Sasha's own email rung is gone)
         out = self.pick("s2", {"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
-        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "request_email"))
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("requested", "agapi", "request_email"))
 
     def test_old_s1_follows_the_same_decision(self):   # Sasha 378 · old S1 (parity off): AgAPI's decision too (its schema unchanged)
         self.agapi()
         with mock.patch.dict("os.environ", {"SASHA_S1_PARITY": "off"}):
             out = self.pick("s1", {"form": {}})
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
+        self.assertEqual((out["status"], out["route"]), ("requested", "agapi"))
 
-    def test_the_yes_in_a_later_turn_books_it(self):
+    def test_the_instruction_books_it(self):
         self.agapi({"status": "confirmed", "reference": "TV-230"})   # Sasha 270 · MOVED: AgAPI's send
-        self.pick("s2", {"form": {}}, route="form")
-        VN._HELD[ACCT]["at"] -= timedelta(seconds=5)                           # the read-back was said in an earlier turn
-        ctx = API.Ctx(account=ACCT, mode="test", user_said="Yes, book it.", session="s230", surface="s2")
         from booking_signer import wa_brain as WB
         with mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value="It's in your bookings")), \
                 mock.patch("agapi.v0.claim", mock.AsyncMock()):
-            out = run(VN.book_venue(ctx, {"approval": {"said": "Yes, book it."}}))
+            out = self.pick("s2", {"form": {}}, route="form")
         self.assertEqual((out["status"], out.get("reference")), ("confirmed", "TV-230"))
-        sub = [c for c in self.fake.calls if c[0] == "venue.submit_booking"]
-        self.assertEqual((sub[-1][2], sub[-1][1]["prepared_id"]), ("apv_01JABCDEFGHJKMNPQRSTVWXYZ0", "vpr_" + "a" * 32))   # the yes binds it
+        tap = self.fake.body("approvals.in_app_tap")                              # the instruction binds the read-back (CR 196)
+        self.assertEqual((tap["read_back_id"], tap["session"]["kind"]), ("rb_01JABCDEFGHJKMNPQRSTVWXYZ0", "in_app"))
+
 
 if __name__ == "__main__":
     unittest.main()

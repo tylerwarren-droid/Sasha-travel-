@@ -54,6 +54,7 @@ class Ctx:
         self.account, self.surface, self.user_said, self.via, self.session = ACCT, surface, said, via, "sess-328"
         self.started = datetime.now(timezone.utc)
         self.idem = self.act_name = self.claimed = None
+        self.turn, self.said_before = "turn_" + __import__("uuid").uuid4().hex, ""   # Sasha 381 · the instruction's own id (agapi.v0.Ctx)
 
 
 class Memory:
@@ -149,7 +150,10 @@ class Base(unittest.TestCase):
                   mock.patch("booking_signer.basket._run", lambda: None)]   # claims in-process (no database in a unit test)
         for p in self.p:
             p.start()
-        self.tok = VS.TAP.set({"kind": "supabase", "token": "test-session"})   # the in-app session: their tap IS the approval
+        self.tok = VS.TAP.set({"kind": "supabase", "token": "test-session"})   # the in-app session: their instruction IS the approval
+        self.env = mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s328-secret"})   # Sasha 381 · CR 196's proof is signed
+        self.env.start()
+        self.addCleanup(self.env.stop)
 
     def tearDown(self):
         VS.TAP.reset(self.tok)
@@ -171,15 +175,13 @@ class Base(unittest.TestCase):
 
 class TheZonaQuestion(Base):
     def test_asked_once_with_agapis_options_as_taps_and_the_answer_goes_back_to_agapi(self):
-        held = self.hold()
-        self.assertEqual((held["status"], held["route"]), ("awaiting_yes", "platform_book"))
-        q = self.yes()
+        q = self.hold()   # Sasha 381 · no yes card: AgAPI pressed on at once and stopped on the term only they can give
         print("\n── the walk stopped; Sasha asks ONCE ──\n" + json.dumps({k: q[k] for k in ("ask", "choices", "read_back_id")}, ensure_ascii=False))
         self.assertEqual(q["ask"], "La Taberna's booking asks for your Zona: Terraza, Salón, Barra. Which one?")   # AgAPI's ask, said
         self.assertEqual([c["title"] for c in q["choices"]], ["Terraza", "Salón", "Barra"])        # exactly AgAPI's options
         self.assertTrue(all(c["route"] == "pick:" + c["title"] for c in q["choices"]))
         from app.agent import sasha as S
-        card = S.render("book_venue", q, {})
+        card = S.render("hold_venue", q, {})
         self.assertEqual((card["kind"], card["read_back_id"]), ("read_back", q["read_back_id"]))     # S2's one-tap card
         done = self.tap(q["read_back_id"], "Terraza")
         sub = self.ag.bodies("venue.submit_booking")
@@ -188,16 +190,15 @@ class TheZonaQuestion(Base):
         self.assertEqual(sub[-1]["prepared_id"], sub[0]["prepared_id"])                             # the SAME prepared booking
         self.assertNotIn("choices", sub[0])                                                         # never guessed before
         self.assertEqual(len(self.ag.bodies("venue.prepare_booking")), 1)                           # prepared once — no `answers`
-        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)   # their yes, then their tap — no third ask
+        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)   # the instruction, then their answer — no third ask
         print("── said ──\n" + done["line"])
         self.assertEqual(done["status"], "confirmed")
-        for part in ("La Taberna", "Friday 13 November", "21:00", "2 people", "Terraza", "CM48213"):
-            self.assertIn(part, done["line"])
+        self.assertEqual(done["line"], "Booking now: La Taberna, 2 people, Fri 13 Nov at 21:00. Booked — reference CM48213.")   # Sasha 381
+        self.assertEqual(done["area"], "Terraza")                                                   # their choice, on the booking
         self.assertNotIn("CoverManager", done["line"])   # 249: the platform is never said
 
     def test_her_words_answer_it_too_and_never_a_guess(self):
-        self.hold()
-        q = self.yes()
+        q = self.hold()
         with self.assertRaises(V0.ToolError) as e:   # "the one by the window" names no option: asked, never chosen for them
             run(VN.book_venue(Ctx("the one by the window"), {"approval": {"said": "the one by the window"}}))
         self.assertEqual(e.exception.code, "which_option")
@@ -208,8 +209,7 @@ class TheZonaQuestion(Base):
         self.assertTrue(q["read_back_id"].startswith("q_"))
 
     def test_in_my_bookings_with_its_reference_and_the_stop_is_not_a_booking(self):
-        self.hold()
-        q = self.yes()
+        q = self.hold()
         self.tap(q["read_back_id"], "Terraza")
         rows = run(VS.bookings(ACCT))
         print("── My bookings ──\n" + json.dumps(rows, ensure_ascii=False))
@@ -219,8 +219,7 @@ class TheZonaQuestion(Base):
 
     def test_on_whatsapp_the_options_are_taps_never_yes_no(self):
         from booking_signer import guest_whatsapp as GWM, wa_agent as WA
-        self.hold()
-        q = self.yes()
+        q = self.hold()
         out = GWM.Out()
         WA._read_back({"kind": "read_back", **q}, out)
         kind, text, buttons = out.items[0]
@@ -229,27 +228,12 @@ class TheZonaQuestion(Base):
         self.assertEqual(WA.message_of(ACCT, "", "say:Terraza"), "Terraza")
 
 
-class TheTapIsTheYesOnlyForTheSameWords(Base):
-    def test_a_changed_read_back_is_shown_and_waits_for_their_yes(self):
-        self.ag.extra_line = ["Their deposit: €10 per person, charged by CoverManager."]   # AgAPI's read-back changed after the answer
-        self.hold()
-        q = self.yes()
-        got = self.tap(q["read_back_id"], "Terraza")
-        self.assertEqual(got["status"], "awaiting_yes")
-        self.assertIn("zona: Terraza", got["read_back"][0])   # Sasha 329 · CR 161 · AgAPI's own read-back carries the choice
-        self.assertIn("Their deposit: €10 per person, charged by CoverManager.", got["read_back"])
-        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 1)   # nothing sent on the tap
-        done = run(VN.book_venue(Ctx("Yes, book it"), {"approval": {"said": "Yes, book it"}}))   # their yes to THESE words sends it
-        self.assertEqual((done["status"], self.ag.ops().count("approvals.in_app_tap")), ("confirmed", 2))
-
-    def test_voice_or_old_s1_without_an_in_app_session_never_takes_the_tap_as_the_yes(self):
+class NoVerifiedPersonNothingIsPressed(Base):
+    def test_voice_or_old_s1_without_an_in_app_session_never_presses_book(self):
         VS.TAP.reset(self.tok)
         self.tok = VS.TAP.set(None)
-        self.hold()
-        VN._HELD[ACCT].update(rung="platform_choice", id="q_x", read_back_id="q_x", choice="zona", field="Zona", options=["Terraza", "Salón"],
-                              base=VN._HELD[ACCT]["same"], asked_at=datetime.now(timezone.utc), out={})
-        got = run(VN.book_venue(Ctx("Terraza", surface="voice"), {"approval": {"said": "Terraza"}}))
-        self.assertEqual(got["status"], "awaiting_yes")
+        got = self.hold()
+        self.assertEqual(got["status"], "not_sent")                    # Sasha 381 · the instruction can't be proved theirs: nothing pressed
         self.assertNotIn("approvals.in_app_tap", self.ag.ops())
 
 
@@ -258,8 +242,7 @@ class AskedOnceNeverALoop(Base):
     OUTCOMES = (STOPPED, {**STOPPED, "act_id": "act_zona2"})
 
     def test_the_same_question_after_the_answer_is_said_not_asked(self):
-        self.hold()
-        q = self.yes()
+        q = self.hold()
         again = self.tap(q["read_back_id"], "Terraza")
         print("\n── the walk stopped again on the same question ──\n" + again["say"])
         self.assertEqual(self.ag.bodies("venue.submit_booking")[-1]["choices"], {"zona": "Terraza"})   # sent all the same
@@ -273,8 +256,7 @@ class AskedOnceNeverALoop(Base):
 
 class TheConfirmationEmailAndCancel(Base):
     def _booked(self):
-        self.hold()
-        self.tap(self.yes()["read_back_id"], "Terraza")
+        self.tap(self.hold()["read_back_id"], "Terraza")
 
     def _sync(self, mails):
         from booking_signer import guest_whatsapp as GWM

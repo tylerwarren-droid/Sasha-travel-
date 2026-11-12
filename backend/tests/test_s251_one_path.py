@@ -38,7 +38,8 @@ class Base(unittest.TestCase):
         self.addCleanup(VN._HELD.pop, ACCT, None)
 
     def hold(self, surface, rungs, **extra):
-        ctx = API.Ctx(account=ACCT, mode="test", user_said="Hammam Al Ándalus, please.", session="s251", surface=surface)
+        ctx = API.Ctx(account=ACCT, mode="test", user_said=f"Hammam Al Ándalus, please, for 2 on {LATER} at 17:00.", session="s251",
+                      surface=surface)   # Sasha 381 · every term in their words (a term not given is asked)
         from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: their own booking page is the engine's read
         with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             return asyncio.run(VN.hold_venue(ctx, {"name": "Hammam Al Ándalus Salesas", "city": "Madrid", "country": "ES",

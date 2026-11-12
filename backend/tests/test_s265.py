@@ -155,30 +155,17 @@ class BookingRules2(unittest.TestCase):
 
 
 class TheCardIsTheQuestion(T254.Base):
-    def test_gate_a_call_is_its_card_one_ok(self):
-        # Sasha 378 · CR 188: AgAPI decided the call — its read-back on a card with ONE "OK" (no page of Sasha's choosing beside it)
+    def test_gate_a_call_is_placed_on_the_instruction(self):
+        # Sasha 381 · AgAPI decided the call: no card, no OK — the instruction is the approval; the act places it, Tyler's line said by code
         out = self.hold(PHONE, hours=20)
-        self.assertEqual(out["status"], "awaiting_yes")
-        self.assertEqual(out["choices"], list(BD.OK_CHOICES))
+        self.assertEqual(out["status"], "calling")
+        self.assertNotIn("choices", out)
         self.assertIn(("prepare", {"phone": "+34910000000", "source": "venue", "open_now": False}), self.vs_calls)   # the act carries the call
         self.assertIn(("read_back", "call"), self.vs_calls)                              # the CALL's read-back
-        self.assertEqual(V.read_back_line("hold_venue", {"ok": True, "result": out}), out["ask"])   # said by code, word for word
-        ev = S.render("hold_venue", out, {})
-        self.assertEqual((ev["kind"], ev["read_back_id"], ev["choices"]), ("read_back", "rbk_1", list(BD.OK_CHOICES)))
-        self.assertNotIn("/api/booking/calls", self.api.paths())
-
-    def test_gate_the_tap_is_the_approval_and_only_on_it_is_said(self):
-        self.hold(PHONE, hours=20)
-        VN._HELD[T254.ACCT]["at"] -= timedelta(minutes=1)
-        tok = VS.TAP.set({"kind": "supabase", "token": "t"})
-        try:
-            evs = run(collect(S.card_tap(T254.ACCT, "s254d", "s2", {"read_back_id": "rbk_1", "choice": "call"}, "Call them")))
-        finally:
-            VS.TAP.reset(tok)
-        text = next(e["delta"] for e in evs if e["type"] == "text")
-        self.assertEqual(text, "On it — I'll call them now and let you know.")             # ONLY the act's say
         self.assertIn(("submit", "rbk_1"), self.vs_calls)
-        self.assertNotIn("/api/booking/calls", self.api.paths())                            # never Sasha's own call
+        self.assertEqual(V.yes_line("hold_venue", {"ok": True, "result": out}), out["line"])   # said by code, word for word
+        self.assertTrue(out["line"].startswith("Booking now: Casa Gate, 2 people, ") and out["line"].endswith(V.REQUESTED), out["line"])
+        self.assertNotIn("/api/booking/calls", self.api.paths())                         # never Sasha's own call
 
     def test_a_tap_on_a_card_no_longer_there_sends_nothing(self):
         self.hold(PHONE, hours=20)

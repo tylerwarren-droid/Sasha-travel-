@@ -106,9 +106,9 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
             return await real_read_back(account, pid)
         return {"ok": True, "end_user": "usr_1", "read_back_id": "rbk_1", "lines": lines, "sha256": "f" * 64}
 
-    async def submit(account, held, said):
+    async def submit(account, held, said, **kw):   # Sasha 381 · + the instruction (the approval)
         if held.get("rung") != "agapi_call":
-            return await real_submit(account, held, said)
+            return await real_submit(account, held, said, **kw)
         test.vs_calls.append(("submit", held.get("read_back_id")))
         return dict(answer or {"ok": True, "status": "calling", "route": "call", "act_id": "act_1",
                                "call_plan": {"phone": "+34910000000", "when": "now", "simulate": True, "next_call": {"allowed": True}},
@@ -116,6 +116,13 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
     for p in (mock.patch.object(VS, "prepare", prepare), mock.patch.object(VS, "read_back", read_back), mock.patch.object(VS, "submit", submit)):
         p.start()
         test.addCleanup(p.stop)
+
+
+def said(args: dict) -> str:
+    """Sasha 381 · the person's instruction in their own words — every term of the booking given (a term not given is asked, never
+    guessed): the venue, the day, the time (none for a quote), the people."""
+    when = (f" on {args['day']}" if args.get("day") else "") + (f" at {str(args['time'])[:5]}" if args.get("time") else "")
+    return f"book {args.get('name')}{when} for {args.get('party')}"
 
 
 class Base(unittest.TestCase):
@@ -163,7 +170,7 @@ class Base(unittest.TestCase):
         args = {"name": venue, "city": "Madrid", "country": "ES", "what": what, "party": 2, "day": day, "time": hhmm,
                 "place_id": "ChIJcasagate254", **a}   # Sasha 378 · its listing: venue.profile (AgAPI's decision) is asked by it
         with mock.patch.object(VN, "_read", reader(rungs, venue, facts=facts)), mock.patch.object(VN, "engine_channel", engine_from(rungs, facts)):
-            return run(VN.hold_venue(self.ctx("book it"), args))
+            return run(VN.hold_venue(self.ctx(said(args)), args))
 
     def yes(self):
         return run(VN.book_venue(self.ctx("yes, go ahead", later=True), {"approval": {"said": "yes, go ahead"}}))
@@ -187,9 +194,9 @@ class FollowsAgapi(Base):
         from tests.test_s254_handle_it_live import use_fake_agapi
         self.agapi = use_fake_agapi(self)
 
-    def test_their_own_form_is_kanoes_send_read_back_first(self):
+    def test_their_own_form_is_kanoes_send_on_the_instruction(self):
         out = self.hold(ALL4)                                                           # a form AND every other way: still ONE decision
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
+        self.assertEqual((out["status"], out["route"]), ("requested", "agapi"))       # Sasha 381 · sent on the instruction, no card
         self.assertNotIn("options", out)                                                # no "prefilled form or handle it?"
         self.assertEqual(out["rules"]["action"], "fill_form_zero_touch")
         self.assertIn("venue.prepare_booking", self.agapi.ops())
@@ -197,14 +204,13 @@ class FollowsAgapi(Base):
 
     def test_their_own_email_is_kanoes_request(self):
         out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=20)    # within 48 h: still AgAPI's email, never a call of Sasha's
-        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "request_email"))
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("requested", "agapi", "request_email"))
         self.assertNotIn("/api/booking/calls", self.api.paths())
 
-    def test_their_phone_is_the_calls_card(self):
-        out = self.hold({"phone": ALL4["phone"]}, hours=20)
-        self.assertEqual((out["status"], out["route"], out["choices"]), ("awaiting_yes", "agapi_call", list(BD.OK_CHOICES)))
-        got = self.yes()
-        self.assertEqual(got["status"], "calling")
+    def test_their_phone_is_the_call_on_the_instruction(self):
+        got = self.hold({"phone": ALL4["phone"]}, hours=20)
+        self.assertEqual((got["status"], got["route"]), ("calling", "agapi_call"))   # Sasha 381 · no OK card: the instruction is it
+        self.assertNotIn("choices", got)
         self.assertEqual(self.api.bodies("/api/booking/calls"), [])                    # the act's call, never Sasha's own
 
     def test_their_whatsapp_they_send_is_agapis_hand_over(self):
@@ -400,9 +406,8 @@ class R10Limits(Base):
     """R10 is the ACT's (CR 99), and the dial's (R10CallRoutes): Sasha keeps no count of her own to decide a route by."""
 
     def test_refused_at_the_dial_the_stop_is_said_in_the_turn(self):
-        self.hold({"phone": ALL4["phone"]}, hours=20)
         fake_act(self, answer={"ok": True, "status": "not_allowed", "route": "call", "say": BR.PHRASES["calls_cap"]})
-        got = self.yes()
+        got = self.hold({"phone": ALL4["phone"]}, hours=20)
         self.assertEqual(got["status"], "not_allowed")
         self.assertEqual(got["say"], BR.PHRASES["calls_cap"])
         self.assertNotIn("/api/booking/calls", self.api.paths())
@@ -489,7 +494,7 @@ class EverySurface(Base):
             self.surface = surface
             with mock.patch.dict(os.environ, {"SASHA_S1_PARITY": parity}):
                 out = self.hold({"phone": ALL4["phone"]}, hours=20)
-            self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi_call"), (surface, parity))
+            self.assertEqual((out["status"], out["route"]), ("calling", "agapi_call"), (surface, parity))
 
 
 class UtcOf(unittest.TestCase):

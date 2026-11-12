@@ -48,6 +48,8 @@ class FakeAgapi:
                                            "details": {"read_back_id": RB, "read_back": {"lines": [
                                                "I'll send Casa Gate's own booking form: 2 people, under Alex Gate.",
                                                "Nothing is booked until they confirm."]}}}}
+        if op == "approvals.in_app_tap":   # Sasha 381 · CR 196 · the instruction's approval: AgAPI approves and acts (its result)
+            return {"ok": True, "result": {"approval_id": APV, "result": dict(self.submit)}}
         if op == "sandbox.simulate_approval":
             return {"ok": True, "result": {"approval_id": APV}}
         if op == "approvals.request":
@@ -68,11 +70,25 @@ class FakeAgapi:
         return next(b for o, b, _a in self.calls if o == op)
 
 
+def signed_in(test: unittest.TestCase) -> None:
+    """Sasha 381 · the person's verified in-app session on this turn (as sasha.agent_turn sets it): their instruction is the approval."""
+    tok = VS.TAP.set({"kind": "supabase", "token": "test-token"})
+    test.addCleanup(VS.TAP.reset, tok)
+    API._CLAIMED.clear()   # each test its own conversation: a booking claimed by another test is not this one
+    p = mock.patch("booking_signer.basket._run", lambda: None)   # claims in-process (no database in a unit test), as s287 / s328 do
+    p.start()
+    test.addCleanup(p.stop)
+    p = mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "test-tap-secret"})
+    p.start()
+    test.addCleanup(p.stop)
+
+
 def use_fake_agapi(test: unittest.TestCase, submit: dict = None) -> FakeAgapi:
     """Sasha 270 · for tests MOVED off Sasha's own form sender: on the one path "Handle it" is AgAPI's send — faked as CR 90 answers."""
     fake = FakeAgapi()
     if submit:
         fake.submit.update(submit)
+    signed_in(test)
     VS._USERS.clear()
     for p in (mock.patch.object(VS, "CALL", fake), mock.patch.object(VS, "target", mock.AsyncMock(return_value="sandbox")),
               mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=True)),
@@ -90,6 +106,7 @@ class HandleIt(Base):
         VS._USERS.clear()
         VS._ACTS.pop("00000000-0000-4000-8000-000000000254", None)
         self.agapi = FakeAgapi()
+        signed_in(self)
         for p in (mock.patch.object(VS, "CALL", self.agapi), mock.patch.object(VS, "target", mock.AsyncMock(return_value=self.target)),
                   mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=True)),
                   mock.patch("agapi.s2_memory.kind", mock.AsyncMock(return_value=None))):
@@ -102,62 +119,54 @@ class HandleIt(Base):
 
 
 class TheSend(HandleIt):
-    def test_handle_it_read_back_then_yes_then_submit_booking(self):
-        out = self.handle_it()
-        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "fill_form_zero_touch"))
-        self.assertEqual(out["read_back"][0], "I'll send Casa Gate's own booking form: 2 people, under Alex Gate.")   # AgAPI's read-back
-        self.assertEqual(self.agapi.ops(), ["users.register", "venue.prepare_booking", "venue.submit_booking"])   # nothing sent yet (285: the person first)
+    """Sasha 381 · the instruction IS the approval: venue.prepare_booking → its read-back (kept, never shown) → approvals.in_app_tap with
+    the instruction's proof (CR 196) → AgAPI acts — in the SAME turn, said in Tyler's ONE line."""
+
+    def test_handle_it_is_sent_on_the_instruction_in_the_same_turn(self):
+        got = self.handle_it()
+        self.assertEqual(self.agapi.ops(), ["users.register", "venue.prepare_booking", "venue.submit_booking", "approvals.in_app_tap"])
         prep = self.agapi.body("venue.prepare_booking")
         self.assertEqual((prep["person"]["name"], prep["person"]["phone"], prep["party"]), ("Alex Gate", "+447700900211", 2))
         self.assertEqual(prep["place"]["website"], "https://casagate.es")
-        self.assertEqual(self.agapi.calls[-1][2], None)                                         # the read-back call carries no approval
+        self.assertEqual(self.agapi.calls[2][2], None)                                          # the read-back call carries no approval
+        tap = self.agapi.body("approvals.in_app_tap")
+        self.assertEqual((tap["read_back_id"], tap["session"]["kind"]), (RB, "in_app"))
         self.assertFalse(any(p in ("/api/booking/forms", "/api/booking/emails") for p in self.api.paths()))   # Sasha's own senders: unused
-        got = self.yes()
-        self.assertEqual(self.agapi.ops()[-2:], ["sandbox.simulate_approval", "venue.submit_booking"])
-        self.assertEqual(self.agapi.calls[-2][1], {"read_back_id": RB, "said": "yes, go ahead"})          # their own words
-        op, body, approval = self.agapi.calls[-1]
-        self.assertEqual((body, approval), ({"end_user": "eu_254", "prepared_id": PREP}, APV))
         self.assertEqual(got["status"], "requested")
-        self.assertEqual(got["line"], f"{V.SENT} {BR.PHRASES['takeover']}")                     # "Sent. I'll tell you when they reply."
+        self.assertRegex(got["line"], r"^Booking now: Casa Gate, 2 people, \w{3} \d{1,2} \w{3} at \d\d:\d\d\. Requested — I'll tell you when they reply\.$")
         self.assertNotIn(ACCT := "00000000-0000-4000-8000-000000000254", VN._HELD)
         rec = OC.booked.await_args
         self.assertEqual((rec.args[1]["rung"], rec.args[1]["agapi_action"]), ("agapi", "fill_form_zero_touch"))
 
-    def test_a_yes_in_the_same_turn_sends_nothing(self):
-        self.handle_it()
-        same = self.ctx("yes")
-        same.started = VN._HELD["00000000-0000-4000-8000-000000000254"]["at"]                    # the turn the read-back was said in
-        with self.assertRaises(API.ToolError) as e:
-            run(VN.book_venue(same, {"approval": {"said": "yes"}}))
-        self.assertEqual(e.exception.code, "read_back_first")
-        self.assertNotIn("sandbox.simulate_approval", self.agapi.ops())
+    def test_no_verified_person_sends_nothing(self):
+        VS.TAP.set(None)   # no signed-in session and no signed WhatsApp message: the instruction can't be proved theirs
+        got = self.handle_it()
+        self.assertNotIn("approvals.in_app_tap", self.agapi.ops())
+        self.assertNotIn("sandbox.simulate_approval", self.agapi.ops())                          # never a simulated yes in its place
+        self.assertEqual(got["status"], "not_sent")
 
     def test_a_request_by_email_goes_the_same_way(self):
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=72)
-        self.assertEqual((out["route"], out["rules"]["action"]), ("agapi", "request_email"))
-        got = self.yes()
-        # Sasha 288 · an email request is 287's ONE line, as WhatsApp's (was: the rules' request_wait + take-over)
-        self.assertRegex(got["line"], r"^Done — I've asked Casa Gate for .+ at \d\d:\d\d for 2\. I'll tell you when they reply\.$")
+        got = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=72)
+        self.assertEqual(got["status"], "requested")
+        self.assertTrue(got["line"].startswith("Booking now: Casa Gate, 2 people, ") and got["line"].endswith(V.REQUESTED), got["line"])
         self.assertNotIn("/api/booking/emails", self.api.paths())
 
     def test_confirmed_at_once_is_booked_with_their_reference(self):
         self.agapi.submit.update(status="confirmed", reference="CG-77")
-        self.handle_it()
-        got = self.yes()
+        got = self.handle_it()
         self.assertEqual((got["status"], got["reference"]), ("confirmed", "CG-77"))
-        self.assertTrue(got["line"].startswith("✅ Booked: Casa Gate"))
+        self.assertIn(". Booked — reference CG-77.", got["line"])
 
     def test_not_allowed_is_said_kindly_with_their_prepared_page(self):
         why = "I can't send this one for you (no form of their own to send, and no WhatsApp or email to write to). The link I prepared is yours to finish — open it and confirm."
         self.agapi.submit.update(status="not_allowed", submitted=False, act_id=None, say=why)
-        self.handle_it()
-        got = self.yes()
+        got = self.handle_it()
         self.assertEqual(got["status"], "not_allowed")
         self.assertEqual(got["say"], f"{V.FINISH_IT} {BR.PHRASES['takeover']}")                 # Sasha 380 · their page handed over; AgAPI's reason logged
         self.assertNotIn("on this account", got["say"])
         self.assertEqual(got["page_url"], "https://agapi.test/prepared/casagate")
         from app.agent import sasha as AG
-        self.assertEqual(AG.render("book_venue", got, {})["kind"], "handover")                   # their page, drawn
+        self.assertEqual(AG.render("hold_venue", got, {})["kind"], "handover")                   # their page, drawn
 
     def test_not_allowed_at_the_read_back_is_said_kindly_not_an_error(self):   # found by the gate on agapi-live (deploy c59733b0)
         real = self.agapi.__call__
@@ -191,27 +200,16 @@ class TheSend(HandleIt):
 class Live(HandleIt):
     target = "live"
 
-    def test_live_their_tap_is_the_approval(self):
-        self.handle_it()
-        self.assertNotIn("approvals.request", self.agapi.ops())   # Sasha 314 MOVED: no SMS link (it sent nothing, and she said it had)
-        self.agapi.approval_state = "presented"
-        from agapi.v0 import ToolError
-        with self.assertRaises(ToolError) as e:   # no approval channel here: said plainly — never "waiting for your tap"
-            self.yes()
-        self.assertIn("only be taken in the app or from their own WhatsApp", e.exception.message)
-        self.assertNotIn("venue.submit_booking", [o for o, _b, a in self.agapi.calls if a])        # nothing sent before the tap
-        self.assertIn("00000000-0000-4000-8000-000000000254", VN._HELD)                             # still held for it
-        self.agapi.approval_state = "valid"
-        VN._HELD["00000000-0000-4000-8000-000000000254"]["at"] -= timedelta(minutes=1)
-        got = self.yes()
-        self.assertEqual(got["status"], "requested")
-        self.assertEqual(self.agapi.calls[-1][2], APV)
+    def test_live_the_instruction_is_the_approval_too(self):
+        got = self.handle_it()
+        self.assertNotIn("approvals.request", self.agapi.ops())   # Sasha 314: no SMS link
+        self.assertNotIn("approvals.status", self.agapi.ops())    # never waiting for a tap: the instruction is it (CR 196)
+        self.assertEqual((got["status"], self.agapi.body("approvals.in_app_tap")["session"]["kind"]), ("requested", "in_app"))
 
 
 class TheStatus(HandleIt):
     def test_booking_status_confirmed_get_status_says_booked(self):
         self.handle_it()
-        self.yes()
         self.agapi.state = "confirmed"
         with mock.patch.object(API, "_latest", mock.AsyncMock(return_value=None)):
             st = run(SS.status_of("00000000-0000-4000-8000-000000000254"))
@@ -223,7 +221,6 @@ class TheStatus(HandleIt):
 
     def test_still_waiting_is_requested(self):
         self.handle_it()
-        self.yes()
         with mock.patch.object(API, "_latest", mock.AsyncMock(return_value=None)):
             st = run(SS.status_of("00000000-0000-4000-8000-000000000254"))
         self.assertEqual(st["state"], "requested")

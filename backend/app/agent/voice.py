@@ -72,6 +72,30 @@ NOTHING_WAITING = "There's nothing waiting to send."
 CALENDAR_ASK = "Shall I put it in your calendar?"
 
 
+# Sasha 381 · THE INSTRUCTION IS THE APPROVAL (Tyler, KANOE_DECISIONS 12 Nov 20:11): a venue booking is never a yes card — she says what
+# she is doing as she acts, in ONE line, then the outcome. <venue> is AgAPI's ONE identity (CR 194: the prepared booking's `venue`).
+REQUESTED = "Requested — I'll tell you when they reply."
+#: Sasha 381 · Tyler, 12 Nov 20:20 (B): a term the person didn't give is ASKED — only that term — never guessed, never a yes card
+TERM_ASK = {"people": "For how many people?", "day": "Which day?", "time": "What time?"}
+
+
+def booking_now(venue: str, party, at: str) -> str:
+    """"Booking now: La Taberna de Peñalver, 2 people, Fri 14 Nov at 21:00." — at is the booking's local "YYYY-MM-DDTHH:MM"."""
+    from datetime import date as _d
+    d = _d.fromisoformat(str(at)[:10])
+    n = int(party)
+    return f"Booking now: {venue}, {n} {'person' if n == 1 else 'people'}, {d:%a} {d.day} {d:%b} at {str(at)[11:16]}."
+
+
+def booked_now(ref: Optional[str]) -> str:
+    return f"Booked — reference {ref}." if ref else "Booked."
+
+
+def acted_line(venue: str, party, at: str, booked: bool, ref: Optional[str] = None) -> str:
+    """Sasha 381 · the ONE line of a venue act: what she is doing, then its outcome (confirmed → Booked; anything else → Requested)."""
+    return f"{booking_now(venue, party, at)} {booked_now(ref) if booked else REQUESTED}"
+
+
 def booked_line(venue: str, when: str, ref: Optional[str]) -> str:
     return f"✅ Booked: {venue}, {when}" + (f" — reference {ref}." if ref else ".")
 
@@ -101,6 +125,12 @@ def yes_line(tool: str, r: dict) -> str:
     res = (r or {}).get("result") if (r or {}).get("ok") else None
     if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("status") in PENDING and res.get("line"):
         return res["line"]
+    if tool == "hold_venue" and isinstance(res, dict) and res.get("status") == "need_term" and res.get("ask") in TERM_ASK.values():
+        return res["ask"]   # Sasha 381 · the ONE term they didn't give, asked word for word — never a yes card, never a guess
+    if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("acted") and res.get("line"):
+        # Sasha 381 · a venue act on the instruction: "Booking now: …" + its outcome, said by code on EVERY surface; booked in the app →
+        # the one question after it (263)
+        return f"{res['line']} {CALENDAR_ASK}" if res.get("status") == "confirmed" and res.get("in_app") else res["line"]
     if tool != "book_venue" or not isinstance(res, dict) or not res.get("in_app"):
         return ""
     if res.get("status") == "nothing_waiting":
@@ -150,7 +180,6 @@ FLOOR = floor_line()
 # venue, day, time and people ARE the yes: sent, ONE line said. S2 filled in any of the four: ONE line asks, never the message's text. A
 # "no" from AgAPI's gate is the same line as their own WhatsApp. Her voice names no channel here (AgAPI's "{venue} takes booking
 # requests by WhatsApp — …" names and limits it: her own line instead).
-KANOE_CHOICES = ({"title": "Yes, send it", "route": "send"},)
 # Sasha 330 · "give me a button": the cancel read-back's two taps (card_tap → venues.cancel_card, the booking card's claim-once rule)
 CANCEL_CHOICES = ({"title": "Yes, cancel it", "route": "cancel"}, {"title": "No, keep it", "route": "keep"})
 # Sasha 330 · a read-back whose yes must be the person's OWN words (book(): yes_to_book · a venue read-back with no card of its own): its
@@ -176,13 +205,6 @@ def day_words(at: str, today) -> str:
     return "today" if gap == 0 else "tomorrow" if gap == 1 else d.strftime("%A") if 0 < gap <= 6 else f"{d:%a} {d.day} {d:%b}"
 
 
-def kanoe_ask(venue: str, day: str, hhmm: str, n, by: Optional[str] = None) -> str:
-    """Sasha 314 · the short read-back when S2 filled a term (Tyler's words: "DiverXO, Fri 13 Nov 21:00 for 2, by email. Send?") — the
-    exact terms he approves, how it goes among them."""
-    # HER VOICE never names a channel (the standing rule, its suite): how it goes is on the card's own terms, never in her line
-    return f"{venue}, {day} {hhmm} for {n}. Send?"
-
-
 def cancel_sent_line(venue: str, date: Optional[str], hhmm: Optional[str], party) -> str:
     """Sasha 314 · the cancellation went (Tyler's words): "Cancelled — I've asked DiverXO to cancel Fri 13 Nov 21:00 for 2. I'll tell you
     when they confirm." — it's a request to them until they answer."""
@@ -193,10 +215,6 @@ def cancel_sent_line(venue: str, date: Optional[str], hhmm: Optional[str], party
         day = ""
     what = " ".join(x for x in (day, str(hhmm or "")[:5], f"for {party}" if party else "") if x)
     return f"Cancelled — I've asked {venue} to cancel{(' ' + what) if what else ' it'}. I'll tell you when they confirm."
-
-
-def wa_done_line(venue: str, day: str, hhmm: str, n) -> str:
-    return f"Done — I've asked {venue} for {day} at {hhmm} for {n}. I'll tell you when they reply."
 
 
 def wa_sent_line(hhmm: str, venue: str) -> str:
@@ -1143,10 +1161,11 @@ def handover_message(venue: str, platform: str, when_iso: str, party: int, carri
     return f"{venue} books on {platform} — {how}." + (f" Your details to paste: {paste}" if paste else "") + f"\n{link}"
 
 # ── Sasha 258 · THE IN-APP YES (CR 97): her words when AgAPI refuses a tap — one plain line each, never a dead end ─────────────────
+# Sasha 381 · AgAPI refused the INSTRUCTION's approval (a venue act has no card: never "here's the card again", never "say yes")
 TAP_SAYS = {
-    "approval_void": "Something in it changed, so here's the card again. Shall I send it?",      # + the new read-back card
-    "approval_expired": "That card timed out, so here it is again. Shall I send it?",            # + a fresh read-back card
-    "approval_untrusted_origin": "I couldn't confirm it's you on this device — please sign in again, then say yes.",
+    "approval_void": "Something changed at their end, so nothing was sent — ask me again and I'll book it.",
+    "approval_expired": "Something changed at their end, so nothing was sent — ask me again and I'll book it.",
+    "approval_untrusted_origin": "I couldn't confirm it's you here — sign in, then ask me again. Nothing was sent.",
     "approval_consumed": "That's already been sent.",                                             # + the booking's status
 }
 
@@ -1218,8 +1237,8 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "route_line", "is_route_line", "route_told", "ROUTE_LINES", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
-           "TOLD", "told_line", "told_prefix", "is_told", "KANOE_CHOICES", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "kanoe_ask",
-           "wa_done_line", "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]
+           "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "TERM_ASK", "booking_now", "booked_now", "acted_line",
+           "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]
 
 
 # ── Sasha 349 · SILENT MODE (Tyler, 6 Nov): ONE switch on the person — text only, every surface, until they turn it off ─────────

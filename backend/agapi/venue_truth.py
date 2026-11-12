@@ -103,7 +103,9 @@ def _from_profile(res: dict) -> dict:
             "venue_id": res.get("venue_id"), "cant_read": _said(res.get("cant_read")),
             # Sasha 284 · AgAPI's ONE booking decision (CR 107 handoff.decide: route · say_text · button · options) — kept whole, never
             # re-decided here: S2 says its say_text and shows its button (venues.follow / read_booking_route)
-            **({"decision": res["decision"]} if isinstance(res.get("decision"), dict) and res["decision"].get("route") else {})}
+            **({"decision": res["decision"]} if isinstance(res.get("decision"), dict) and res["decision"].get("route") else {}),
+            # Sasha 381 · CR 194 · AgAPI's ONE identity of the venue {name, source} — the card's name (shape), never a page's title
+            **({"identity": res["identity"]} if isinstance(res.get("identity"), dict) and res["identity"].get("name") else {})}
 
 
 def _from_engine(res: dict) -> dict:
@@ -216,9 +218,10 @@ def shape(place: dict, site: Optional[dict]) -> dict:
                                 + ([(place.get("gphoto") or {}).get("uri")] if isinstance(place.get("gphoto"), dict) else [])) if p]
     oa = place.get("open_at")
     held = place.get("facts") or {}   # Sasha 252 · facts another engine read quoted for THIS card (an activity's day): kept first
-    # Sasha 252 · an activity keeps its own name: its official site can be an umbrella's (the Jerónimos card read "Museus e
-    # Monumentos de Portugal")
-    name = place.get("name") if place.get("activity") else ((site.get("name") or {}).get("value") or place.get("name"))
+    # Sasha 381 · CR 194 · the card's name is AgAPI's ONE identity (venue.profile's identity.name: the card they chose, the name their own
+    # site declares, their listing, else their address) — never a reading of their page (facts.name: a heading or an SEO line, Peñalver's
+    # "Restaurante Mediterraneo en Madrid"). Not read yet: the place as found (its listing's name).
+    name = (site.get("identity") or {}).get("name") or place.get("name")
     return {"place_id": place.get("place_id"), "name": name,
             "listing_name": place.get("name"), "website": place.get("website"),
             # Sasha 250 · WHAT IT IS comes from their own site, or nothing — never the map's category, not even labelled (D3; the

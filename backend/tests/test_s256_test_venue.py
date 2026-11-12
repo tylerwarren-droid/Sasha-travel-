@@ -25,7 +25,7 @@ def run(c):
     return asyncio.run(c)
 
 
-def ctx(said="Book a table for two at the Sasha Test Venue in Madrid.", surface="s2"):
+def ctx(said=f"Book a table for two at the Sasha Test Venue in Madrid on {LATER} at 20:00.", surface="s2"):
     return API.Ctx(account=ACCT, mode="test", user_said=said, session="s256", surface=surface)
 
 
@@ -72,7 +72,7 @@ class ATestPerson(Base):
         with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             out = run(VN.hold_venue(ctx(), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid", "country": "ES",
                                             "what": "dinner", "party": 2, "day": LATER, "time": "20:00"}))
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"), out)
+        self.assertEqual((out["status"], out["route"]), ("requested", "agapi"), out)   # Sasha 381 · sent on the instruction
         self.assertNotIn("options", out)
 
     def test_vet_gives_the_test_cards_own_form(self):
@@ -120,34 +120,25 @@ class TheirWordsPickNoRoute(Base):
 
 
 class ShortConfirmations(Base):
-    """Demo path item 10 (≤ 2 sentences + the card): found live — after "Handle it" she recited the read-back in five sentences. On a
-    screen the venue read-back is its card and she says one line (venues.READ_BACK_ASK); WhatsApp keeps the words (no card there)."""
+    """Demo path item 10 (≤ 2 sentences). Sasha 381: no card — on a screen and on WhatsApp alike, Tyler's ONE line, said by code."""
 
     def handle_it(self, surface):
-        # Sasha 270 · MOVED (CR 101: one form engine): its form is the engine's read, and "Handle it" is AgAPI's send (faked)
         from tests.test_s254_handle_it_live import use_fake_agapi
         from tests.test_s254_one_decider import engine_from
         use_fake_agapi(self)
         rungs = {"link": {"value": "https://x.test/api/booking/test-venue/plain"}, "form": {}}
         with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
-            return run(VN.hold_venue(ctx("Handle it", surface), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid",
-                                                                  "country": "ES", "what": "dinner", "party": 2, "day": LATER, "time": "20:00",
-                                                                  "route": "form"}))
+            return run(VN.hold_venue(ctx(surface=surface), {"name": "Sasha Test Venue", "place_id": "kanoe-test-venue", "city": "Madrid",
+                                                             "country": "ES", "what": "dinner", "party": 2, "day": LATER, "time": "20:00"}))
 
-    def test_on_a_screen_one_line_over_the_card(self):
-        from app.agent import sasha as S
-        out = self.handle_it("s2")
-        self.assertEqual(out["status"], "awaiting_yes", out)
-        self.assertEqual(out["ask"], VN.READ_BACK_ASK.format(venue=out["venue"]))
-        self.assertLessEqual(len([x for x in out["ask"].replace("?", ".").split(".") if x.strip()]), 2)
-        r = S.render("hold_venue", out, {})
-        self.assertEqual((r or {}).get("kind"), "read_back")
-        self.assertTrue(r["read_back"])
-
-    def test_whatsapp_keeps_the_read_back_in_words(self):
-        out = self.handle_it("wa")
-        self.assertEqual(out["status"], "awaiting_yes", out)
-        self.assertNotIn("ask", out)
+    def test_one_line_said_by_code_on_every_surface(self):
+        for surface in ("s2", "wa"):
+            VN._HELD.pop(ACCT, None)
+            API._CLAIMED.clear()
+            out = self.handle_it(surface)
+            line = V.yes_line("hold_venue", {"ok": True, "result": out})
+            self.assertTrue(line.startswith("Booking now: Casa Gate, 2 people, "), (surface, out))   # AgAPI's venue (the fake's, CR 194)
+            self.assertLessEqual(len([x for x in line.split(". ") if x.strip()]), 2)
 
 
 class EverySurfaceSearchesHere(unittest.TestCase):

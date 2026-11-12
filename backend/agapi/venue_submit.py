@@ -311,13 +311,21 @@ async def read_back(account: str, prepared_id: str, route: Optional[str] = None,
     return {"ok": True, "end_user": uid, "read_back_id": rid, "lines": lines, "sha256": sha}
 
 
-async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
-    """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|confirm_number, …}"""
+async def submit(account: str, held: dict, said: str, instruction: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """The approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|confirm_number, …}
+    Sasha 381 · instruction {instruction_id, session_id}: a venue booking's approval IS the person's instruction (Tyler, 12 Nov 20:11) —
+    in the app, the instruction proof (CR 196, instruction_tap); on WhatsApp, the instruction's own signed message (CR 99 §4d, unchanged).
+    Without one (a card's tap — the health product's call), the in-app tap as before."""
     rid, pid, uid = held["read_back_id"], held["prepared_id"], held.get("end_user") or await end_user(account)
+    if instruction is not None and TAP.get() is None and WA.get() is None:
+        # Sasha 381 · an instruction is the approval only when it is provably the person's: their verified in-app session or their signed
+        # WhatsApp message. Neither here (no person behind this turn) → nothing is sent, and never a simulated yes in its place
+        return {"ok": False, "error": {"code": ERR.APPROVAL_UNTRUSTED_ORIGIN, "message": "no signed-in instruction to confirm it's them"}}
     if TAP.get() is not None or WA.get() is not None:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
         # Sasha 265 · item 4 (CR 99 §4d): on WhatsApp, their reply (signed webhook) is the same in_app_tap, session kind "whatsapp"
-        r = await (in_app_tap(account, rid, held.get("sha") or held.get("sha256") or "") if TAP.get() is not None
-                   else whatsapp_tap(account, rid, held.get("sha") or held.get("sha256") or ""))
+        sha = held.get("sha") or held.get("sha256") or ""
+        r = await (whatsapp_tap(account, rid, sha) if TAP.get() is None
+                   else instruction_tap(account, rid, sha, instruction) if instruction else in_app_tap(account, rid, sha))
         if not r.get("ok") and TAP.get() is None and r["error"]["code"] == ERR.APPROVAL_UNTRUSTED_ORIGIN and WA.get() is not None \
                 and not await whatsapp_verified(account, (WA.get() or {}).get("wa_id")):
             # Sasha 311 · a WhatsApp yes from a number AgAPI hasn't verified (read back): its one-time code, from that number — on any
@@ -899,6 +907,39 @@ async def in_app_tap(account: str, read_back_id: str, read_back_sha256: str) -> 
     return {"ok": True, "result": (r.get("result") or {}).get("result") or {}, "approval_id": (r.get("result") or {}).get("approval_id")}
 
 
+def instruction_session(instruction: Dict[str, str], who: str, read_back_id: str, read_back_sha256: str, t: Optional[int] = None,
+                        nonce: Optional[str] = None) -> Optional[dict]:
+    """Sasha 381 · CR 196 · the in-app INSTRUCTION as approvals.in_app_tap's session (the Sasha 372 / CR 187 proof form): kind "in_app",
+    signed hex HMAC-SHA256(SASHA_AGAPI_TAP_SECRET, "<t>.<nonce>.in_app.<instruction_id>.<who>.<read_back_id>.<read_back_sha256>"), who =
+    the person (<person> of their end user "sasha:<person>", AgAPI access.person_of); session_id rides along as context. Signed ONLY for a
+    turn whose request carried the person's verified session (TAP). None: no instruction id, no session, or no secret (nothing is sent)."""
+    import hmac as _hmac
+    import os
+    secret = os.getenv("SASHA_AGAPI_TAP_SECRET", "")
+    iid = str((instruction or {}).get("instruction_id") or "")
+    if not secret or not iid or TAP.get() is None:
+        return None
+    t = int(t if t is not None else time.time())
+    nonce = nonce or secrets.token_hex(16)
+    sig = _hmac.new(secret.encode(), f"{t}.{nonce}.in_app.{iid}.{who}.{read_back_id}.{read_back_sha256}".encode(), hashlib.sha256).hexdigest()
+    return {"kind": "in_app", "t": t, "nonce": nonce, "instruction_id": iid, "session_id": str((instruction or {}).get("session_id") or ""),
+            "signature": sig}
+
+
+async def instruction_tap(account: str, read_back_id: str, read_back_sha256: str, instruction: Dict[str, str]) -> Dict[str, Any]:
+    """Sasha 381 · CR 196 · THE INSTRUCTION IS THE APPROVAL, in the app: ONE approvals.in_app_tap {read_back_id, read_back_sha256, session:
+    the instruction proof}. AgAPI records the approval as THIS instruction's (once per instruction and read-back)."""
+    sess = instruction_session(instruction, account, read_back_id, read_back_sha256)
+    if not sess:
+        return {"ok": False, "error": {"code": "approval_untrusted_origin", "message": "no signed-in instruction to confirm it's them"}}
+    r = await _call(account, OP.APPROVALS_IN_APP_TAP, {"read_back_id": read_back_id, "read_back_sha256": read_back_sha256, "session": sess})
+    if not r.get("ok"):
+        e = _err(r)
+        log.info("[venue_submit] the instruction's approval refused: %s", e["code"])   # the code only — never the proof
+        return {"ok": False, "error": e}
+    return {"ok": True, "result": (r.get("result") or {}).get("result") or {}, "approval_id": (r.get("result") or {}).get("approval_id")}
+
+
 def _wa_signed(tail: str, wa: Optional[dict] = None, t: Optional[int] = None, nonce: Optional[str] = None) -> Optional[dict]:
     """THE ONE WhatsApp signer: "t.nonce.whatsapp.<wa_id digits>.<message_id>.<tail>" with SASHA_AGAPI_TAP_SECRET (AgAPI's in_app
     signatures, byte for byte), t = now, a fresh nonce, the reply's own message id. None: no signed WhatsApp message here, or no secret."""
@@ -1087,7 +1128,7 @@ async def _approval(account: str, rid: str, said: str):
 
 __all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL",
            "handed_over", "handed_over_later", "agapi_bookings",
-           "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt",
+           "TAP", "in_app_tap", "instruction_session", "instruction_tap", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt",
            "call_again", "link_whatsapp", "confirm_whatsapp", "whatsapp_link_signature", "stay_of", "unkept"]
 
 

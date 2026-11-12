@@ -156,15 +156,22 @@ class AVenueNamedByItsWebsite(unittest.TestCase):
                     mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=True)), \
                     mock.patch("agapi.s2_memory.kind", mock.AsyncMock(return_value=None)):
                 v = {"name": "Sasha Test Venue", "city": "Madrid", "country": "ES", "website": test_venue_url("plain"), "what": "dinner"}
-                ctx = API.Ctx(account=acct, mode="test", user_said="Book it", surface="s1")
+                ctx = API.Ctx(account=acct, mode="test", user_said="Book it for 2 on 2099-11-16 at 21:00", surface="s1")   # every term theirs
                 r = run(VN.read_booking_route(ctx, dict(v)))
-                h = run(VN.hold_venue(ctx, {**v, "day": "2099-11-16", "time": "21:00", "party": 2}))
+                tok = VS.TAP.set({"kind": "supabase", "token": "s378"})   # Sasha 381 · a signed-in turn: the instruction is the approval
+                try:
+                    API._CLAIMED.clear()
+                    with mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s378-secret"}), \
+                            mock.patch("booking_signer.basket._run", lambda: None):   # claims in-process (no database here)
+                        h = run(VN.hold_venue(ctx, {**v, "day": "2099-11-16", "time": "21:00", "party": 2}))
+                finally:
+                    VS.TAP.reset(tok)
         finally:
             VT.CALL, VS.CALL = real_vt, real_vs
             VT._CACHE.clear()
             VN._HELD.pop(acct, None)
         self.assertEqual((r["routes"], r["decision"]["route"]), (["send_form"], "send_form"))     # AgAPI's decision, by the website
-        self.assertEqual((h["status"], h["route"]), ("awaiting_yes", "agapi"))                    # its read-back, held for the yes
+        self.assertEqual((h["status"], h["route"]), ("requested", "agapi"))                       # Sasha 381 · sent on the instruction
 
     def test_one_place_for_the_decision_and_the_prepare(self):
         self.assertEqual(VN.place_of({"venue": "X"}, None, {"website": "https://x.example"}), {"name": "X", "website": "https://x.example"})

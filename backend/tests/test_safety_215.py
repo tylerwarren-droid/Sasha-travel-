@@ -49,7 +49,7 @@ class VenueAPI:
     # Sasha 319 · AgAPI's acts are the one sender to venues: the send and the cancellation are venue_submit's (submit / cancel_submit)
     refuse = False
 
-    async def submit(self, account, held, said):
+    async def submit(self, account, held, said, instruction=None):   # Sasha 381 · + the instruction (the approval)
         if self.refuse:
             return {"ok": False, "error": {"code": "not_sent", "message": "no"}}
         self.calls.append(("POST", "venue.submit_booking", {"read_back_id": held.get("read_back_id"), "said": said}))

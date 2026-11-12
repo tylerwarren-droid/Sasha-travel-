@@ -64,7 +64,7 @@ class FakeAgAPI:
                    "say_text": "Casa Gate takes bookings by WhatsApp: I can send it for you and tell you when they answer." if k else PROFILE_DEC["say_text"],
                    "button": {"label": "Send the request" if k else "Send on WhatsApp", "link": WA, "sends": k},
                    "options": [{"kind": "whatsapp", "label": "Send on WhatsApp", "link": WA, "sends": k}]}
-            return {"ok": True, "result": {"prepared_id": PID, "submitted": False, "link": "https://agapi.test/prepared/x", "decision": dec,
+            return {"ok": True, "result": {"prepared_id": PID, "venue": "Casa Gate", "submitted": False, "link": "https://agapi.test/prepared/x", "decision": dec,
                                            "person_send": {"whatsapp": WA, "kanoe_sends": k}}}
         if op == "venue.submit_booking":
             if not self.gate_at_read:
@@ -107,9 +107,9 @@ class Memory:
         return True
 
 
-def ctx(said="", surface="s2"):
+def ctx(said="", surface="s2", before=""):
     from agapi import v0 as API
-    c = API.Ctx(account=ACCT, surface=surface, user_said=said, mode="test")
+    c = API.Ctx(account=ACCT, surface=surface, user_said=said, mode="test", session="s287", said_before=before)
     c.started = datetime.now(timezone.utc)
     return c
 
@@ -150,19 +150,20 @@ class Base(unittest.TestCase):
         for p in self.p:
             p.stop()
 
-    def hold(self, words=FULL_DEFAULT):
+    def hold(self, words=FULL_DEFAULT, before=""):
         tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})   # an in-app turn (/s2): its own session, for the whole turn
         try:
-            return self._hold(words)
+            with mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s287-secret"}):
+                return self._hold(words, before)
         finally:
             VS.TAP.reset(tok)
 
-    def _hold(self, words):
+    def _hold(self, words, before=""):
         with mock.patch("agapi.test_venues.vet", mock.AsyncMock(side_effect=lambda c, a: a)), \
                 mock.patch.object(VN, "_read", mock.AsyncMock(return_value=dict(RD))), \
                 mock.patch.object(VN, "_reservation", mock.AsyncMock(return_value=RES)), \
                 mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)):   # Sasha 378 · AgAPI's decision only (VT.decision)
-            out = run(VN.hold_venue(ctx(words), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
+            out = run(VN.hold_venue(ctx(words, before=before), {"name": "Casa Gate", "place_id": "ChIJ287", "day": RES["when"]["at"][:10],
                                                  "time": "21:00", "party": 2}))
         if ACCT in VN._HELD:
             VN._HELD[ACCT]["at"] -= timedelta(minutes=1)   # the yes comes in a later turn
@@ -195,58 +196,30 @@ class FullRequestSendsNoQuestion(Base):
         out = self.hold(FULL)
         self.assertEqual(out["status"], "requested")
         self.assertEqual(self.agapi.sends, ["rbk_287"])
-        self.assertEqual(out["line"], "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you when they reply.")
+        self.assertEqual(out["line"], "Booking now: Casa Gate, 2 people, Fri 30 Oct at 21:00. Requested — I'll tell you when they reply.")
         self.assertNotIn("ask", out)
         act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_287")
         self.assertEqual((act["channel"], act["reference"]), ("whatsapp", "SM" + "2" * 32))   # Twilio's message id, on the booking
-        self.assertEqual(act["consent"], {"kind": "their_words", "said": FULL})                # their words, kept as the consent
+        self.assertEqual(act["consent"], {"kind": "instruction", "said": FULL})                # Sasha 381 · the instruction, kept as the consent
         self.assertNotIn("approvals.request", self.agapi.ops)                                  # nothing for them to tap
 
 
-class OneDetailInferredAsksOnce(Base):
-    """Offline 2 · one detail S2 filled in (no party said: the default 2) → ONE line, no message text → sent on their yes."""
+class AMissingTermIsAsked(Base):
+    """Sasha 381 (Tyler, 12 Nov 20:20) · a term they didn't give (no party said) is ASKED — only that term, never the default 2, never a
+    yes card — and their answer completes the instruction: sent, ONE line."""
 
-    def test_asks_once_without_the_message(self):
+    def test_asked_then_sent_on_the_answer(self):
         out = self.hold("Book Casa Gate on Friday at 9pm")
-        self.assertEqual(out["status"], "awaiting_yes")
-        self.assertEqual(out["ask"], "Casa Gate, Friday 21:00 for 2. Send?")
-        self.assertEqual(out["read_back"], [])                                                 # never the template's text
-        self.assertEqual(out["filled_in"], ["people"])
-        self.assertEqual(out["message_if_asked"], LINES)                                       # only if they ask to see it
-        ev = S.render("hold_venue", out, {})
-        self.assertEqual((ev["kind"], ev["read_back"], ev["ask"], ev["read_back_id"]), ("read_back", [], out["ask"], "rbk_287"))
-        self.assertEqual(V.read_back_line("hold_venue", {"ok": True, "result": out}), out["ask"])
-        self.assertEqual(self.agapi.sends, [])
-
-    def test_the_tap_sends(self):
-        self.hold("Book Casa Gate on Friday at 9pm")
-        evs = self.tap()
-        self.assertEqual(self.agapi.sends, ["rbk_287"], evs)
-        self.assertEqual(_said(evs), "Done — I've asked Casa Gate for Friday at 21:00 for 2. I'll tell you when they reply.")
-        act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_287")
-        self.assertEqual(act["consent"]["kind"], "in_app_tap")
-
-    def test_the_spoken_yes_sends(self):
-        self.hold("Book Casa Gate on Friday at 9pm")
-        tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})
-        try:
-            out = run(VN.book_venue(ctx("yes, send it"), {"name": "Casa Gate", "approval": {"said": "yes, send it"}}))
-        finally:
-            VS.TAP.reset(tok)
+        self.assertEqual((out["status"], out["ask"]), ("need_term", "For how many people?"))
+        self.assertEqual((self.agapi.sends, self.agapi.ops), ([], []))                          # nothing prepared, nothing sent
+        out = self.hold("2 of us", before="Book Casa Gate on Friday at 9pm")
         self.assertEqual((out["status"], self.agapi.sends), ("requested", ["rbk_287"]))
+        self.assertTrue(out["line"].startswith("Booking now: Casa Gate, 2 people, Fri 30 Oct at 21:00."), out["line"])
 
-
-class NoYesNoSend(Base):
-    """Offline 3 · no yes → nothing sent."""
-
-    def test_no_yes_no_send(self):
-        self.hold("Book Casa Gate on Friday")
+    def test_no_time_is_asked_and_nothing_is_sent(self):
+        self.assertEqual(self.hold("Book Casa Gate for 2 on Friday")["ask"], "What time?")
         self.assertEqual(self.agapi.sends, [])
-        from agapi import v0 as API
-        with self.assertRaises(API.ToolError):   # words that aren't a yes never send it
-            run(VN.book_venue(ctx("hmm, maybe later"), {"name": "Casa Gate", "approval": {"said": "hmm, maybe later"}}))
-        self.assertEqual(_said(self.tap(rid="rbk_other")), V.NOTHING_WAITING)   # a tap on a card that isn't the held one
-        self.assertEqual(self.agapi.sends, [])
+        self.assertEqual(_said(self.tap(rid="rbk_other")), V.NOTHING_WAITING)                   # no card waits for a tap
         self.assertNotIn("approvals.in_app_tap", self.agapi.ops)
 
 
@@ -294,19 +267,10 @@ class RetryNoSecondSend(Base):
         self.assertEqual(self.agapi.sends, ["rbk_287"])
         self.assertEqual(out["status"], "already_sent")
 
-    def test_a_double_tap(self):
-        self.hold("Book Casa Gate on Friday at 9pm")
-        self.tap()
-        self.tap()
-        self.assertEqual(self.agapi.sends, ["rbk_287"])
-        held = {"rung": "agapi", "kanoe": True, "read_back_id": "rbk_287", "prepared_id": PID, "end_user": "eu_287", "sha": "f" * 64}
-        tok = VS.TAP.set({"kind": "supabase", "token": "their-session"})
-        try:
-            r = run(VS.submit(ACCT, held, "yes"))                          # even straight at the send: AgAPI's yes is used up
-        finally:
-            VS.TAP.reset(tok)
-        self.assertEqual(r["error"]["code"], "approval_consumed")
-        self.assertEqual(self.agapi.sends, ["rbk_287"])
+    def test_a_later_turn_holding_it_again(self):
+        self.hold(FULL)
+        out = self.hold("did you book it?", before=FULL)                                       # the same booking, from the conversation
+        self.assertEqual((self.agapi.sends, out["status"]), (["rbk_287"], "already_sent"))
 
 
 class RepliesComeBackToTheBooking(Base):
@@ -373,12 +337,10 @@ class TheirWords(unittest.TestCase):
     def test_the_card_they_tapped_is_their_venue(self):
         self.assertTrue(self.w("This one: “Casa Gate” [their tap on the card on their screen: Casa Gate · place_id ChIJ287 — use this place_id]")["venue"])
 
-    def test_s2_sends_unasked_only_when_all_four_are_theirs(self):
-        src = inspect.getsource(VN.kanoe_card)
-        self.assertIn("if all(got.values()):", src)
-        self.assertLess(src.index("if all(got.values()):"), src.index("_kanoe_now("))
-        self.assertEqual(src.count("_kanoe_now("), 1)
-        self.assertIn("str(getattr(ctx, \"user_said\", \"\") or \"\")", src)   # THIS turn's own words — never the model's arguments
+    def test_every_term_is_read_from_their_words(self):
+        src = inspect.getsource(VN.unsaid_term)   # Sasha 381 · the instruction's terms: their words this conversation, never the model's
+        for read in ("SD.day(", "SD.time_(", "SD.people(", "said_before", "user_said"):
+            self.assertIn(read, src)
 
 
 class TheLane(unittest.TestCase):
@@ -425,17 +387,12 @@ class TheRatchet(unittest.TestCase):
     def test_the_kanoe_card_comes_before_the_one_decision(self):
         src = inspect.getsource(VN.hold_venue)
         self.assertLess(src.index("kanoe_route(dec)"), src.index("one_decision("))   # Sasha 378 · S2's own rules are gone (CR 188)
-        va = inspect.getsource(VN._via_agapi)   # S2's own read finding a WhatsApp (no AgAPI decision): AgAPI's send, the same question
-        self.assertIn('d["action"] in MESSAGE_ACTIONS', va)   # Sasha 288 · every message request, WhatsApp among them
-        self.assertIn("request_whatsapp", VN.MESSAGE_ACTIONS)
-        self.assertIn("kanoe_card(", va)
+        for f in (VN._via_agapi, VN.kanoe_whatsapp):   # Sasha 381 · every message request is acted on the instruction: ONE act path
+            self.assertIn("_act(ctx,", inspect.getsource(f))
 
-    def test_the_send_is_only_the_held_read_back_once(self):
-        ac = inspect.getsource(VN.answer_card)
-        self.assertIn('held.get("kanoe")', ac)
-        self.assertIn('held.get("read_back_id") != read_back_id', ac)
+    def test_the_send_is_only_the_read_back_once(self):
         self.assertIn("VS.submit(", inspect.getsource(VN._agapi_send))
-        self.assertIn("in_app_tap(account, rid,", inspect.getsource(VS.submit))   # the tap on that read-back's sha256
+        self.assertIn("instruction_tap(account, rid, sha, instruction)", inspect.getsource(VS.submit))   # CR 196 · on that read-back's sha256
 
     def test_no_kanoe_flag_allow_list_or_twilio_post_in_s2(self):
         bad = []
@@ -451,7 +408,7 @@ class TheRatchet(unittest.TestCase):
         self.assertEqual(bad, [])                                       # (Twilio's closed list: test_s285.NoSecondTwilioSender)
 
     def test_her_voice_names_no_channel(self):
-        lines = [V.kanoe_ask("X", "Friday", "21:00", 2), V.wa_done_line("X", "Friday", "21:00", 2), V.OWN_WHATSAPP, V.wa_sent_line("21:00", "X"),
+        lines = [V.acted_line("X", 2, "2099-10-30T21:00", False), V.acted_line("X", 2, "2099-10-30T21:00", True, "R1"), V.OWN_WHATSAPP, V.wa_sent_line("21:00", "X"),
                  V.wa_yes_line("X", "Friday", "21:00", 2), V.wa_offered_line("X", "21:30"), V.wa_no_line("X"), V.wa_stopped_line("X"),
                  V.wa_replied_line("X", "ok")]
         self.assertEqual(V.check(lines), [])

@@ -45,6 +45,7 @@ class Ctx:
         self.account, self.surface, self.user_said, self.via, self.session = ACCT, surface, said, "page", "sess-329"
         self.started = datetime.now(timezone.utc)
         self.idem = self.act_name = self.claimed = None
+        self.turn, self.said_before = "turn_" + __import__("uuid").uuid4().hex, ""   # Sasha 381 · the instruction's own id (agapi.v0.Ctx)
 
 
 class Memory:
@@ -193,6 +194,9 @@ class Base(unittest.TestCase):
         for p in self.p:
             p.start()
         self.tok = VS.TAP.set({"kind": "supabase", "token": "test-session"} if self.TAP else None)
+        self.env = mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s329-secret"})   # Sasha 381 · the instruction's proof is signed
+        self.env.start()
+        self.addCleanup(self.env.stop)
 
     def tearDown(self):
         VS.TAP.reset(self.tok)
@@ -209,8 +213,7 @@ class Base(unittest.TestCase):
         return run(VN.book_venue(Ctx("Yes, book it"), {"approval": {"said": "Yes, book it"}}))
 
     def booked(self):
-        self.hold()
-        q = self.yes()
+        q = self.hold()   # Sasha 381 · acted on the instruction at once: the walk's question (Zona) is what comes back
         done = run(VN.answer_card(Ctx("Salón Interior"), q["read_back_id"], "pick:Salón Interior"))
         self.assertEqual(done["status"], "confirmed", done)
         return done
@@ -218,9 +221,8 @@ class Base(unittest.TestCase):
 
 class TheAskBecomesTapsAndGoesBackAsChoices(Base):
     def test_ask_taps_then_submit_with_the_same_prepared_id_and_choices(self):
-        held = self.hold()
-        self.assertEqual((held["status"], held["route"]), ("awaiting_yes", "platform_book"))
-        q = self.yes()
+        q = self.hold()   # Sasha 381 · no yes card: AgAPI pressed on at once and stopped on the term only they can give
+        self.assertEqual(q["route"], "platform_book")
         print("\n── AgAPI's ask, asked ONCE ──\n" + json.dumps({k: q[k] for k in ("ask", "choices")}, ensure_ascii=False))
         self.assertEqual([c["title"] for c in q["choices"]], ASK["options"])                       # exactly AgAPI's options
         self.assertEqual([c["route"] for c in q["choices"]], ["pick:Salón Interior", "pick:Terraza 1"])
@@ -236,9 +238,10 @@ class TheAskBecomesTapsAndGoesBackAsChoices(Base):
         self.assertEqual(subs[-1]["choices"], {"zona": "Salón Interior"})
         print("── said ──\n" + done["line"])
         self.assertEqual(done["status"], "confirmed")
-        for part in (VENUE, "22:00", "2 people", "Salón Interior", "SBX-ABC123"):
+        for part in (VENUE, "22:00", "2 people", "SBX-ABC123"):   # Sasha 381 · Tyler's ONE line; their choice stays on the booking
             self.assertIn(part, done["line"])
-        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)                           # their yes, then their tap
+        self.assertEqual(done["area"], "Salón Interior")
+        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)                           # the instruction, then their answer
 
     def test_my_bookings_shows_it_with_the_reference_and_the_choice(self):
         self.booked()
@@ -249,23 +252,16 @@ class TheAskBecomesTapsAndGoesBackAsChoices(Base):
                          ("confirmed", "SBX-ABC123", "platform", {"zona": "Salón Interior"}))
 
 
-class TheSandboxApprovalCarriesTheChoices(Base):
-    """No in-app session (the sandbox's own approval): the approved venue.submit_booking carries the SAME prepared_id and the choices."""
+class NoVerifiedPersonNothingIsPressed(Base):
+    """Sasha 381 · no in-app session and no signed WhatsApp message: the instruction can't be proved theirs — nothing is pressed, and never
+    a simulated yes in its place."""
     TAP = False
 
-    def test_the_approved_submit_body(self):
-        self.hold()
-        q = self.yes()
-        self.assertEqual(q["choices"][0]["title"], "Salón Interior")
-        shown = run(VN.answer_card(Ctx("Salón Interior"), q["read_back_id"], "pick:Salón Interior"))
-        self.assertEqual(shown["status"], "awaiting_yes")                 # outside the app the new read-back is shown, never assumed
-        self.assertTrue(any("zona: Salón Interior" in l for l in shown["read_back"]))
-        done = run(VN.book_venue(Ctx("Yes, book it"), {"approval": {"said": "Yes, book it"}}))
-        approved = self.ag.bodies("venue.submit_booking", approved=True)
-        print("\n── the approved venue.submit_booking ──\n" + json.dumps(approved[-1], ensure_ascii=False))
-        self.assertEqual(approved[-1]["choices"], {"zona": "Salón Interior"})
-        self.assertEqual(approved[-1]["prepared_id"], approved[0]["prepared_id"])
-        self.assertEqual(done["status"], "confirmed")
+    def test_nothing_pressed(self):
+        out = self.hold()
+        self.assertEqual(out["status"], "not_sent")
+        self.assertEqual(self.ag.bodies("venue.submit_booking", approved=True), [])
+        self.assertNotIn("sandbox.simulate_approval", self.ag.ops())
 
 
 class CancelIt(Base):
@@ -301,7 +297,7 @@ class CancelIt(Base):
             run(VN.cancel_venue(Ctx("what does that mean?"), {"act_id": done["act_id"], "approval": {"said": "what does that mean?"}}))
         self.assertEqual(e.exception.code, "no_explicit_yes")
         self.assertEqual([a for o, _, a in self.ag.calls if o == "venue.cancel_booking" and a], [])
-        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)   # the booking's two — no cancel tap
+        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)   # the booking's two (instruction, answer) — no cancel tap
 
 
 class AFeeStops(Base):

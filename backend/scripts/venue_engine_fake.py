@@ -34,6 +34,9 @@ async def _answer(op: str, body: dict) -> Dict[str, Any]:
     return {"ok": True, "result": saved}
 
 
+_PREPARED: dict = {}   # Sasha 381 · the last prepared booking's decision route (the double's own memory, one process)
+
+
 async def submit_answer(op: str, body: dict, approval=None, account=None) -> dict:
     from agapi.contract_shape import assert_shape
     return assert_shape(op, await _submit_answer(op, body, approval, account))
@@ -51,13 +54,25 @@ async def _submit_answer(op: str, body: dict, approval=None, account=None) -> di
         # Sasha 378 · CR 188 · prepare answers with venue.profile's ONE decision for this place (as AgAPI does) — never one of the fake's
         from agapi import venue_truth as VT
         dec = VT.decision({k: v for k, v in (body.get("place") or {}).items() if k in ("place_id", "website", "name")})
+        _PREPARED["route"] = (dec or {}).get("route")   # Sasha 381 · what this prepared booking is: AgAPI acts on it by its decision
         return {"ok": True, "result": {"venue_id": "v_gate", "venue": str((body.get("place") or {}).get("name") or "the venue"), "submitted": False,
                                        "prepared_id": "vpr_gate", "zero_touch_allowed": True, "link": "https://agapi.test/prepared/gate", "say": "ready",
                                        **({"decision": dec} if dec else {})}}
     if op == OP.VENUE_SUBMIT_BOOKING and not approval:
         return {"ok": False, "error": {"code": "approval_required", "message": "the person's yes first", "retryable": False,
-                                       "details": {"read_back_id": "rbk_gate", "read_back": {"lines": [
+                                       "details": {"read_back_id": "rbk_gate_call" if body.get("route") == "call" else "rbk_gate",
+                                                   "read_back": {"lines": [
                                            "I'll send their own booking form with your details.", "Nothing is booked until they confirm."]}}}}
+    if op == OP.APPROVALS_IN_APP_TAP:   # Sasha 381 · CR 196 · the instruction's approval: AgAPI approves THAT read-back and acts
+        call = body.get("read_back_id") == "rbk_gate_call"
+        if _PREPARED.get("route") == "platform_book" and not call:   # AgAPI pressed Book on the permitted platform: confirmed, its reference
+            return {"ok": True, "result": {"approval_id": "apv_gate", "result": {
+                "prepared_id": "vpr_gate", "status": "confirmed", "submitted": True, "act_id": "act_gate_pb", "reference": "GATE-PB",
+                "route": "platform", "say": "Booked."}}}
+        return {"ok": True, "result": {"approval_id": "apv_gate", "result": {
+            "prepared_id": "vpr_gate", "status": "calling" if call else "sent", "submitted": True, "act_id": "act_gate_call" if call else "act_gate",
+            "say": "On it — I'll call them now and let you know." if call else "Sent.",
+            **({"call_plan": {"call_id": "cpl_gate", "phone": "+34910000000", "simulate": True}} if call else {})}}}
     if op == OP.SANDBOX_SIMULATE_APPROVAL:
         return {"ok": True, "result": {"approval_id": "apv_gate"}}
     if op == OP.APPROVALS_REQUEST:

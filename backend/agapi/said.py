@@ -55,6 +55,9 @@ def day(words: str, d: date, today: date) -> bool:
     mon = "|".join(MONTHS[d.month - 1])
     if re.search(rf"\b0?{d.day}(st|nd|rd|th)?\s*(de\s+)?({mon})\w*\b", w) or re.search(rf"\b({mon})\w*\s+0?{d.day}(st|nd|rd|th)?\b", w):
         return True
+    # Sasha 381 · a stay's range names its first day: "from 20 to 22 October", "20-22 Oct", "del 20 al 22 de octubre"
+    if re.search(rf"\b0?{d.day}(st|nd|rd|th)?\s*(?:-|–|to|until|till|al|a)\s*\d{{1,2}}(st|nd|rd|th)?\s*(de\s+)?({mon})\w*\b", w):
+        return True
     return bool(re.search(rf"\b0?{d.day}[/.-]0?{d.month}\b", w))
 
 
@@ -71,8 +74,8 @@ def time_(words: str, hhmm: str) -> bool:
     for hh, ap in re.findall(r"\b(\d{1,2})\s*(am|pm|h)\b", w):
         if (ap == "h" and int(hh) == h) or (ap == "pm" and pm and int(hh) == h12) or (ap == "am" and not pm and int(hh) == h):
             return True
-    for hh in re.findall(r"\b(?:at|a las|sobre las)\s+(\d{1,2})\b(?![:.]\d)(?!\s*(?:people|persons?|personas?|of us|guests|pax))", w):
-        if int(hh) in (h, h12):
+    for hh in re.findall(rf"\b(?:at|a las|sobre las)\s+{_NUM}\b(?![:.]\d)(?!\s*(?:people|persons?|personas?|of us|guests|pax))", w):
+        if _n(hh) in (h, h12):   # Sasha 381 · "at 9" and "at nine" / "a las nueve" alike
             return True
     return False
 

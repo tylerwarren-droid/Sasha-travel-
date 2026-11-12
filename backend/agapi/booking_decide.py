@@ -6,7 +6,7 @@ chooses a channel, reads a person's switch (preference, real_venue_sends, platfo
   booking_words(...)                 the read-back's day and time in the venue's own clock
   tell_stopped(...) / stops_of(...)  R12 · an automatic stop → the person is told (WhatsApp if linked; get_status says it)
   is_test_venue(...)                 Kanoe's own TEST venue (its marks)
-  SERVER_CALLS_PER_DAY / OK_CHOICES  constants: the server's call net, the call card's one button
+  SERVER_CALLS_PER_DAY  the server's call net
 
 Deleted by Sasha 378: decide_for / redecide / ctx_for / channels_of / page_of / access_of / access_cached / state_of / PREFERENCE /
 CHOICES / CALL_CHOICES / legacy_decision / legacy_ladder / as_v1 — Sasha's own decider over its own channel read.
@@ -28,7 +28,6 @@ SERVER_CALLS_PER_DAY = 3
 
 TEST_VENUE_MARKS = ("(TEST stand-in)", "Sasha Test Venue")
 
-OK_CHOICES = ({"title": "OK", "route": "call"},)
 
 
 # ── the venue ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -157,4 +156,4 @@ def stops_of(account: Optional[str]) -> List[str]:
 
 
 __all__ = ["say", "out_of", "tell_stopped", "stops_of", "venue_type", "is_test_venue", "utc_of", "SERVER_CALLS_PER_DAY", "CALL_STOPS",
-           "OK_CHOICES", "booking_words"]
+           "booking_words"]

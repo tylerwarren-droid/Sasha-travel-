@@ -126,6 +126,7 @@ def sweep(cls, scenarios) -> List[Tuple[str, bool, List[str]]]:
                     problems.append(f"forbidden «{f}»")
         finally:
             case.tearDown()
+            case.doCleanups()   # Sasha 381 · found by its suite: the cases' addCleanup patches (a fake venue_submit.submit) outlived the sweep
         out.append((name, ok, problems))
     return out
 

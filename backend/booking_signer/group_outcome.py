@@ -110,7 +110,7 @@ def _pick(rows: List[dict], who: Optional[List[str]]) -> tuple:
 def reason(r: dict) -> Optional[str]:
     """Why this worker can't be booked now (from the master list's own row), or None when they can be tried (over the limit included:
     its own tap, "Book anyway", comes from AgAPI's read-back)."""
-    if r["status"] in ("booked", "cancelled", "not planned"):
+    if r["status"] in ("booked", "cancelled", "not planned", "confirming", "incomplete"):   # Sasha 371b · AgAPI's record holds them: never tried twice
         return r["status"]
     if not (r.get("vault") or {}).get("passport"):
         return "passport"
@@ -181,7 +181,8 @@ async def _swap(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
                    f"{leaver.get('grade') or 'none'}).", missing=["their home city"])
     if leaver["status"] == "booked":   # a booking to swap: AgAPI's swap (its read-back on ONE card) — group_book.prepare, unchanged
         out = await GB.prepare(account, "swap", [leaver["name"]], in_name, bool(a.get("over_ok")),
-                               newcomer={"city": city, "grade": grade or leaver.get("grade") or "worker"} if city else None)
+                               newcomer={"city": city, "grade": grade or leaver.get("grade") or "worker"} if city else None,
+                               movement_id=v["movement"]["id"])   # Sasha 371b · the list read above IS the movement acted on
         return {**out, "done": out.get("status") in ("awaiting_yes", "needs_vault")}
     # nothing booked for who leaves: the swap is the LIST's — who leaves comes off, who comes goes on in their place, planned now
     if comer:
@@ -192,10 +193,10 @@ async def _swap(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     if not org:
         return _no("AgAPI's sandbox didn't answer, so Sasha can't check nothing is booked for "
                    f"{leaver['name']} — nothing changed. Try again.")
-    if GB._latest(await GB._records(account), leaver["member_id"]):
+    if GB.record_of(await GB._records(account, v["movement"]["id"]), leaver["member_id"]):   # Sasha 371b · AgAPI's record, by movement
         return _no(f"AgAPI has a booking record for {leaver['name']} — reload the list; the swap goes through the booking.")
     st = G.store()
-    mv = await st.movement(account)
+    mv = await st.movement(account, v["movement"]["id"])
     line = ", ".join([in_name, city, str(leaver.get("out") or mv.get("starts_on") or ""), str(leaver.get("back") or mv.get("ends_on") or ""),
                       grade or str(leaver.get("grade") or "worker")])   # they take the leaver's dates, and grade unless one is given
     up = await G.upload(account, G.read_text(line), mv["id"])   # Sasha 358 · the roster, then ON the trip by the engine (set_on_trip)
@@ -235,7 +236,7 @@ async def _cancel(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     none = [r["name"] for r in rows if r["status"] != "booked"]
     if len(none) == len(rows):
         return _no(f"0 can be cancelled: {_and(none)} {'has' if len(none) == 1 else 'have'} no booking.")
-    out = await GB.prepare(account, "cancel", [r["name"] for r in rows if r["status"] == "booked"])
+    out = await GB.prepare(account, "cancel", [r["name"] for r in rows if r["status"] == "booked"], movement_id=v["movement"]["id"])
     return {**out, "done": out.get("status") == "awaiting_yes",
             "say": out.get("say") or (f"Not cancelled: {_and(none)} — no booking." if none else "")}
 
@@ -270,12 +271,12 @@ async def _invite(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
 
 async def _invoice(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     from . import group_book as GB, groups as G
-    inv = await GB.invoice(account)
+    mv = await G.store().movement(account)   # the organiser's trip, chosen once here; the invoice and its link are THAT movement's
+    inv = await GB.invoice(account, mv["id"]) if mv else {"why": "no movement"}
     if inv.get("why"):
         return _no(NO_MOVEMENT)
     if not inv["lines"] and not inv["adjustments"]:
         return _no("Nothing is booked yet — the invoice lists each booking, so there's nothing on it to show. Book first.", invoice=inv)
-    mv = await G.store().movement(account)
     link = GB.invoice_link(account, mv["id"])
     n = len(inv["lines"])
     return {"done": True, **inv, "link": link,

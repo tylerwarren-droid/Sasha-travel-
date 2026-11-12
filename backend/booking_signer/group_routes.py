@@ -278,7 +278,7 @@ async def invoice_by_link(token: str):
     t = GB.read_invoice_token(token)
     if not t:
         return JSONResponse({"ok": False, "rule": "link_expired", "message": "This invoice link has expired — ask Sasha for a new one."}, status_code=403)
-    return await GB.invoice(t["owner"])
+    return await GB.invoice(t["owner"], t["movement"])   # Sasha 371b · the link's OWN movement, never the open trip
 
 
 resolver = APIRouter(prefix="/keep", tags=["keep"])

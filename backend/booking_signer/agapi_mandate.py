@@ -44,14 +44,19 @@ def _minor(eur: Optional[float]) -> Optional[Dict[str, Any]]:
 
 
 def limits_for(mv: dict, members: List[dict]) -> Optional[Dict[str, Any]]:
-    """The company's limits, from the record (each person's own: their grade's, or theirs by name) → AgAPI's outer bounds: the highest any
-    worker on THIS trip may spend (each worker's own limit is still held by the plan — over it, they're asked, never booked)."""
+    """Sasha 371b · CR 184: EACH worker's OWN limits, from the ONE rules record (groups.limit_for — their own, else their grade's), as AgAPI's
+    per_worker list [{worker, flight_return_max?, stay_night_max?}] (money in minor units). One meaning on both sides: the worker's flights
+    together (out + back) against flight_return_max, each night against stay_night_max. A worker with none is LEFT OUT — AgAPI asks for
+    theirs (limits_missing); another worker's limit is never used. None: nobody on the trip has a limit (asked before anything is sent)."""
     from . import groups as G
-    lims = [G.limit_for(mv.get("rules") or {}, m) for m in members]
-    fl = [float(x["flight_return_eur"]) for x in lims if x.get("flight_return_eur") is not None]
-    st = [float(x["hotel_night_eur"]) for x in lims if x.get("hotel_night_eur") is not None]
-    out = {k: v for k, v in (("flight_max", _minor(max(fl)) if fl else None), ("stay_night_max", _minor(max(st)) if st else None)) if v}
-    return out or None
+    out = []
+    for m in members:
+        lim = G.limit_for(mv.get("rules") or {}, m)
+        row = {k: _minor(lim[src]) for k, src in (("flight_return_max", "flight_return_eur"), ("stay_night_max", "hotel_night_eur"))
+               if lim.get(src) is not None}
+        if row:
+            out.append({"worker": str(m["id"]), **row})
+    return {"per_worker": out} if out else None
 
 
 async def _codes(city: str) -> List[str]:
@@ -73,8 +78,8 @@ async def _codes(city: str) -> List[str]:
 
 async def scope_for(mv: dict, members: List[dict]) -> Dict[str, Any]:
     codes = sorted({c.upper() for c in await _codes(mv.get("destination") or "")})
-    return {"workers": [m["id"] for m in members], "destination": codes, "from": str(mv.get("starts_on") or "")[:10],
-            "to": str(mv.get("ends_on") or "")[:10]}
+    return {"movement_id": str(mv["id"]), "workers": [m["id"] for m in members], "destination": codes,   # Sasha 371b · CR 184: the movement
+            "from": str(mv.get("starts_on") or "")[:10], "to": str(mv.get("ends_on") or "")[:10]}
 
 
 def mandate_sha256(end_user: str, words: str, scope: dict, limits: dict, expires_in_minutes: int) -> str:

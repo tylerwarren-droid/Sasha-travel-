@@ -28,6 +28,7 @@ class FakeAgAPI:
     def __init__(self):
         self.records, self.rbs, self.apvs, self.answers, self.supplier, self.calls = [], {}, {}, [], [], []
         self.n = 0
+        self.keys = {}   # Sasha 371b · CR 184: (Idempotency-Key) → (the request, its answer once it named a record)
 
     def _id(self, p):
         self.n += 1
@@ -40,10 +41,39 @@ class FakeAgAPI:
     def _price(self, kind):
         return {"amount_minor": 12000 if kind == "flight" else 30000, "currency": "EUR"}
 
-    async def __call__(self, op, body, approval=None):
+    async def __call__(self, op, body, approval=None, idem=None):
         self.calls.append((op, json.loads(json.dumps(body))))   # Sasha 365 · what was asked (one group hotel search, never one per person)
-        out = await self._do(op, body, approval)
+        out = await self._keyed(op, body, approval, idem)
         self.answers.append(json.dumps(out))
+        return out
+
+    async def _keyed(self, op, body, approval, idem):
+        """CR 184 (row 1885) as AgAPI keeps it: group acts need their key; the same key + the same request → the same answer (replayed);
+        the same key + another request → idempotency_conflict; another key while the traveller's record on this movement is live →
+        already_completed / outcome_unknown, never a second order."""
+        if op not in ("group.book", "group.swap", "group.cancel"):
+            return await self._do(op, body, approval)
+        if not idem:
+            return {"ok": False, "error": {"code": "idempotency_key_required", "message": "key"}}
+        req = json.dumps({"op": op, **body}, sort_keys=True)
+        seen = self.keys.get(idem)
+        if seen and seen[0] != req:
+            return {"ok": False, "error": {"code": "idempotency_conflict", "message": "another request"}}
+        if seen and seen[1] is not None:
+            return {**json.loads(seen[1]), "replayed": True}
+        if op == "group.book":
+            if not body.get("movement_id") or not (body.get("worker") or {}).get("key"):
+                return {"ok": False, "error": {"code": "invalid_input", "message": "movement_id and worker.key", "details": {"path": "/movement_id"}}}
+            live = next((b for b in self.records if b.get("movement_id") == body["movement_id"] and b["worker"]["key"] == body["worker"]["key"]
+                         and b["state"] in ("booked", "unknown", "incomplete")), None)
+            if live and approval or (live and body.get("mandate_id")):
+                code = "outcome_unknown" if live["state"] == "unknown" else "already_completed"
+                return {"ok": False, "error": {"code": code, "message": "on the record", "details": {"booking_id": live["booking_id"],
+                                                                                                    "state": live["state"], "movement_id": live["movement_id"]}}}
+        self.keys[idem] = (req, None)
+        out = await self._do(op, body, approval)
+        if out.get("ok") or ((out.get("error") or {}).get("details") or {}).get("booking_id"):
+            self.keys[idem] = (req, json.dumps(out))
         return out
 
     async def _do(self, op, body, approval):
@@ -57,8 +87,9 @@ class FakeAgAPI:
             a = self._id("apv")
             self.apvs[a] = body["read_back_id"]
             return {"ok": True, "result": {"approval_id": a}}
-        if op == "group.bookings":
-            return {"ok": True, "result": {"bookings": [dict(b) for b in self.records]}}
+        if op == "group.bookings":   # CR 184 · by movement only
+            assert body.get("movement_id"), "group.bookings is read by movement (CR 184)"
+            return {"ok": True, "result": {"bookings": [dict(b) for b in self.records if b.get("movement_id") == body["movement_id"]]}}
         key = json.dumps({"op": op, **{k: v for k, v in body.items() if k != "end_user"}}, sort_keys=True)
         if not approval:
             rb = self.rbs.setdefault(key, self._id("rb"))
@@ -71,26 +102,28 @@ class FakeAgAPI:
                                            "details": {"read_back_id": rb, "read_back_sha256": "sha_" + rb, "read_back": {"lines": lines}}}}
         assert self.apvs.get(approval) == self.rbs.get(key), "an approval for ANOTHER read-back"
         if op == "group.book":
-            return {"ok": True, "result": await self._book(body["worker"], body["items"])}
+            return {"ok": True, "result": await self._book(body["worker"], body["items"], movement_id=body["movement_id"])}
         if op == "group.cancel":
             b = next(x for x in self.records if x["booking_id"] == body["booking_id"])
             b["state"] = "cancelled"
             return {"ok": True, "result": {**b, "refund": {"amount_minor": 54000, "currency": "EUR"}}}
         if op == "group.swap":
             old = next(x for x in self.records if x["booking_id"] == body["booking_id"])
-            new = await self._book(body["worker"], [{"kind": "flight", "ref": "re1"}, {"kind": "flight", "ref": "re2"}], stay=old["parts"][-1])
+            new = await self._book(body["worker"], [{"kind": "flight", "ref": "re1"}, {"kind": "flight", "ref": "re2"}], stay=old["parts"][-1],
+                                   movement_id=old.get("movement_id"))   # CR 184 · the newcomer belongs to the old booking's movement
             old.update(state="swapped_out", replaced_by=new["booking_id"])
             new["replaces"] = old["booking_id"]
             return {"ok": True, "result": {**new, "difference": {"amount_minor": 0, "currency": "EUR"}}}
         raise AssertionError(op)
 
-    async def _book(self, w, items, stay=None):
+    async def _book(self, w, items, stay=None, movement_id=None):
         pp = await self._open(w["keep"]["passport"])          # INSIDE the supplier call
         self.supplier.append(pp["number"])
         pp = None
         parts = [{"kind": "flight", "reference": self._id("PNR"), "price": self._price("flight")} for i in items if i["kind"] == "flight"]
         parts.append(stay or {"kind": "stay", "reference": self._id("HTL"), "price": self._price("stay")})
-        b = {"booking_id": self._id("gbk"), "worker": {"key": w["key"], "name": f"{w['given_name']} {w['family_name']}"}, "state": "booked", "parts": parts}
+        b = {"booking_id": self._id("gbk"), "worker": {"key": w["key"], "name": f"{w['given_name']} {w['family_name']}"}, "state": "booked", "parts": parts,
+             "movement_id": movement_id}
         self.records.append(b)
         return dict(b)
 
@@ -175,7 +208,7 @@ class BookSwapCancelInvoice(unittest.TestCase):
             self.assertIn("Refund in all EUR 540.00.", cx["read_back"])
             run(w.tap(cx["read_back_id"]))
             v = {r["name"]: r["status"] for r in run(G.view(OWNER))["rows"]}
-            inv = run(GB.invoice(OWNER))
+            inv = run(GB.invoice(OWNER, run(G.store().movement(OWNER))["id"]))
             logs, answers = "\n".join(w.logs), "\n".join(w.agapi.answers)
         self.assertEqual((v["Bruno Example"], v["Zoe Newcomer"], v["Hanna Dummy"]), ("cancelled", "booked", "cancelled"))
         self.assertEqual(len(inv["lines"]), 18)                                                      # 19 − Bruno − Hanna + Zoe

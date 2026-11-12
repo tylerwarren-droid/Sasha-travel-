@@ -14,6 +14,7 @@ import asyncio
 import pathlib
 import re
 import unittest
+from unittest import mock
 
 from booking_signer import group_outcome as GO, groups as G
 from tests import test_s332 as W
@@ -89,10 +90,10 @@ class Engine(unittest.TestCase):
                 ids = [p["id"] for p in (await G.state(OWNER))["roster"]]
                 await GO.run(OWNER, "create", {"destination": "Lisbon", "starts_on": "2026-11-17", "ends_on": "2026-11-21", "who": ids})
                 await G.planned(OWNER)
-                for rows in w.trips.values():
-                    for x in rows:
-                        x["state"] = "booked"
-                r = await GO.run(OWNER, "switch", {"person": ids[0], "on": False})
+                from booking_signer import group_book as GB   # Sasha 371b · booked is AgAPI's record's word, never Sasha's rows
+                said = mock.AsyncMock(side_effect=lambda account, mv, members, **kw: {x["id"]: "booked" for x in members})
+                with mock.patch.object(GB, "reconcile", said):
+                    r = await GO.run(OWNER, "switch", {"person": ids[0], "on": False})
                 self.assertFalse(r["done"])
                 self.assertIn("booked", r["say"])
                 self.assertEqual([a["tool"] for a in r.get("actions") or []], ["group_cancel"])     # Cancel offered (352)

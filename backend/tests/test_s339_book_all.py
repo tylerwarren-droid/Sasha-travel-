@@ -62,7 +62,12 @@ class PricedAgAPI(W334.FakeAgAPI):
             k = self.acts[name] = self.acts.get(name, 0) + 1
             if (name in self.refused and k == 1) or name in self.refused_twice:
                 return {"ok": False, "error": {"code": "upstream_refused", "message": "Duffel refused the order.", "details": {"service": "duffel"}}}
-            res = await self._book(w, body["items"])
+            m = self.mandates[body["mandate_id"]]   # CR 184 · EACH worker's own limits: none on the mandate → asked (limits_missing)
+            if not any(x["worker"] == w["key"] for x in (m.get("limits") or {}).get("per_worker") or []):
+                out = await self._do(op, {k: v for k, v in body.items() if k != "mandate_id"}, None)
+                out["error"]["details"]["mandate"] = {"mandate_id": body["mandate_id"], "outside": [{"why": "limits_missing"}]}
+                return out
+            res = await self._book(w, body["items"], movement_id=body["movement_id"])
             return {"ok": True, "result": {**res, "mandate_id": body["mandate_id"]}}
         if op == "travel.find_flights":
             return {"ok": True, "result": {"offers": [{"offer_ref": f"off_{body['origin']['query']}_{body['destination']['query']}_{body['date']}_{self._id('o')}",
@@ -200,7 +205,7 @@ class TheInvoiceIsThisMovements(unittest.TestCase):
             run(w.tap(card["read_back_id"]))
             w.agapi.records.append({"booking_id": "gbk_old", "worker": {"key": "member-of-an-earlier-movement", "name": "Old Worker"},
                                     "state": "booked", "parts": [{"kind": "stay", "reference": "OLD1", "price": {"amount_minor": 99900, "currency": "EUR"}}]})
-            inv = run(GB.invoice(OWNER))
+            inv = run(GB.invoice(OWNER, run(G.store().movement(OWNER))["id"]))
         self.assertEqual([l["who"] for l in inv["lines"]], ["Amara Sample"])
         self.assertEqual(inv["total"], "€540.00")
         self.assertFalse(any("?" in l["route"] for l in inv["lines"]))

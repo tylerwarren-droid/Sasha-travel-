@@ -16,6 +16,8 @@ Sasha's resolver (keep_resolver.py) inside its one supplier call, under a grant 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import logging
 import secrets
@@ -33,19 +35,85 @@ HOTEL_WORDS = ("marriott", "bonvoy", "hilton", "hyatt", "ihg", "accor", "all ", 
 
 # ── the ONE transport (agapi_route.post), on the group family (the sandbox: CR 163 is TEST) ─────────────────────────────────
 
-async def _call(account: str, op: str, body: dict, approval: Optional[str] = None) -> Dict[str, Any]:
+#: Sasha 371b · CR 184: AgAPI's group acts are idempotent — ONE key per traveller + movement + plan, re-sent unchanged on every retry
+GROUP_ACTS = ("group.book", "group.swap", "group.cancel")
+#: the answers that mean "AgAPI didn't (yet) answer this request" — the SAME request is sent again with the SAME key, never a new one
+RESEND = ("timeout", "unreachable", "idempotency_in_flight", "upstream_rate_limited", "rate_limited")
+RESEND_WAIT_S = (2.0, 5.0, 10.0, 20.0)
+
+
+def plan_version(body: dict) -> str:
+    """The plan this request carries (its offers, nights, worker, mandate — everything but the organiser): a new plan is a new version,
+    the same plan the same one. Lowercase hex."""
+    b = {k: v for k, v in (body or {}).items() if k != "end_user"}
+    return hashlib.sha256(json.dumps(b, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+def idem_key(op: str, movement_id: str, member_id: str, version: str) -> str:
+    """CR 184 (row 1885) · sha256("<op>:" + movement_id + ":" + member_id + ":" + plan_version), lowercase hex (spec/ext/vectors/group.json)."""
+    return hashlib.sha256(f"{op}:{movement_id}:{member_id}:{version}".encode()).hexdigest()
+
+
+def act_key(op: str, movement_id: str, member_id: str, body: dict) -> str:
+    return idem_key(op, str(movement_id), str(member_id), plan_version(body))
+
+
+async def _call(account: str, op: str, body: dict, approval: Optional[str] = None, idem: Optional[str] = None) -> Dict[str, Any]:
+    if op in GROUP_ACTS and not idem:   # ⛔ Sasha 371b · a group act without its ONE key is a bug — never a random one
+        raise ValueError(f"{op} needs its idempotency key (act_key)")
     if CALL is not None:
+        KEYS.append((op, idem))
+        import inspect
+        if "idem" in inspect.signature(CALL).parameters:   # a test's AgAPI that keeps CR 184's keys
+            return await CALL(op, body, approval, idem=idem)
         return await CALL(op, body, approval)
     from agapi import agapi_route as AR
     url, key = await AR.client_for(FAMILY, account)
     if not key:
         return {"ok": False, "error": {"code": "not_configured", "message": "AgAPI's sandbox key isn't set here"}}
-    h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": "s334_" + secrets.token_hex(12),
+    h = {"Authorization": f"Bearer {key}", "content-type": "application/json", "Idempotency-Key": idem or "s334_" + secrets.token_hex(12),
          **({"AgAPI-Approval-Id": approval} if approval else {})}
-    return await AR.post(url, key, op, body, h, 60.0)
+    return await AR.post(url, key, op, body, h, TIMEOUT_S)
+
+
+async def _send(account: str, op: str, body: dict, idem: str, approval: Optional[str] = None) -> Dict[str, Any]:
+    """Sasha 371b · THE ONE WAY a group act is sent: no answer (a dropped connection, a timeout, AgAPI still working on it, busy) → the SAME
+    request with the SAME key, after the time AgAPI gives (or a short wait), a few times — AgAPI then answers with its ONE record. Still no
+    answer → returned as it is; the record (group.bookings by movement) says what happened."""
+    r: Dict[str, Any] = {}
+    for wait in (0.0,) + RESEND_WAIT_S:
+        if wait:
+            await SLEEP(wait)
+        r = await _call(account, op, body, approval=approval, idem=idem)
+        e = r.get("error") or {}
+        if r.get("ok") or e.get("code") not in RESEND:
+            return r
+        given = e.get("retry_after_s") or (e.get("details") or {}).get("retry_after_s")
+        if given:
+            await SLEEP(min(float(given), 20.0))
+    return r
+
+
+#: Sasha 371b · CR 184's answers that NAME the traveller's record on this movement (details {booking_id, state, movement_id}): states, never "failed"
+ON_RECORD = ("already_completed", "outcome_unknown")
+NO_ANSWER = ("timeout", "unreachable")   # still no answer after _send's re-sends: AgAPI may have ordered — its record decides, read by movement
+
+
+def recorded(e: Dict[str, Any]) -> Dict[str, Any]:
+    """An answer that names (or may name) the record → {state, status, booking_id?, why} in plain words — never "not booked"."""
+    d = (e or {}).get("details") or {}
+    state = d.get("state") or ("unknown" if (e or {}).get("code") in ("outcome_unknown",) + NO_ANSWER else "booked")
+    status = RECORD_STATUS.get(state, "confirming")
+    why = {"booked": "already booked on this trip — nothing new was ordered",
+           "confirming": "the airline hasn't confirmed yet — I'm checking; nothing will be ordered twice",
+           "incomplete": "part of their trip is booked and the rest isn't — it's on the master list",
+           "cancelled": "their booking on this trip was cancelled"}.get(status, "on the master list")
+    return {"state": state, "status": status, "code": (e or {}).get("code"), "why": why, **({"booking_id": d["booking_id"]} if d.get("booking_id") else {})}
 
 
 CALL = None   # tests replace it: (op, body, approval) → envelope
+KEYS: List[Tuple[str, Optional[str]]] = []   # tests read it: every (op, Idempotency-Key) sent through CALL
+TIMEOUT_S = 60.0
 
 
 async def _organiser(account: str) -> Optional[str]:
@@ -181,24 +249,32 @@ def _gone(e: dict) -> bool:
                                                     d.get("duffel_code") in ("offer_no_longer_available", "offer_expired", "not_found"))
 
 
-async def _read_back(account: str, op: str, body: dict) -> Dict[str, Any]:
-    """AgAPI's read-back for one act; its "busy" answer (upstream_rate_limited) waited out ONCE, for the time it gives."""
-    r = await _call(account, op, body)
-    e = r.get("error") or {}
-    if e.get("code") == "upstream_rate_limited":
-        await SLEEP(min(float(e.get("retry_after_s") or (e.get("details") or {}).get("retry_after_s") or 10), 20))
-        r = await _call(account, op, body)
-    return r
+async def _read_back(account: str, op: str, body: dict, idem: str) -> Dict[str, Any]:
+    """AgAPI's read-back for one act (Sasha 371b: the same key as the act it reads back — and the act, under a mandate), through _send."""
+    return await _send(account, op, body, idem)
 
 
-async def _records(account: str) -> List[dict]:
+async def _records(account: str, movement_id: str) -> List[dict]:
+    """Sasha 371b · AgAPI's ONE record for THIS movement (CR 184: group.bookings {end_user, movement_id}) — never the organiser's every trip."""
+    if not movement_id:
+        raise ValueError("group.bookings is read by movement")
     org = await _organiser(account)
-    r = await _call(account, "group.bookings", {"end_user": org}) if org else {}
+    r = await _call(account, "group.bookings", {"end_user": org, "movement_id": str(movement_id)}) if org else {}
     return ((r.get("result") or {}).get("bookings") or []) if r.get("ok") else []
 
 
+LIVE = ("booked", "unknown", "incomplete")   # CR 184 · a record that holds (or may hold) an order — at most ONE per traveller per movement
+
+
+def record_of(records: List[dict], member_id: str) -> Optional[dict]:
+    """The traveller's record on THIS movement: the live one (CR 184 holds at most one), else the last settled one (cancelled / swapped out)."""
+    mine = [b for b in records if (b.get("worker") or {}).get("key") == member_id]
+    return next((b for b in mine if b.get("state") in LIVE and (b.get("state") != "incomplete" or b.get("parts"))), None) or (mine[-1] if mine else None)
+
+
 def _live_record(records: List[dict], member_id: str) -> Optional[dict]:
-    return next((b for b in reversed(records) if (b.get("worker") or {}).get("key") == member_id and b.get("state") == "booked"), None)
+    b = record_of(records, member_id)
+    return b if b and b.get("state") == "booked" else None
 
 
 def contact_of(m: Dict[str, Any]) -> Dict[str, str]:
@@ -232,20 +308,24 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
         its, why = await _items(account, m, mv)
         if not its:
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": "not_found", "why": why}
-        body = {"end_user": org, "worker": {**w, **contact_of(m)}, "items": _wire(its), **({"mandate_id": mandate_id} if mandate_id else {})}
+        body = {"end_user": org, "movement_id": str(mv["id"]), "worker": {**w, **contact_of(m)}, "items": _wire(its),
+                **({"mandate_id": mandate_id} if mandate_id else {})}   # Sasha 371b · CR 184: the movement on the record; worker.key = member id
+        idem = act_key("group.book", mv["id"], m["id"], body)   # the read-back, the act and every retry of it: ONE key
         if mandate_id:   # Sasha 367 · under the mandate THIS call is the act: THIS worker's references granted for it only (as _act_one does)
             from . import keep_resolver as KR
             refs = [x for x in _refs(w) if x]
             KR.grant(owner_of(m), refs)
             try:
-                r = await _read_back(account, "group.book", body)
+                r = await _read_back(account, "group.book", body, idem)
             finally:
                 KR.revoke(refs)
         else:
-            r = await _read_back(account, "group.book", body)
+            r = await _read_back(account, "group.book", body, idem)
         e = r.get("error") or {}
         if mandate_id and r.get("ok"):   # Sasha 367 · INSIDE the mandate: booked on the manager's instruction (no read-back to answer)
             return "booked", {"name": m["name"], "member_id": m["id"], "result": r.get("result") or {}}
+        if e.get("code") in ON_RECORD or (mandate_id and e.get("code") in NO_ANSWER):   # Sasha 371b · AgAPI's record holds it: a STATE, never "failed"
+            return "recorded", {"name": m["name"], "member_id": m["id"], **recorded(e)}
         if mandate_id and e.get("code") in ("mobile_needed", "email_needed", "approval_expired", "not_found", "incomplete", "passport_detail_needed"):
             d = e.get("details") or {}
             return "skip", {"name": m["name"], "member_id": m["id"], "kind": e["code"], "code": e["code"],
@@ -256,12 +336,12 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
             over = over_priced(d["priced"], lim, its) if d.get("priced") else over_at_booking(its, lim)
             outside = [x.get("why") for x in ((d.get("mandate") or {}).get("outside") or []) if x.get("why")]
             if mandate_id and outside and not asked:   # Sasha 367 · OUTSIDE the mandate: asked with AgAPI's reasons (the explicit tap)
-                return "outside", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body,
+                return "outside", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body, "idem": idem,
                                    "outside": outside, "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
                                    "lines": list((d.get("read_back") or {}).get("lines") or [])}
             if over and not asked:
                 return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
-            return "item", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body,
+            return "item", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body, "idem": idem,
                             "over": st_ == "over limit" or bool(over), "over_words": over, "replanned": replanned,
                             "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
                             "lines": list((d.get("read_back") or {}).get("lines") or [])}
@@ -285,15 +365,11 @@ async def _agapi_reachable(account: str) -> bool:
     return bool(os.getenv(AR.key_name(await AR.target_for(FAMILY, account)), "").strip())
 
 
-def _latest(records: List[dict], member_id: str) -> Optional[dict]:
-    return next((b for b in reversed(records) if (b.get("worker") or {}).get("key") == member_id), None)
-
-
 def record_booked(records: List[dict], members: List[dict]) -> Dict[str, Dict[str, Any]]:
     """Sasha 340 · what a booked worker's master-list row shows, FROM AgAPI's record: the price booked (its parts) and its references."""
     out = {}
     for m in members:
-        b = _latest(records, m["id"])
+        b = record_of(records, m["id"])
         if b and b.get("state") == "booked":
             parts = b.get("parts") or []
             out[m["id"]] = {"price_eur": round(sum(((p.get("price") or {}).get("amount_minor") or 0) for p in parts) / 100, 2),
@@ -301,18 +377,33 @@ def record_booked(records: List[dict], members: List[dict]) -> Dict[str, Dict[st
     return out
 
 
+#: Sasha 371b · AgAPI's record state → the master list's status (CR 184: booked | incomplete | unknown | cancelled | swapped_out)
+RECORD_STATUS = {"booked": "booked", "cancelled": "cancelled", "swapped_out": "cancelled", "unknown": "confirming", "incomplete": "incomplete"}
+
+
 def record_states(records: List[dict], members: List[dict]) -> Dict[str, str]:
-    """Sasha 339 (Tyler) · each worker's state AS AgAPI'S ONE RECORD SAYS: booked / cancelled (cancelled or swapped out) — absent when AgAPI has
-    no record of them. The master list's status reads THIS first; the trip rows only decide for a worker AgAPI never booked."""
+    """Sasha 339 (Tyler) · each worker's state AS AgAPI'S ONE RECORD SAYS — absent when AgAPI has no record of them on this movement.
+    Sasha 371b · "unknown" (an order may exist) is "confirming" and "incomplete" is "incomplete": NEITHER is ever "not booked"."""
     out = {}
     for m in members:
-        b = _latest(records, m["id"])
-        if b and b.get("state") in ("booked", "cancelled", "swapped_out"):
-            out[m["id"]] = "booked" if b["state"] == "booked" else "cancelled"
+        b = record_of(records, m["id"])
+        if b and b.get("state") in RECORD_STATUS:
+            out[m["id"]] = RECORD_STATUS[b["state"]]
     return out
 
 
-async def reconcile(account: str, members: List[dict], records: Optional[List[dict]] = None, booked: Optional[dict] = None) -> Dict[str, str]:
+def record_whys(records: List[dict], members: List[dict]) -> Dict[str, str]:
+    """Sasha 371b · AgAPI's own "why" on a record that isn't booked (CR 184) — said, never a guess."""
+    out = {}
+    for m in members:
+        b = record_of(records, m["id"])
+        if b and b.get("why") and b.get("state") in ("unknown", "incomplete"):
+            out[m["id"]] = str(b["why"])
+    return out
+
+
+async def reconcile(account: str, movement_id: str, members: List[dict], records: Optional[List[dict]] = None, booked: Optional[dict] = None,
+                    whys: Optional[dict] = None) -> Dict[str, str]:
     """Sasha 339 (Tyler) · THE ONE BOOKING RECORD DECIDES: each worker's trip follows AgAPI's group.bookings — their latest record booked →
     their current plan's rows booked (with its references); cancelled / swapped out → cancelled. Run on every master-list read and once
     after every yes, so a trip row and AgAPI's record can never disagree for longer than one read. → rows changed."""
@@ -320,9 +411,9 @@ async def reconcile(account: str, members: List[dict], records: Optional[List[di
     if records is None:
         if not await _agapi_reachable(account):
             return {}
-        records = await _records(account)
+        records = await _records(account, movement_id)
     for m in members:
-        b = _latest(records, m["id"])
+        b = record_of(records, m["id"])
         if not b or not m.get("trip_id"):
             continue
         want = "booked" if b.get("state") == "booked" else "cancelled" if b.get("state") in ("cancelled", "swapped_out") else None
@@ -336,6 +427,8 @@ async def reconcile(account: str, members: List[dict], records: Optional[List[di
                 log.warning("[group_book] %s not reconciled: %s", m["name"], type(e).__name__)
     if booked is not None:
         booked.update(record_booked(records, members))
+    if whys is not None:
+        whys.update(record_whys(records, members))
     return record_states(records, members)
 
 
@@ -368,11 +461,13 @@ def summary_taps(skipped: List[dict]) -> List[Dict[str, Any]]:
 
 async def prepare(account: str, action: str, who: Optional[List[str]] = None, swap_to: Optional[str] = None,
                   over_ok: bool = False, newcomer: Optional[Dict[str, Any]] = None,
-                  progress: Optional[Callable[[int, int], None]] = None, held: Optional[List[dict]] = None) -> Dict[str, Any]:
-    """→ {status: awaiting_yes, read_back, read_back_id (the card), ask, skipped} or {status: nothing, say}."""
+                  progress: Optional[Callable[[int, int], None]] = None, held: Optional[List[dict]] = None,
+                  movement_id: Optional[str] = None) -> Dict[str, Any]:
+    """→ {status: awaiting_yes, read_back, read_back_id (the card), ask, skipped} or {status: nothing, say}. The organiser's trip (the one
+    they have open, or `movement_id`) is chosen HERE, once; the card carries its id to the act (Sasha 371b)."""
     from . import groups as G
     st = G.store()
-    mv = await st.movement(account)
+    mv = await st.movement(account, movement_id)
     if not mv:
         return {"status": "nothing", "say": "There's no group movement yet."}
     members = await st.members(mv["id"])
@@ -380,15 +475,15 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
     org = await _organiser(account)
     if not org:
         return {"status": "nothing", "say": "AgAPI's sandbox didn't answer — nothing was prepared."}
-    view = {r["member_id"]: r for r in (await G.view(account))["rows"]}
+    view = {r["member_id"]: r for r in (await G.view(account, mv["id"]))["rows"]}
     items, skipped, lines = [], [], []
-    records = await _records(account)   # Sasha 339 · AgAPI's ONE booking record, read for book too (never book a worker twice)
+    records = await _records(account, mv["id"])   # Sasha 371b · AgAPI's ONE booking record for THIS movement
     if action == "book" and not (mv.get("rules") or {}).get("hotel"):   # Sasha 365 · the group's ONE hotel search, before the workers
         await G.group_hotel(account, mv, members)
     if action == "book":   # Sasha 339 · each worker in parallel (bounded), progress counted — the card in member order
         pick = [by_name[w.lower()] for w in who or [] if w.lower() in by_name] if who else members
-        todo = [(m, view.get(m["id"], {}).get("status")) for m in pick if view.get(m["id"], {}).get("status") != "booked"
-                and not _live_record(records, m["id"])]   # PATCH (said, Tyler): a belt only — reconcile() makes the trip follow the record
+        todo = [(m, view.get(m["id"], {}).get("status")) for m in pick
+                if (record_of(records, m["id"]) or {}).get("state") not in LIVE]   # Sasha 371b · AgAPI's record: anyone it holds an order for is not asked again
         sem, done = asyncio.Semaphore(BOOK_PARALLEL), [0]
         if progress:
             progress(0, len(todo))
@@ -444,9 +539,9 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         if over and not over_ok:
             return {"status": "nothing", "say": f"{b['name']}'s own flights are over the limit: {over}.",
                     "taps": [{"label": "Swap anyway", "say": f"{b['name']} — {over}", "act": {"action": "swap", "who": [a["name"]], "to": b["name"], "over_ok": True}}]}
+        sb = {"end_user": org, "booking_id": rec["booking_id"], "worker": w, "flights": _wire(own)}   # CR 164 · HIS own flights
         items.append({"op": "group.swap", "member": b["id"], "owner": owner_of(b), "from_member": a["id"], "name": f"{a['name']} → {b['name']}", "worker": w,
-                      "over": bool(over), "over_words": over,
-                      "body": {"end_user": org, "booking_id": rec["booking_id"], "worker": w, "flights": _wire(own)}})   # CR 164 · HIS own flights
+                      "over": bool(over), "over_words": over, "body": sb, "idem": act_key("group.swap", mv["id"], b["id"], sb)})
     elif action == "cancel":
         for nm in who or []:
             m = by_name.get(nm.lower())
@@ -454,13 +549,14 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
             if not rec:
                 skipped.append({"name": nm, "why": "no booking to cancel"})
                 continue
-            items.append({"op": "group.cancel", "member": m["id"], "name": m["name"], "body": {"end_user": org, "booking_id": rec["booking_id"]}})
+            cb = {"end_user": org, "booking_id": rec["booking_id"]}
+            items.append({"op": "group.cancel", "member": m["id"], "name": m["name"], "body": cb, "idem": act_key("group.cancel", mv["id"], m["id"], cb)})
     for it in items:   # AgAPI's read-back for each (nothing is done without the approval)
         if it.get("read_back_id"):   # Sasha 339 · a book item brings its own (prepared in parallel)
             lines += it["lines"] + ([f"⚠ {it['name']} is OVER the group's limit ({it.get('over_words') or 'by the plan'}) — included only because you asked."]
                                     if it.get("over") else []) + (["(Re-planned: the first fare was gone.)"] if it.get("replanned") else []) + [""]
             continue
-        r = await _read_back(account, it["op"], it["body"])
+        r = await _read_back(account, it["op"], it["body"], it["idem"])
         e = r.get("error") or {}
         if e.get("code") != "approval_required":
             skipped.append({"name": it["name"], **decision(e)})   # Sasha 364 · a named decision, never the raw message
@@ -476,7 +572,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         return {"status": "nothing", "say": f"{zero}: " + ("; ".join(t["say"] for t in taps) if taps else "nobody on the list is waiting to be "
                 + {"book": "booked", "cancel": "cancelled"}.get(action, "changed")) + ".", "taps": taps, "skipped": skipped}
     cid = "grp_" + secrets.token_hex(10)
-    _CARDS[cid] = {"account": account, "action": action, "items": items, "at": time.time()}
+    _CARDS[cid] = {"account": account, "action": action, "items": items, "at": time.time(), "movement_id": str(mv["id"])}
     n = len(items)
     verb = {"book": "Book", "swap": "Swap", "cancel": "Cancel"}[action]
     ask = {"book": f"Book {'these ' + str(n) if n > 1 else items[0]['name']}? Everything is on the card (TEST — nothing is charged now).",
@@ -486,22 +582,22 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
             "verb": verb, "skipped": skipped, "taps": taps, "how": "Say `ask` word for word — nothing happens until they say yes."}
 
 
-async def book_under_mandate(account: str, mandate_id: str, names: List[str], over_ok: bool = False,
+async def book_under_mandate(account: str, mandate_id: str, names: List[str], movement_id: str, over_ok: bool = False,
                              progress: Optional[Callable[[int, int], None]] = None) -> Dict[str, Any]:
     """Sasha 367 · every worker booked under the manager's ONE mandate (CR 182): inside → booked (the trip settled from AgAPI's answer);
     outside → ONE card of AgAPI's read-backs with their reasons (the explicit tap: Yes, book them); the rest named (missing contact,
     expired). → {done, outside, asks, card}."""
     from . import groups as G
     st = G.store()
-    mv = await st.movement(account)
+    mv = await st.movement(account, movement_id)   # Sasha 371b · the mandate's OWN movement, never "the open trip"
     members = [m for m in await st.members(mv["id"]) if m["name"] in set(names)]
     org = await _organiser(account)
     if not org:
         return {"done": [], "outside": [], "asks": [{"name": m["name"], "code": "upstream_unreachable"} for m in members], "card": None}
     if not (mv.get("rules") or {}).get("hotel"):
         await G.group_hotel(account, mv, await st.members(mv["id"]))
-        mv = await st.movement(account)
-    view = {r["member_id"]: r for r in (await G.view(account))["rows"]}
+        mv = await st.movement(account, movement_id)
+    view = {r["member_id"]: r for r in (await G.view(account, movement_id))["rows"]}
     sem, n = asyncio.Semaphore(BOOK_PARALLEL), [0]
     done, outside, asks = [], [], []
     if progress:
@@ -531,6 +627,8 @@ async def book_under_mandate(account: str, mandate_id: str, names: List[str], ov
                                             for p in res.get("parts") or [] if p.get("conditions") or p.get("cancel_by")]})
             elif kind == "outside":
                 outside.append(x)
+            elif kind == "recorded":   # Sasha 371b · AgAPI's record holds them (booked / confirming / incomplete): a state, said from the record
+                done.append({"name": m["name"], "state": x["state"], "parts": []})
             else:
                 asks.append(x)
         n[0] += 1
@@ -538,13 +636,13 @@ async def book_under_mandate(account: str, mandate_id: str, names: List[str], ov
             progress(n[0], len(members))
     await asyncio.gather(*(one(m) for m in members))
     try:
-        await reconcile(account, await st.members(mv["id"]))
+        await reconcile(account, mv["id"], await st.members(mv["id"]))
     except Exception as e:
         log.warning("[group_book] reconcile after the mandate: %s", type(e).__name__)
     card = None
     if outside:   # ONE card, the explicit tap (card_tap → confirm → each read-back's own approval)
         cid = "grp_" + secrets.token_hex(10)
-        _CARDS[cid] = {"account": account, "action": "book", "items": outside, "at": time.time()}
+        _CARDS[cid] = {"account": account, "action": "book", "items": outside, "at": time.time(), "movement_id": str(mv["id"])}
         lines = [l for it in outside for l in it["lines"] + [""]]
         card = {"read_back_id": cid, "read_back": lines[:400], "ask": f"Book {'these ' + str(len(outside)) if len(outside) > 1 else outside[0]['name']} anyway?",
                 "choices": [dict(c) for c in __import__("app.agent.voice", fromlist=["x"]).GROUP_CHOICES["book"]]}
@@ -666,7 +764,9 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
     if choice not in ("group_yes", "yes"):
         return {"status": "kept", "say": "Kept — nothing changed."}
     st = G.store()
-    mv = await st.movement(account)
+    mv = await st.movement(account, c["movement_id"])   # Sasha 371b · the card's OWN movement (set when it was prepared)
+    if not mv:
+        return {"status": "nothing", "say": "That trip isn't on the list any more — nothing was done."}
     members = {m["id"]: m for m in await st.members(mv["id"])}
     done, failed, reasked, sem, n = [], [], [], asyncio.Semaphore(ACT_PARALLEL), [0]   # Sasha 339 · each act (bounded: one at a time), counted
     if progress:
@@ -684,16 +784,16 @@ async def confirm(account: str, card_id: str, choice: str, said: str = "",
             progress(n[0], len(c["items"]))
     await asyncio.gather(*(act(it) for it in c["items"]))
     try:   # Sasha 339 (Tyler) · the trips follow AgAPI's ONE record after every yes
-        await reconcile(account, list(members.values()))
+        await reconcile(account, mv["id"], list(members.values()))
     except Exception as e:
         log.warning("[group_book] reconcile after the yes: %s", type(e).__name__)
     order = {it["name"]: i for i, it in enumerate(c["items"])}
     done.sort(key=lambda d: order.get(d["name"], 0))
     failed.sort(key=lambda d: order.get(d["name"], 0))
     verb = {"book": "booked", "swap": "swapped", "cancel": "cancelled"}[c["action"]]
-    cards = [_card_for(account, c["action"], x) for x in reasked]   # Sasha 340 · each moved fare: its OWN card, its own Yes
+    cards = [_card_for(account, c["action"], x, mv["id"]) for x in reasked]   # Sasha 340 · each moved fare: its OWN card, its own Yes
     if c["action"] == "book":   # Sasha 364 · THE FINISH, composed from the trip record: booked, references, confirmations, the invoice
-        fin = await finish(account, done, failed + list(also or []), ask_once=ask_once)   # Sasha 365 · `also`: the mandate's held ones
+        fin = await finish(account, mv["id"], done, failed + list(also or []), ask_once=ask_once)   # Sasha 365 · `also`: the mandate's held ones
         moved = (f" The fare moved for {', '.join(x['name'] for x in reasked)} — {'a new card' if len(reasked) == 1 else 'new cards'} below, "
                  f"{'its' if len(reasked) == 1 else 'each with its'} own Yes; nothing was booked for them yet.") if reasked else ""
         return {"status": "done", "done": done, "failed": failed, "reasked": cards, "say": fin["say"] + moved, "finish": fin}
@@ -714,6 +814,12 @@ DECISIONS = {
     "price_changed": "their fare's price moved before it was booked — nothing was taken. Shall I read it back again at the new price?",
     "offer_expired": "their fare expired before it was booked — nothing was taken. Shall I find the same flight again?",
     "upstream_unreachable": "the airline didn't answer just now — nothing was taken. Shall I try them again?",
+    # Sasha 371b · CR 184
+    "idempotency_conflict": "their booking request changed while it was being sent — nothing new was ordered. Shall I read it back again?",
+    "limits_missing": "no limit is set for them yet — what's their flight and hotel limit?",
+    "another_movement": "that booking belongs to another trip — nothing was ordered on this one.",
+    "over_flight_limit": "their flights are over their own flight limit. Book anyway, another option, or leave them off?",
+    "over_stay_limit": "their hotel is over their own nightly limit. Book anyway, another option, or leave them off?",
 }
 
 
@@ -721,13 +827,18 @@ RETRY_ONCE = ("upstream_refused", "upstream_failed", "upstream_unreachable")
 
 #: Sasha 367 · AgAPI's mandate answers as facts (details.mandate.outside[].why, and the missing contact)
 MANDATE_FACTS = {"worker_not_named": "not named in your instruction", "another_destination": "their flight goes somewhere else",
-                 "outside_dates": "their flight is outside the trip's dates", "over_flight_limit": "their flight is over the company's flight limit",
-                 "over_stay_limit": "their hotel is over the company's nightly limit", "over_trip_limit": "their trip is over the company's limit",
+                 "outside_dates": "their flight is outside the trip's dates", "over_flight_limit": "their flights are over their own flight limit",
+                 "over_stay_limit": "their hotel is over their own nightly limit", "over_trip_limit": "their trip is over the company's limit",
                  "currency": "the fare is in another currency", "fare_not_refundable": "their fare can't be refunded",
                  "mobile_needed": "no mobile on their profile — add it on the Group page",
                  "passport_detail_needed": "a detail an airline needs is missing from their passport (sex, date of birth or name) — their link is emailed", "email_needed": "no email on their profile — add it on the Group page",
                  "approval_expired": "your instruction had expired", "not_found": "the booking system didn't know your instruction",
-                 "incomplete": "part is booked (only the airline can cancel it) and the rest was refused"}   # Sasha 365 · tried once more before anyone is asked
+                 "incomplete": "part is booked (only the airline can cancel it) and the rest was refused",
+                 # Sasha 371b · CR 184's reasons, asked — never "failed"
+                 "limits_missing": "no limit is set for them yet — what's their flight and hotel limit?",
+                 "another_movement": "their booking would be on another trip than this instruction's",
+                 "already_completed": "already booked on this trip — nothing new was ordered",
+                 "outcome_unknown": "the airline hasn't confirmed yet — I'm checking; nothing will be ordered twice"}   # Sasha 365 · tried once more before anyone is asked
 
 #: Sasha 365 · the same reasons as FACTS (no question each): the mandate puts them to the manager as ONE grouped question
 FACTS = {"approval_refused": "the booking system didn't take your instruction as the yes for it (nothing was booked or charged)",
@@ -803,19 +914,22 @@ def _names(xs: List[str]) -> str:
     return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1] if xs else ""
 
 
-async def finish(account: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]], ask_once: bool = False) -> Dict[str, Any]:
+async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]], ask_once: bool = False) -> Dict[str, Any]:
     """THE ONE FINISH of a group booking, composed from the trip record (the master list as it is now — AgAPI's record for the booked):
     how many are booked, where the references are, the confirmations sent (to each traveller's registered email; anyone without one
     named), the invoice — and anything not done as a named decision, never an error."""
     from . import groups as G
-    mv = await G.store().movement(account)
-    view = await G.view(account, mv["id"])
+    mv = await G.store().movement(account, movement_id)
+    view = await G.view(account, movement_id)
     rows = view.get("rows") or []
     booked = [r["name"] for r in rows if r.get("status") == "booked"]
+    confirming = [r["name"] for r in rows if r.get("status") == "confirming"]   # Sasha 371b · AgAPI's record: an order may exist
+    incomplete = [r for r in rows if r.get("status") == "incomplete"]
+    failed = [f for f in failed if f.get("name") not in set(confirming) | {r["name"] for r in incomplete}]   # a state, never asked as "not booked"
     total = len(rows)
     conf = await _confirmations(account, mv, booked) if booked else {"sent": [], "no_email": [], "not_sent": []}
     try:
-        inv = await invoice(account)
+        inv = await invoice(account, movement_id)
     except Exception as e:
         log.warning("[group_book] the invoice wasn't read for the finish: %s", type(e).__name__)
         inv = {}
@@ -839,6 +953,11 @@ async def finish(account: str, done: List[Dict[str, Any]], failed: List[Dict[str
                                  ("it can't be changed" if c.get("change") in (False, "none", "no") else "")) if w]
             if words:
                 parts.append(f"{d['name']}'s {c.get('kind') or 'booking'}: " + ", ".join(words) + ".")
+    if confirming:
+        parts.append(f"{_names(confirming)}: the airline hasn't confirmed yet — I'm checking, and nothing will be ordered twice.")
+    for r in incomplete:
+        parts.append(f"{r['name']}: part of the trip is booked and the rest isn't"
+                     + (f" ({FACTS.get(r.get('record_why') or '', str(r.get('record_why')).replace('_', ' '))})" if r.get("record_why") else "") + ".")
     if ask_once:   # Sasha 365 · the mandate: ONE grouped question for everything outside the limits
         q = one_question(failed)
         if q:
@@ -863,10 +982,10 @@ def waiting_cards(account: str) -> List[Dict[str, Any]]:
     return out
 
 
-def _card_for(account: str, action: str, it: dict) -> Dict[str, Any]:
+def _card_for(account: str, action: str, it: dict, movement_id: str) -> Dict[str, Any]:
     """ONE worker's own card (a moved fare, re-asked alone): the SAME card store, the same Yes / No (yes_buttons in the route)."""
     cid = "grp_" + secrets.token_hex(10)
-    _CARDS[cid] = {"account": account, "action": action, "items": [it], "at": time.time()}
+    _CARDS[cid] = {"account": account, "action": action, "items": [it], "at": time.time(), "movement_id": str(movement_id)}
     lines = list(it.get("lines") or []) + ([f"⚠ {it['name']} is OVER the group's limit ({it.get('over_words')}) — included only because you asked."]
                                            if it.get("over") and it.get("over_words") else [])
     return {"status": "awaiting_yes", "action": action, "read_back": lines, "read_back_id": cid, "name": it["name"],
@@ -884,11 +1003,15 @@ async def _act_one(account: str, it: dict, said: str, mv: dict, members: dict, d
     refs = [r for r in _refs(it.get("worker") or {}) if r]
     KR.grant(it.get("owner") or it.get("member"), refs)   # THIS worker's references (their vault: the PERSON's, Sasha 351), for THIS act only
     try:
-        r = await _call(account, it["op"], it["body"], approval=apv)
+        r = await _send(account, it["op"], it["body"], it["idem"], approval=apv)   # Sasha 371b · its ONE key, re-sent unchanged
     finally:
         KR.revoke(refs)
     e = r.get("error") or {}
     d = e.get("details") or {}
+    if e.get("code") in ON_RECORD + NO_ANSWER:   # Sasha 371b · AgAPI's record holds (or may hold) it: a state from the record, never "failed"
+        x = recorded(e)
+        done.append({"name": it["name"], "state": x["state"], "parts": []})
+        return
     if e.get("code") == "approval_void" and d.get("void_reason") == "payload_changed" and reasked is not None:
         # Sasha 340 · CR 166: nothing was booked for THIS worker; the rest stand. A fresh read-back → their own card, their own Yes;
         # an offer gone (no read-back) → this worker prepared again (re-planned once), then their own card — or held, said.
@@ -990,16 +1113,15 @@ def _eur(minor: int) -> str:
     return f"€{minor / 100:,.2f}"
 
 
-async def invoice(account: str) -> Dict[str, Any]:
+async def invoice(account: str, movement_id: str) -> Dict[str, Any]:
+    """ONE invoice for THIS movement (Sasha 371b: by its id — the link's own, never "the open trip"), from AgAPI's records for it."""
     from . import groups as G
     st = G.store()
-    mv = await st.movement(account)
+    mv = await st.movement(account, movement_id) if movement_id else None
     if not mv:
         return {"why": "there's no group movement yet"}
     members = {m["id"]: m for m in await st.members(mv["id"])}
-    # Sasha 339 · THIS movement's records only: AgAPI keeps one list per organiser (every movement of theirs) — a record belongs to this
-    # invoice when its worker is one of this movement's members (the proof's invoice carried the previous movement's bookings)
-    recs = [b for b in await _records(account) if (b.get("worker") or {}).get("key") in members]
+    recs = await _records(account, mv["id"])   # CR 184 · AgAPI's records for this movement only
     lines, adj, total = [], [], 0
     for b in recs:
         m = members.get((b.get("worker") or {}).get("key")) or {}

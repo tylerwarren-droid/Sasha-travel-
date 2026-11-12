@@ -160,8 +160,12 @@ class LimitsAndTheMasterList(unittest.TestCase):
             run(G.plan(OWNER))
             m = next(r for r in run(G.view(OWNER))["rows"] if r["name"] == "Amara Sample")
             for row in w.trips[m["trip_id"]]:
-                row["state"] = "booked"                                                     # its trip changes (CR 163 books it)
-            self.assertEqual(next(r for r in run(G.view(OWNER))["rows"] if r["name"] == "Amara Sample")["status"], "booked")
+                row["state"] = "booked"                                                     # Sasha's own rows say booked …
+            self.assertNotEqual(next(r for r in run(G.view(OWNER))["rows"] if r["name"] == "Amara Sample")["status"], "booked")   # … never enough (371b)
+            from booking_signer import group_book as GB
+            said = mock.AsyncMock(side_effect=lambda account, mv, members, **kw: {x["id"]: "booked" for x in members if x["id"] == m["member_id"]})
+            with mock.patch.object(GB, "reconcile", said):                                  # AgAPI's ONE record says booked → booked
+                self.assertEqual(next(r for r in run(G.view(OWNER))["rows"] if r["name"] == "Amara Sample")["status"], "booked")
             for row in w.trips[m["trip_id"]]:
                 row["state"] = "cancelled"
             self.assertEqual(next(r for r in run(G.view(OWNER))["rows"] if r["name"] == "Amara Sample")["status"], "cancelled")

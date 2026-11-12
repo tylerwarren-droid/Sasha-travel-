@@ -89,8 +89,14 @@ class InsideTheLimits(unittest.TestCase):
         self.assertEqual(mand[0]["scope"]["destination"], ["LGW", "LHR", "LON"])
         self.assertEqual((mand[0]["scope"]["from"], mand[0]["scope"]["to"]), ("2026-12-15", "2026-12-17"))
         self.assertEqual(len(mand[0]["scope"]["workers"]), 6)
-        self.assertEqual(mand[0]["limits"], {"flight_max": {"amount_minor": 90000, "currency": "EUR"},
-                                             "stay_night_max": {"amount_minor": 14000, "currency": "EUR"}})   # the company's, from the record
+        pw = mand[0]["limits"]["per_worker"]                                                  # Sasha 371b · CR 184: EACH worker's own
+        self.assertEqual(set(mand[0]["limits"]), {"per_worker"})
+        self.assertEqual(sorted(x["worker"] for x in pw), sorted(mand[0]["scope"]["workers"]))
+        for x in pw:                                                                          # … from the ONE rules record, never a max
+            lim = G.limit_for(mv.get("rules") or {}, {"id": x["worker"], "grade": next(r["grade"] for r in view["rows"] if r["member_id"] == x["worker"])})
+            self.assertEqual(x["flight_return_max"], {"amount_minor": round(lim["flight_return_eur"] * 100), "currency": "EUR"})
+            self.assertEqual(x["stay_night_max"], {"amount_minor": round(lim["hotel_night_eur"] * 100), "currency": "EUR"})
+        self.assertEqual(mand[0]["scope"]["movement_id"], str(mv["id"]))
         self.assertEqual(mand[0]["proof"]["kind"], "in_app")
         mid = (mv["rules"]["mandate"].get("agapi") or {}).get("mandate_id")
         self.assertEqual(mid, w.agapi.mandates and next(iter(w.agapi.mandates)))           # its id on the trip record (never a token)

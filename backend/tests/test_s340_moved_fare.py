@@ -78,7 +78,7 @@ class MovedFareReaskedAlone(unittest.TestCase):
             waiting_after = [x["name"] for x in GB.waiting_cards(OWNER)]
             rows = run(G.view(OWNER))["rows"]
             listed = {r["name"]: r["status"] for r in rows}
-            inv = run(GB.invoice(OWNER))
+            inv = run(GB.invoice(OWNER, run(G.store().movement(OWNER))["id"]))
         self.assertEqual((len(again["done"]), again["failed"], again["reasked"]), (1, [], []))
         self.assertEqual(waiting_before, ["Bruno Example"])                                    # a reload finds THAT card
         self.assertEqual(waiting_after, [])

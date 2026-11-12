@@ -244,16 +244,16 @@ async def _run(account: str, movement_id: str, m: Dict[str, Any]) -> None:
             def acted(k: int, total: int) -> None:
                 prog(k, total)
                 _publish(account, "group_progress", f"Booking {k} of {total}")
-            got = await GB.book_under_mandate(account, mid, ready, over_ok=over_ok, progress=acted)
+            got = await GB.book_under_mandate(account, mid, ready, movement_id, over_ok=over_ok, progress=acted)
             asks = [x for x in got["asks"] if x.get("kind") != "needs_vault"] + got["outside"]   # invited above: said as done, never asked
             card = got["card"]
             if any(x.get("code") == "approval_expired" for x in got["asks"]):
                 text = "Your instruction expired before I could book everyone — say it again and I'll carry on from the master list."
             else:
-                text = (await GB.finish(account, got["done"], held + asks, ask_once=True))["say"]
+                text = (await GB.finish(account, movement_id, got["done"], held + asks, ask_once=True))["say"]
             done = got["done"]
         else:
-            text = (await GB.finish(account, [], held, ask_once=True))["say"]
+            text = (await GB.finish(account, movement_id, [], held, ask_once=True))["say"]
         said_inv = invited_words(inv)   # done things first, the ONE question last
         text = text.replace(" Not booked — ", said_inv + " Not booked — ", 1) if " Not booked — " in text else text + said_inv
         # THE ONE FINISH, to the door that started it (channel.tell: their last turn's channel — WhatsApp, or the S2 page / its news)

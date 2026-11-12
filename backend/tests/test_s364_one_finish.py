@@ -87,7 +87,7 @@ class TheFinish(unittest.TestCase):
                 return {"sent": True}
             with mock.patch.object(G, "view", view), mock.patch("booking_signer.live_events.SEND", send), \
                     mock.patch.object(GB, "invoice", mock.AsyncMock(return_value={"number": "KAN-TEST", "total": "€1,234.00"})):
-                fin = await GB.finish(OWNER, [{"name": n} for n in booked], [{"name": "Ana Example", **GB.decision({"code": "not_cancellable"})}])
+                fin = await GB.finish(OWNER, (await G.store().movement(OWNER))["id"], [{"name": n} for n in booked], [{"name": "Ana Example", **GB.decision({"code": "not_cancellable"})}])
             return fin, sent
         fin, sent = _in_world(go)
         self.assertTrue(fin["say"].startswith("2 of 3 booked (TEST)."), fin["say"])
@@ -111,7 +111,7 @@ class TheFinish(unittest.TestCase):
                     r["status"] = "booked"
                 return v
             with mock.patch.object(G, "view", view), mock.patch.object(GB, "invoice", mock.AsyncMock(return_value={})):
-                return await GB.finish(OWNER, [{"name": "Ana Example"}], [])
+                return await GB.finish(OWNER, (await G.store().movement(OWNER))["id"], [{"name": "Ana Example"}], [])
         fin = _in_world(go)
         self.assertTrue(fin["say"].startswith("All 1 booked (TEST)."), fin["say"])
         self.assertIn("No email on file for Ana Example", fin["say"])
@@ -119,7 +119,7 @@ class TheFinish(unittest.TestCase):
     def test_the_yes_ends_in_the_finish(self):
         src = (ROOT / "booking_signer" / "group_book.py").read_text()
         self.assertIn('if c["action"] == "book":', src)
-        self.assertIn("fin = await finish(account, done, failed + list(also or []), ask_once=ask_once)", src)   # 365: + the mandate's held
+        self.assertIn("fin = await finish(account, mv[\"id\"], done, failed + list(also or []), ask_once=ask_once)", src)   # 365: + the mandate's held
 
 
 class PlanningLive(unittest.TestCase):

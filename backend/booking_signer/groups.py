@@ -29,7 +29,7 @@ from xml.etree import ElementTree as ET
 
 log = logging.getLogger("booking_signer.groups")
 
-STATUSES = ("not planned", "planning…", "planned", "needs vault", "over limit", "booked", "cancelled")   # Sasha 364 · planning…: live
+STATUSES = ("not planned", "planning…", "planned", "needs vault", "over limit", "confirming", "incomplete", "booked", "cancelled")   # Sasha 364 · planning…: live · 371b: confirming / incomplete — AgAPI's record
 
 # ── 1 · reading the list ───────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -809,8 +809,7 @@ def status_of(rows: List[dict], lim: dict, documents: bool) -> str:
         return "not planned"
     if all(r.get("state") == "cancelled" for r in live):
         return "cancelled"
-    if all(r.get("state") == "booked" for r in live):
-        return "booked"
+    # ⛔ Sasha 371b · "booked" is never read from Sasha's rows: only AgAPI's record (view → reconcile → record_states) says it
     if any((r.get("snapshot") or {}).get("over_limit") for r in live):
         return "over limit"
     if any(r.get("kind") == "flight" for r in live) and not documents:
@@ -847,10 +846,11 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     out = []
     members = await st.members(mv["id"])
     recorded: Dict[str, str] = {}
+    whys: Dict[str, str] = {}   # Sasha 371b · AgAPI's own "why" on a record that isn't booked
     booked_rec: Dict[str, Dict[str, Any]] = {}   # Sasha 340 · a booked worker's price and references, from AgAPI's record
     try:   # Sasha 339 (Tyler) · every read: AgAPI's ONE booking record first — the trips follow it, the status IS it
         from . import group_book as GB
-        recorded = await GB.reconcile(account, members, booked=booked_rec)
+        recorded = await GB.reconcile(account, mv["id"], members, booked=booked_rec, whys=whys)
     except Exception as e:
         log.warning("[groups] the list not reconciled with AgAPI's record: %s", type(e).__name__)
     from . import basket as BK
@@ -872,6 +872,7 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
                     **(await _vault_marks(m)),
                     "status": recorded.get(m["id"]) or ("planning…" if m["id"] in _PLANNING.get(account, set()) and not rows
                                                         else status_of(rows, lim, await _has_documents(m))),   # Sasha 364 · live
+                    **({"record_why": whys[m["id"]]} if m["id"] in whys else {}),
                     **({"price_eur": booked_rec[m["id"]]["price_eur"], "references": booked_rec[m["id"]]["references"],
                         "transport": _transport(rows) or "Booked · " + " · ".join(booked_rec[m["id"]]["references"])}
                        if m["id"] in booked_rec else {})})

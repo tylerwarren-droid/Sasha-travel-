@@ -388,7 +388,7 @@ async def _open_trip(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
 # ── Sasha 358 · THE ENGINE's doors: [Go] (a new trip with who's going) and one person's switch ───────────────────────────────
 
 async def _create(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
-    from . import groups as G
+    from . import groups as G, group_book as GB
     r = await G.create_trip(account, a.get("company"), str(a["destination"]), a.get("starts_on"), a.get("ends_on"), a.get("hotel_area"),
                             [str(x) for x in a["who"]])
     if r.get("why"):
@@ -400,7 +400,8 @@ async def _create(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     when = " – ".join(x for x in (str(a.get("starts_on") or "")[:10], str(a.get("ends_on") or "")[:10]) if x)
     return {"done": True, **r, "say": (f"The {r['destination']} trip" + (f" ({when})" if when else "") + (" was already there — opened, " if r["reused"] else ": ")
                                       + f"{_people(r['on_trip'])} on it. Planning each from their own home airport now, within their limits; "
-                                        "the list fills in as I go. Nothing is booked yet." + (f" ({'; '.join(notes)})" if notes else ""))}
+                                        "the list fills in as I go. " + await GB.booked_line(account, r.get("movement_id") or r.get("id"))
+                                      + (f" ({'; '.join(notes)})" if notes else ""))}
 
 
 async def _switch(account: str, a: Dict[str, Any]) -> Dict[str, Any]:

@@ -36,7 +36,7 @@ class TylersWords(unittest.TestCase):
         self.assertEqual(r["say"].split(" I'm")[0], "Saved: executive: €400 a night; worker: €250 a night.")   # FROM storage, in €
         self.assertEqual(mv["rules"]["limits"]["by_grade"]["executive"], {"hotel_night_eur": 400.0})
         self.assertTrue(r["planning"])
-        self.assertIn("I'm planning all 5 now", r["say"])                                       # the next step, started
+        self.assertIn("I'm planning 5 now", r["say"])                                             # the next step, started
         self.assertNotIn("$", r["say"])
 
     def test_by_person_read_back_by_name(self):

@@ -406,6 +406,25 @@ def record_states(records: List[dict], members: List[dict]) -> Dict[str, str]:
     return out
 
 
+HELD = ("booked", "confirming", "incomplete")   # the master list's statuses AgAPI's record holds an order (or a maybe) for
+
+
+async def booked_line(account: str, movement_id: Optional[str]) -> str:
+    """Sasha 371b · what is booked, said ONLY from AgAPI's record for THIS movement (the master list's status) — never assumed."""
+    from . import groups as G
+    if not movement_id:
+        return "Nothing is booked yet."
+    rows = (await G.view(account, movement_id)).get("rows") or []
+    n = sum(1 for r in rows if r.get("status") == "booked")
+    return "Nothing is booked yet." if not n else f"{n} of {len(rows)} {'is' if n == 1 else 'are'} already booked."
+
+
+async def unbooked(account: str, movement_id: str) -> List[str]:
+    """The members AgAPI's record holds NO order for on this movement — the only ones a plan may change."""
+    from . import groups as G
+    return [r["member_id"] for r in (await G.view(account, movement_id)).get("rows") or [] if r.get("status") not in HELD]
+
+
 def record_whys(records: List[dict], members: List[dict]) -> Dict[str, str]:
     """Sasha 371b · AgAPI's own "why" on a record that isn't booked (CR 184) — said, never a guess."""
     out = {}

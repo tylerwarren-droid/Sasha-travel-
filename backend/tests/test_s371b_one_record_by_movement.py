@@ -138,6 +138,9 @@ class Ratchet(unittest.TestCase):
         self.assertNotIn('return "booked"', (BS / "groups.py").read_text().split("def status_of")[1].split("def _transport")[0])
         self.assertIn('"Idempotency-Key": idem or "s334_"', gb)                               # a random key only where no act is sent
         self.assertIn("raise ValueError(f\"{op} needs its idempotency key (act_key)\")", gb)
+        for f in ("agapi/v0.py", "booking_signer/group_outcome.py"):                            # "nothing booked" only from the record
+            self.assertNotIn("Nothing is booked yet.", (ROOT / "backend" / f).read_text(), f)
+        self.assertIn("ids = await GB.unbooked(account, mv[\"id\"])", (ROOT / "backend" / "agapi" / "v0.py").read_text())   # never re-plan the booked
         acts = re.findall(r"_call\(account, it\[\"op\"\], it\[\"body\"\][^)]*\)", gb)
         self.assertEqual(acts, [])                                                            # every act goes through _send (one key, re-sent)
 

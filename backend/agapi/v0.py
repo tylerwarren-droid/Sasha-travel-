@@ -1778,8 +1778,11 @@ async def group_limits(ctx: Ctx, a: dict) -> dict:
     if resumed:
         return {**r, "saved": saved, "planning": True, "say": (f"Saved: {saved}. " if saved else "") + resumed}
     started = await _start_plan(ctx.account)
+    from booking_signer import group_book as GB   # Sasha 371b · what is booked: AgAPI's record for this movement, never assumed
+    mv = await G.store().movement(ctx.account)
+    said = await GB.booked_line(ctx.account, mv["id"] if mv else None)
     say = (f"Saved: {saved}." if saved else "No limits are saved.") + (
-        f" I'm planning all {started} now, one by one, within those limits — the master list fills in as I go. Nothing is booked yet."
+        f" I'm planning {started} now, one by one, within those limits — the master list fills in as I go. {said}"
         if started else " Tell me who's going next (from your People, or add them once), and I'll plan them within these limits.")
     return {**r, "saved": saved, "planning": bool(started), "say": say}
 
@@ -1793,7 +1796,8 @@ async def _start_plan(account: str) -> int:
     if run is not None and not run.done():
         return 0
     mv = await G.store().movement(account)
-    ids = [m["id"] for m in await G.store().members(mv["id"])] if mv else []
+    from booking_signer import group_book as GB   # Sasha 371b · never re-plan anyone AgAPI's record holds an order for
+    ids = await GB.unbooked(account, mv["id"]) if mv else []
     if ids:
         G._plan_later(account, mv["id"], ids)
     return len(ids)
@@ -1807,8 +1811,10 @@ async def group_plan(ctx: Ctx, a: dict) -> dict:
     n = await _start_plan(ctx.account)
     if not n:
         return {"status": "planning", "say": "I'm already working through the list — the master list fills in as each person is planned."}
-    return {"status": "planning", "people": n, "say": f"I'm working through all {n} now, one by one, each within their limit — "
-            "the master list fills in as I go. Nothing is booked yet."}
+    from booking_signer import group_book as GB
+    mv = await G.store().movement(ctx.account)
+    return {"status": "planning", "people": n, "say": f"I'm working through {n} now, one by one, each within their limit — "
+            "the master list fills in as I go. " + await GB.booked_line(ctx.account, mv["id"] if mv else None)}
 
 
 async def group_invite_vault(ctx: Ctx, a: dict) -> dict:

@@ -2,7 +2,7 @@
 dive.onboard results (scripts/fixtures/venue_engine/<host>.json) — nothing is fetched, no AgAPI call. A site with no saved answer
 is "not read", as the real engine says when it can't read one."""
 from __future__ import annotations
-from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
+from kanoe_contract import ERR, OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import json
 import os
@@ -74,7 +74,9 @@ async def _submit_answer(op: str, body: dict, approval=None, account=None) -> di
         return {"ok": True, "result": {"status": "sent", "cancel_act_id": "act_gate_c", "say": "I've asked them to cancel it."}}
     if op == OP.VENUE_BOOKING_STATUS:
         return {"ok": True, "result": {"act_id": body.get("act_id"), "state": "sent", "say": "sent"}}
-    return {"ok": False, "error": {"code": "unknown_op", "message": op}}
+    if op == OP.VENUE_MANAGE_OPTIONS:   # Sasha 374 · a venue (not a train): AgAPI keeps no fare rules for it — its own published shape
+        return {"ok": True, "result": {"act_id": body.get("act_id"), "kind": "venue", "known": False, "options": []}}
+    return {"ok": False, "error": {"code": ERR.UNKNOWN_OPERATION, "message": op}}   # AgAPI's own code, never one of the fake's
 
 
 def install(submit: bool = False) -> None:

@@ -941,30 +941,50 @@ async def hold_venue(ctx, a: dict) -> dict:
     path = one_path(ctx)   # Sasha 270 · the one path: their listing too (reservable); never a form of Sasha's own reading
     eng = await engine_channel(card or (listing_card(rd) if path else None), listing=path) or read_channel(rd, card, one_path=path)
     from agapi import venue_truth as VT
-    dec = VT.decision(card or listing_card(rd)) if path else None
+    dec = VT.decision(card or listing_card(rd))   # Sasha 377 · CR 188: AgAPI's ONE decision (venue.profile → handoff.decide), every surface
     ctx.route_dec = dec   # Sasha 331 · the decision the route line is said from
     if kanoe_route(dec) and at and not _open_slot(ctx, a):   # Sasha 287 · a WhatsApp venue: AgAPI's gate decides who sends it
         return _with_card(card, await kanoe_whatsapp(ctx, a, rd, res, at, now, card, dec))
-    if follows(dec, at):   # Sasha 284 · the person finishes it: handed over as AgAPI decided (its words, its button)
-        return _with_card(card, await follow(ctx, a, rd, res, at, now, card, dec))
-    d = await rules_for(ctx, a, rd, res, at, eng, card, route, now)
-    if dec and dec["route"] != "none" and d.get("say") in REFUSED:   # Sasha 284 · Kanoe may not act here: never "can't" — AgAPI's
-        ctx.route_dec = None   # Sasha 331 · handed over instead of AgAPI's route: its line would say what isn't happening
-        return _with_card(card, await follow(ctx, a, rd, res, at, now, card, dec, refused=True))   # prepared page, theirs to finish
-    return _with_card(card, await _execute(ctx, a, rd, res, at, now, d, eng, card))
+    return _with_card(card, await one_decision(ctx, a, rd, res, at, now, card, dec))
 
 
-# Sasha 284 · the booking rules' answers that mean "Kanoe may not act here" (access off, today's calls made, too soon, no channel of
-# its own) — with AgAPI's decision naming a route, each becomes that route handed over, never a "can't"
-REFUSED = ("no_real_sends", "calls_cap", "too_soon", "no_channel")
+#: Sasha 377 · CR 188 · the routes AgAPI ACTS on (Kanoe sends, or places the call) on the person's ONE yes — read back first
+ACT_ROUTES = ("send_form", "ask_then_send", "message")
+CALL_ROUTES = ("call", "call_at_opening", "call_no_voice")
 
 
-def follows(dec: Optional[dict], at: Optional[str]) -> bool:
-    """Sasha 284 · AgAPI's decision is one the PERSON finishes — its button sends nothing, it is not a call, a route was found — so S2
-    hands it over as decided. A message they send needs its words written by venue.prepare_booking: only with a day and a time."""
-    if not dec or dec.get("route") in (None, "none") or dec.get("how_far") == "call" or (dec.get("button") or {}).get("sends"):
-        return False
-    return bool(at) or dec.get("how_far") != "request"
+def agapi_d(dec: dict) -> dict:
+    """Sasha 377 · CR 188 · AgAPI's ONE decision in the shape the act executors take (_via_agapi, _call_question, _said) — its route and
+    its words only; NOTHING is decided here. (Sasha's own decider over its own channel read — rules_for / _execute — is deleted.)"""
+    from agapi.booking_rules import booking_rules as BR
+    route, btn, hours = dec.get("route"), dec.get("button") or {}, dec.get("hours") or {}
+    action = ("fill_form_zero_touch" if route in ("send_form", "ask_then_send") else "fill_platform_form" if route == "platform_book"
+              else "request_email" if route == "message" and str(dec.get("channel") or "").lower() == "email"
+              else "request_whatsapp" if route == "message" else "call" if route in CALL_ROUTES else "prepared_link")
+    return {"action": action, "say": "ask_call" if route in CALL_ROUTES else route, "say_text": dec.get("say_text") or "", "rung": route,
+            "takeover": {"say": BR.PHRASES["takeover"], "link": btn.get("link")},
+            "ctx": {"venue": {k: hours.get(k) for k in ("opens_at", "open_now") if hours.get(k) is not None}}}
+
+
+async def one_decision(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card: Optional[dict], dec: Optional[dict]) -> dict:
+    """Sasha 377 · CR 188 · THE ONE BOOKING PATH: AgAPI's decision, followed. Its act (Kanoe's form / email / WhatsApp, or the call) →
+    venue.prepare_booking → its read-back → the person's ONE yes → venue.submit_booking (_via_agapi / _call_question). The platform →
+    venue.prepare_booking decides platform_book (the read-back, the yes, Sasha books it) or the hand-over for the step only the person
+    may do (follow). No route → the floor. Sasha chooses no channel and reads no person's switch."""
+    if not dec or dec.get("route") in (None, "none"):
+        return await follow(ctx, a, rd, res, at, now, card, dec or {"route": "none"})
+    route = dec["route"]
+    acts = (route in ACT_ROUTES and (dec.get("button") or {}).get("sends")) or route in CALL_ROUTES
+    if not acts:   # the platform (platform_book or its hand-over), their own WhatsApp, reserve with Google, no reservations: AgAPI's words
+        return await follow(ctx, a, rd, res, at, now, card, dec)
+    d = agapi_d(dec)
+    if not at or _open_slot(ctx, a):   # an act books a day and a time — AgAPI's prepare needs both
+        return _said({"status": "need_day", "venue": rd["venue"],
+                      "how": "Their booking needs a day and a time: ask them which (one short question), then hold_venue again."}, d)
+    if route in CALL_ROUTES:
+        return await _call_question(ctx, a, rd, res, at, now, d, card)
+    got = await _via_agapi(ctx, a, rd, res, at, now, d, card, **({"stay": _stay(ctx, a)} if _nights(ctx, a) else {}))
+    return got if got is not None else _to_tyler(_API().plain_venue(rd["venue"]), d)   # no booking service on this server: nothing sent
 
 
 async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card: Optional[dict], dec: dict, refused: bool = False) -> dict:
@@ -975,7 +995,7 @@ async def follow(ctx, a: dict, rd: dict, res: dict, at: Optional[str], now, card
     venue = GW.plain_venue(rd["venue"])
     link = (dec.get("button") or {}).get("link") or (card or {}).get("website")
     prep = None
-    if at and not _open_slot(ctx, a) and dec.get("route") == "platform" and not refused:
+    if at and not _open_slot(ctx, a) and dec.get("route") in ("platform_book", "platform") and not refused:
         # Sasha 328 · CR 160 · a platform venue: venue.prepare_booking WITH this person decides whether AgAPI books it for them (the platform
         # beta: route platform_book — its read-back, their yes, AgAPI presses Book). Anyone else: that same prepared booking is the hand-over.
         got = await _platform_book(ctx, a, rd, res, at, card, dec)
@@ -1378,7 +1398,7 @@ async def _person_link(ctx, a: dict, rd: dict, res: dict, at: str, now, card: Op
     ch = (got.get("channel") if got.get("ok") else None) or {"kind": "cant_read", "owner": "the person", "url": link}
     log.info("[venues] %s: their link is %s (owner %s)", venue, ch.get("kind"), ch.get("owner"))
     if ch.get("owner") == "kanoe" and at and not _nights(ctx, a) and not _open_slot(ctx, a):
-        d = await rules_for(ctx, a, rd, res, at, {"kind": "form", "url": link, "from": "person"}, card, "form", now)
+        d = agapi_d({"route": "send_form", "button": {"link": link, "sends": True}})   # Sasha 377 · AgAPI's classifier said Kanoe's form
         if d["action"] == "fill_form_zero_touch":
             out = await _via_agapi(ctx, a, rd, res, at, now, d, card, link=link)
             if out is not None:
@@ -1392,35 +1412,6 @@ async def _person_link(ctx, a: dict, rd: dict, res: dict, at: str, now, card: Op
                      {**d, "takeover": {**d["takeover"], "link": link}})
     return {"status": "page_link", "venue": venue, "booked": False, "link_kind": ch.get("kind"), **_link_out(link),
             "say": V.link_line(ch), "how": "Say `say` exactly — their link is on their screen; never that it's booked."}
-
-
-async def rules_for(ctx, a: dict, rd: dict, res: dict, at: str, eng: Optional[dict], card: Optional[dict], route: Optional[str],
-                    now: Optional[datetime] = None) -> dict:
-    """Sasha 254 · ONE DECIDER: this booking's Decision from the booking rules (agapi.booking_decide), with the channels it read."""
-    from agapi import booking_decide as BD
-    chans = BD.channels_of(eng if eng and eng.get("from") != "read" else None, rd, card, one_path=one_path(ctx))
-    if _open_slot(ctx, a) or (res.get("when") or {}).get("mode") == "venue_proposes":
-        # Sasha 253 · G7 — no slot: a form or a platform books a SLOT, so for this booking only the request channels exist
-        chans = [c for c in chans if c["kind"] not in ("form", "platform")]
-    phone = str(((rd.get("rungs") or {}).get("phone") or {}).get("value") or "") or None
-    test = BD.is_test_venue(rd, card)
-    if test and (card or {}).get("phone") and not any(c["kind"] == "phone" for c in chans):
-        chans = chans + [{"kind": "phone", "value": card["phone"]}]   # Sasha 265 · a Kanoe test venue's own (sandbox) number
-        phone = phone or card["phone"]
-    when = at or (f"{str(a.get('day'))[:10]}T12:00" if _open_slot(ctx, a) and a.get("day") else None)
-    country = rd.get("country") or a.get("country")
-    path = one_path(ctx)
-    d = await BD.decide_for(ctx.account, channels=chans, vtype=BD.venue_type((res.get("what") or {}).get("category"), _nights(ctx, a)),
-                            test=test, local_at=when, country=country,
-                            preference=route, venue_key=f"read:{rd.get('read_id')}", number=phone if phone and phone.startswith("+") else None,
-                            link=BD.page_of(chans, card), now=now,
-                            # Sasha 265 · item 4 (booking-rules/2): the ONE question's words, local, and when they open
-                            booking=BD.booking_words(_API().plain_venue(rd["venue"]), (res.get("how_many") or {}).get("count"), at or None,
-                                                     country, now) if path else None,
-                            opening=opening_of(rd, card, now, country) if path else None, sandbox_calls=path)
-    if not path:   # Sasha 265 · old S1 (parity off): booking-rules/1's answers, byte-identical
-        d = BD.as_v1(d)
-    return {**d, "channels": chans, **({"phone": phone} if phone else {})}
 
 
 def opening_of(rd: dict, card: Optional[dict], now: Optional[datetime], country: Optional[str]) -> Optional[dict]:
@@ -1458,84 +1449,6 @@ def _said(out: dict, d: dict, *, when: str = "now", account: Optional[str] = Non
         _HELD[account]["rules_say"] = BD.say(d)
         _HELD[account]["out"] = {**_HELD[account].get("out", {}), "rules": out["rules"], "takeover": out["takeover"]}
     return out
-
-
-async def _execute(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, eng: Optional[dict], card: Optional[dict]) -> dict:
-    """Sasha 254 · the executors run EXACTLY the action decide() returned — nothing chooses here."""
-    from agapi import booking_decide as BD
-    GW = _API()
-    action, key = d["action"], d["say"]
-    rungs = rd.get("rungs") or {}
-    nights, open_slot = _nights(ctx, a), _open_slot(ctx, a)
-    venue = GW.plain_venue(rd["venue"])
-    kinds = {c["kind"] for c in d.get("channels") or []}
-    if action == "call_and_email" and "email" in rungs:
-        # Sasha 269 · R6 (CR 100): the email is the act. Sasha 271 · CR 102: a hotel stay is an act too — and the call that goes with
-        # the email is the ENGINE's (venue.submit_booking returns its call_plan R6 under the same yes); Sasha dials only that plan
-        if at and not open_slot:
-            got = await _via_agapi(ctx, a, rd, res, at, now, d, card, **({"stay": _stay(ctx, a)} if nights else {}))
-            if got is not None:
-                return got
-        if nights:   # no booking service here: a stay is never Sasha's own email (its call would be nobody's)
-            return await _no_engine(ctx, rd, d, venue)
-        return _to_tyler(venue, d)   # Sasha 319 · AgAPI is the one sender: no key here (or no slot) → Tyler, nothing sent
-    if key == "ask_page_or_call" or action in ("ask_call", "call", "call_and_email", "wait"):
-        # Sasha 265 · item 4 (CR 99, booking-rules/2): a call is an ACT — the ONE question is its read-back, on a card. Sasha 269: every
-        # call (R3's wait and R6's call too) is the act's — Sasha's own call (/api/booking/calls, never placed without an act) is not used
-        if action == "wait" and not _wait_until(d):
-            return _said({"status": "need_day", "venue": rd["venue"],
-                          "how": "There's no day to call closer to: ask them which day (one short question), then hold_venue again."}, d)
-        if not at or open_slot:   # the act books a day and a time: no slot, no call of Sasha's own — their page, or said
-            return await _no_call(ctx, a, rd, res, at, now, d, card, venue, "a call needs a day and a time to ask them for")
-        # Sasha 271 · CR 102: a stay's call is the same act, with the stay (its check-in, nights, room) — never a call of Sasha's own
-        return await _call_question(ctx, a, rd, res, at, now, d, card)
-    if action == "ask_one_question":   # R2 · the ONE question, word for word (voice.ASK_BOOK is this phrase)
-        return _said({"status": "choose_route", "venue": rd["venue"], "ask": d["say_text"],
-                      "options": [dict(o) for o in BD.CHOICES],
-                      "how": "Say `say` word for word, then hold_venue again with the route they chose (Prefilled form → page; "
-                             "Handle it → form)."}, d)
-    if action in ("fill_form_zero_touch", "request_email", "request_whatsapp") and at and not open_slot \
-            and not (nights and action == "fill_form_zero_touch"):
-        # Sasha 254 · item 3 — "I'll handle it", LIVE: AgAPI sends it (venue.prepare_booking → the read-back → on their yes,
-        # venue.submit_booking). Sasha 319 · AgAPI is the ONE sender: where it doesn't reach (no key here, no slot) nothing is sent —
-        # it's handed to Tyler. Sasha 271 · CR 102: a hotel stay's request is the engine's act too (its R5 call, when the rules say,
-        # comes from booking_status.follow_up); a hotel's own booking engine stays their page
-        got = await _via_agapi(ctx, a, rd, res, at, now, d, card, **({"stay": _stay(ctx, a)} if nights else {}))
-        if got is not None:
-            return got
-        if nights:   # no booking service here: never Sasha's own room email for a stay
-            return await _no_engine(ctx, rd, d, venue)
-    if action == "fill_form_zero_touch":   # R2 · "handle it": AgAPI's (above); else
-        # the venue engine's form (no form in Sasha's own read): Sasha can't submit it from here yet — their page, prepared, and said so
-        return await _prepared_now(ctx, a, rd, res, at, now, eng, card, BD.redecide(d, "page"))
-    if action == "prepared_link":
-        if key in ("prepared_link", "prepared_link_captcha") and nights and ({"link", "own_page"} & set(rungs)):
-            return _said(await _page(ctx, a, rd, res, at), d)   # a hotel's own engine with the stay in its link (G8)
-        return await _prepared_now(ctx, a, rd, res, at, now, eng, card, d)
-    if action == "hand_over_platform_link":   # R14 · their page, handed over — never booked on a platform
-        if {"link", "own_page"} & set(rungs) and not open_slot:
-            got = await _page(ctx, a, rd, res, at)
-            from agapi import venue_submit as VS
-            if one_path(ctx) and VS.TAP.get() is not None and got.get("status") == "awaiting_yes" and ctx.account in _HELD:
-                # Sasha 264 · item 8 (row 929, Ichikani Madrid): on a platform SHE never sends — so no "Shall I send this?", no read-back
-                # card, no forwarding address: their page at once, ONE line + ONE button (the hand-over card), said by code
-                out = _said(await _finish(ctx, _HELD[ctx.account]), d)
-                line = out.get("page_says") or ""
-                out["rules"] = {**out["rules"], "say": line}   # the rules' words for it ARE this line (never a second, longer one)
-                out["say"] = f"{line} Say exactly that."
-                return out
-            return _said(got, d)
-        url = d["takeover"].get("link") or next((c.get("url") for c in d.get("channels") or [] if c["kind"] == "platform" and c.get("url")), None)
-        return _said({"status": "page_link", "venue": venue, "booked": False, **_link_out(url)}, d)
-    if action == "request_email":   # Sasha 319 · AgAPI's (above); with no key here or no slot, Tyler — never Sasha's own email
-        return _to_tyler(venue, d)
-    if action == "request_whatsapp":
-        if eng and eng.get("from") != "read" and eng.get("kind") == "whatsapp":
-            held = await _prepared(ctx, a, rd, res, at, now, eng, card)   # a prepared WhatsApp THEY send (venue.prepare_booking)
-            return _said(held, d, when="after_yes")
-        return _said(_draft(ctx, a, rd, res, at, now, "whatsapp"), d, when="after_yes")
-    # refuse (and anything the rules add later): said, nothing prepared
-    return _said({"status": "refused", "venue": venue}, d)
 
 
 async def _call_question(ctx, a: dict, rd: dict, res: dict, at: str, now, d: dict, card: Optional[dict]) -> dict:

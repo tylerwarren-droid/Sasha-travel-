@@ -97,12 +97,10 @@ async def _view(account: str) -> Dict[str, Any]:
 
 
 def _pick(rows: List[dict], who: Optional[List[str]]) -> tuple:
-    if not who:
-        return rows, []
-    by = {r["name"].lower(): r for r in rows}
-    by_id = {r["member_id"]: r for r in rows}
-    got = [by.get(str(w).strip().lower()) or by_id.get(str(w)) for w in who]
-    return [r for r in got if r], [str(w) for w, r in zip(who, got) if not r]
+    """Sasha 376 · the master list's rows by the names said — THE ONE PERSON RESOLVER (groups.pick: full name, else the one person with
+    that first or last name; two → asked). → (rows, unknown, ambiguous)."""
+    from . import groups as G
+    return G.pick(rows, [str(w) for w in (who if isinstance(who, list) else [who])] if who else None)
 
 
 # ── book ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -145,7 +143,9 @@ async def _book(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
         return _no(NO_MOVEMENT)
     if not v["rows"]:
         return _no("0 can be booked: nobody is on the list yet — add the list first.")
-    rows, unknown = _pick(v["rows"], a.get("who"))
+    rows, unknown, amb = _pick(v["rows"], a.get("who"))
+    if amb:   # Sasha 376 · two people that name could be: asked, never one guessed
+        return _no(__import__("booking_signer.groups", fromlist=["x"]).ambiguous_words(amb), missing=["who"])
     if unknown:
         return _no(f"{_and(unknown)} {'isn’t' if len(unknown) == 1 else 'aren’t'} on the list — check the name.", missing=["who"])
     ready = [r for r in rows if reason(r) is None]
@@ -170,11 +170,13 @@ async def _swap(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
         return _no(NO_MOVEMENT)
     out_name = str((a["who"] if isinstance(a["who"], list) else [a["who"]])[0]).strip()
     in_name = str(a["to"]).strip()
-    leaver, _ = _pick(v["rows"], [out_name])
+    leaver, _, amb = _pick(v["rows"], [out_name])
+    if amb:
+        return _no(__import__("booking_signer.groups", fromlist=["x"]).ambiguous_words(amb), missing=["who leaves"])
     if not leaver:
         return _no(f"{out_name} isn't on the list — check the name of who leaves.", missing=["who leaves"])
     leaver = leaver[0]
-    comer = next((r for r in v["rows"] if r["name"].lower() == in_name.lower()), None)
+    comer = (_pick(v["rows"], [in_name])[0] or [None])[0]   # Sasha 376 · the one resolver
     city, grade = str(a.get("to_city") or "").strip(), str(a.get("to_grade") or "").strip()
     if not comer and not city:
         return _no(f"Swap needs {in_name}'s home city — they're not on the list yet (their grade too, or they take {leaver['name']}'s: "
@@ -230,7 +232,9 @@ async def _cancel(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     v = await _view(account)
     if v.get("why"):
         return _no(NO_MOVEMENT)
-    rows, unknown = _pick(v["rows"], a["who"])
+    rows, unknown, amb = _pick(v["rows"], a["who"])
+    if amb:
+        return _no(__import__("booking_signer.groups", fromlist=["x"]).ambiguous_words(amb), missing=["who to cancel"])
     if unknown:
         return _no(f"{_and(unknown)} {'isn’t' if len(unknown) == 1 else 'aren’t'} on the list — check the name.", missing=["who to cancel"])
     none = [r["name"] for r in rows if r["status"] != "booked"]
@@ -250,7 +254,9 @@ async def _invite(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
         return _no(NO_MOVEMENT)
     if not v["rows"]:
         return _no("Nobody is on the list yet — add the list first, then invite them.")
-    rows, unknown = _pick(v["rows"], a.get("who"))
+    rows, unknown, amb = _pick(v["rows"], a.get("who"))
+    if amb:
+        return _no(__import__("booking_signer.groups", fromlist=["x"]).ambiguous_words(amb))
     if unknown:
         return _no(f"{_and(unknown)} {'isn’t' if len(unknown) == 1 else 'aren’t'} on the list — check the name.")
     if not a.get("who"):   # everyone → everyone still without a passport
@@ -273,6 +279,8 @@ async def _invoice(account: str, a: Dict[str, Any]) -> Dict[str, Any]:
     from . import group_book as GB, groups as G
     mv = await G.store().movement(account)   # the organiser's trip, chosen once here; the invoice and its link are THAT movement's
     inv = await GB.invoice(account, mv["id"]) if mv else {"why": "no movement"}
+    if inv.get("unread"):   # Sasha 376 · the record didn't answer: said as that, never "nothing booked" or €0.00
+        return _no(GB.INVOICE_UNREAD_SAY)
     if inv.get("why"):
         return _no(NO_MOVEMENT)
     if not inv["lines"] and not inv["adjustments"]:

@@ -268,13 +268,22 @@ async def _read_back(account: str, op: str, body: dict, idem: str) -> Dict[str, 
     return await _send(account, op, body, idem)
 
 
+class Unread(Exception):
+    """Sasha 376 · AgAPI's record couldn't be read: said as that — never as nothing booked, never as €0.00."""
+
+
 async def _records(account: str, movement_id: str) -> List[dict]:
-    """Sasha 371b · AgAPI's ONE record for THIS movement (CR 184: group.bookings {end_user, movement_id}) — never the organiser's every trip."""
+    """Sasha 371b · AgAPI's ONE record for THIS movement (CR 184: group.bookings {end_user, movement_id}) — never the organiser's every trip.
+    Sasha 376 · no answer → the SAME read again (as an act's, _send); still unread → Unread, never an empty list."""
     if not movement_id:
         raise ValueError("group.bookings is read by movement")
     org = await _organiser(account)
-    r = await _call(account, "group.bookings", {"end_user": org, "movement_id": str(movement_id)}) if org else {}
-    return ((r.get("result") or {}).get("bookings") or []) if r.get("ok") else []
+    if not org:
+        raise Unread("the organiser isn't known to AgAPI just now")
+    r = await _send(account, "group.bookings", {"end_user": org, "movement_id": str(movement_id)}, "s376_read_" + secrets.token_hex(12))
+    if not r.get("ok"):
+        raise Unread((r.get("error") or {}).get("code") or "unread")
+    return (r.get("result") or {}).get("bookings") or []
 
 
 LIVE = ("booked", "unknown", "incomplete")   # CR 184 · a record that holds (or may hold) an order — at most ONE per traveller per movement
@@ -356,6 +365,7 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
             if over and not asked:
                 return "skip", {"name": m["name"], "member_id": m["id"], "kind": "over_at_booking", "why": over}
             return "item", {"op": "group.book", "member": m["id"], "owner": owner_of(m), "name": m["name"], "worker": w, "body": body, "idem": idem,
+                            **({"outside": outside} if outside else {}),   # Sasha 376 · AgAPI's reasons ride on the card's item
                             "over": st_ == "over limit" or bool(over), "over_words": over, "replanned": replanned,
                             "read_back_id": d["read_back_id"], "sha": d.get("read_back_sha256") or "",
                             "lines": list((d.get("read_back") or {}).get("lines") or [])}
@@ -504,7 +514,6 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
     if not mv:
         return {"status": "nothing", "say": "There's no group movement yet."}
     members = await st.members(mv["id"])
-    by_name = {m["name"].lower(): m for m in members}
     org = await _organiser(account)
     if not org:
         return {"status": "nothing", "say": "AgAPI's sandbox didn't answer — nothing was prepared."}
@@ -514,7 +523,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
     if action == "book" and not (mv.get("rules") or {}).get("hotel"):   # Sasha 365 · the group's ONE hotel search, before the workers
         await G.group_hotel(account, mv, members)
     if action == "book":   # Sasha 339 · each worker in parallel (bounded), progress counted — the card in member order
-        pick = [by_name[w.lower()] for w in who or [] if w.lower() in by_name] if who else members
+        pick = G.pick(members, who)[0]   # Sasha 376 · the one person resolver
         todo = [(m, view.get(m["id"], {}).get("status")) for m in pick
                 if (record_of(records, m["id"]) or {}).get("state") not in LIVE]   # Sasha 371b · AgAPI's record: anyone it holds an order for is not asked again
         sem, done = asyncio.Semaphore(BOOK_PARALLEL), [0]
@@ -535,7 +544,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
         for kind, x in await asyncio.gather(*(one(m, st_) for m, st_ in todo)):
             (items if kind == "item" else skipped).append(x)
     elif action == "swap":
-        a, b = (by_name.get((who or [""])[0].lower()), by_name.get((swap_to or "").lower()))
+        a, b = ((G.pick(members, [(who or [""])[0]])[0] or [None])[0], (G.pick(members, [swap_to])[0] or [None])[0] if swap_to else None)
         if not a:
             return {"status": "nothing", "say": f"{(who or [''])[0] or 'The one who leaves'} isn't on the list."}
         rec = _live_record(records, a["id"])
@@ -577,7 +586,7 @@ async def prepare(account: str, action: str, who: Optional[List[str]] = None, sw
                       "over": bool(over), "over_words": over, "body": sb, "idem": act_key("group.swap", mv["id"], b["id"], sb)})
     elif action == "cancel":
         for nm in who or []:
-            m = by_name.get(nm.lower())
+            m = (G.pick(members, [nm])[0] or [None])[0]   # Sasha 376 · the one person resolver
             rec = _live_record(records, m["id"]) if m else None
             if not rec:
                 skipped.append({"name": nm, "why": "no booking to cancel"})
@@ -623,7 +632,7 @@ async def book_under_mandate(account: str, mandate_id: str, names: List[str], mo
     from . import groups as G
     st = G.store()
     mv = await st.movement(account, movement_id)   # Sasha 371b · the mandate's OWN movement, never "the open trip"
-    members = [m for m in await st.members(mv["id"]) if m["name"] in set(names)]
+    members = G.pick(await st.members(mv["id"]), names)[0]   # Sasha 376 · the one person resolver
     org = await _organiser(account)
     if not org:
         return {"done": [], "outside": [], "asks": [{"name": m["name"], "code": "upstream_unreachable"} for m in members], "card": None}
@@ -658,7 +667,7 @@ async def book_under_mandate(account: str, mandate_id: str, names: List[str], mo
                 done.append({"name": m["name"], "state": res.get("state"), "parts": [p.get("reference") for p in res.get("parts") or []],
                              "conditions": [{"kind": p.get("kind"), **(p.get("conditions") or {}), **({"cancel_by": p["cancel_by"]} if p.get("cancel_by") else {})}
                                             for p in res.get("parts") or [] if p.get("conditions") or p.get("cancel_by")]})
-            elif kind == "outside":
+            elif kind in ("outside", "item"):   # Sasha 376 · a read-back waiting for the explicit tap — ON the card, never dropped
                 outside.append(x)
             elif kind == "recorded":   # Sasha 371b · AgAPI's record holds them (booked / confirming / incomplete): a state, said from the record
                 done.append({"name": m["name"], "state": x["state"], "parts": []})
@@ -947,6 +956,11 @@ def _names(xs: List[str]) -> str:
     return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1] if xs else ""
 
 
+UNREAD_SAY = ("AgAPI's booking record didn't answer just now, so I can't say yet who is booked — nothing is booked twice, and the master "
+              "list will show it as soon as the record answers. Ask me again in a minute.")
+INVOICE_UNREAD_SAY = "The invoice couldn't be read just now — ask me for it again in a minute."
+
+
 async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]], ask_once: bool = False) -> Dict[str, Any]:
     """THE ONE FINISH of a group booking, composed from the trip record (the master list as it is now — AgAPI's record for the booked):
     how many are booked, where the references are, the confirmations sent (to each traveller's registered email; anyone without one
@@ -954,6 +968,9 @@ async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], fai
     from . import groups as G
     mv = await G.store().movement(account, movement_id)
     view = await G.view(account, movement_id)
+    if view.get("record_unread"):   # Sasha 376 · nothing said as booked or not, no money said: the record, as unread
+        return {"say": UNREAD_SAY, "booked": [], "total": len(view.get("rows") or []), "confirmations": {"sent": [], "no_email": [], "not_sent": []},
+                "invoice": {}, "decisions": [], "unread": True}
     rows = view.get("rows") or []
     booked = [r["name"] for r in rows if r.get("status") == "booked"]
     confirming = [r["name"] for r in rows if r.get("status") == "confirming"]   # Sasha 371b · AgAPI's record: an order may exist
@@ -977,7 +994,9 @@ async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], fai
             parts.append(f"No email on file for {_names(conf['no_email'])} — add it on the Group page and I'll send theirs.")
         if conf["not_sent"]:
             parts.append(f"{_names(conf['not_sent'])}'s confirmation didn't go out just now — I'll send it again.")
-        if inv.get("number") and inv.get("total"):
+        if inv.get("unread"):   # Sasha 376 · never "€0.00" for a record that didn't answer
+            parts.append(INVOICE_UNREAD_SAY)
+        elif inv.get("number") and inv.get("total"):
             parts.append(f"The invoice {inv['number']}: {inv['total']}.")
     for d in done:   # Sasha 367 · each booked fare's own conditions (CR 181: parts[].conditions / cancel_by), said plainly
         said_for: set = set()
@@ -1012,6 +1031,13 @@ async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], fai
     return {"say": " ".join(parts), "booked": booked, "total": total, "confirmations": conf, "invoice": {k: inv.get(k) for k in ("number", "total")},
             "decisions": [{"name": f["name"], "code": f.get("code") or f.get("kind"),
                            "why": f.get("why") or FACTS.get(f.get("code") or f.get("kind") or "", "not booked just now")} for f in failed]}
+
+
+def open_card(account: str) -> Optional[str]:
+    """Sasha 376 · THE OPEN CARD on this organiser's conversation: the newest group card still waiting for their yes (the ONE card store,
+    in time) → its id, else None. sasha.turn reads it BEFORE anything can start a new instruction: a yes in any form answers THIS card."""
+    live = [(c["at"], cid) for cid, c in _CARDS.items() if c.get("account") == account and time.time() - c["at"] <= CARD_S]
+    return max(live)[1] if live else None
 
 
 def waiting_cards(account: str) -> List[Dict[str, Any]]:
@@ -1165,7 +1191,10 @@ async def invoice(account: str, movement_id: str) -> Dict[str, Any]:
     if not mv:
         return {"why": "there's no group movement yet"}
     members = {m["id"]: m for m in await st.members(mv["id"])}
-    recs = await _records(account, mv["id"])   # CR 184 · AgAPI's records for this movement only
+    try:
+        recs = await _records(account, mv["id"])   # CR 184 · AgAPI's records for this movement only
+    except Unread as e:   # Sasha 376 · an unread record is said as unread — never a €0.00 invoice
+        return {"why": "unread", "unread": True, "cause": str(e), "number": f"KAN-{str(mv['id'])[:8].upper()}-TEST"}
     lines, adj, total = [], [], 0
     for b in recs:
         m = members.get((b.get("worker") or {}).get("key")) or {}

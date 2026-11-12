@@ -501,6 +501,7 @@ async def _send(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime
         return ["not sent: outside the 24-hour window"]
     from . import switching as _SWc
     _SWc.compose(out)   # Sasha 356 · the ONE place a message's header is written
+    fit(out)            # Sasha 376 · the ONE place a message is fitted to WhatsApp: split, never cut
     _with_menu(out)
     results = []
     for it in out.items:
@@ -522,6 +523,63 @@ async def _send(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime
                 results.append(await SENDER.send(frm, ch["number_e164"], body=f"{it[1]}\n(Reply: {opts})"))
     await _record_out(ch, out.said(), _tool_of(out))
     return results
+
+
+#: Sasha 376 · WhatsApp's own limits (Twilio): a text message's body, and an interactive (buttons / list) message's body
+TEXT_MAX = 1500
+ASK_MAX = 1024
+
+
+def split_text(text: str, limit: int = TEXT_MAX) -> List[str]:
+    """Sasha 376 · a body → consecutive messages of at most `limit`, broken at line ends (a too-long line at a sentence end, else a space)
+    — every word arrives, in order. Never a cut."""
+    import re as _re
+    out: List[str] = []
+    cur = ""
+    pieces: List[str] = []
+    for line in str(text or "").split("\n"):
+        while len(line) > limit:   # one line longer than a message: at its last sentence end (else its last space) that fits
+            cut = max(line.rfind(". ", 0, limit), line.rfind("; ", 0, limit))
+            cut = cut + 1 if cut > limit // 3 else (line.rfind(" ", 0, limit) if line.rfind(" ", 0, limit) > 0 else limit)
+            pieces.append(line[:cut].rstrip())
+            line = line[cut:].lstrip()
+        pieces.append(line)
+    for line in pieces:
+        nxt = (cur + "\n" + line) if cur else line
+        if len(nxt) > limit and cur:
+            out.append(cur)
+            cur = line
+        else:
+            cur = nxt
+    if cur or not out:
+        out.append(cur)
+    return [m for m in out if m.strip()] or [""]
+
+
+def fit(out: "Out") -> None:
+    """Sasha 376 · THE ONE RENDERER of a turn's messages for WhatsApp: a text longer than a message goes as consecutive messages; a question
+    with buttons (or a list) whose body is longer than WhatsApp allows sends its lines FIRST and keeps its LAST lines (the question) with
+    the buttons — so a read-back of N people reaches the phone whole, the yes last. Nothing is ever truncated."""
+    items: List[tuple] = []
+    for it in out.items:
+        if it[0] == "text":
+            items.extend(("text", m) for m in split_text(it[1]))
+        elif it[0] in ("ask", "list") and len(it[1]) > ASK_MAX:
+            lines = it[1].split("\n")
+            tail: List[str] = []
+            while lines and len("\n".join([lines[-1]] + tail)) <= ASK_MAX:
+                tail.insert(0, lines.pop())
+            if not tail:   # its last line alone is longer than a buttons message: that line's own end goes with the buttons
+                last = split_text(lines.pop(), ASK_MAX)
+                lines += last[:-1]
+                tail = [last[-1]]
+            head = "\n".join(lines).strip()
+            if head:
+                items.extend(("text", m) for m in split_text(head))
+            items.append((it[0], "\n".join(tail).strip()) + tuple(it[2:]))
+        else:
+            items.append(it)
+    out.items = items
 
 
 def _tool_of(out: "Out") -> str:

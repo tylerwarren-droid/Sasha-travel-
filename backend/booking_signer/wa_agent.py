@@ -151,12 +151,12 @@ def _read_back(ev: dict, out) -> None:
     picks = [str(c.get("title") or "") for c in ev.get("choices") or [] if isinstance(c, dict) and str(c.get("route") or "").startswith("pick:")]
     if ev.get("ask") and picks:   # Sasha 328 · the platform's ONE question (their "Zona"): its options as taps, exactly AgAPI's — a tap
         if len(picks) <= 3:       # says the option (say:…), which answers it; never Yes / No
-            out.ask(str(ev["ask"])[:1000], [(_cut(t, 20), "say:" + t[:190]) for t in picks])
+            out.ask(str(ev["ask"]), [(_cut(t, 20), "say:" + t[:190]) for t in picks])
         else:
-            out.pick(str(ev["ask"])[:1000], "Choose", [(_cut(t, TITLE), "", "say:" + t[:190]) for t in picks[:LIST_ROWS]])
+            out.pick(str(ev["ask"]), "Choose", [(_cut(t, TITLE), "", "say:" + t[:190]) for t in picks[:LIST_ROWS]])
         return
     if not lines and ev.get("ask") and ev.get("choices"):   # Sasha 314 · the SHORT read-back: its one line IS the card, with Yes / No
-        out.ask(str(ev["ask"])[:1000], _buttons(ev))
+        out.ask(str(ev["ask"]), _buttons(ev))   # Sasha 376 · whole: delivery fits it to WhatsApp (guest_whatsapp.fit)
         return
     if not lines:
         return
@@ -165,11 +165,11 @@ def _read_back(ev: dict, out) -> None:
         return
     pay = ev.get("pay") if isinstance(ev.get("pay"), dict) else {}
     if pay.get("checkout_url") and pay.get("where") == "phone":   # Sasha 363(a) · ONE message: the read-back and its payment link — the pay IS the yes
-        out.text(("\n".join(lines) + f"\n\nPay here when you're happy (a hold — taken only once it's booked):\n{pay['checkout_url']}")[:1500])
+        out.text("\n".join(lines) + f"\n\nPay here when you're happy (a hold — taken only once it's booked):\n{pay['checkout_url']}")   # whole (fit)
         return
     # Sasha 309 · ONE message: the request as it goes (AgAPI's lines), her one line, and its buttons — a tap or a typed yes sends it once
     body = "\n".join(lines) + (f"\n\n{ev['ask']}" if ev.get("ask") else "")
-    out.ask(body[:1000], _buttons(ev))
+    out.ask(body, _buttons(ev))   # Sasha 376 · WHOLE: delivery splits it (guest_whatsapp.fit) — the lines first, the question + buttons last
 
 
 #: Sasha 330 · the card routes WhatsApp sends to sasha.card_tap (the cancel read-back's Yes / No) — the SAME claim as /s2's tap
@@ -232,7 +232,7 @@ def _card(ev: dict, out, title: str) -> None:
     if lines:
         body = "\n".join([f"*{title}*"] + lines + [f"See the card: {s2_link()}"])
         taps = next_taps(ev)   # Sasha 352 · the card's next action(s) as taps (a tap says the words)
-        out.ask(body[:1000], taps) if taps else out.text(body)
+        out.ask(body, taps) if taps else out.text(body)   # Sasha 376 · whole (guest_whatsapp.fit)
 
 
 def _capabilities(ev: dict, out) -> None:

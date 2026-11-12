@@ -67,7 +67,7 @@ async def carry_out(account: str, said: str, who: Optional[List[str]] = None, ov
     mv = await G.store().movement(account)
     if not mv:
         return {"started": False, "say": "There's no group trip yet — tell me who's going, where and when."}
-    members = [x for x in await G.store().members(mv["id"]) if not who or x["name"].lower() in {w.lower() for w in who}]
+    members = G.pick(await G.store().members(mv["id"]), who)[0]   # Sasha 376 · the one person resolver
     reg = await AM.register(account, said, mv, members, proof)
     m = {"said": (said or "")[:500], "who": who or None, "over_ok": bool(over_ok), "door": door if door in ("s2", "wa") else "s2",
          "state": "running" if reg.get("mandate_id") else ("waiting" if reg.get("code") == "limits_needed" else "stopped"), "at": time.time(),
@@ -93,7 +93,7 @@ async def resume_waiting(account: str) -> Optional[str]:
     m = ((mv or {}).get("rules") or {}).get("mandate") or {}
     if m.get("state") != "waiting":
         return None
-    members = [x for x in await G.store().members(mv["id"]) if not m.get("who") or x["name"].lower() in {w.lower() for w in m["who"]}]
+    members = G.pick(await G.store().members(mv["id"]), m.get("who"))[0]   # Sasha 376 · the one person resolver
     reg = await AM.register(account, m.get("said") or "", mv, members, m.get("proof"))
     if not reg.get("mandate_id"):
         return reg["why"]
@@ -224,7 +224,7 @@ async def _run(account: str, movement_id: str, m: Dict[str, Any]) -> None:
     try:
         await _planning(account, movement_id)
         v = await G.view(account, movement_id)
-        rows = [r for r in v.get("rows") or [] if not who or r["name"].lower() in {w.lower() for w in who}]
+        rows = G.pick(v.get("rows") or [], who)[0]   # Sasha 376 · the one person resolver
         planned = sum(1 for r in rows if r["status"] not in ("planning…", "not planned"))
         await _report(account, door, f"Planned {planned} of {len(rows)}." + (f" {v['hotel_line']}." if v.get("hotel_line") else ""))
         inv = await G.invite_missing(account, movement_id)   # every one without a passport: their secure link by email, now (ONE source)

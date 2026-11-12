@@ -846,11 +846,15 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     out = []
     members = await st.members(mv["id"])
     recorded: Dict[str, str] = {}
+    unread: Optional[str] = None
     whys: Dict[str, str] = {}   # Sasha 371b · AgAPI's own "why" on a record that isn't booked
     booked_rec: Dict[str, Dict[str, Any]] = {}   # Sasha 340 · a booked worker's price and references, from AgAPI's record
     try:   # Sasha 339 (Tyler) · every read: AgAPI's ONE booking record first — the trips follow it, the status IS it
         from . import group_book as GB
         recorded = await GB.reconcile(account, mv["id"], members, booked=booked_rec, whys=whys)
+    except GB.Unread as e:   # Sasha 376 · AgAPI's record unread: the view SAYS so (record_unread) — never a list that reads as nothing booked
+        unread = str(e) or "unread"
+        log.warning("[groups] AgAPI's record unread: %s", unread)
     except Exception as e:
         log.warning("[groups] the list not reconciled with AgAPI's record: %s", type(e).__name__)
     from . import basket as BK
@@ -880,7 +884,8 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     for r in out:
         r["actions"] = NA.for_group_row(r)
     counts = {s: sum(1 for r in out if r["status"] == s) for s in STATUSES if any(r["status"] == s for r in out)}
-    return {"movement": {k: mv.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on", "hotel_area")},
+    return {**({"record_unread": unread} if unread else {}),
+            "movement": {k: mv.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on", "hotel_area")},
             "limits": (mv.get("rules") or {}).get("limits") or {}, "rows": out, "counts": counts, "actions": NA.for_group(out),
             "hotel_line": hotel_line(mv, sum(1 for r in out if r["status"] != "cancelled"))}   # Sasha 365 · ONE line for the group's hotel
 
@@ -1096,6 +1101,36 @@ def _by_name(people: List[dict], said: str) -> Tuple[List[dict], List[str]]:
     near = [p["name"] for p in parts] or difflib.get_close_matches(str(said), [p["name"] for p in people], n=3, cutoff=0.5) or \
         [p["name"] for p in people if w.split() and p["name"].lower().split()[0] == w.split()[0]]
     return [], near
+
+
+def pick(people: List[dict], who: Optional[List[str]]) -> Tuple[List[dict], List[str], Dict[str, List[str]]]:
+    """Sasha 376 · THE ONE PERSON RESOLVER for every group path: each name as the organiser (or the finish) says it → the person, through
+    _by_name — the full name, else the ONE person with that first or last name ("Ana" → Ana García). → (people, unknown, ambiguous
+    {said: [the names it could be]}) — two with that name are asked, never one guessed. `who` empty → everyone."""
+    if not who:
+        return list(people), [], {}
+    got, unknown, ambiguous, seen = [], [], {}, set()
+    for w in who:
+        w = str(w or "").strip()
+        if not w:
+            continue
+        by_id = next((p for p in people if str(p.get("id") or p.get("member_id") or "") == w), None)
+        found, near = ([by_id], []) if by_id else _by_name(people, w)
+        if found:
+            key = str(found[0].get("id") or found[0].get("member_id") or found[0]["name"])
+            if key not in seen:
+                seen.add(key)
+                got.append(found[0])
+        elif len([n for n in near if n.split(" (")[0].split()[0].lower() == w.lower().split()[0]]) > 1:
+            ambiguous[w] = near
+        else:
+            unknown.append(w)
+    return got, unknown, ambiguous
+
+
+def ambiguous_words(ambiguous: Dict[str, List[str]]) -> str:
+    """"Which Ana — Ana García or Ana López?" — one question per name that could be two people."""
+    return " ".join(f"Which {w} — {_and_words(names).replace(' and ', ' or ')}?" for w, names in ambiguous.items())
 
 
 def _and_words(xs: List[str]) -> str:

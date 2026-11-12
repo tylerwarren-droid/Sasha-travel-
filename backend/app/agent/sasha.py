@@ -838,6 +838,15 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     await _CH.used(account, _CH.WA if wa else _CH.S2)
     from agapi import person_access as _PA
     await _PA.warm(account)   # Sasha 254 · the one record (founder, calls, real venues …), fresh for this turn's sync checks
+    # Sasha 376 · THE OPEN CARD ANSWERS FIRST: a yes in any form (the ONE yes reader, booking_signer/yes.py — typed, spoken, "sí", "ok book
+    # them") while a group card waits on this conversation answers THAT card, through the card's own claim-once path — exactly as its
+    # button does — before anything can start a new instruction. Both doors: /s2 and WhatsApp (surface "wa") come through here.
+    from booking_signer import group_book as _GBo, yes as _YSo
+    _open = _GBo.open_card(account) if _YSo.is_yes(message) else None
+    if _open:
+        async for _ev in card_tap(account, session, "s2", {"read_back_id": _open, "choice": "group_yes"}, message):
+            yield _ev
+        return
     remembered = _HANDOVER.pop(session or "-", None)   # Sasha 239 · on the first turn back only: what was (and wasn't) decided
     # Sasha 249 · ONE MEMORY: the handover, the screen and the openers are kept in s2_memory too (kinds handover / screen / openers,
     # each with its session) — after a restart the first turn back still hears them. This process's copy wins when it has one.

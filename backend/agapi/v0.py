@@ -61,6 +61,7 @@ class Ctx:
     space: str = "sasha"               # Sasha 249 · the account's space (products/space.py), read at the start of sasha.turn
     via: str = "page"                  # Sasha 276 · "wa" when WhatsApp's brain runs as s2 (its list cards keep find's shape until 277)
     lang: str = field(default_factory=lambda: PAGE_LANG.get())   # Sasha 298 · the page's browser language (its turn body's `lang`)
+    starts_seen: Dict[str, dict] = field(default_factory=dict)   # Sasha 376 · this turn's starts: (tool, args) → its ONE answer
 
 
 class ToolError(Exception):
@@ -1764,11 +1765,18 @@ async def group_limits(ctx: Ctx, a: dict) -> dict:
     by_member = None
     if a.get("by_person"):
         mv = await G.store().movement(ctx.account)
-        names = {m["name"].lower(): m["id"] for m in (await G.store().members(mv["id"]) if mv else [])}
-        missing = [n for n in a["by_person"] if n.lower() not in names]
+        members = await G.store().members(mv["id"]) if mv else []
+        by_member, missing = {}, []
+        for n, v in a["by_person"].items():   # Sasha 376 · the one person resolver ("Luis" → Luis Pérez; two → asked)
+            got, unknown, amb = G.pick(members, [n])
+            if amb:
+                raise ToolError("ambiguous_person", G.ambiguous_words(amb))
+            if not got:
+                missing.append(n)
+            else:
+                by_member[got[0]["id"]] = v
         if missing:
             raise ToolError("unknown_person", "not on the list: " + ", ".join(missing))
-        by_member = {names[n.lower()]: v for n, v in a["by_person"].items()}
     r = _group_err(await G.set_limits(ctx.account, a.get("by_grade"), by_member))
     # Sasha 345 · what was SAVED is what she says — read back from the ONE place, in euros, per grade and per person (found live, 5 Nov:
     # "400 a night, and 250 for the workers" was answered with "$729") — then the next step: planning, started now when the list is in
@@ -2229,6 +2237,8 @@ ACTS = {"book", "book_venue", "cancel_venue", "send_email", "send_whatsapp"}   #
 READS = {"search_flights", "search_stays", "search_venues", "check_offer", "read_booking_route", "get_status", "get_trip", "get_total",
          "add_to_calendar", "get_activity", "keep_list"}
 ACTS = ACTS | {"running_late", "change_booking", "cancel_booking"}   # Sasha 226 · claimed once, durably, before they act
+#: Sasha 376 · the tools that START something (an act, or a group instruction): one start per (tool, arguments) per turn
+STARTS = set(ACTS) | {"group_select", "group_book", "group_plan", "group_limits"}
 READS = READS | {"my_plans"}
 READS = READS | {"booking_fine_print"}   # Sasha 301 · reads the itinerary only
 
@@ -2265,6 +2275,11 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
     miss = [k for k in req if args.get(k) in (None, "")]
     if miss:
         return {"ok": False, "error": {"code": "missing_input", "message": f"missing: {', '.join(miss)}"}}
+    # Sasha 376 · ONE INSTRUCTION, ONE START per turn: the same starting tool with the same arguments twice in one turn is the SAME call —
+    # its first answer again (found live: the model called group_select twice and narrated "I sent your request twice …")
+    start_key = f"{name}:{json.dumps(args, sort_keys=True, default=str)}" if name in STARTS else None
+    if start_key and start_key in ctx.starts_seen:
+        return ctx.starts_seen[start_key]
     key = None
     t_call = time.perf_counter()
     if t["idempotent"]:
@@ -2297,6 +2312,8 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
             f"{name} failed partway ({type(e).__name__}) — it may or may not have taken effect: check get_status / get_trip "
             "before saying anything was or wasn't done")}}
     ctx.idem = ctx.claimed = ctx.act_name = ctx.act_said = None
+    if start_key:
+        ctx.starts_seen[start_key] = res
     out = res.get("result") if res["ok"] else None
     if ctx.surface == "s2" and res["ok"]:   # CR 76 · a read-back shown is recorded for THE ONE YES RULE
         from agapi import yes_gate as YG

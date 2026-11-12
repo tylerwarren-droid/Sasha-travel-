@@ -96,7 +96,7 @@ async def _send(account: str, op: str, body: dict, idem: str, approval: Optional
 
 #: Sasha 371b · CR 184's answers that NAME the traveller's record on this movement (details {booking_id, state, movement_id}): states, never "failed"
 ON_RECORD = ("already_completed", "outcome_unknown")
-NO_ANSWER = ("timeout", "unreachable")   # still no answer after _send's re-sends: AgAPI may have ordered — its record decides, read by movement
+NO_ANSWER = ("timeout", "unreachable", "idempotency_in_flight")   # still no answer after _send's re-sends: AgAPI may have ordered — its record decides, read by movement
 
 
 def recorded(e: Dict[str, Any]) -> Dict[str, Any]:

@@ -98,7 +98,7 @@ class ReadByMovement(unittest.TestCase):
         members = [{"id": k} for k in "abc"]
         self.assertEqual(GB.record_states(recs, members), {"a": "confirming", "b": "incomplete", "c": "booked"})
         self.assertEqual(GB.record_whys(recs, members), {"a": "internal", "b": "upstream_refused"})
-        for code in ("already_completed", "outcome_unknown", "timeout"):
+        for code in ("already_completed", "outcome_unknown", "timeout", "idempotency_in_flight"):
             self.assertNotIn("not booked", GB.recorded({"code": code, "details": {}})["why"].lower())
 
     def test_the_invoice_link_opens_its_own_movement(self):

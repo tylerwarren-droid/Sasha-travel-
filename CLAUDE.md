@@ -123,6 +123,12 @@ chat renders as ChatCancel. Three CTO-file lines, each marked "Sasha 96 chat can
     and the JSX after ChatBooking's (`{bookingCancel && <ChatCancel key={bookingCancel.n} venue={bookingCancel.venue} />}`).
 /api/booking/health reports "chat_hooks": {"response_fields": false} if the conductor lines are lost.
 
+Spoken words (Sasha 381i) — /next's mic transcript is marked as speech-to-text, so the server reads a time by how it reached her
+(typed "11:37" is 11:37; a spoken "nine" / "09:00" is asked). Three lines in the CTO's frontend/app/components/SashaChat.tsx, each
+marked "Sasha 381i spoken": `spoken?: boolean` in sendMessage's opts, `sendMessage(text, { spoken: true })` in the mic's onTranscript,
+and `...(spoken ? { channel: 'voice' } : {})` in agentTurn's body (agentTurn takes `spoken`, passed `!!opts?.spoken`).
+The build refuses if they are lost: prebuild (scripts/check-outcome-surfaces.mjs) fails.
+
 Sasha's abilities re-apply command (Sasha 88) — the conversational model is told what she can do (phone, email,
 WhatsApp, book, follow up, cancel), so the chat and the avatar never say she "can't call". Run after the booking drafts:
     cd ~/Projects/sasha-travel && python3 - <<'PY'

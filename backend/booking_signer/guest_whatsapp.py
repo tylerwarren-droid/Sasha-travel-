@@ -1074,6 +1074,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
             # Sasha 173 · the WORDS go on, never the audio: a voice note's file was handed to the products as if it were a photo,
             # and EspañaMe's DNI reader took "a massage at a spa in Hanoi …" (live)
             p = {**{k: v for k, v in p.items() if not k.startswith("Media")}, "Body": heard, "NumMedia": "0"}
+    from agapi import venue_submit as _VSW
+    _VSW.SPOKEN.set(bool(heard))   # Sasha 381i · a voice note's transcript: these words came through speech-to-text
     payload = _tap_id(p)   # Sasha 344 · a quick reply's ButtonPayload or a list row's ListId
     now = NOW()
     loaded = copy.deepcopy(st.get("pending"))   # Sasha 252 · the open question as this turn found it

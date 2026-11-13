@@ -136,6 +136,10 @@ def number_confirmed_line(venue: str) -> str:
     return f"Your number is confirmed. Say yes and I'll send your request to {venue}."
 NUMBER_NOT_CONFIRMED = "It isn't sent yet: I couldn't confirm this WhatsApp number just now, so nothing went to them."
 PENDING = ("waiting_for_their_tap", "confirm_number", "not_sent")
+#: Sasha 381i · a venue booking's results where NOTHING was acted this turn — each says its own line (yes_line), never "Booking now"
+REFUSED = ("already_sent", "not_sent")
+#: Sasha 381i · the words that say an act is happening — only ever from an act's own result (AgAPI's instructed.say)
+ACTING = re.compile(r"(?i)\bbooking now:")
 
 
 def confirm_number_line(text: str) -> str:
@@ -151,6 +155,10 @@ def yes_line(tool: str, r: dict) -> str:
     if tool == "hold_venue" and isinstance(res, dict) and res.get("status") == "need_term" and res.get("terms") \
             and res.get("ask") == term_ask(res["terms"], res.get("unsure")):
         return res["ask"]   # Sasha 381 · exactly the terms AgAPI says they didn't give, asked word for word — never a yes card
+    if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("status") in REFUSED and (res.get("line") or res.get("say")):
+        # Sasha 381i · a booking that did NOT act (already sent, outside the instruction, no proof, nothing sent) says ITS OWN line from
+        # the result, by code — the line is never composed before the act's result is known (never "Booking now" for an act not made)
+        return str(res.get("line") or res.get("say"))
     if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("acted") and res.get("line"):
         # Sasha 381 · a venue act on the instruction: "Booking now: …" + its outcome, said by code on EVERY surface; booked in the app →
         # the one question after it (263)
@@ -1261,7 +1269,7 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "route_line", "is_route_line", "route_told", "ROUTE_LINES", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
-           "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "TERM_ASK", "hour_ask", "term_ask", "booked_now", "acted_line", "OUTSIDE", "outside_line", "outside_ask",
+           "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "TERM_ASK", "hour_ask", "term_ask", "REFUSED", "ACTING", "booked_now", "acted_line", "OUTSIDE", "outside_line", "outside_ask",
            "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]
 
 

@@ -188,11 +188,16 @@ def total_matches(v: float, figures: dict) -> bool:
     return False
 
 
-def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optional[dict] = None, other: Optional[set] = None) -> List[str]:
+def guard_check(text: str, allowed: set, anything_booked: bool, figures: Optional[dict] = None, other: Optional[set] = None,
+                acted_now: bool = False) -> List[str]:
     """What's wrong with a reply, if anything: unproven claims, prices no tool gave. Sasha 249 · `figures` (get_total's
     trip_figures): a stated trip total must be exactly its total_eur. Sasha 345 · a figure in any other currency must be a tool's, in
-    THAT currency (`other`: the (currency, amount) pairs this turn's tools gave)."""
+    THAT currency (`other`: the (currency, amount) pairs this turn's tools gave). Sasha 381i · "Booking now: …" in HER OWN words is a
+    claim that an act is happening — never hers to write (`acted_now`: a booking acted this turn; its line is said by code)."""
+    from app.agent import voice as _Vg
     bad = []
+    if _Vg.ACTING.search(text or "") and not acted_now:
+        bad.append("claim: it says “Booking now” but no booking acted this turn — say the tool's own line")
     for m in _OTHER.finditer(text or ""):
         cur, v = _CUR[(m["sym"] or m["code"]).lower()], float((m["a"] or m["b"]).replace(",", ""))
         if not any(c == cur and abs(v - a) <= max(1.0, a * 0.005) for c, a in (other or set())):
@@ -1046,7 +1051,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             if _claims(x) and booked_now is None:
                 booked_now = await _anything_booked(ctx)
             figs = await _trip_figures_now(ctx) if trip_total_figure(x) else None   # Sasha 249 · a trip total: checked exactly
-            if guard_check(x, allowed, bool(booked_now), figs, other):
+            if guard_check(x, allowed, bool(booked_now), figs, other, acted_now):
                 held = True
                 break
             if honest and _V.is_ack(x):   # Sasha 273 · item 8: the turn's first line is said by code — never again by the model
@@ -1105,6 +1110,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     last_tools: set = set()
     agapi_out = False   # Sasha 261 · an AgAPI outage's line was said this turn
     read_back_said = False   # Sasha 262 · the read-back's one line was said this turn (item 10)
+    acted_now = False   # Sasha 381i · a venue booking ACTED this turn (its result says so) — the only time "Booking now" is said
     # Sasha 299 · (4) (Tyler, 27 Oct) A BOOK TAP RUNS THE ROUTE AND THE HOLD BY CODE: its two calls (venues.tap_plan — only what he
     # already gave) stand in for the first model step; the model then only writes the words (or nothing, when a code line ends the turn)
     tap_uses: List[Any] = []
@@ -1257,6 +1263,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             # yes first"). Sasha 263 · and the in-app yes's line (nothing waiting / booked + the calendar question), the same way
             rb = (_V.read_back_line(u.name, r) or _V.yes_line(u.name, r) or _V.page_line(u.name, r)
                   or _V.discover_line(u.name, r) or _V.fine_print_line(u.name, r) or _V.flight_line(u.name, r)) if honest else ""   # 264: + a page · 276: AgAPI's say_text, with its cards · 302: the fine print · 305: a flight's change / cancel
+            if r.get("ok") and isinstance(r.get("result"), dict) and r["result"].get("acted"):
+                acted_now = True
             if rb:
                 read_back_said = True
                 if rb not in said:
@@ -1334,7 +1342,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     text = " ".join(said).strip()
     figures: Dict[str, Any] = {}   # Sasha 249 · get_total's trip_figures (read only — the guard never re-prices the trip)
     allowed |= await _basket_amounts(ctx, figures)
-    bad = guard_check("".join(raw), allowed, await _anything_booked(ctx), figures or None, other)
+    bad = guard_check("".join(raw), allowed, await _anything_booked(ctx), figures or None, other, acted_now)
     guard_log = list(bad) + [f"internal dropped: {x}" for x in internal_log]
     if bad:   # once: back to the model to rewrite — honestly (Sasha 205: no length rewrite; a safety trim below)
         spoken = " ".join(said).strip()
@@ -1345,7 +1353,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         r = await client.messages.create(model=FAST_MODEL, max_tokens=400, system=system_now(), messages=msgs)
         _MS.usage(FAST_MODEL, getattr(r, "usage", None))   # Sasha 275
         new = drop_internal("".join(b.text for b in r.content if b.type == "text").strip())
-        bad2 = guard_check(new, allowed, await _anything_booked(ctx), figures or None, other)
+        bad2 = guard_check(new, allowed, await _anything_booked(ctx), figures or None, other, acted_now)
         new = new if not bad2 else guard_strip(new, bad2)
         if said and opener_of(new):
             new = strip_openers(new)
@@ -2187,6 +2195,7 @@ async def agent_turn(request: Request):
     # sent it (the backend verified it in chat_account), or the founder's proxy session. Held for this turn only: never stored or logged
     from agapi import venue_submit as _VS
     tap_session = _VS.session_of(request)   # Sasha 321 · one reader, shared with the voice avatar and the REST chat
+    _VS.SPOKEN.set(str(body.get("channel") or "") == "voice")   # Sasha 381i · S2's / /next's mic: their words came through speech-to-text
     over = await over_budget(account)
     lap("budget")
     session_id = str(body.get("session_id") or "")[:64] or None

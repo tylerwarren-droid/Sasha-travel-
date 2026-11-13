@@ -146,6 +146,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             # AgAPI's in_app_tap from this request's own session (never the retired senders behind the chat's booking card)
             from booking_signer import voice_turn as _vt
             from agapi import venue_submit as _VS
+            _VS.SPOKEN.set(False)   # Sasha 381i · the REST chat: typed words
             _r = await _vt.turn(account, message, body.conversation_history, tap=_VS.session_of(request), venues_only=True)
             if _r is not None:
                 result = {"tools_used": [], **_r}

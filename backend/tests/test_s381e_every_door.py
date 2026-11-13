@@ -52,7 +52,7 @@ class EveryDoor(unittest.TestCase):
             return "x"
         with mock.patch.object(WA, "agent_turn", brain), mock.patch.object(WA, "set_agent_state", lambda *a, **k: None):
             run(VT._agent(ACCT, "k" * 64, "book Taverna Sandbox", {}, __import__("datetime").datetime.now(), {"kind": "supabase", "token": "t"}))
-        self.assertEqual(seen["door"], {"kind": "in_app"})
+        self.assertEqual(seen["door"], {"kind": "in_app", "words": "typed"})   # Sasha 381i · + how the words came (the REST chat's: typed)
         self.assertEqual((seen["proof"]["kind"], seen["proof"]["instruction_id"]), ("in_app", "turn_381e"))
         self.assertIsNone(VS.TAP.get())                                                     # recorded for that turn only
 

@@ -295,6 +295,12 @@ function main() {
     console.error("check-outcome-surfaces: SashaChat.tsx lacks the S-62 step 7 lines (guest token, session adoption) — re-apply them (CLAUDE.md, Stage B).");
     process.exit(1);
   }
+  // Sasha 381i · /next's mic marks its words as speech-to-text (channel "voice"): the server reads a time by how it reached her
+  if ((chat.match(/Sasha 381i spoken/g) || []).length < 3 || !chat.includes("sendMessage(text, { spoken: true })")
+      || !chat.includes("...(spoken ? { channel: 'voice' } : {})")) {
+    console.error("check-outcome-surfaces: SashaChat.tsx lacks the Sasha 381i spoken lines (the mic's channel \"voice\") — re-apply them (CLAUDE.md, Stage B).");
+    process.exit(1);
+  }
   const you = readFileSync(join(ROOT, "app/components/workspace/YouPanel.tsx"), "utf8");
   if (!you.includes("S-45 Sasha reservations") || !you.includes("<SashaReservations />")) {
     console.error("check-outcome-surfaces: YouPanel.tsx lacks the S-45 Sasha reservations block — run Stage B's reservations re-apply (CLAUDE.md).");

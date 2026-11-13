@@ -38,6 +38,10 @@ TAP: _cv.ContextVar = _cv.ContextVar("sasha_in_app_session", default=None)
 #: checked in inbound_phone before anything reads it) — {"wa_id": digits, "message_id": its MessageSid}. Set by guest_whatsapp for that
 #: message only; None everywhere else. Their reply to a read-back on WhatsApp is then approvals.in_app_tap, session kind "whatsapp".
 WA: _cv.ContextVar = _cv.ContextVar("sasha_whatsapp_tap", default=None)
+#: Sasha 381i · this turn's words came through SPEECH-TO-TEXT — recorded by the entry point that transcribed them, and only there: the
+#: voice page (/api/voice/conductor, Deepgram), S2's mic (channel "voice"), /next's mic (the chat's transcript, channel "voice"), a
+#: WhatsApp voice note (guest_whatsapp, its transcript). Every other door's words are typed. Part of door(): never guessed.
+SPOKEN: _cv.ContextVar = _cv.ContextVar("sasha_words_spoken", default=False)
 TAP_REFUSALS = (ERR.APPROVAL_VOID, ERR.APPROVAL_EXPIRED, ERR.APPROVAL_UNTRUSTED_ORIGIN, ERR.APPROVAL_CONSUMED)
 
 
@@ -48,12 +52,20 @@ def door() -> Optional[Dict[str, str]]:
         voice avatar and the REST chat, by the /group page; each from session_of(request))     → {"kind": "in_app"}
       · a signed WhatsApp message (WA — set by inbound_phone after Twilio's signature)          → {"kind": "whatsapp", wa_id, message_id}
       · neither                                                                                   → None (nothing can be proved: nothing acts)
-    Every proof of an instruction (agapi_mandate.proof_from) and every yes's approval (in_app_tap / whatsapp_tap) reads this."""
+    Every proof of an instruction (agapi_mandate.proof_from) and every yes's approval (in_app_tap / whatsapp_tap) reads this.
+    Sasha 381i · and HOW the words reached Sasha — "words": "spoken" (through speech-to-text, as that entry point recorded: SPOKEN) or
+    "typed" — which agapi.said reads to know what a time IS ("11:37" typed is 11:37; a spoken "nine" / "09:00" is asked)."""
+    words = {"words": words_heard()}
     if TAP.get() is not None:
-        return {"kind": "in_app"}
+        return {"kind": "in_app", **words}
     w = WA.get() or {}
     wa_id, mid = re.sub(r"\D", "", str(w.get("wa_id") or "")), str(w.get("message_id") or "")
-    return {"kind": "whatsapp", "wa_id": wa_id, "message_id": mid} if wa_id and mid else None
+    return {"kind": "whatsapp", "wa_id": wa_id, "message_id": mid, **words} if wa_id and mid else None
+
+
+def words_heard() -> str:
+    """Sasha 381i · "spoken" when THIS turn's words came through speech-to-text (its entry point recorded SPOKEN), else "typed"."""
+    return "spoken" if SPOKEN.get() else "typed"
 
 
 def session_of(request) -> Optional[dict]:

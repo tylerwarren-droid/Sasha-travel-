@@ -355,7 +355,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     }
     if (got.length) setAttachments((a) => [...a, ...got].slice(0, MAX_PHOTOS))
   }
-  const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean; history?: any[] }) => {
+  const sendMessage = async (content: string, opts?: { force?: boolean; intent?: string; payload?: string; opening?: boolean; history?: any[]; spoken?: boolean }) => {
     if (asleep && !opts?.opening) onWake?.('typed')   // Sasha 246 item 2 · a message wakes her
     const media = attachments
     if (!content.trim() && media.length) content = media.length === 1 ? '📷 (photo)' : `📷 (${media.length} photos)`
@@ -407,7 +407,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     const turnId = ++turnSeqRef.current
     if (agent) {   // Sasha 205 · the agent path (/next): streamed, spoken in phrases, the Trip view refreshed as tools return
       try {
-        await agentTurn(content, historyBeforeMessage, turnId, media)   // Sasha 241 · its 📎 photos go with it
+        await agentTurn(content, historyBeforeMessage, turnId, media, !!opts?.spoken)   // Sasha 241 · its 📎 photos go with it · Sasha 381i spoken
       } finally {
         setIsLoading(false)
         inFlightRef.current = false
@@ -620,7 +620,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
   // shown as it streams; phrases go to the avatar through onSashaResponse (the page queues them behind what she's saying);
   // a short acknowledgement goes through onThinking (spoken only when she's quiet); flight searches arrive as the same
   // Live Workspace card; every trip change refreshes the Trip view at once (the 'sasha-plan-refresh' event).
-  const agentTurn = async (content: string, history: any[], turnId: number, media: Attachment[] = []) => {
+  const agentTurn = async (content: string, history: any[], turnId: number, media: Attachment[] = [], spoken = false) => {
     const plain = (history || []).filter((m: any) => (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim() && !m.sleepLine)   // Sasha 246 · "I'm here" is the page's, not hers to answer
       .map((m: any) => ({ role: m.role, content: String(m.content) }))
     // Sasha 212 · NEVER AN EMPTY BUBBLE: her text now arrives with her voice (one utterance per step), so a turn that starts
@@ -646,6 +646,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
       const r = await reach('/api/sasha-agent', { method: 'POST', headers: { 'content-type': 'application/json' },
         // Sasha 241 · the 📎 photos go WITH the turn (they were dropped on the agent path): the same handlers as /s2 and WhatsApp
         body: JSON.stringify({ message: content, history: plain, session_id: chatSessionIdRef.current,
+          ...(spoken ? { channel: 'voice' } : {}),   // Sasha 381i spoken: these words came through speech-to-text (the server reads a time by it)
           ...(tapRef.current ? { tap: tapRef.current } : {}),   // Sasha 265 · item 4: the tap IS the approval (the server's, not the model's)
           ...(media.length ? { photos: media.map(a => ({ media_type: a.content_type, content_base64: a.data_b64 })) } : {}) }) })
       tapRef.current = null
@@ -1273,7 +1274,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
                 return
               }
               if (tab !== 'chat') onMarkUnseen?.('chat')
-              observe(sendMessage(text), 'Your message', announce)
+              observe(sendMessage(text, { spoken: true }), 'Your message', announce)   // Sasha 381i spoken: the mic's transcript
             }}
             autoStart={true}
             readyToListen={readyToListen}

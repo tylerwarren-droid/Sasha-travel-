@@ -54,7 +54,9 @@ class EveryForm(unittest.TestCase):
     def test_a_clock_hour_without_its_side_is_asked_too(self):
         """"9:30", "09:00" with no side said: asked — speech-to-text writes a spoken "nine" as "09:00" (Sasha 167's live failure)."""
         for words, hm in (("at 9:30", (9, 30)), ("a romantic restaurant on October 27 at 09:00", (9, 0)), ("at 11:00", (11, 0))):
-            self.assertEqual((SD.times_in(words), SD.unsure_hours(words)), ([], [hm]), words)
+            # Sasha 381i · SPOKEN (through speech-to-text) — typed, the same clock is the 24-hour clock as written
+            self.assertEqual((SD.times_in(words, spoken=True), SD.unsure_hours(words, spoken=True)), ([], [hm]), words)
+            self.assertEqual(SD.times_in(words, spoken=False), [f"{hm[0]:02d}:{hm[1]:02d}"], words)
         for words, want in (("dinner at 9:30", "21:30"), ("breakfast at 9:30", "09:30"), ("a dinner at 08:00 at night", "20:00")):
             self.assertEqual(SD.times_in(words), [want], words)
 

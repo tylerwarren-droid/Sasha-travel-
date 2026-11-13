@@ -153,21 +153,29 @@ def _side(w: str, end: int) -> Optional[str]:
     return None
 
 
-def _clock(h: int, mi: int, side: Optional[str], w: str, plain24: bool, open_between: Optional[tuple] = None) -> tuple:
+def _clock(h: int, mi: int, side: Optional[str], w: str, plain24: bool, open_between: Optional[tuple] = None, clock: bool = False,
+           spoken: bool = True) -> tuple:
     """→ ("HH:MM", None) when the time is certain, or (None, (h, mi)) when it is a bare hour that could be either side of the day.
     A 24-hour time (13–23, 0, a leading zero) is certain as said; 12 is noon; 1–11 needs its side — said after it, or ONE side said
     anywhere in their words (the meal, the part of the day). Both sides said, or none → not read: asked "9am or 9pm?", never guessed —
-    "9:30" and even "09:00" too: speech-to-text writes a spoken "nine" as "09:00" (Sasha 167's live failure: a romantic dinner at 09:00)."""
+    Sasha 381i · a clock time is read by what it IS and HOW it reached Sasha (`spoken`, from the door): TYPED "11:37" / "09:00" is the
+    24-hour clock as written (a side said still wins: "dinner at 9:30" → 21:30); SPOKEN, ≤ 12:59 with no side said, it is asked —
+    speech-to-text writes a spoken "nine" as "09:00" (Sasha 167's live failure: a romantic dinner at 09:00)."""
     if not (0 <= h <= 23 and 0 <= mi <= 59):
         return None, None
     if side == "pm" and 1 <= h <= 11:
         h += 12
     elif side == "am" and h == 12:
         h = 0
+    elif side is None and h == 12 and clock and spoken:   # Sasha 381i · a spoken "12:30" (speech-to-text) could be 00:30: asked
+        if not (_CUE_PM.search(w) or _CUE_AM.search(w) or _CUE_LUNCH.search(w)):
+            return None, (h, mi)
     elif side is None and 1 <= h <= 11 and not plain24:
         pm, am, lunch = bool(_CUE_PM.search(w)), bool(_CUE_AM.search(w)), bool(_CUE_LUNCH.search(w))
         if lunch and not (pm or am):
             pm, am = h <= 5, h >= 11   # "lunch at 1" is 13:00, "lunch at 11" is 11:00; "lunch at 8" is not read
+        if pm == am and clock and not spoken:   # Sasha 381i · a TYPED clock time ("11:37", "9:30", "09:00") is the 24-hour clock as written
+            pm, am = False, True
         if pm == am and open_between:   # the venue open on ONE side of that hour only: that side ("10:00" at an office open 7–21)
             lo, hi = open_between
             am, pm = (lo * 60 <= x * 60 + mi <= hi * 60 for x in (h, h + 12))
@@ -177,16 +185,25 @@ def _clock(h: int, mi: int, side: Optional[str], w: str, plain24: bool, open_bet
     return f"{h:02d}:{mi:02d}", None
 
 
-def _times(words: str, open_between: Optional[tuple] = None) -> tuple:
+def _heard() -> bool:
+    """Sasha 381i · did THIS turn's words come through speech-to-text? — THE ONE door reader (venue_submit.door: its entry point
+    recorded it), never guessed. No door recorded → typed (an entry point that transcribes always says so)."""
+    from agapi import venue_submit as VS
+    d = VS.door()
+    return (d.get("words") if d else VS.words_heard()) == "spoken"
+
+
+def _times(words: str, open_between: Optional[tuple] = None, spoken: Optional[bool] = None) -> tuple:
+    spoken = _heard() if spoken is None else spoken
     w = " " + (words or "").casefold().replace("’", "'") + " "
     found: List[tuple] = []   # (pos, "HH:MM" | None, (h, mi) | None)
     taken: List[range] = []
 
-    def add(m, h: int, mi: int, plain24: bool = False, side: Optional[str] = None) -> None:
+    def add(m, h: int, mi: int, plain24: bool = False, side: Optional[str] = None, clock: bool = False) -> None:
         if any(m.start() < r.stop and r.start < m.end() for r in taken):   # one time, read once
             return
         taken.append(range(m.start(), m.end()))
-        got, unsure = _clock(h, mi, side or _side(w, m.end()), w, plain24, open_between)
+        got, unsure = _clock(h, mi, side or _side(w, m.end()), w, plain24, open_between, clock, spoken)
         if got or unsure:
             found.append((m.start(), got, unsure))
     # spoken forms first (they hold a number word): half past nine · quarter past/to nine · half nine · las nueve y media / menos cuarto
@@ -210,11 +227,11 @@ def _times(words: str, open_between: Optional[tuple] = None) -> tuple:
         if m[2] == "." and not (_side(w, m.end()) or re.search(r"\b(?:at|a las|sobre las|around|by)\s+$", w[:m.start()])):
             continue   # "20.11" is a day; "9.30 pm" / "at 21.30" is a time
         h = int(m[1])
-        add(m, h, int(m[3]), plain24=h >= 13 or h == 0)
+        add(m, h, int(m[3]), plain24=h >= 13 or h == 0, clock=True)
     for m in re.finditer(r"\b(?:at|a las|by|from|sobre las)\s+([01]\d|2[0-3])([0-5]\d)h?\b", w):   # "at 2130", "a las 2100h"
         add(m, int(m[1]), int(m[2]), plain24=True)
     for m in re.finditer(r"(?<![\d/.:-])(\d{1,2})h(?![a-z\d])", w):
-        add(m, int(m[1]), 0, plain24=int(m[1]) >= 13 or int(m[1]) == 0)
+        add(m, int(m[1]), 0, plain24=int(m[1]) >= 13 or int(m[1]) == 0, clock=True)
     for m in re.finditer(rf"\b{_HOUR}\s+(o'?clock|thirty|fifteen|forty[- ]five)\b", w):
         if _n(m[1]) is not None:
             add(m, _n(m[1]), _MIN_WORDS[m[2].replace("-", " ").replace("'", "")])
@@ -239,25 +256,25 @@ def _times(words: str, open_between: Optional[tuple] = None) -> tuple:
     return sure, unsure
 
 
-def times_in(words: str, open_between: Optional[tuple] = None) -> List[str]:
+def times_in(words: str, open_between: Optional[tuple] = None, spoken: Optional[bool] = None) -> List[str]:
     """Sasha 381h · THE ONE READER of every way a person says a booking's time — EN and ES → every time they said, "HH:MM", in order:
     21:30 · 9:30pm · 9.30 p.m. · 21h30 · 21h · half past nine · half nine · quarter past / to nine · nine thirty · nine o'clock · 9pm ·
     "at nine" with its side (at night, tonight, dinner, in the morning, breakfast, lunch) · a las nueve y media · las nueve y cuarto ·
     las nueve menos cuarto · a las nueve de la noche · noon · midnight. A bare hour whose side of the day they didn't say is NOT read
     (unsure_hours names it: asked "9am or 9pm?") — a time they didn't say never reaches a booking. `open_between` (start, end hours):
     the venue's own hours, when known — a bare hour it is open on ONE side of only is that side; open on both → still asked."""
-    return _times(words, open_between)[0]
+    return _times(words, open_between, spoken)[0]
 
 
-def unsure_hours(words: str, open_between: Optional[tuple] = None) -> List[tuple]:
+def unsure_hours(words: str, open_between: Optional[tuple] = None, spoken: Optional[bool] = None) -> List[tuple]:
     """Sasha 381h · the bare hours they said without saying which side of the day: [(9, 0)] for "at nine" — asked, never guessed."""
-    return _times(words, open_between)[1]
+    return _times(words, open_between, spoken)[1]
 
 
 def times_matching(words: str) -> List[str]:
     """Sasha 381h · a time they name to PICK one of the options on their screen ("the 7:44"): every time they said, a bare hour as
     both its sides — matched against what was offered (never a time sent on its own)."""
-    sure, unsure = _times(words)   # "the 7:44" names the 07:44 or the 19:44 on their screen
+    sure, unsure = _times(words, spoken=True)   # "the 7:44" names the 07:44 or the 19:44 on their screen (both, matched to the list)
     return sure + [f"{h + d:02d}:{mi:02d}" for h, mi in unsure for d in (0, 12) if h + d < 24]
 
 

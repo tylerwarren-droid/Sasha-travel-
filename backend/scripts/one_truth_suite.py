@@ -340,6 +340,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "nine, nine thirty tonight, a las nueve y media… reach scope.booking; a bare hour without its side is asked \"9am or 9pm?\", "
             "never guessed; \"nine thirty\" never becomes 21:00; one \"already sent\" memory: the record of what was sent (Sasha 381h)",
             ["tests.test_s381h_one_time_reader"]),
+    "T96": ("Sasha never says an act happened unless it did: the line comes from the act's RESULT (\"Booking now\" only when it acted; "
+            "already sent / outside / no proof / a term missing each say their own, by code; her own \"Booking now\" fails the guard); "
+            "a time is read by what it is and how it reached her — typed \"11:37\" is 11:37, a spoken \"09:00\" is asked — from the "
+            "ONE door reader (Sasha 381i)",
+            ["tests.test_s381i_said_from_the_result"]),
 }
 
 _RUNNER = """

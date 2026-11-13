@@ -216,6 +216,22 @@ class LiveFailure(unittest.TestCase):
     """Sasha 167 live: "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00" got the CampusMe intro."""
     SAID = "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00"
 
+    def setUp(self):   # Sasha 381i · a voice note: its entry point records the words as spoken (speech-to-text wrote "09:00")
+        from agapi import venue_submit as VS
+        tok = VS.SPOKEN.set(True)
+        self.addCleanup(VS.SPOKEN.reset, tok)
+
+    def test_typed_09_00_is_09_00(self):
+        """Sasha 381i · the same words TYPED: "09:00" is the 24-hour clock as written — never asked."""
+        from agapi import venue_submit as VS
+        from booking_signer import handoff as HO
+        tok = VS.SPOKEN.set(False)
+        try:
+            self.assertEqual(HO.booking_handoff(self.SAID, [], NOW)["booking_find"].get("open_at"), "2026-10-27T09:00")
+            self.assertIsNone(WB.hour_said(self.SAID))
+        finally:
+            VS.SPOKEN.reset(tok)
+
     def test_it_is_a_search_and_clear(self):
         from booking_signer import handoff as HO
         t = HO.booking_handoff(self.SAID, [], NOW)

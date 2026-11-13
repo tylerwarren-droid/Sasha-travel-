@@ -156,7 +156,8 @@ class AVenueNamedByItsWebsite(unittest.TestCase):
                     mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=True)), \
                     mock.patch("agapi.s2_memory.kind", mock.AsyncMock(return_value=None)):
                 v = {"name": "Sasha Test Venue", "city": "Madrid", "country": "ES", "website": test_venue_url("plain"), "what": "dinner"}
-                ctx = API.Ctx(account=acct, mode="test", user_said="Book it for 2 on 2099-11-16 at 21:00", surface="s1")   # every term theirs
+                ctx = API.Ctx(account=acct, mode="test", user_said="Book it for 2 on 2099-11-16 at 21:00", surface="s1",
+                              session="s378-website")   # every term theirs; its turn proves the instruction (CR 196)
                 r = run(VN.read_booking_route(ctx, dict(v)))
                 tok = VS.TAP.set({"kind": "supabase", "token": "s378"})   # Sasha 381 · a signed-in turn: the instruction is the approval
                 try:

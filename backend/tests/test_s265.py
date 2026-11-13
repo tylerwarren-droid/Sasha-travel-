@@ -134,9 +134,9 @@ class NewChatClearsTheConversationOnly(unittest.TestCase):
 # (docs/sasha/S-329-cr161.md): the follow-up reads it from AgAPI
 # Sasha 378 · CR 188 · booking-rules/3.0, byte for byte from AgAPI cr/188's agapi_service/booking_rules (its SHA256SUMS) — words and
 # vectors only: Sasha calls no decide of it (tests/test_s378_follows_agapi)
-ROW_965 = {"booking_rules.py": "6d90a8b57542a3f5f8bf50d9304019a313df1188d4e858a9b8bf23bda41eb605",
-           "vectors.json": "1439ca5bf62791807d883b0589883d3fc4a948bf792983efd68f68d3e4aafcd4",
-           "test_booking_rules.py": "5b6aa3de445a70c604c3bddea17cb71de57ed299b7fe1878eeac162ea6801e3e"}
+ROW_965 = {"booking_rules.py": "5e43388d1a39f6b97914c1208d9909c0b5db497634a75afdaa970109f8835a72",
+           "vectors.json": "37fb532216a0f96d6bd63d6f94b895ad824beaa2c3bef19ea3c547b64a81ddc7",
+           "test_booking_rules.py": "5b6aa3de445a70c604c3bddea17cb71de57ed299b7fe1878eeac162ea6801e3e"}   # Sasha 381 · CR 195 (row 1948): booking-rules/4.0, byte for byte from AgAPI cr/196
 PHONE = {"phone": {"fact_index": 0, "value": "+34910000000"}}   # Sasha 378 · AgAPI's decision for it: call
 
 
@@ -145,7 +145,7 @@ class BookingRules2(unittest.TestCase):
         d = BACKEND / "agapi" / "booking_rules"
         for name, want in ROW_965.items():
             self.assertEqual(hashlib.sha256((d / name).read_bytes()).hexdigest(), want, name)
-        self.assertTrue(BR.VERSION.startswith("booking-rules/3"))
+        self.assertTrue(BR.VERSION.startswith("booking-rules/4"))
 
     def test_the_booking_words_are_local(self):
         now = datetime(2026, 10, 14, 10, 0, tzinfo=timezone.utc)
@@ -161,8 +161,7 @@ class TheCardIsTheQuestion(T254.Base):
         self.assertEqual(out["status"], "calling")
         self.assertNotIn("choices", out)
         self.assertIn(("prepare", {"phone": "+34910000000", "source": "venue", "open_now": False}), self.vs_calls)   # the act carries the call
-        self.assertIn(("read_back", "call"), self.vs_calls)                              # the CALL's read-back
-        self.assertIn(("submit", "rbk_1"), self.vs_calls)
+        self.assertIn(("submit", "mdt_" + "c" * 26), self.vs_calls)                     # ONE submit, approved BY the instruction (CR 196)
         self.assertEqual(V.yes_line("hold_venue", {"ok": True, "result": out}), out["line"])   # said by code, word for word
         self.assertTrue(out["line"].startswith("Booking now: Casa Gate, 2 people, ") and out["line"].endswith(V.REQUESTED), out["line"])
         self.assertNotIn("/api/booking/calls", self.api.paths())                         # never Sasha's own call

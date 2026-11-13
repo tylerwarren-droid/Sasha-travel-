@@ -141,4 +141,35 @@ async def register(account: str, words: str, mv: dict, members: List[dict], proo
     return {"code": code, "why": "The booking system didn't accept your instruction as the yes — nothing was booked."}
 
 
-__all__ = ["proof_from", "limits_for", "scope_for", "mandate_sha256", "sign", "register", "EXPIRES_MIN"]
+BOOKING_MIN = 30   # Sasha 381 · a venue booking's instruction approves its ONE booking, now — never a standing yes
+async def for_booking(ctx: Any, end_user: str, words: str, booking: Dict[str, Any]) -> Dict[str, Any]:
+    """Sasha 381 · CR 196 · THE PERSON'S INSTRUCTION IS THE APPROVAL of ONE venue booking: approvals.mandate scope.booking with ONLY the
+    terms the person SAID (and the prepared booking's id, once there is one) — with the door's proof of THAT instruction (proof_from: the
+    in-app turn's id / the WhatsApp message's id, used once at AgAPI), signed by THE ONE signer (sign). No limits: a booking's instruction
+    has none. Which terms are REQUIRED is AgAPI's alone: → {mandate_id} | {code "term_not_given", missing: [AgAPI's terms]} | {code, why}."""
+    from agapi import venue_submit as VS
+    proof = proof_from(ctx)
+    if not proof:
+        return {"code": "no_proof", "why": "I couldn't confirm this came from you, so I haven't booked anything — ask me again."}
+    words = " ".join(str(words or "").split())[:500]   # as AgAPI keeps them (its sha is over these exact words)
+    b = {k: booking[k] for k in ("prepared_id", "party", "date", "time") if booking.get(k) not in (None, "")}   # only what was said
+    scope = {"booking": {**b, **({"party": int(b["party"])} if "party" in b else {}), **({"time": str(b["time"])[:5]} if "time" in b else {})}}
+    signed = sign(proof, ctx.account, mandate_sha256(end_user, words, scope, {}, BOOKING_MIN))
+    if not signed:
+        return {"code": "not_configured", "why": "Booking on your word isn't switched on here — nothing was booked."}
+    if proof["kind"] == "whatsapp":   # the number as THEIR end user's destination (AgAPI counts only a verified one)
+        await VS._call(ctx.account, OP.USERS_REGISTER, {"external_ref": f"sasha:{ctx.account}",
+                                                        "destinations": [{"channel": "whatsapp", "value": "+" + proof["wa_id"]}]})
+    r = await VS._call(ctx.account, OP.APPROVALS_MANDATE, {"end_user": end_user, "words": words, "scope": scope,
+                                                           "expires_in_minutes": BOOKING_MIN, "proof": signed})
+    if r.get("ok"):
+        return {"mandate_id": (r.get("result") or {}).get("mandate_id")}
+    e = r.get("error") or {}
+    d = e.get("details") or {}
+    if d.get("rule") == "term_not_given":   # CR 196 · AgAPI names what the person didn't give: asked, never guessed
+        return {"code": "term_not_given", "missing": [str(m) for m in d.get("missing") or []]}
+    log.warning("[mandate] AgAPI refused the booking's instruction: %s", e.get("code"))   # the code only — never the proof
+    return {"code": e.get("code") or "refused", "why": "The booking system didn't accept your instruction — nothing was booked."}
+
+
+__all__ = ["proof_from", "limits_for", "scope_for", "mandate_sha256", "sign", "register", "EXPIRES_MIN", "for_booking"]

@@ -74,7 +74,7 @@ class AgAPI:
     the read-back; the in-app tap → the walk's outcome, scripted (first: the Zona stop; then: Booked with CoverManager's reference)."""
 
     def __init__(self, outcomes):
-        self.calls, self.outcomes, self.n, self.extra_line, self.choices = [], list(outcomes), 0, [], {}
+        self.calls, self.outcomes, self.n, self.extra_line, self.choices, self.mandates = [], list(outcomes), 0, [], {}, []
 
     async def call(self, op, body, approval=None, account=None):
         self.calls.append((op, json.loads(json.dumps(body))))
@@ -88,6 +88,14 @@ class AgAPI:
                                                         "say_text": "They book on CoverManager — I'll fill in their booking and press Book for you.",
                                                         "button": {"label": "Yes, book it", "link": None, "sends": True}},
                                            "hand_over": {"link": CM_PAGE, "platform": "CoverManager", "carried": [], "copy": []}}}
+        if op == "approvals.mandate":   # Sasha 381 · CR 196 · the booking's instruction (the turn's proof), recorded
+            self.mandates.append(body)
+            return {"ok": True, "result": {"mandate_id": f"mdt_{len(self.mandates):026d}", "expires_at": "2099-01-01T00:00:00Z",
+                                           "proof": {"kind": body["proof"]["kind"]}}}
+        if op == "venue.submit_booking" and body.get("mandate_id"):   # CR 196 · approved BY the instruction: the walk's outcome, at once
+            self.choices.update(body.get("choices") or {})
+            return {"ok": True, "result": {**self.outcomes.pop(0), "instructed": {
+                "mandate_id": body["mandate_id"], "say": "Booking now: La Taberna, 2 people, Fri 13 Nov at 21:00."}}}
         if op == "venue.submit_booking" and not approval:   # CR 161 · choices kept on the prepared booking and read back
             self.choices.update(body.get("choices") or {})
             picked = "; ".join(f"{k}: {v}" for k, v in self.choices.items())
@@ -148,19 +156,16 @@ class Base(unittest.TestCase):
                   mock.patch.object(GW, "api", mock.AsyncMock(return_value=(200, {"reservations": []}))),
                   mock.patch.object(VN, "card_of", lambda acct, pid=None, name=None: CARD),
                   mock.patch("booking_signer.basket._run", lambda: None)]   # claims in-process (no database in a unit test)
-        for p in self.p:
+        for p in self.p:   # Sasha 381 · cleanups, never tearDown: they run even when a subclass's setUp fails
             p.start()
+            self.addCleanup(p.stop)
         self.tok = VS.TAP.set({"kind": "supabase", "token": "test-session"})   # the in-app session: their instruction IS the approval
-        self.env = mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s328-secret"})   # Sasha 381 · CR 196's proof is signed
-        self.env.start()
-        self.addCleanup(self.env.stop)
-
-    def tearDown(self):
-        VS.TAP.reset(self.tok)
-        for p in self.p:
-            p.stop()
-        VN._HELD.pop(ACCT, None)
-        VS._ACTS.pop(ACCT, None)
+        self.addCleanup(lambda: VS.TAP.reset(self.tok))
+        env = mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s328-secret"})   # Sasha 381 · CR 196's proof is signed
+        env.start()
+        self.addCleanup(env.stop)
+        self.addCleanup(VN._HELD.pop, ACCT, None)
+        self.addCleanup(VS._ACTS.pop, ACCT, None)
 
     def hold(self):
         return run(VN.follow(Ctx("book La Taberna friday 21:00 for 2"), {"name": "La Taberna", "city": "Madrid"}, RD, RES,
@@ -190,7 +195,8 @@ class TheZonaQuestion(Base):
         self.assertEqual(sub[-1]["prepared_id"], sub[0]["prepared_id"])                             # the SAME prepared booking
         self.assertNotIn("choices", sub[0])                                                         # never guessed before
         self.assertEqual(len(self.ag.bodies("venue.prepare_booking")), 1)                           # prepared once — no `answers`
-        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)   # the instruction, then their answer — no third ask
+        self.assertEqual((len(self.ag.mandates), self.ag.ops().count("approvals.in_app_tap")), (2, 0))   # the instruction, then their
+        # answer — each its own turn's proof (CR 196); no tap, no third ask
         print("── said ──\n" + done["line"])
         self.assertEqual(done["status"], "confirmed")
         self.assertEqual(done["line"], "Booking now: La Taberna, 2 people, Fri 13 Nov at 21:00. Booked — reference CM48213.")   # Sasha 381
@@ -229,12 +235,13 @@ class TheZonaQuestion(Base):
 
 
 class NoVerifiedPersonNothingIsPressed(Base):
-    def test_voice_or_old_s1_without_an_in_app_session_never_presses_book(self):
-        VS.TAP.reset(self.tok)
-        self.tok = VS.TAP.set(None)
-        got = self.hold()
-        self.assertEqual(got["status"], "not_sent")                    # Sasha 381 · the instruction can't be proved theirs: nothing pressed
-        self.assertNotIn("approvals.in_app_tap", self.ag.ops())
+    def test_a_turn_with_nothing_to_prove_it_by_never_presses_book(self):
+        ctx = Ctx("book La Taberna friday 21:00 for 2", surface="voice")
+        ctx.session = None   # Sasha 381 · CR 196: no conversation of its own (and no signed WhatsApp message) — the instruction can't be proved
+        got = run(VN.follow(ctx, {"name": "La Taberna", "city": "Madrid"}, RD, RES, "2026-11-13T21:00", datetime.now(timezone.utc), CARD, DEC))
+        self.assertEqual(got["status"], "not_sent")
+        self.assertNotIn("approvals.mandate", self.ag.ops())
+        self.assertNotIn("venue.submit_booking", [o for o, b in self.ag.calls if b.get("mandate_id")])
 
 
 class AskedOnceNeverALoop(Base):

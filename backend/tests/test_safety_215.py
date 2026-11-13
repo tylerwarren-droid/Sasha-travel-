@@ -93,7 +93,7 @@ class Base(unittest.TestCase):
         from booking_signer import basket as BK
         from agapi import venue_submit as VS
         self.patches = [mock.patch.object(GW, "api", self.venue.api), mock.patch.object(GW, "plain_venue", lambda v: v or ""),
-                        mock.patch.object(VS, "submit", self.venue.submit), mock.patch.object(VS, "cancel_submit", self.venue.cancel_submit),
+                        mock.patch.object(VS, "submit", self.venue.submit), mock.patch.object(VS, "submit_instructed", self.venue.submit), mock.patch.object(VS, "cancel_submit", self.venue.cancel_submit),
                         mock.patch.object(VS, "cancel_read_back", self.venue.cancel_read_back),
                         mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=[])),
                         mock.patch.object(GW, "refusal_words", lambda j, s: "refused"),

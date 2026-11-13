@@ -233,7 +233,7 @@ class BrainPath(Base):
     def test_no_contact_saved_means_no_booking(self):
         from app.agent.fakes import Block
         seen = self.turn([[Block(type="tool_use", id="t1", name="hold_venue", input=dict(VENUE))],
-                          [Block(type="text", text="Whose name should I book under?")]], "book La Mi Venta for two on Saturday at 9")
+                          [Block(type="text", text="Whose name should I book under?")]], f"book La Mi Venta for two on {DAY} at 9")   # Sasha 381 · every term theirs
         self.assertIn("save_contact", [t["name"] for t in seen[0]["tools"]])
         result = json.dumps(seen[1]["messages"], default=str)
         self.assertIn("contact_missing", result)

@@ -209,7 +209,7 @@ class Rehearsal(OnTheBrain):
     def test_a_whatsapp_read_carries_the_demo_setting(self):
         hold = {"name": "Botavara Chamberí", "city": "Madrid", "country": "ES", "what": "dinner", "party": 2, "day": SOON, "time": "21:00"}
         self.brain([tool("hold_venue", **hold), says("Shall I?")])
-        self.say("book Botavara for 2 at 9")
+        self.say(f"book Botavara for 2 on {SOON} at 9")   # Sasha 381 · every term theirs (else AgAPI's missing term is asked first)
         read = next(c[3] for c in GW.api.calls if c[2] == "/api/booking/venues/read")
         self.assertTrue(read.get("s2_demo"))
 

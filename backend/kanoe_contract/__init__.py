@@ -1,10 +1,10 @@
 """GENERATED from AgAPI's spec/ by tools/contract/generate.py (CR 186) — DO NOT EDIT. Change spec/, regenerate, bump the release.
-kanoe_contract 1.86.0 · AgAPI 1.86.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
+kanoe_contract 1.90.0 · AgAPI 1.90.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, TypedDict, Union  # noqa: F401
 
-CONTRACT_VERSION = "1.86.0"
+CONTRACT_VERSION = "1.90.0"
 
 
 class OP:
@@ -880,7 +880,7 @@ VenuePrepareBookingOut = TypedDict('VenuePrepareBookingOut', {"venue_id": str, "
 VenueProfileIn = TypedDict('VenueProfileIn', {"call": Dict[str, Any], "url": str, "place": Dict[str, Any], "refresh": bool, "link": Dict[str, Any], "clock": str}, total=False)
 
 # venue.profile — output
-VenueProfileOut = TypedDict('VenueProfileOut', {"venue_id": str, "site": str, "url": str, "read_at": Union[str, None], "facts": Dict[str, Any], "kind": Union[str, None], "photos": List[Any], "booking": Dict[str, Any], "confirm": Dict[str, Any], "form": Union[Dict[str, Any], None], "form_note": str, "withheld": List[Any], "cant_read": Dict[str, Any], "cached": bool, "age_days": int, "robots": Union[str, None], "channels": List[Dict[str, Any]], "listing": Dict[str, Any], "reservable": Dict[str, Any], "decision": Dict[str, Any], "web_site_unreadable": Dict[str, Any], "web_search": Dict[str, Any], "alternatives": Any, "hours_now": Any, "identity": Any, "listing_whatsapp": Any, "read_rules": Any, "refresh": Any, "site_unreadable": Any, "social_link": Any}, total=False)
+VenueProfileOut = TypedDict('VenueProfileOut', {"venue_id": str, "site": str, "url": str, "read_at": Union[str, None], "facts": Dict[str, Any], "kind": Union[str, None], "photos": List[Any], "booking": Dict[str, Any], "confirm": Dict[str, Any], "form": Union[Dict[str, Any], None], "form_note": str, "withheld": List[Any], "cant_read": Dict[str, Any], "cached": bool, "age_days": int, "robots": Union[str, None], "channels": List[Dict[str, Any]], "listing": Dict[str, Any], "reservable": Dict[str, Any], "decision": Dict[str, Any], "web_site_unreadable": Dict[str, Any], "web_search": Dict[str, Any], "alternatives": Any, "hours_now": Any, "identity": Dict[str, Any], "own_name": Dict[str, Any], "listing_whatsapp": Any, "read_rules": Any, "refresh": Any, "site_unreadable": Any, "social_link": Any}, total=False)
 
 # venue.recognition — input
 VenueRecognitionIn = TypedDict('VenueRecognitionIn', {"place": Dict[str, Any], "location": Dict[str, Any], "search": bool}, total=False)
@@ -889,10 +889,10 @@ VenueRecognitionIn = TypedDict('VenueRecognitionIn', {"place": Dict[str, Any], "
 VenueRecognitionOut = TypedDict('VenueRecognitionOut', {"place": Dict[str, Any], "recognition": Union[Dict[str, Any], None], "say_text": Union[str, None], "searched": bool}, total=False)
 
 # venue.submit_booking — input
-VenueSubmitBookingIn = TypedDict('VenueSubmitBookingIn', {"end_user": str, "prepared_id": str, "choices": Dict[str, Any], "route": Literal['auto', 'call']}, total=False)
+VenueSubmitBookingIn = TypedDict('VenueSubmitBookingIn', {"end_user": str, "prepared_id": str, "choices": Dict[str, Any], "route": Literal['auto', 'call'], "mandate_id": str}, total=False)
 
 # venue.submit_booking — output
-VenueSubmitBookingOut = TypedDict('VenueSubmitBookingOut', {"prepared_id": str, "status": Literal['confirmed', 'sent', 'failed', 'not_allowed', 'calling'], "submitted": bool, "rung": str, "how": str, "venue": str, "act_id": str, "evidence_id": str, "outcome_id": Union[str, None], "reference": Union[str, None], "venue_words": Dict[str, Any], "why": List[Any], "say": str, "route": str, "call_plan": Dict[str, Any], "approval": Dict[str, Any], "takeover": Dict[str, Any], "hand_over": Dict[str, Any], "ask": Dict[str, Any]}, total=False)
+VenueSubmitBookingOut = TypedDict('VenueSubmitBookingOut', {"prepared_id": str, "status": Literal['confirmed', 'sent', 'failed', 'not_allowed', 'calling'], "submitted": bool, "rung": str, "how": str, "venue": str, "act_id": str, "evidence_id": str, "outcome_id": Union[str, None], "reference": Union[str, None], "venue_words": Dict[str, Any], "why": List[Any], "say": str, "route": str, "call_plan": Dict[str, Any], "approval": Dict[str, Any], "takeover": Dict[str, Any], "hand_over": Dict[str, Any], "ask": Dict[str, Any], "instructed": Dict[str, Any]}, total=False)
 
 # venue.unhandled — input
 VenueUnhandledIn = TypedDict('VenueUnhandledIn', {"since": str, "limit": int}, total=False)
@@ -965,7 +965,6 @@ REQUIRED: Dict[str, List[str]] = {
  ],
  "ApprovalsMandateIn": [
   "end_user",
-  "limits",
   "proof",
   "scope",
   "words"

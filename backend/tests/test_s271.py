@@ -66,7 +66,7 @@ class TheStayIsTheEnginesAct(Base):
         self.assertEqual((got["call"]["status"], got["call"]["reason"]), ("calling", "R6"))
         self.assertTrue(got["line"].endswith(V.REQUESTED), got["line"])                      # Sasha 381 · Tyler's ONE line
         self.assertEqual(dialled, [("act_1", "vcp_r6")])
-        self.assertEqual((fake.ops().count("venue.submit_booking"), fake.ops().count("approvals.in_app_tap")), (1, 1))   # read-back, ONE send
+        self.assertEqual((fake.ops().count("approvals.mandate"), fake.ops().count("venue.submit_booking")), (1, 1))   # the instruction, ONE send
 
     def test_no_booking_service_a_stay_is_said_never_sasha_s_own_email(self):
         async def none(*a, **k):

@@ -115,28 +115,16 @@ class TheYesSendsItself(Base):
 
 
 class AStaleReadBack(Base):
-    """Sasha 381 · the read-back changed under the instruction: never "here's the card again" — acted on ONCE more on AgAPI's fresh
-    read-back; refused again → said, nothing sent, nothing held."""
+    """Sasha 381 · the booking changed or timed out under the instruction: never "here's the card again" — said, nothing sent, nothing
+    held (the read-back is AgAPI's, approved BY the instruction or not at all — CR 196)."""
     TAP_ERROR = "approval_void"
 
-    def test_acted_on_once_more_then_said(self):
+    def test_said_nothing_sent_nothing_held(self):
         held = {**self.hold(), "rung": "agapi"}
-        r = run(VS.submit(ACCT, held, "Yes, send it."))
-        self.assertEqual(r["error"]["code"], "approval_void")
-        self.assertIn("(v2)", r["error"]["details"]["fresh"]["lines"][0])
-        retried = []
-
-        async def inner(ctx, h, how, venue, rung):
-            retried.append(h["sha"])
-            return {"status": "not_sent", "venue": venue, "booked": False, "say": V.tap_line("approval_void")}
 
         class Ctx:
             account = ACCT
-        with mock.patch.object(VN, "_book_inner", inner):
-            out = run(VN._tap_refused(Ctx(), held, "approval_void", r["error"], "Taverna Sandbox"))
-        self.assertEqual(retried, ["a" * 64])                                 # once more, on the NEW read-back
-        self.assertNotEqual(out["status"], "awaiting_yes")
-        out = run(VN._tap_refused(Ctx(), {**held, "refreshed": True}, "approval_void", r["error"], "Taverna Sandbox"))
+        out = run(VN._tap_refused(Ctx(), held, "approval_void", {"code": "approval_void"}, "Taverna Sandbox"))
         self.assertEqual((out["status"], out["say"]), ("not_sent", V.TAP_SAYS["approval_void"]))
         self.assertNotIn(ACCT, VN._HELD)
 

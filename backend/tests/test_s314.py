@@ -106,9 +106,9 @@ class TheShortReadBackIsGone(unittest.TestCase):
 
     def test_tylers_words(self):
         self.assertFalse(hasattr(V, "kanoe_ask"))
-        self.assertEqual(V.acted_line("DiverXO", 2, "2026-11-13T21:00", False),
+        self.assertEqual(V.acted_line("Booking now: DiverXO, 2 people, Fri 13 Nov at 21:00.", False),
                          "Booking now: DiverXO, 2 people, Fri 13 Nov at 21:00. Requested — I'll tell you when they reply.")   # HER VOICE: no channel
-        self.assertEqual(V.TERM_ASK["people"], "For how many people?")
+        self.assertEqual(V.TERM_ASK["party"], "For how many people?")
 
 
 class TheShortReadBackIsShown(unittest.TestCase):   # found by the proof: the short card wasn't recorded, so his yes got a second confirmation

@@ -55,24 +55,39 @@ async def _submit_answer(op: str, body: dict, approval=None, account=None) -> di
         from agapi import venue_truth as VT
         dec = VT.decision({k: v for k, v in (body.get("place") or {}).items() if k in ("place_id", "website", "name")})
         _PREPARED["route"] = (dec or {}).get("route")   # Sasha 381 · what this prepared booking is: AgAPI acts on it by its decision
+        _PREPARED["venue"] = str((body.get("place") or {}).get("name") or "the venue")
         return {"ok": True, "result": {"venue_id": "v_gate", "venue": str((body.get("place") or {}).get("name") or "the venue"), "submitted": False,
                                        "prepared_id": "vpr_gate", "zero_touch_allowed": True, "link": "https://agapi.test/prepared/gate", "say": "ready",
                                        **({"decision": dec} if dec else {})}}
+    if op == OP.APPROVALS_MANDATE:   # Sasha 381 · CR 196 · the booking's instruction (a missing term → term_not_given: asked)
+        b = (body.get("scope") or {}).get("booking") or {}
+        missing = [k for k in ("prepared_id", "party", "date", "time") if b.get(k) in (None, "")]
+        if missing:
+            return {"ok": False, "error": {"code": ERR.INVALID_INPUT, "message": "asked, never guessed",
+                                           "details": {"path": "/scope/booking", "rule": "term_not_given", "missing": missing}}}
+        _PREPARED["booking"] = b
+        return {"ok": True, "result": {"mandate_id": "mdt_gate", "expires_at": "2099-01-01T00:00:00Z",
+                                       "proof": {"kind": (body.get("proof") or {}).get("kind")}}}
+    if op == OP.VENUE_SUBMIT_BOOKING and body.get("mandate_id"):   # CR 196 · approved BY the instruction, acted at once
+        b = _PREPARED.get("booking") or {}
+        from datetime import date as _d
+        d = _d.fromisoformat(b["date"])
+        said = f"Booking now: {_PREPARED.get('venue') or 'the venue'}, {b['party']} people, {d:%a} {d.day:02d} {d:%b} at {b['time']}."
+        instructed = {"instructed": {"mandate_id": body["mandate_id"], "say": said}}
+        if body.get("route") == "call":
+            return {"ok": True, "result": {"prepared_id": "vpr_gate", "status": "calling", "submitted": True, "act_id": "act_gate_call",
+                                           "say": "On it — I'll call them now and let you know.", **instructed,
+                                           "call_plan": {"call_id": "cpl_gate", "phone": "+34910000000", "simulate": True}}}
+        if _PREPARED.get("route") == "platform_book":   # AgAPI pressed Book on the permitted platform: confirmed, its reference
+            return {"ok": True, "result": {"prepared_id": "vpr_gate", "status": "confirmed", "submitted": True, "act_id": "act_gate_pb",
+                                           "reference": "GATE-PB", "route": "platform", "say": "Booked.", **instructed}}
+        return {"ok": True, "result": {"prepared_id": "vpr_gate", "status": "sent", "submitted": True, "act_id": "act_gate", "say": "Sent.",
+                                       **instructed}}
     if op == OP.VENUE_SUBMIT_BOOKING and not approval:
         return {"ok": False, "error": {"code": "approval_required", "message": "the person's yes first", "retryable": False,
                                        "details": {"read_back_id": "rbk_gate_call" if body.get("route") == "call" else "rbk_gate",
                                                    "read_back": {"lines": [
                                            "I'll send their own booking form with your details.", "Nothing is booked until they confirm."]}}}}
-    if op == OP.APPROVALS_IN_APP_TAP:   # Sasha 381 · CR 196 · the instruction's approval: AgAPI approves THAT read-back and acts
-        call = body.get("read_back_id") == "rbk_gate_call"
-        if _PREPARED.get("route") == "platform_book" and not call:   # AgAPI pressed Book on the permitted platform: confirmed, its reference
-            return {"ok": True, "result": {"approval_id": "apv_gate", "result": {
-                "prepared_id": "vpr_gate", "status": "confirmed", "submitted": True, "act_id": "act_gate_pb", "reference": "GATE-PB",
-                "route": "platform", "say": "Booked."}}}
-        return {"ok": True, "result": {"approval_id": "apv_gate", "result": {
-            "prepared_id": "vpr_gate", "status": "calling" if call else "sent", "submitted": True, "act_id": "act_gate_call" if call else "act_gate",
-            "say": "On it — I'll call them now and let you know." if call else "Sent.",
-            **({"call_plan": {"call_id": "cpl_gate", "phone": "+34910000000", "simulate": True}} if call else {})}}}
     if op == OP.SANDBOX_SIMULATE_APPROVAL:
         return {"ok": True, "result": {"approval_id": "apv_gate"}}
     if op == OP.APPROVALS_REQUEST:

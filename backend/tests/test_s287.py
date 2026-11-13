@@ -50,7 +50,7 @@ class FakeAgAPI:
     """AgAPI's half, as its code does it: the gate at prepare, the read-back, the gate again at submit, the single-use yes, ONE send."""
 
     def __init__(self, gate=True, gate_at_read=None, gate_at_send=None):
-        self.gate, self.ops, self.sends, self.used = gate, [], [], set()
+        self.gate, self.ops, self.sends, self.used, self.mandates = gate, [], [], set(), []
         self.gate_at_read = gate if gate_at_read is None else gate_at_read
         self.gate_at_send = self.gate_at_read if gate_at_send is None else gate_at_send
 
@@ -66,6 +66,31 @@ class FakeAgAPI:
                    "options": [{"kind": "whatsapp", "label": "Send on WhatsApp", "link": WA, "sends": k}]}
             return {"ok": True, "result": {"prepared_id": PID, "venue": "Casa Gate", "submitted": False, "link": "https://agapi.test/prepared/x", "decision": dec,
                                            "person_send": {"whatsapp": WA, "kanoe_sends": k}}}
+        if op == "approvals.mandate":   # Sasha 381 · CR 196 · the booking's instruction (the turn's proof), recorded
+            missing = [k for k in ("prepared_id", "party", "date", "time") if (body["scope"].get("booking") or {}).get(k) in (None, "")]
+            if missing:   # AgAPI's term_not_given: every term as the person gave it
+                return {"ok": False, "error": {"code": "invalid_input", "message": "asked, never guessed",
+                                               "details": {"path": "/scope/booking", "rule": "term_not_given", "missing": missing}}}
+            self.mandates.append(body)
+            return {"ok": True, "result": {"mandate_id": f"mdt_{len(self.mandates):026d}", "expires_at": "2099-01-01T00:00:00Z",
+                                           "proof": {"kind": body["proof"]["kind"]}}}
+        if op == "venue.submit_booking" and body.get("mandate_id"):   # CR 196 · ONE submit, approved BY the instruction — AgAPI's gate in it
+            said = {"instructed": {"mandate_id": body["mandate_id"], "say": "Booking now: Casa Gate, 2 people, Fri 30 Oct at 21:00."}}
+            if not self.gate_at_read:
+                return {"ok": True, "result": {"prepared_id": PID, "status": "not_allowed", "submitted": False,
+                                               "say": "I can't send this one for you (sending from Kanoe's number isn't on for this person)."}}
+            if body["mandate_id"] in self.used:   # AgAPI: one booking per instruction (used_at)
+                return {"ok": False, "error": {"code": "approval_required", "message": "outside", "details": {
+                    "read_back_id": "rbk_287", "mandate": {"mandate_id": body["mandate_id"], "outside": [{"why": "already_used"}]}}}}
+            self.used.add(body["mandate_id"])
+            if not self.gate_at_send:   # _send_whatsapp: the gate again — nothing sent, said
+                return {"ok": True, "result": {"prepared_id": PID, "status": "failed", "submitted": True, "act_id": "act_287f",
+                                               "venue": "Casa Gate", "how": "whatsapp", **said,
+                                               "say": "Not booked — Casa Gate's form answered: \"sending from Kanoe's number isn't on for this person — nothing was sent.\""}}
+            self.sends.append("rbk_287")
+            return {"ok": True, "result": {"prepared_id": PID, "status": "sent", "submitted": True, "act_id": "act_287", "venue": "Casa Gate",
+                                           "how": "whatsapp_template", "reference": "SM" + "2" * 32, **said,
+                                           "say": "Sent to Casa Gate. I'll tell you when they reply."}}
         if op == "venue.submit_booking":
             if not self.gate_at_read:
                 return {"ok": True, "result": {"status": "not_allowed", "submitted": False,
@@ -211,7 +236,8 @@ class AMissingTermIsAsked(Base):
     def test_asked_then_sent_on_the_answer(self):
         out = self.hold("Book Casa Gate on Friday at 9pm")
         self.assertEqual((out["status"], out["ask"]), ("need_term", "For how many people?"))
-        self.assertEqual((self.agapi.sends, self.agapi.ops), ([], []))                          # nothing prepared, nothing sent
+        self.assertEqual((self.agapi.sends, self.agapi.ops), ([], ["users.register", "approvals.mandate"]))   # AgAPI named it; nothing
+        # prepared, nothing sent, nothing recorded (its term_not_given)
         out = self.hold("2 of us", before="Book Casa Gate on Friday at 9pm")
         self.assertEqual((out["status"], self.agapi.sends), ("requested", ["rbk_287"]))
         self.assertTrue(out["line"].startswith("Booking now: Casa Gate, 2 people, Fri 30 Oct at 21:00."), out["line"])
@@ -338,7 +364,7 @@ class TheirWords(unittest.TestCase):
         self.assertTrue(self.w("This one: “Casa Gate” [their tap on the card on their screen: Casa Gate · place_id ChIJ287 — use this place_id]")["venue"])
 
     def test_every_term_is_read_from_their_words(self):
-        src = inspect.getsource(VN.unsaid_term)   # Sasha 381 · the instruction's terms: their words this conversation, never the model's
+        src = inspect.getsource(VN.said_terms)   # Sasha 381 · the instruction's terms: their words this conversation, never the model's
         for read in ("SD.day(", "SD.time_(", "SD.people(", "said_before", "user_said"):
             self.assertIn(read, src)
 
@@ -380,7 +406,7 @@ class TheRatchet(unittest.TestCase):
     def test_s2_reads_the_gate_in_one_place(self):
         src = inspect.getsource(VN.kanoe_whatsapp).replace(VN.kanoe_whatsapp.__doc__, "")   # its code, not its docstring
         self.assertIn('get("sender") != "kanoe"', src)                  # AgAPI's answer at prepare
-        self.assertIn("VS.read_back(", src)                              # and at the read-back
+        self.assertIn("_act(ctx,", src)                                  # and at the ONE instructed submit (Sasha 381 · CR 196)
         for bad in ("getenv", "environ", "founder", "@", "allow", "rules_for", "BD.", "_twilio", "send_whatsapp"):
             self.assertNotIn(bad, src, bad)                              # no flag, no list, no rules of its own, no second sender
 
@@ -391,8 +417,8 @@ class TheRatchet(unittest.TestCase):
             self.assertIn("_act(ctx,", inspect.getsource(f))
 
     def test_the_send_is_only_the_read_back_once(self):
-        self.assertIn("VS.submit(", inspect.getsource(VN._agapi_send))
-        self.assertIn("instruction_tap(account, rid, sha, instruction)", inspect.getsource(VS.submit))   # CR 196 · on that read-back's sha256
+        self.assertIn("VS.submit_instructed(", inspect.getsource(VN._agapi_send))
+        self.assertIn('"mandate_id": held["mandate_id"]', inspect.getsource(VS.submit_instructed))   # CR 196 · approved BY the instruction
 
     def test_no_kanoe_flag_allow_list_or_twilio_post_in_s2(self):
         bad = []
@@ -408,7 +434,7 @@ class TheRatchet(unittest.TestCase):
         self.assertEqual(bad, [])                                       # (Twilio's closed list: test_s285.NoSecondTwilioSender)
 
     def test_her_voice_names_no_channel(self):
-        lines = [V.acted_line("X", 2, "2099-10-30T21:00", False), V.acted_line("X", 2, "2099-10-30T21:00", True, "R1"), V.OWN_WHATSAPP, V.wa_sent_line("21:00", "X"),
+        lines = [V.acted_line("Booking now: X, 2 people, Fri 30 Oct at 21:00.", False), V.acted_line("Booking now: X, 2 people, Fri 30 Oct at 21:00.", True, "R1"), V.OWN_WHATSAPP, V.wa_sent_line("21:00", "X"),
                  V.wa_yes_line("X", "Friday", "21:00", 2), V.wa_offered_line("X", "21:30"), V.wa_no_line("X"), V.wa_stopped_line("X"),
                  V.wa_replied_line("X", "ok")]
         self.assertEqual(V.check(lines), [])

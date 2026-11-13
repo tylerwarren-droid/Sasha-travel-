@@ -102,8 +102,7 @@ class APick(unittest.TestCase):
                 mock.patch("agapi.v0.claim", mock.AsyncMock()):
             out = self.pick("s2", {"form": {}}, route="form")
         self.assertEqual((out["status"], out.get("reference")), ("confirmed", "TV-230"))
-        tap = self.fake.body("approvals.in_app_tap")                              # the instruction binds the read-back (CR 196)
-        self.assertEqual((tap["read_back_id"], tap["session"]["kind"]), ("rb_01JABCDEFGHJKMNPQRSTVWXYZ0", "in_app"))
+        self.assertEqual(self.fake.body("venue.submit_booking")["mandate_id"], "mdt_01JABCDEFGHJKMNPQRSTVWXYZ0")   # approved BY the instruction
 
 
 if __name__ == "__main__":

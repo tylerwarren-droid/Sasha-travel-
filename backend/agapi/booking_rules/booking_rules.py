@@ -20,6 +20,12 @@ booking-rules/3.0 (CR 188 · Tyler, 12 Nov 2026 11:07: "all users can book real 
   · a hand-over to the person ONLY for what the person alone may do: a CAPTCHA, a sign-in, a card or deposit (that step only, the rest
     filled), a consent box of theirs — or a platform the channel policy doesn't let Sasha book on (OpenTable, TheFork …: as counsel set it).
 
+booking-rules/4.0 (CR 195 · Tyler, KANOE_DECISIONS 12 Nov: "the channel that CONFIRMS INSTANTLY comes first") · ONE order for EVERY person:
+  · their own form Sasha can send (no CAPTCHA, no consent box of theirs) → a platform Sasha books on the person's yes (channel.submit_ok, no
+    step only the person can do: CoverManager, DISH …) → only then a request (WhatsApp → email) or a call (R1, R3–R6 unchanged).
+  · a platform Sasha can't book (a step only the person can do, or one the channel policy keeps closed) never comes before the venue's own
+    channels: its link is handed over only when the venue gives no channel of its own.
+
 ctx (all optional except venue and when):
   venue:  {type: restaurant|spa|hotel|activity|service|other, test: bool,
            channels: [{kind: form|own_engine|widget|whatsapp|email|phone|platform, value, host, captcha, required_consent,
@@ -57,7 +63,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-VERSION = "booking-rules/3.0 · 2026-11-12"
+VERSION = "booking-rules/4.0 · 2026-11-12"
 
 # ── the constants, as data (never env vars) ──────────────────────────────────────────────────────────────────────────────
 URGENT_HOURS = 48                           # R3/R4 · more than this → request and wait; within it → call or their own page
@@ -339,9 +345,23 @@ def decide(ctx: Dict[str, Any]) -> Dict[str, Any]:
     hours = (at - now).total_seconds() / 3600 if (now and at) else None
     chans = list(venue.get("channels") or [])
 
-    # R14 · booking-rules/3.0 (CR 188) · a platform comes AFTER the venue's own channels (form, WhatsApp, email, phone); then Sasha books it
-    # herself on the ONE yes, for EVERY person — the person is handed only the step only they may do (a CAPTCHA, a sign-in, a card or deposit)
+    # R14 · booking-rules/4.0 (CR 195) · what CONFIRMS INSTANTLY comes first: their own form Sasha can send, then a platform Sasha books
+    # herself on the ONE yes (for EVERY person); a request or a call only when nothing confirms instantly. A platform Sasha can't book never
+    # comes before the venue's own channels — the person is handed only the step only they may do (a CAPTCHA, a sign-in, a card or deposit)
+    own_form = next((c for c in chans if c.get("kind") == "form" and not platform_of(c)), None)
+    instant_form = bool(own_form) and not (own_form.get("captcha") or own_form.get("required_consent"))
     own_first = any(x.get("kind") in CHANNEL_ORDER and not platform_of(x) for x in chans)
+    for c in chans:
+        named = platform_of(c)
+        p = c.get("kind") == "platform" and ((named and platform_words(c, named)) or c.get("host") or "a booking platform") or \
+            (c.get("kind") in ("form", "own_engine", "widget") and named and platform_words(c, named))
+        bookable = p and c.get("submit_ok") is True and not (c.get("captcha") or c.get("needs_sign_in") or c.get("card"))
+        if not bookable or instant_form:
+            continue
+        page = link or (c.get("value") if str(c.get("value") or "").startswith("http") else c.get("url"))
+        if not venue.get("test") and access.get("mode") != "live":
+            return _decision("prepared_link", "not_live", c, link, refusals=[{"rule": "access", "reason": "test mode"}])
+        return _decision("fill_platform_form", "platform_book", c, page, fmt={"platform": p})   # before any request or call
     for c in chans:
         named = platform_of(c)
         p = c.get("kind") == "platform" and ((named and platform_words(c, named)) or c.get("host") or "a booking platform") or \

@@ -214,11 +214,14 @@ class G7NoSlot(Base):
         self.assertEqual(self.api.bodies("/api/booking/links"), [])
         self.assertEqual(self.api.bodies("/api/booking/emails"), [])
 
-    def test_no_time_and_no_open_slot_says_how(self):
-        with self.assertRaises(API.ToolError) as e:
-            self.hold({"email": {}}, day=LATER)
-        self.assertEqual(e.exception.code, "when_invalid")
-        self.assertIn("open_slot", e.exception.message)
+    def test_no_time_and_no_open_slot_is_agapis_question(self):
+        # Sasha 381 · CR 196: a time they didn't give is AgAPI's to name (term_not_given) and hers to ask — "whenever they have space" is
+        # their answer to it (open_slot then), never a time picked for them
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        fake = use_fake_agapi(self)
+        out = self.hold({"email": {}}, day=LATER)
+        self.assertEqual((out["status"], out["ask"]), ("need_term", "What time?"))
+        self.assertNotIn("venue.prepare_booking", fake.ops())
 
     def test_a_given_time_wins_over_open_slot(self):   # Sasha 319 · the slot goes to AgAPI's booking record (the one sender)
         from agapi import venue_submit as VS
@@ -503,10 +506,11 @@ class OldS1Untouched(Base):
         p.start()
         self.addCleanup(p.stop)
 
-    def test_no_time_is_when_invalid_as_before(self):
-        with self.assertRaises(API.ToolError) as e:
-            self.hold({"email": {}}, open_slot="quote", day=LATER)
-        self.assertEqual((e.exception.code, e.exception.message), ("when_invalid", "day is YYYY-MM-DD and time HH:MM"))
+    def test_no_time_is_asked_as_everywhere(self):   # Sasha 381 · Tyler's 20:20 decision is every surface's: old S1 too
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        use_fake_agapi(self)
+        out = self.hold({"email": {}}, open_slot="quote", day=LATER)
+        self.assertEqual((out["status"], out["ask"]), ("need_term", "What time?"))
 
     def test_nothing_of_sashas_own_reaches_the_venue(self):   # Sasha 319 · old S1 too: AgAPI's acts are the one sender
         LY.find_for.return_value = ITEM

@@ -44,6 +44,16 @@ class FakeAgAPI(T.FakeAgAPI):
         if op == "venue.prepare_booking":
             self.ops.append(op)
             return {"ok": True, "result": {"prepared_id": PID, "venue": "Casa Gate", "submitted": False, "link": "https://agapi.test/prepared/x", "decision": EMAIL_DEC}}
+        if op == "venue.submit_booking" and body.get("mandate_id"):   # Sasha 381 · CR 196 · ONE submit, approved BY the instruction
+            self.ops.append(op)
+            said = {"instructed": {"mandate_id": body["mandate_id"], "say": "Booking now: Casa Gate, 2 people, Fri 30 Oct at 21:00."}}
+            if not self.gate_at_send:
+                return {"ok": True, "result": {"prepared_id": PID, "status": "not_allowed", "submitted": False, "venue": "Casa Gate",
+                                               "say": "I can't send this one for you.", **said}}
+            self.sends.append("rbk_288")
+            return {"ok": True, "result": {"prepared_id": PID, "status": "sent", "submitted": True, "act_id": "act_288", "venue": "Casa Gate",
+                                           "how": "email", "reference": "em_288", "say": "I've emailed Casa Gate. I'll tell you when they reply.",
+                                           **said}}
         if op == "venue.submit_booking" and self.gate_at_read:
             self.ops.append(op)
             return {"ok": False, "error": {"code": "approval_required", "message": "read it back first",
@@ -187,10 +197,10 @@ class TheRatchet(unittest.TestCase):
             self.assertNotRegex(code, r"""(?:==|!=|\bin)\s*\(?["']email["']""", fn.__name__)   # no `if channel == "email"` copy
             for bad in ("/api/booking/emails", "_email(", "send_email", "resend", "messages.send"):
                 self.assertNotIn(bad, code, (fn.__name__, bad))
-        self.assertIn("VS.submit(", inspect.getsource(VN._agapi_send))   # the ONE send: venue.submit_booking
+        self.assertIn("VS.submit_instructed(", inspect.getsource(VN._agapi_send))   # the ONE send: venue.submit_booking (CR 196)
 
     def test_her_voice_never_names_the_channel(self):
-        lines = [V.acted_line("X", 2, "2099-10-30T21:00", False), V.wa_sent_line("21:00", "X"),
+        lines = [V.acted_line("Booking now: X, 2 people, Fri 30 Oct at 21:00.", False), V.wa_sent_line("21:00", "X"),
                  V.wa_replied_line("X", "ok, we'll check")]
         self.assertEqual(V.check(lines), [])
         for x in lines:

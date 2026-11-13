@@ -87,9 +87,10 @@ async def main() -> bool:
         check("(b) followed: AgAPI's act on the instruction — sent in the same turn, nothing waits for a yes (Sasha 381)",
               out.get("status") in ("requested", "confirmed") and str(out.get("line") or "").startswith("Booking now: ")
               and acct not in VN._HELD, str(out)[:240])
-        check("(b) prepared by AgAPI (venue.prepare_booking), its read-back, then ONE approval: the instruction (approvals.in_app_tap)",
-              calls[calls.index(OP.VENUE_PREPARE_BOOKING):] == [OP.VENUE_PREPARE_BOOKING, OP.VENUE_SUBMIT_BOOKING, OP.APPROVALS_IN_APP_TAP]
-              if OP.VENUE_PREPARE_BOOKING in calls else False, str(calls))
+        after = calls[calls.index(OP.VENUE_PREPARE_BOOKING):] if OP.VENUE_PREPARE_BOOKING in calls else []
+        check("(b) prepared by AgAPI (venue.prepare_booking), the instruction recorded (approvals.mandate, CR 196), then ONE submit — no tap",
+              [c for c in after if c != OP.USERS_REGISTER] == [OP.VENUE_PREPARE_BOOKING, OP.APPROVALS_MANDATE, OP.VENUE_SUBMIT_BOOKING],
+              str(calls))
     finally:
         GR.address_of, VS.CALL = real_addr, real_call
         VN._HELD.pop(acct, None)

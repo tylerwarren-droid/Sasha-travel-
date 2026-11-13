@@ -126,8 +126,10 @@ class ANewHoldSupersedes(unittest.TestCase):
         VN._HELD[ACCOUNT] = {"rung": "form", "id": "f1", "sha": "x" * 64, "at": datetime.now(timezone.utc) - timedelta(minutes=2),
                              "venue": "El Mirador de Sol", "when": f"{D1}T21:00", "party": 2, "out": {"status": "awaiting_yes"}}
         with mock.patch.object(VN, "_read", mock.AsyncMock(side_effect=RuntimeError("the new venue's read failed"))):
+            c = ctx()
+            c.user_said = f"book D-Sunset Madrid on {D1} at 21:00 for 2"   # Sasha 381 · every term theirs (else AgAPI's term is asked)
             with self.assertRaises(RuntimeError):
-                run(VN.hold_venue(ctx(), {"name": "D-Sunset Madrid", "city": "Madrid", "day": D1, "time": "21:00", "party": 2}))
+                run(VN.hold_venue(c, {"name": "D-Sunset Madrid", "city": "Madrid", "day": D1, "time": "21:00", "party": 2}))
         self.assertNotIn(ACCOUNT, VN._HELD)   # nothing left for a yes to book
 
 

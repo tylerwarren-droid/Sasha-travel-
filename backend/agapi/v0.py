@@ -2109,16 +2109,17 @@ TOOLS: List[dict] = [
        [], {"type": "object", "properties": {"status": {"const": "awaiting_payment"}, "booked": {"const": False}}},
        ["no_explicit_yes", "no_read_back", "read_back_stale", "read_back_changed", "not_bookable", "already_done", "payments_unreachable",
         "store_unreachable"], austen=True),
-    _t("hold_venue", "Austen", hold_venue, "Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question "
-       "first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the "
-       "yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). A place that books only by a WhatsApp "
-       "or Instagram message (status draft_message): read the drafted message and offer to send it to their phone — they "
-       "send it; it is never booked until the place replies. Nothing is sent.",
+    _t("hold_venue", "Austen", hold_venue, "Book a venue (a restaurant, a spa…) on the person's instruction — Sasha 381: their instruction "
+       "IS the approval, so this BOOKS it in this turn (AgAPI's act) and says it in ONE line (`line`, said by code). Pass only the terms "
+       "THEY gave — a term they didn't give (status need_term) is asked: say `ask` word for word, then call again with their answer. "
+       "A place that books only by a message they send (their WhatsApp / Instagram) or a step only they can do: its hand-over, as returned.",
        {**VENUE_PROPS, "what": {"type": "string", "description": "e.g. dinner, a table, a massage"}, "day": DATE,
-        "time": {"type": "string", "description": "HH:MM, the venue's local time"}, "party": {"type": "integer", "minimum": 1, "maximum": 20},
+        "time": {"type": "string", "description": "HH:MM, the venue's local time"},
+        "party": {"type": "integer", "minimum": 1, "maximum": 20,
+                  "description": "how many people — only the number THEY said; never guessed (leave it out and she asks: Sasha 381)"},
         "route": {"enum": ["form", "page", "email", "call", "whatsapp", "instagram", "no"], "description": "the route they chose (from choose_route)"}},
-       ["name", "city", "day", "time", "party"], {"type": "object", "properties": {"status": {"type": "string"}, "read_back": {"type": "array"}}},
-       ["read_failed", "when_invalid", "contact_missing", "no_route"], austen=True),
+       ["name", "city", "day", "time"], {"type": "object", "properties": {"status": {"type": "string"}, "read_back": {"type": "array"}}},
+       ["read_failed", "when_invalid", "contact_missing", "no_route"], austen=True),   # Sasha 381 · party never required: asked, never guessed
     _t("book_venue", "Austen", book_venue, "After the person's explicit yes in THIS turn, to what hold_venue read back in an earlier "
        "turn: the booking, by its route — their form (any human step goes to their phone as Tap to finish), the platform's page "
        "to their phone, the email, or the call. Its status says what's true: confirmed only on the venue's own confirmation.",

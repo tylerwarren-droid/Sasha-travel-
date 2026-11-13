@@ -56,7 +56,7 @@ def _src(case, rel):
 
 class TheRules21(unittest.TestCase):
     def test_gate_the_engine_s_words(self):
-        self.assertTrue(BR.VERSION.startswith("booking-rules/3."))   # Sasha 378 · CR 188: 3.0 (re-vendored byte for byte)   # Sasha 329 · CR 161 · 2.6 (+ decide_cancel)   # CR 160 · 2.5 (the same words)   # CR 129 · was 2.1: the same rules, R14 reading every field
+        self.assertTrue(BR.VERSION.startswith("booking-rules/4."))   # Sasha 381 · CR 195: 4.0   # Sasha 378 · CR 188: 3.0 (re-vendored byte for byte)   # Sasha 329 · CR 161 · 2.6 (+ decide_cancel)   # CR 160 · 2.5 (the same words)   # CR 129 · was 2.1: the same rules, R14 reading every field
         self.assertEqual(BR.PHRASES["no_answer_first"], "They didn't pick up.")
         self.assertEqual(BR.PHRASES["no_answer"], "They didn't pick up again — the form is the fastest way.")
         self.assertEqual(BR.no_answer(PAGE, n=1)["ask_text"], BR.PHRASES["ask_try_again"])
@@ -196,7 +196,7 @@ class ListingNumbers(unittest.TestCase):
         self.assertIsNone(VN.call_of(rd, None, None))                                        # no place_id: nothing to hand the booking
         src = pathlib.Path(VN.__file__).read_text()
         self.assertNotIn("listing_number(", src)
-        self.assertIn('rb = await VS.read_back(ctx.account, p["prepared_id"], route="call")', src)
+        self.assertIn('return await _act(ctx, "agapi_call", p, rd, res,', src)   # Sasha 381 · the call's ONE instructed submit (CR 196)
         brief = VC.brief_of("act_1", {"phone": LISTING, "source": "listing", "call_id": "vcp_1"}, {"place_id": "ChIJ-t"})
         self.assertIsNone(brief["number"])
         self.assertNotIn(LISTING[1:], json.dumps(brief))

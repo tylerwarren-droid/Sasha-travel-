@@ -58,8 +58,7 @@ class TheCallIsGivenOnce(Base):
         fake = use_fake_agapi(self)
         self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=96, what="a room", venue="Hotel Gate", nights=2)
         self.assertEqual(fake.body("venue.prepare_booking")["call"], {"phone": "+34910000000", "source": "venue"})
-        self.assertNotIn("call", [b for o, b, _a in fake.calls if o == "venue.submit_booking"][-1])
-        self.assertNotIn("call", fake.body("approvals.in_app_tap"))
+        self.assertNotIn("call", [b for o, b, _a in fake.calls if o == "venue.submit_booking"][-1])   # given once, at prepare
 
     def test_call_of_never_reads_the_digits(self):
         rd = {"facts": LISTING_FACTS}

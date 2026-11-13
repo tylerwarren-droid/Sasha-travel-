@@ -70,7 +70,7 @@ class AgAPI:
     - booking_status / bookings → the ONE record's state."""
 
     def __init__(self, cancel="cancelled", beta=True):
-        self.calls, self.prepared, self.rbs, self.acts = [], {}, {}, {}
+        self.calls, self.prepared, self.rbs, self.acts, self.mandates = [], {}, {}, {}, []
         self.cancel, self.beta, self.n = cancel, beta, 0
 
     def _rb(self, op, body, lines):
@@ -120,6 +120,15 @@ class AgAPI:
                                            "decision": {"route": "platform_book", "how_far": "zero_touch",
                                                         "say_text": "I'll fill in their booking and press Book for you."},
                                            "hand_over": {"link": STANDIN, "platform": "CoverManager", "carried": [], "copy": []}}}
+        if op == "approvals.mandate":   # Sasha 381 · CR 196 · the booking's instruction (the turn's proof), recorded
+            self.mandates.append(body)
+            return {"ok": True, "result": {"mandate_id": f"mdt_{len(self.mandates):026d}", "expires_at": "2099-01-01T00:00:00Z",
+                                           "proof": {"kind": body["proof"]["kind"]}}}
+        if op == "venue.submit_booking" and body.get("mandate_id"):   # CR 196 · approved BY the instruction, acted at once
+            if body.get("choices"):
+                self.prepared[body["prepared_id"]].update(body["choices"])
+            return {"ok": True, "result": {**self._submit(body), "instructed": {
+                "mandate_id": body["mandate_id"], "say": "Booking now: Taberna Sandbox, 2 people, Fri 20 Nov at 22:00."}}}
         if op == "venue.submit_booking":
             if not approval:
                 if body.get("choices"):   # kept on the ONE prepared booking at the read-back (AgAPI: venue_prepared.data.choices)
@@ -191,19 +200,16 @@ class Base(unittest.TestCase):
                   mock.patch.object(GW, "api", mock.AsyncMock(return_value=(200, {"reservations": []}))),
                   mock.patch.object(VN, "card_of", lambda acct, pid=None, name=None: CARD),
                   mock.patch("booking_signer.basket._run", lambda: None)]
-        for p in self.p:
+        for p in self.p:   # Sasha 381 · cleanups, never tearDown: they run even when a subclass's setUp fails (s330's booked())
             p.start()
-        self.tok = VS.TAP.set({"kind": "supabase", "token": "test-session"} if self.TAP else None)
-        self.env = mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s329-secret"})   # Sasha 381 · the instruction's proof is signed
-        self.env.start()
-        self.addCleanup(self.env.stop)
-
-    def tearDown(self):
-        VS.TAP.reset(self.tok)
-        for p in self.p:
-            p.stop()
+            self.addCleanup(p.stop)
+        tok = VS.TAP.set({"kind": "supabase", "token": "test-session"} if self.TAP else None)
+        self.addCleanup(VS.TAP.reset, tok)
+        p = mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "s329-secret"})   # Sasha 381 · the instruction's proof is signed
+        p.start()
+        self.addCleanup(p.stop)
         for d in (VN._HELD, VN._CANCEL, VS._ACTS, VS._RECORD):
-            d.pop(ACCT, None)
+            self.addCleanup(d.pop, ACCT, None)
 
     def hold(self):
         return run(VN.follow(Ctx("book Taberna Sandbox friday 22:00 for 2"), {"name": VENUE, "city": "Madrid"}, RD, RES,
@@ -236,12 +242,13 @@ class TheAskBecomesTapsAndGoesBackAsChoices(Base):
         self.assertTrue(all("answers" not in b for b in self.ag.bodies("venue.prepare_booking")))   # never answers-on-prepare
         self.assertEqual({b["prepared_id"] for b in subs}, {pid})                                  # the SAME prepared_id
         self.assertEqual(subs[-1]["choices"], {"zona": "Salón Interior"})
+        self.assertEqual(len(self.ag.mandates), 2)                      # the instruction, then their answer: each its own turn's proof
         print("── said ──\n" + done["line"])
         self.assertEqual(done["status"], "confirmed")
         for part in (VENUE, "22:00", "2 people", "SBX-ABC123"):   # Sasha 381 · Tyler's ONE line; their choice stays on the booking
             self.assertIn(part, done["line"])
         self.assertEqual(done["area"], "Salón Interior")
-        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)                           # the instruction, then their answer
+        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 0)                           # no tap: the instructions approved it
 
     def test_my_bookings_shows_it_with_the_reference_and_the_choice(self):
         self.booked()
@@ -253,15 +260,18 @@ class TheAskBecomesTapsAndGoesBackAsChoices(Base):
 
 
 class NoVerifiedPersonNothingIsPressed(Base):
-    """Sasha 381 · no in-app session and no signed WhatsApp message: the instruction can't be proved theirs — nothing is pressed, and never
-    a simulated yes in its place."""
+    """Sasha 381 · CR 196 · a turn with nothing to prove it by (no conversation of its own in the app, no signed WhatsApp message): the
+    instruction can't be recorded as theirs — nothing is pressed, and never a simulated yes in its place."""
     TAP = False
 
     def test_nothing_pressed(self):
-        out = self.hold()
+        ctx = Ctx("book Taberna Sandbox friday 22:00 for 2")
+        ctx.session = None
+        out = run(VN.follow(ctx, {"name": VENUE, "city": "Madrid"}, RD, RES, "2026-11-20T22:00", datetime.now(timezone.utc), CARD, DEC))
         self.assertEqual(out["status"], "not_sent")
         self.assertEqual(self.ag.bodies("venue.submit_booking", approved=True), [])
         self.assertNotIn("sandbox.simulate_approval", self.ag.ops())
+        self.assertNotIn("approvals.mandate", self.ag.ops())
 
 
 class CancelIt(Base):
@@ -297,7 +307,7 @@ class CancelIt(Base):
             run(VN.cancel_venue(Ctx("what does that mean?"), {"act_id": done["act_id"], "approval": {"said": "what does that mean?"}}))
         self.assertEqual(e.exception.code, "no_explicit_yes")
         self.assertEqual([a for o, _, a in self.ag.calls if o == "venue.cancel_booking" and a], [])
-        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 2)   # the booking's two (instruction, answer) — no cancel tap
+        self.assertEqual(self.ag.ops().count("approvals.in_app_tap"), 0)   # the booking's were instructions — and no cancel tap
 
 
 class AFeeStops(Base):
@@ -341,7 +351,8 @@ class TheWholeClass(unittest.TestCase):
         self.assertNotIn("answers", inspect.signature(VS.prepare).parameters)
         self.assertNotIn("answers", inspect.getsource(VS.prepare).split('"""')[-1])   # its body (the docstring may say why)
         self.assertNotIn("VS.prepare(", inspect.getsource(VN.platform_answer))
-        self.assertIn("VS.read_back(ctx.account, held[\"prepared_id\"], choices=choices)", inspect.getsource(VN.platform_answer))
+        self.assertIn('"choices": choices}', inspect.getsource(VN.platform_answer))   # Sasha 381 · their answer, on the SAME prepared booking
+        self.assertIn('{"choices": dict(held["choices"])}', inspect.getsource(VS.submit_instructed))   # … sent with its instruction (CR 196)
         for f, s in self._py():
             self.assertNotRegex(s, r"prepare\([^)]*answers\s*=", str(f))
 

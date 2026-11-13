@@ -1250,7 +1250,7 @@ After the person's explicit yes in THIS turn: one payment (Stripe TEST) for exac
 
 ### `hold_venue`
 
-Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own question first when it has one (status choose_route: ask it, then call again with the route they pick), else the read-back the yes binds to (status awaiting_yes: say it in a line and ask them to go ahead). A place that books only by a WhatsApp or Instagram message (status draft_message): read the drafted message and offer to send it to their phone — they send it; it is never booked until the place replies. Nothing is sent.
+Book a venue (a restaurant, a spa…) on the person's instruction — Sasha 381: their instruction IS the approval, so this BOOKS it in this turn (AgAPI's act) and says it in ONE line (`line`, said by code). Pass only the terms THEY gave — a term they didn't give (status need_term) is asked: say `ask` word for word, then call again with their answer. A place that books only by a message they send (their WhatsApp / Instagram) or a step only they can do: its hand-over, as returned.
 
 **Errors:** `read_failed`, `when_invalid`, `contact_missing`, `no_route`, `missing_input`, `internal` · **idempotent** (`idempotency_key` required)
 
@@ -1294,7 +1294,8 @@ Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own 
   "party": {
    "type": "integer",
    "minimum": 1,
-   "maximum": 20
+   "maximum": 20,
+   "description": "how many people — only the number THEY said; never guessed (leave it out and she asks: Sasha 381)"
   },
   "route": {
    "enum": [
@@ -1320,7 +1321,6 @@ Prepare a venue booking (a restaurant, a spa…) by its route: the ladder's own 
   "city",
   "day",
   "time",
-  "party",
   "idempotency_key"
  ],
  "additionalProperties": false

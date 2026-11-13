@@ -85,6 +85,36 @@ def engine_from(rungs, facts=None, url=None):
 ALL4 = {"form": {}, "whatsapp": {"value": "+34600000001"}, "email": {"value": "reservas@casagate.es"}, "phone": {"fact_index": 0, "value": "+34910000000"}}
 
 
+def signed_in(test: unittest.TestCase) -> None:
+    """Sasha 381 · CR 196 · the door's proof of this turn's instruction, as production sets it: in the app the person's verified session
+    (sasha.agent_turn) with the turn's id; on WhatsApp the signed inbound message (inbound_phone, after Twilio's signature). The
+    instruction is the approval (agapi_mandate.proof_from reads whichever this turn came by)."""
+    from agapi import venue_submit as VS
+    tok = VS.TAP.set({"kind": "supabase", "token": "test-token"})
+    test.addCleanup(VS.TAP.reset, tok)
+    wtok = VS.WA.set({"wa_id": "447700900254", "message_id": "SM" + "4" * 32})
+    test.addCleanup(VS.WA.reset, wtok)
+    API._CLAIMED.clear()   # each test its own conversation: a booking claimed by another test is not this one
+    for p in (mock.patch("booking_signer.basket._run", lambda: None),   # claims in-process (no database in a unit test), as s287 / s328 do
+              mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "test-tap-secret"})):
+        p.start()
+        test.addCleanup(p.stop)
+
+
+async def agapi_door(op, body, approval=None, account=None):
+    """Sasha 381 · AgAPI's person and instruction ops as it answers them (a test's own fake replaces this one): users.register, and
+    approvals.mandate (CR 196: a missing term → term_not_given). Anything else is a test reaching AgAPI it didn't fake — refused."""
+    if op == "users.register":
+        return {"ok": True, "result": {"end_user_id": "eu_254"}}
+    if op == "approvals.mandate":
+        missing = [k for k in ("prepared_id", "party", "date", "time") if (body["scope"].get("booking") or {}).get(k) in (None, "")]
+        if missing:
+            return {"ok": False, "error": {"code": "invalid_input", "message": "asked, never guessed",
+                                           "details": {"rule": "term_not_given", "missing": missing}}}
+        return {"ok": True, "result": {"mandate_id": "mdt_" + "c" * 26, "expires_at": "2099-01-01T00:00:00Z", "proof": {"kind": body["proof"]["kind"]}}}
+    return {"ok": False, "error": {"code": "not_configured", "message": op}}   # nothing else here: as a server with no venues key
+
+
 def fake_act(test: unittest.TestCase, answer: dict = None):
     """Sasha 265 · item 4 (CR 99): AgAPI's call act, faked — venue.prepare_booking with call, the call's read-back, and the tap's result
     (status calling + call_plan, simulate: nothing dialled), or `submit` when a test gives another answer."""
@@ -92,7 +122,7 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
     lines = ["2 people at Casa Gate.", "I'll call them now and let you know.", "Sasha calls Casa Gate from Kanoe's number …"]
     test.vs_calls = []
 
-    real_prepare, real_read_back, real_submit = VS.prepare, VS.read_back, VS.submit   # only the CALL act is faked; the rest is real
+    real_prepare, real_read_back = VS.prepare, VS.read_back   # only the CALL act is faked; the rest is real
 
     async def prepare(account, place, person, date_, time_, party, notes=None, call=None, **kw):
         test.vs_calls.append(("prepare", call))
@@ -106,14 +136,19 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
             return await real_read_back(account, pid)
         return {"ok": True, "end_user": "usr_1", "read_back_id": "rbk_1", "lines": lines, "sha256": "f" * 64}
 
-    async def submit(account, held, said, **kw):   # Sasha 381 · + the instruction (the approval)
+    real_instructed = VS.submit_instructed
+
+    async def submit_instructed(account, held, said):   # Sasha 381 · CR 196 · the call act, approved by the instruction (its mandate)
         if held.get("rung") != "agapi_call":
-            return await real_submit(account, held, said, **kw)
-        test.vs_calls.append(("submit", held.get("read_back_id")))
+            return await real_instructed(account, held, said)
+        test.vs_calls.append(("submit", held.get("mandate_id")))
+        say = f"Booking now: Casa Gate, {held['party']} people, {held['when'][:10]} at {held['when'][11:16]}."
         return dict(answer or {"ok": True, "status": "calling", "route": "call", "act_id": "act_1",
                                "call_plan": {"phone": "+34910000000", "when": "now", "simulate": True, "next_call": {"allowed": True}},
-                               "say": BR.on_it("I'll call them now and let you know")})
-    for p in (mock.patch.object(VS, "prepare", prepare), mock.patch.object(VS, "read_back", read_back), mock.patch.object(VS, "submit", submit)):
+                               "say": BR.on_it("I'll call them now and let you know"), "instructed": {"mandate_id": held.get("mandate_id"), "say": say}})
+    signed_in(test)
+    for p in (mock.patch.object(VS, "prepare", prepare), mock.patch.object(VS, "read_back", read_back),
+              mock.patch.object(VS, "submit_instructed", submit_instructed), mock.patch.object(VS, "CALL", agapi_door)):
         p.start()
         test.addCleanup(p.stop)
 

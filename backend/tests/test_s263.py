@@ -61,12 +61,16 @@ class World:
         self.sent = []
 
     async def via_agapi(self, ctx, a, rd, res, at, now, d, card, **kw):   # Sasha 381 · AgAPI's prepared booking, acted on the instruction
-        return await VN._act(ctx, "agapi", {"prepared_id": "prep-" + at, "venue": VENUE},
-                             {"read_back_id": "rb-" + at, "sha256": "sha-" + at, "lines": [f"· {at}"], "end_user": "u"}, rd, res)
+        return await VN._act(ctx, "agapi", {"prepared_id": "prep-" + at, "venue": VENUE}, rd, res)
 
-    async def submit(self, account, held, said, instruction=None):   # Sasha 381 · + the instruction (the approval)
-        self.sent.append({"when": held["when"], "read_back_id": held["read_back_id"], "sha": held["sha"]})
-        return {"ok": True, "status": "confirmed", "reference": "TV-263"}
+    async def for_booking(self, ctx, end_user, words, booking):   # CR 196 · the instruction recorded (approvals.mandate)
+        return {"mandate_id": "mdt-" + booking["date"] + "T" + booking["time"]}
+
+    async def submit_instructed(self, account, held, said):   # Sasha 381 · CR 196 · ONE submit, approved BY the instruction
+        self.sent.append({"when": held["when"], "mandate_id": held["mandate_id"]})
+        d = datetime.fromisoformat(held["when"])
+        return {"ok": True, "status": "confirmed", "reference": "TV-263",
+                "instructed": {"mandate_id": held["mandate_id"], "say": f"Booking now: {VENUE}, {held['party']} people, {d:%a} {d.day:02d} {d:%b} at {d:%H:%M}."}}
 
     async def read(self, ctx, a):
         return {"venue": VENUE, "place_id": "p-tv", "read_id": "r-tv", "rungs": {"form": {}}}
@@ -84,7 +88,9 @@ class World:
                 mock.patch.object(VN, "_reservation", self.reservation), mock.patch.object(VN, "engine_channel", mock.AsyncMock(return_value=None)),
                 mock.patch("agapi.venue_truth.decision", lambda p: dict(self.DEC)), mock.patch.object(VN, "card_of", lambda *a, **k: None),
                 mock.patch.object(VN, "_said", lambda out, d, **k: out), mock.patch.object(VN, "_via_agapi", self.via_agapi),
-                mock.patch.object(VS, "submit", self.submit), mock.patch.object(V0, "claim", mock.AsyncMock()),
+                mock.patch.object(VS, "submit_instructed", self.submit_instructed), mock.patch.object(V0, "claim", mock.AsyncMock()),
+                mock.patch.object(VS, "end_user", mock.AsyncMock(return_value="u")),
+                mock.patch("booking_signer.agapi_mandate.for_booking", self.for_booking),
                 mock.patch.object(OC, "booked", mock.AsyncMock()), mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value=None)),
                 mock.patch.dict(VN._HELD, {}, clear=True), mock.patch.dict(VN._PREV, {}, clear=True), mock.patch.dict(VN._SENT, {}, clear=True)]
 
@@ -120,7 +126,8 @@ class EachInstructionBooksItsOwnSlot(unittest.TestCase):
     def test_gate_item_7_then_a_new_booking(self):
         """THE GATE (row 914), Sasha 381: no card — each instruction books the slot IT gave (21:15 is 21:15, never item 7's 20:15)."""
         w, out = play(ITEM_7 + [("Thursday 22 October at 21:15 for 2 too", "hold_venue", booking("21:15"))])
-        self.assertEqual([x["when"] for x in w.sent], ["2026-10-22T20:15", "2026-10-22T21:15"])
+        self.assertEqual([(x["when"], x["mandate_id"]) for x in w.sent], [("2026-10-22T20:15", "mdt-2026-10-22T20:15"),
+                                                                          ("2026-10-22T21:15", "mdt-2026-10-22T21:15")])   # each its own instruction
         self.assertEqual(out[1]["status"], "confirmed")
         self.assertIn("at 21:15", out[1]["line"])
 
@@ -168,7 +175,7 @@ class TheConfirmationIsTwoSentencesSaidByCode(unittest.TestCase):
         w, out = play([("Book Sasha Test Venue Thursday 22 October at 21:15 for 2", "hold_venue", booking("21:15"))])
         line = V.yes_line("hold_venue", {"ok": True, "result": {**out[0], "in_app": True}})
         # Sasha 381 · Tyler's ONE line, then (Sasha 279 · C) the closing line and the one question
-        self.assertTrue(line.startswith("Booking now: Sasha Test Venue, 2 people, Thu 22 Oct at 21:15. Booked — reference TV-263. "), line)
+        self.assertTrue(line.startswith("Booking now: Sasha Test Venue, 2 people, Thu 22 Oct at 21:15. Booked — reference TV-263."), line)
         self.assertTrue(line.endswith(" Shall I put it in your calendar?"), line)   # (279's closing between them when it's its first time)
 
     def test_not_in_the_app_she_says_it_as_before(self):

@@ -11,6 +11,7 @@
   WhatsApp-only draft — and never a send without the person's explicit yes in a LATER turn.
 """
 from __future__ import annotations
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import os
@@ -23,8 +24,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
 
-def _ctx(a: str, said: str = "", via: str = "page", before: str = "", session=None):
-    from agapi import v0 as API
+def _ctx(a: str, said: str = "", via: str = "page", before: str = "", session: str = "venue-suite-real"):
+    from agapi import v0 as API   # Sasha 381 · CR 196: a conversation's turn — its id is the instruction's proof in the app
     return API.Ctx(account=a, mode="test", user_said=said, via=via, said_before=before, session=session)   # Sasha 326 · via "wa": asked on WhatsApp
 
 
@@ -234,10 +235,11 @@ async def routes_offline(a: str) -> None:
         from scripts import venue_engine_fake as VF
         n0 = len(VF.CALLS)
         VN._read = read_with({"email": {}})
-        nt = await API.call(_ctx(a, "book Casa Gate for 2 this week"), "hold_venue", {**v, "day": later, "time": "21:00",
+        nt = await API.call(_ctx(a, "book Casa Gate for 2 this week at 21:00"), "hold_venue", {**v, "day": later, "time": "21:00",
                                                                                      "idempotency_key": "vo-n"})
-        ok("VENUE ROUTE · a day / time they didn't give is asked — nothing prepared, nothing sent (Sasha 381)",
-           nt.get("ok") and nt["result"]["status"] == "need_term" and not VF.CALLS[n0:], str(nt.get("error") or nt.get("result"))[:160])
+        ok("VENUE ROUTE · a day they didn't give: AgAPI names it (term_not_given), she asks ONLY it — nothing prepared, nothing sent (381)",
+           nt.get("ok") and nt["result"]["status"] == "need_term" and nt["result"]["ask"] == "Which day?"
+           and not {OP.VENUE_PREPARE_BOOKING, OP.VENUE_SUBMIT_BOOKING} & set(VF.CALLS[n0:]), str(nt.get("error") or nt.get("result"))[:160])
     finally:
         GW.api, GW.tap_platform, VN._read, WB.trip_day_words, GW._tell, GW.STORE, VN.engine_channel = real
         PA.uninstall(a)
@@ -272,10 +274,12 @@ async def _main() -> int:
         ok("venue suite: scratch guest", False, why)
         return 1
     a = g["account_id"]
-    # Sasha 381 · the scratch guest's turn is SIGNED IN (the in-app session its instruction is proved by, CR 196) — AgAPI is the gate's
-    # double here, so the proof is signed with the server's own secret, or a scratch one only for this run when the server has none
+    # Sasha 381 · CR 196 · the scratch guest's instruction is PROVED as production proves it: in the app its turn (signed in), on WhatsApp
+    # its signed message — AgAPI is the gate's double here, so the proof is signed with the server's own secret, or a scratch one only for
+    # this run when the server has none
     from agapi import venue_submit as VS
     tok = VS.TAP.set({"kind": "supabase", "token": "venue-suite"})
+    wtok = VS.WA.set({"wa_id": "447700900211", "message_id": "SM" + uuid.uuid4().hex})
     scratch = not os.getenv("SASHA_AGAPI_TAP_SECRET")
     if scratch:
         os.environ["SASHA_AGAPI_TAP_SECRET"] = "venue-suite-" + uuid.uuid4().hex
@@ -286,6 +290,7 @@ async def _main() -> int:
         ok("the venue suite itself", False, f"{type(e).__name__}: {e}")
     finally:
         VS.TAP.reset(tok)
+        VS.WA.reset(wtok)
         if scratch:
             os.environ.pop("SASHA_AGAPI_TAP_SECRET", None)
         try:

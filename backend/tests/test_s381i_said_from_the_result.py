@@ -104,6 +104,33 @@ class TheSameInstructionAgain(Base):
         self.assertTrue(said_line(again))
 
 
+class TheSameCallAgain(TheSameInstructionAgain):
+    """Found by d9d75bba's recording gate (39230f4d): the same words in a new talk → the same turn key → the same once-only key: the
+    call returned the first act's answer and she said its "Booking now" again, nothing acted (acts []). A replayed act → already sent."""
+
+    def call(self, words, day):
+        args = {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": "dinner", "party": 3, "day": day, "time": "21:30",
+                "place_id": "ChIJcasagate254", "idempotency_key": "s381i-same-key"}
+        rungs = {"email": ALL4["email"]}
+        with mock.patch.object(VN, "_read", reader(rungs, "Casa Gate")), mock.patch.object(VN, "engine_channel", engine_from(rungs, None)):
+            return run(API.call(API.Ctx(account=ACCT, mode="test", user_said=words, session="s381i-call", surface="s2", via="wa"),
+                                "hold_venue", args))
+
+    def test_a_replayed_act_is_already_sent(self):
+        API._IDEM.clear()
+        self.addCleanup(API._IDEM.clear)
+        day = (VN._today("ES") + timedelta(days=3)).isoformat()
+        words = f"book Casa Gate on {day} at half past nine at night for 3"
+        first = self.call(words, day)
+        self.assertRegex(V.yes_line("hold_venue", first), V.ACTING)
+        again = self.call(words, day)
+        self.assertTrue(again.get("replayed"))
+        self.assertEqual(again["result"]["status"], "already_sent")
+        line = V.yes_line("hold_venue", again)
+        self.assertTrue(line.startswith(V.TAP_SAYS["approval_consumed"]), line)
+        self.assertNotRegex(line, V.ACTING)
+
+
 class TypedOrSpoken(Base):
     """The same "11:37" — typed: booked at 11:37; through speech-to-text: asked "11:37am or 11:37pm?"."""
 

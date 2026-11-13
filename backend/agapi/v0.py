@@ -2284,7 +2284,13 @@ async def call(ctx: Ctx, name: str, args: dict) -> dict:
         if bound:   # Sasha 258 · the once-only key belongs to the READ-BACK it answers — a model that reuses its key for a new booking
             key = f"{key}:{bound}"   # never gets "already done" (found on the scoreboard's account, which books the same venue every run)
         if key in _IDEM:
-            return {**_IDEM[key], "replayed": True}
+            first = _IDEM[key]
+            if name in ("hold_venue", "book_venue") and first.get("ok") and (first.get("result") or {}).get("acted"):
+                # Sasha 381i · the SAME call again returns the first act's answer — but nothing acts NOW: said as already sent (its
+                # status from the record), never "Booking now" again (found by the gate: the same words in a new talk, the same key)
+                from agapi import venues as _VNr
+                return {"ok": True, "result": await _VNr.already_sent(ctx, first["result"]), "replayed": True}
+            return {**first, "replayed": True}
     ctx.idem, ctx.claimed = (key if name in ACTS else None), None
     ctx.act_name = ctx.act_said = None
     if ctx.surface == "s2" and name in ACTS:   # CR 76 · their words, heard as the approval if they answer an earlier read-back

@@ -2154,6 +2154,22 @@ async def last_sent(account: str) -> Optional[dict]:
     return None if API.stale(at) else {"venue": a["venue"], "at": at}
 
 
+async def already_sent(ctx, first: dict) -> dict:
+    """Sasha 381i · a booking act's answer asked for again (the same call, its once-only key): nothing acts now — "already sent" and the
+    booking's status, from the record (the one line for every repeat: the claim's and the key's)."""
+    return await _already_sent_line(ctx, str(first.get("venue") or ""))   # nothing held is touched: it's an answer, not an act
+
+
+async def _already_sent_line(ctx, venue: str) -> dict:
+    """"That's already been sent." + the booking's own status, from the record — never a second send."""
+    from agapi import venue_submit as VS, s2_status as ST
+    from app.agent import voice as V
+    row = next((b for b in await VS.bookings(ctx.account) if _base(b.get("venue") or "") == _base(venue)), None)
+    status = ST.decide({"venues": [row], "booked": [], "failed": []})["line"] if row else None
+    return {"status": "already_sent", "venue": venue, "booked": bool(row and row.get("status") == "confirmed"),
+            "say": V.tap_line("approval_consumed") + (f" {status}" if status else "")}
+
+
 async def _tap_refused(ctx, held: dict, code: str, err: dict, venue: str) -> dict:
     """AgAPI refused the approval (CR 97 / CR 196). Sasha 381 · a venue act has no card, so nothing is ever shown to be answered again:
     the booking changed or timed out under the instruction, or it isn't provably theirs → said, nothing sent, nothing held; already sent
@@ -2165,11 +2181,7 @@ async def _tap_refused(ctx, held: dict, code: str, err: dict, venue: str) -> dic
         return {"status": "not_sent", "venue": venue, "booked": False, "say": V.tap_line(code)}
     # approval_consumed: the yes was already taken — the booking's own status, never a second send
     _HELD.pop(ctx.account, None)
-    row = next((b for b in await VS.bookings(ctx.account) if _base(b.get("venue") or "") == _base(venue)), None)
-    from agapi import s2_status as ST
-    status = ST.decide({"venues": [row], "booked": [], "failed": []})["line"] if row else None
-    return {"status": "already_sent", "venue": venue, "booked": bool(row and row.get("status") == "confirmed"),
-            "say": V.tap_line(code) + (f" {status}" if status else "")}
+    return await _already_sent_line(ctx, venue)
 
 
 async def _with_loyalty(ctx, held: dict) -> List[dict]:

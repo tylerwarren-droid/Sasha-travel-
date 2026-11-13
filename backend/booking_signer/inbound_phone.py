@@ -385,6 +385,14 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         from . import guest_whatsapp as GW
         from agapi import venue_submit as VS
         from products import tools as TL
+        to = TL.switched_to(p)
+        if to:   # Sasha 383 · CR 202 · an explicit switch (keyword, tool row, back row): AgAPI's record knows BEFORE its inbound reads this
+            from products import space as SPC
+            w_tok = VS.WA.set({"wa_id": sender, "message_id": sid})
+            try:
+                await SPC.conversation_switched(to)
+            finally:
+                VS.WA.reset(w_tok)
         tap = TL.switch_tap(p)
         ad_tap = tap is not None and tap[0] == "tool" and TL.product_of(tap[1]) == "diligence"
         if tap is not None and not ad_tap:   # Sasha 344 · the ONE switch: "← Everything I can do" / one of SASHA's own tools' rows —

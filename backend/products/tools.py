@@ -215,6 +215,19 @@ def route(body: str, conversation_role: Optional[Dict[str, Any]]) -> str:
     return product_of(kw) if kw is not None else "sasha"
 
 
+def switched_to(p: Dict[str, Any]) -> Optional[str]:
+    """Sasha 383 · CR 202 · the product a WhatsApp message EXPLICITLY switches the conversation to — the registry's recognition, and only
+    it: the back row ("← Everything I can do") or a tool's row (tapped or typed as its title), or a tool's keyword at the start ("sasha",
+    "diligence …", "campus …") → the tool's product ("travel" for Sasha's own); anything else → None. Which product the conversation IS
+    in is AgAPI's record (messages.whatsapp_switch), never kept here."""
+    tap = switch_tap(p)
+    if tap is not None:
+        t = tap[1] if tap[0] == "tool" else None
+        return (t or {}).get("product") or "travel"
+    kw = _keyword_tool(tap_fields(p)[0] if (p.get("ListId") or p.get("ListTitle")) else str(p.get("Body") or ""))
+    return (kw.get("product") or "travel") if kw is not None else None
+
+
 def keyword_rest(body: str) -> str:
     """The words after an explicit keyword ("diligence do 1-3 on Halfords" → "do 1-3 on Halfords")."""
     from . import whatsapp as PW

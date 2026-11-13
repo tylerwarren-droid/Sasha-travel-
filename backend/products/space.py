@@ -73,14 +73,44 @@ async def current(account: Optional[str]) -> dict:
     return {"space": "sasha"}
 
 
+#: Sasha 383 · CR 202 · Sasha's space → the product as AgAPI's record names it (the registry's product; travel for Sasha's own)
+AGAPI_PRODUCT = {"sasha": "travel", "campus": "campus", "relocation": "relocation", "espana": "health", "diligence": "diligence"}
+_TOLD: Dict[str, set] = {}   # message_id → the products AgAPI was told of on it (once per switch per message; this process)
+
+
+async def conversation_switched(product: str) -> Optional[dict]:
+    """Sasha 383 · CR 202 · THE ONE place Sasha tells AgAPI the conversation on its shared WhatsApp number switched product
+    (messages.whatsapp_switch {from, product, message_id}) — AgAPI's record is the only one of which product a number's conversation is
+    in. The number and the message are THIS turn's signed WhatsApp message (the door: venue_submit.WA); no WhatsApp door → nothing (a
+    switch on the web isn't a WhatsApp conversation's). Once per message and product. Called by set_space (every switch Sasha's turn
+    makes) and by the webhook (an explicit switch — a keyword, a tool's row, the back row — before AgAPI's inbound reads the message)."""
+    from agapi import venue_submit as VS
+    w = VS.WA.get() or {}
+    sender, mid = str(w.get("wa_id") or ""), str(w.get("message_id") or "")
+    to = AGAPI_PRODUCT[normalize(product)]   # any name a product has had ("travel", "health", a space) → AgAPI's
+    if not (sender and mid):
+        return None
+    told = _TOLD.setdefault(mid, set())
+    if to in told:
+        return None
+    told.add(to)
+    if len(_TOLD) > 2000:   # a process's memory of messages it already told about: only the recent ones matter (a Twilio retry)
+        for k in list(_TOLD)[:1000]:
+            _TOLD.pop(k, None)
+    return await VS.whatsapp_switch(sender, to, mid)
+
+
 async def set_space(account: Optional[str], space: Optional[str], cause: str) -> str:
-    """Move the account to a space (any old name accepted). Kept in s2_memory, awaited. → the space now."""
+    """Move the account to a space (any old name accepted). Kept in s2_memory, awaited. → the space now. Sasha 383 · on a WhatsApp turn,
+    a CHANGE is a switch of the conversation's product: AgAPI is told (conversation_switched) — every switch Sasha's turn makes."""
     s = normalize(space)
     if not account:
         return s
     now = await current(account)
     if now.get("space") == s and account in _SPACE:
         return s   # unchanged: nothing written
+    if now.get("space") != s:
+        await conversation_switched(s)
     rec = {"space": s, "cause": str(cause or "")[:40], "at": time.time()}
     _SPACE[account] = rec
     try:
@@ -121,4 +151,4 @@ def context_line(rec: dict) -> str:
 
 
 __all__ = ["SPACES", "NAME", "ALIASES", "normalize", "engine_key", "current_space", "current", "set_space", "from_pending", "asked",
-           "context_line"]
+           "context_line", "conversation_switched", "AGAPI_PRODUCT"]

@@ -1,10 +1,10 @@
 """GENERATED from AgAPI's spec/ by tools/contract/generate.py (CR 186) — DO NOT EDIT. Change spec/, regenerate, bump the release.
-kanoe_contract 1.90.0 · AgAPI 1.90.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
+kanoe_contract 1.93.0 · AgAPI 1.93.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, TypedDict, Union  # noqa: F401
 
-CONTRACT_VERSION = "1.90.0"
+CONTRACT_VERSION = "1.93.0"
 
 
 class OP:
@@ -59,6 +59,7 @@ class OP:
     MESSAGES_SEND_WHATSAPP = "messages.send_whatsapp"
     MESSAGES_TYPING = "messages.typing"
     MESSAGES_WHATSAPP_INBOUND = "messages.whatsapp_inbound"
+    MESSAGES_WHATSAPP_SWITCH = "messages.whatsapp_switch"
     MONEY_BAG_CHECK = "money.bag_check"
     MONEY_BAG_CLAIM = "money.bag_claim"
     MONEY_CLAIM_SIMULATE_REPLY = "money.claim_simulate_reply"
@@ -194,7 +195,7 @@ class DOOR:
     SET_PHONE = "set_phone"
 
 
-OPERATIONS = frozenset(['access.get', 'activities.suggest', 'activities.verify', 'activity.list', 'acts.status', 'approvals.in_app_tap', 'approvals.mandate', 'approvals.request', 'approvals.status', 'calendar.add_event', 'cards.accident_notify', 'cards.accident_photo', 'cards.accident_start', 'cards.accident_step', 'cards.ask', 'cards.claim_attach', 'cards.claim_file', 'cards.claim_simulate_reply', 'cards.claim_start', 'cards.claim_status', 'cards.intake', 'cards.mine', 'cards.moment', 'cards.moment_settings', 'cards.products', 'cards.rental_cover', 'cards.rental_dispute', 'cards.terms', 'cards.which', 'dive.onboard', 'entry.check', 'entry.prepare', 'evidence.get', 'evidence.verify', 'group.book', 'group.bookings', 'group.cancel', 'group.swap', 'keep.activity', 'keep.delete', 'keep.list', 'keep.put', 'keep.use', 'magellan.read_site', 'messages.ad_cases', 'messages.replies', 'messages.send_email', 'messages.send_whatsapp', 'messages.typing', 'messages.whatsapp_inbound', 'money.bag_check', 'money.bag_claim', 'money.claim_simulate_reply', 'money.claim_status', 'money.flight_check', 'money.flight_claim', 'outcomes.list', 'outcomes.mark_test', 'outcomes.record', 'outcomes.report', 'outcomes.update', 'registry.change_list', 'registry.countries', 'registry.documents', 'registry.get', 'registry.obtain_plan', 'registry.row_results', 'registry.verify', 'registry.wave_resume', 'registry.wave_run', 'registry.wave_status', 'sandbox.ad_case', 'sandbox.ad_open_case', 'sandbox.link_proof', 'sandbox.messages', 'sandbox.platform_prepare', 'sandbox.platform_walk', 'sandbox.simulate_approval', 'sandbox.simulate_call', 'sandbox.simulate_reply', 'sandbox.wa_template', 'sources.get', 'subscriptions.cancel', 'subscriptions.cancel_plan', 'subscriptions.find', 'travel.find_flights', 'travel.find_stays', 'trip.cancel', 'trip.complete', 'trip.hold', 'trip.plan', 'trip.plan_get', 'usage.get', 'users.confirm_whatsapp', 'users.link_whatsapp', 'users.register', 'users.verify_destination', 'venue.booking_status', 'venue.bookings', 'venue.call_again', 'venue.call_attempt', 'venue.cancel_booking', 'venue.change_booking', 'venue.confirmation', 'venue.discover', 'venue.handed_over', 'venue.manage_options', 'venue.person_report', 'venue.prepare_booking', 'venue.profile', 'venue.recognition', 'venue.submit_booking', 'venue.unhandled', 'venues.find_venues', 'webhooks.register', 'webhooks.revoke'])
+OPERATIONS = frozenset(['access.get', 'activities.suggest', 'activities.verify', 'activity.list', 'acts.status', 'approvals.in_app_tap', 'approvals.mandate', 'approvals.request', 'approvals.status', 'calendar.add_event', 'cards.accident_notify', 'cards.accident_photo', 'cards.accident_start', 'cards.accident_step', 'cards.ask', 'cards.claim_attach', 'cards.claim_file', 'cards.claim_simulate_reply', 'cards.claim_start', 'cards.claim_status', 'cards.intake', 'cards.mine', 'cards.moment', 'cards.moment_settings', 'cards.products', 'cards.rental_cover', 'cards.rental_dispute', 'cards.terms', 'cards.which', 'dive.onboard', 'entry.check', 'entry.prepare', 'evidence.get', 'evidence.verify', 'group.book', 'group.bookings', 'group.cancel', 'group.swap', 'keep.activity', 'keep.delete', 'keep.list', 'keep.put', 'keep.use', 'magellan.read_site', 'messages.ad_cases', 'messages.replies', 'messages.send_email', 'messages.send_whatsapp', 'messages.typing', 'messages.whatsapp_inbound', 'messages.whatsapp_switch', 'money.bag_check', 'money.bag_claim', 'money.claim_simulate_reply', 'money.claim_status', 'money.flight_check', 'money.flight_claim', 'outcomes.list', 'outcomes.mark_test', 'outcomes.record', 'outcomes.report', 'outcomes.update', 'registry.change_list', 'registry.countries', 'registry.documents', 'registry.get', 'registry.obtain_plan', 'registry.row_results', 'registry.verify', 'registry.wave_resume', 'registry.wave_run', 'registry.wave_status', 'sandbox.ad_case', 'sandbox.ad_open_case', 'sandbox.link_proof', 'sandbox.messages', 'sandbox.platform_prepare', 'sandbox.platform_walk', 'sandbox.simulate_approval', 'sandbox.simulate_call', 'sandbox.simulate_reply', 'sandbox.wa_template', 'sources.get', 'subscriptions.cancel', 'subscriptions.cancel_plan', 'subscriptions.find', 'travel.find_flights', 'travel.find_stays', 'trip.cancel', 'trip.complete', 'trip.hold', 'trip.plan', 'trip.plan_get', 'usage.get', 'users.confirm_whatsapp', 'users.link_whatsapp', 'users.register', 'users.verify_destination', 'venue.booking_status', 'venue.bookings', 'venue.call_again', 'venue.call_attempt', 'venue.cancel_booking', 'venue.change_booking', 'venue.confirmation', 'venue.discover', 'venue.handed_over', 'venue.manage_options', 'venue.person_report', 'venue.prepare_booking', 'venue.profile', 'venue.recognition', 'venue.submit_booking', 'venue.unhandled', 'venues.find_venues', 'webhooks.register', 'webhooks.revoke'])
 ERROR_CODES = frozenset(['already_completed', 'approval_consumed', 'approval_expired', 'approval_not_found', 'approval_required', 'approval_same_turn', 'approval_untrusted_origin', 'approval_void', 'budget_exhausted', 'destination_code_expired', 'destination_code_invalid', 'email_needed', 'forbidden', 'hold_expired', 'idempotency_conflict', 'idempotency_in_flight', 'idempotency_key_required', 'internal', 'invalid_input', 'invalid_request', 'mobile_needed', 'mode_not_available', 'no_explicit_yes', 'not_cancellable', 'not_found', 'outcome_unknown', 'rate_limited', 'travellers_missing', 'unauthenticated', 'unknown_operation', 'upstream_failed', 'upstream_rate_limited', 'upstream_refused', 'upstream_timeout', 'upstream_unreachable', 'version_unsupported', 'webhook_limit_reached', 'webhook_url_refused'])
 DOOR_KINDS = frozenset(['actions', 'add_evidence', 'add_party', 'cancel_order', 'case_events', 'case_list', 'case_status', 'conversation_role', 'interview', 'interview_declined', 'interview_due', 'interview_offer', 'interview_sent', 'interview_transcript', 'message', 'next_steps', 'questionnaire', 'questionnaire_offer', 'report', 'set_contact', 'set_phone'])
 DOOR_ANSWERS: Dict[str, frozenset] = {
@@ -220,6 +221,73 @@ DOOR_ANSWERS: Dict[str, frozenset] = {
     'set_contact': frozenset(['case_id', 'detail', 'error', 'intent', 'intent_why', 'next_steps_token', 'parts', 'recorded', 'reply']),
     'set_phone': frozenset(['case_id', 'detail', 'error', 'intent', 'intent_why', 'parts', 'person', 'replaced', 'reply']),
 }
+# CR 197 · each shaped answer field → the ONLY keys it may carry
+DOOR_SHAPES: Dict[str, frozenset] = {
+    'report': frozenset(['report_id', 'verdict', 'verdict_label', 'generated_at', 'authorship', 'report_url']),
+}
+# CR 200 · each kind → the request fields a sender MUST send with it (beyond kind)
+DOOR_REQUIRES: Dict[str, tuple] = {
+    'actions': (),
+    'add_evidence': (),
+    'add_party': (),
+    'cancel_order': (),
+    'case_events': (),
+    'case_list': (),
+    'case_status': (),
+    'conversation_role': ('sender', 'text', 'message_id'),
+    'interview': (),
+    'interview_declined': (),
+    'interview_due': (),
+    'interview_offer': (),
+    'interview_sent': (),
+    'interview_transcript': (),
+    'message': ('sender', 'text', 'message_id'),
+    'next_steps': (),
+    'questionnaire': (),
+    'questionnaire_offer': (),
+    'report': (),
+    'set_contact': (),
+    'set_phone': (),
+}
+
+DoorReport = TypedDict('DoorReport', {"report_id": Any, "verdict": Any, "verdict_label": Any, "generated_at": Any, "authorship": Any, "report_url": Any}, total=False)
+
+
+def door_read(kind: str, answer: Dict[str, Any]) -> tuple:
+    """CR 197 · THE ONE reader of an Applied Diligence answer: → (the answer with ONLY the fields the contract declares for this kind — a
+    shaped field with only its declared keys —, the undeclared paths it dropped). A field nobody declares never reaches the reader's code."""
+    allowed = DOOR_ANSWERS.get(kind)
+    if allowed is None or not isinstance(answer, dict):
+        return ({}, [kind or "?"]) if allowed is None else ({}, [])
+    out: Dict[str, Any] = {}
+    dropped: List[str] = []
+    for f, v in answer.items():
+        if f not in allowed:
+            dropped.append(f)
+            continue
+        if f in DOOR_SHAPES and isinstance(v, dict):
+            dropped += [f"{f}.{x}" for x in v if x not in DOOR_SHAPES[f]]
+            v = {x: y for x, y in v.items() if x in DOOR_SHAPES[f]}
+        out[f] = v
+    return out, dropped
+
+
+def door_missing(body: Dict[str, Any]) -> List[str]:
+    """CR 200 · → the fields this request must carry for its kind and doesn't (an unknown kind: ["kind"]). A sender checks it before sending."""
+    k = body.get("kind")
+    if k not in DOOR_REQUIRES:
+        return ["kind"]
+    return [f for f in DOOR_REQUIRES[k] if body.get(f) is None]
+
+
+def door_answer(kind: str, **fields: Any) -> Dict[str, Any]:
+    """CR 197 · an Applied Diligence answer BUILT from the contract (a test's stand-in uses this, never a hand-made dict): any field —
+    or shaped key — the contract doesn't declare for this kind is refused here (ValueError), before anything can read it."""
+    out, dropped = door_read(kind, fields)
+    if dropped:
+        raise ValueError(f"not in the door contract for {kind!r}: {', '.join(dropped)}")
+    return out
+
 
 
 # access.get — input
@@ -521,6 +589,12 @@ MessagesWhatsappInboundIn = TypedDict('MessagesWhatsappInboundIn', {"from": str,
 
 # messages.whatsapp_inbound — output
 MessagesWhatsappInboundOut = TypedDict('MessagesWhatsappInboundOut', {"conversation_role": Dict[str, Any], "matched": bool, "kept": bool, "why": str, "reply_id": str, "received_at": str, "opted_out": bool, "window_open_until": Union[str, None], "booking": Union[Dict[str, Any], None], "ad": str, "replied": bool, "declined": bool, "ignored": str, "asked": Any, "message_id": Any, "released": Any}, total=False)
+
+# messages.whatsapp_switch — input
+MessagesWhatsappSwitchIn = TypedDict('MessagesWhatsappSwitchIn', {"from": str, "product": str, "message_id": str}, total=False)
+
+# messages.whatsapp_switch — output
+MessagesWhatsappSwitchOut = TypedDict('MessagesWhatsappSwitchOut', {"product": str, "was": Union[str, None], "dropped": List[str], "since": str}, total=False)
 
 # money.bag_check — input
 MoneyBagCheckIn = TypedDict('MoneyBagCheckIn', {"end_user": str, "booking_reference": str, "passengers": List[str], "bag": Dict[str, Any]}, total=False)
@@ -1372,6 +1446,16 @@ REQUIRED: Dict[str, List[str]] = {
  "MessagesWhatsappInboundOut": [
   "matched"
  ],
+ "MessagesWhatsappSwitchIn": [
+  "from",
+  "message_id",
+  "product"
+ ],
+ "MessagesWhatsappSwitchOut": [
+  "dropped",
+  "product",
+  "since"
+ ],
  "MoneyBagCheckIn": [
   "bag",
   "end_user"
@@ -1934,4 +2018,4 @@ REQUIRED: Dict[str, List[str]] = {
  ]
 }
 
-OPERATION_TYPES = {"access.get": (AccessGetIn, AccessGetOut), "activities.suggest": (ActivitiesSuggestIn, ActivitiesSuggestOut), "activities.verify": (ActivitiesVerifyIn, ActivitiesVerifyOut), "activity.list": (ActivityListIn, ActivityListOut), "acts.status": (ActsStatusIn, ActsStatusOut), "approvals.in_app_tap": (ApprovalsInAppTapIn, ApprovalsInAppTapOut), "approvals.mandate": (ApprovalsMandateIn, ApprovalsMandateOut), "approvals.request": (ApprovalsRequestIn, ApprovalsRequestOut), "approvals.status": (ApprovalsStatusIn, ApprovalsStatusOut), "calendar.add_event": (CalendarAddEventIn, CalendarAddEventOut), "cards.accident_notify": (CardsAccidentNotifyIn, CardsAccidentNotifyOut), "cards.accident_photo": (CardsAccidentPhotoIn, CardsAccidentPhotoOut), "cards.accident_start": (CardsAccidentStartIn, CardsAccidentStartOut), "cards.accident_step": (CardsAccidentStepIn, CardsAccidentStepOut), "cards.ask": (CardsAskIn, CardsAskOut), "cards.claim_attach": (CardsClaimAttachIn, CardsClaimAttachOut), "cards.claim_file": (CardsClaimFileIn, CardsClaimFileOut), "cards.claim_simulate_reply": (CardsClaimSimulateReplyIn, CardsClaimSimulateReplyOut), "cards.claim_start": (CardsClaimStartIn, CardsClaimStartOut), "cards.claim_status": (CardsClaimStatusIn, CardsClaimStatusOut), "cards.intake": (CardsIntakeIn, CardsIntakeOut), "cards.mine": (CardsMineIn, CardsMineOut), "cards.moment": (CardsMomentIn, CardsMomentOut), "cards.moment_settings": (CardsMomentSettingsIn, CardsMomentSettingsOut), "cards.products": (CardsProductsIn, CardsProductsOut), "cards.rental_cover": (CardsRentalCoverIn, CardsRentalCoverOut), "cards.rental_dispute": (CardsRentalDisputeIn, CardsRentalDisputeOut), "cards.terms": (CardsTermsIn, CardsTermsOut), "cards.which": (CardsWhichIn, CardsWhichOut), "dive.onboard": (DiveOnboardIn, DiveOnboardOut), "entry.check": (EntryCheckIn, EntryCheckOut), "entry.prepare": (EntryPrepareIn, EntryPrepareOut), "evidence.get": (EvidenceGetIn, EvidenceGetOut), "evidence.verify": (EvidenceVerifyIn, EvidenceVerifyOut), "group.book": (GroupBookIn, GroupBookOut), "group.bookings": (GroupBookingsIn, GroupBookingsOut), "group.cancel": (GroupCancelIn, GroupCancelOut), "group.swap": (GroupSwapIn, GroupSwapOut), "keep.activity": (KeepActivityIn, KeepActivityOut), "keep.delete": (KeepDeleteIn, KeepDeleteOut), "keep.list": (KeepListIn, KeepListOut), "keep.put": (KeepPutIn, KeepPutOut), "keep.use": (KeepUseIn, KeepUseOut), "magellan.read_site": (MagellanReadSiteIn, MagellanReadSiteOut), "messages.ad_cases": (MessagesAdCasesIn, MessagesAdCasesOut), "messages.replies": (MessagesRepliesIn, MessagesRepliesOut), "messages.send_email": (MessagesSendEmailIn, MessagesSendEmailOut), "messages.send_whatsapp": (MessagesSendWhatsappIn, MessagesSendWhatsappOut), "messages.typing": (MessagesTypingIn, MessagesTypingOut), "messages.whatsapp_inbound": (MessagesWhatsappInboundIn, MessagesWhatsappInboundOut), "money.bag_check": (MoneyBagCheckIn, MoneyBagCheckOut), "money.bag_claim": (MoneyBagClaimIn, MoneyBagClaimOut), "money.claim_simulate_reply": (MoneyClaimSimulateReplyIn, MoneyClaimSimulateReplyOut), "money.claim_status": (MoneyClaimStatusIn, MoneyClaimStatusOut), "money.flight_check": (MoneyFlightCheckIn, MoneyFlightCheckOut), "money.flight_claim": (MoneyFlightClaimIn, MoneyFlightClaimOut), "outcomes.list": (OutcomesListIn, OutcomesListOut), "outcomes.mark_test": (OutcomesMarkTestIn, OutcomesMarkTestOut), "outcomes.record": (OutcomesRecordIn, OutcomesRecordOut), "outcomes.report": (OutcomesReportIn, OutcomesReportOut), "outcomes.update": (OutcomesUpdateIn, OutcomesUpdateOut), "registry.change_list": (RegistryChangeListIn, RegistryChangeListOut), "registry.countries": (RegistryCountriesIn, RegistryCountriesOut), "registry.documents": (RegistryDocumentsIn, RegistryDocumentsOut), "registry.get": (RegistryGetIn, RegistryGetOut), "registry.obtain_plan": (RegistryObtainPlanIn, RegistryObtainPlanOut), "registry.row_results": (RegistryRowResultsIn, RegistryRowResultsOut), "registry.verify": (RegistryVerifyIn, RegistryVerifyOut), "registry.wave_resume": (RegistryWaveResumeIn, RegistryWaveResumeOut), "registry.wave_run": (RegistryWaveRunIn, RegistryWaveRunOut), "registry.wave_status": (RegistryWaveStatusIn, RegistryWaveStatusOut), "sandbox.ad_case": (SandboxAdCaseIn, SandboxAdCaseOut), "sandbox.ad_open_case": (SandboxAdOpenCaseIn, SandboxAdOpenCaseOut), "sandbox.link_proof": (SandboxLinkProofIn, SandboxLinkProofOut), "sandbox.messages": (SandboxMessagesIn, SandboxMessagesOut), "sandbox.platform_prepare": (SandboxPlatformPrepareIn, SandboxPlatformPrepareOut), "sandbox.platform_walk": (SandboxPlatformWalkIn, SandboxPlatformWalkOut), "sandbox.simulate_approval": (SandboxSimulateApprovalIn, SandboxSimulateApprovalOut), "sandbox.simulate_call": (SandboxSimulateCallIn, SandboxSimulateCallOut), "sandbox.simulate_reply": (SandboxSimulateReplyIn, SandboxSimulateReplyOut), "sandbox.wa_template": (SandboxWaTemplateIn, SandboxWaTemplateOut), "sources.get": (SourcesGetIn, SourcesGetOut), "subscriptions.cancel": (SubscriptionsCancelIn, SubscriptionsCancelOut), "subscriptions.cancel_plan": (SubscriptionsCancelPlanIn, SubscriptionsCancelPlanOut), "subscriptions.find": (SubscriptionsFindIn, SubscriptionsFindOut), "travel.find_flights": (TravelFindFlightsIn, TravelFindFlightsOut), "travel.find_stays": (TravelFindStaysIn, TravelFindStaysOut), "trip.cancel": (TripCancelIn, TripCancelOut), "trip.complete": (TripCompleteIn, TripCompleteOut), "trip.hold": (TripHoldIn, TripHoldOut), "trip.plan": (TripPlanIn, TripPlanOut), "trip.plan_get": (TripPlanGetIn, TripPlanGetOut), "usage.get": (UsageGetIn, UsageGetOut), "users.confirm_whatsapp": (UsersConfirmWhatsappIn, UsersConfirmWhatsappOut), "users.link_whatsapp": (UsersLinkWhatsappIn, UsersLinkWhatsappOut), "users.register": (UsersRegisterIn, UsersRegisterOut), "users.verify_destination": (UsersVerifyDestinationIn, UsersVerifyDestinationOut), "venue.booking_status": (VenueBookingStatusIn, VenueBookingStatusOut), "venue.bookings": (VenueBookingsIn, VenueBookingsOut), "venue.call_again": (VenueCallAgainIn, VenueCallAgainOut), "venue.call_attempt": (VenueCallAttemptIn, VenueCallAttemptOut), "venue.cancel_booking": (VenueCancelBookingIn, VenueCancelBookingOut), "venue.change_booking": (VenueChangeBookingIn, VenueChangeBookingOut), "venue.confirmation": (VenueConfirmationIn, VenueConfirmationOut), "venue.discover": (VenueDiscoverIn, VenueDiscoverOut), "venue.handed_over": (VenueHandedOverIn, VenueHandedOverOut), "venue.manage_options": (VenueManageOptionsIn, VenueManageOptionsOut), "venue.person_report": (VenuePersonReportIn, VenuePersonReportOut), "venue.prepare_booking": (VenuePrepareBookingIn, VenuePrepareBookingOut), "venue.profile": (VenueProfileIn, VenueProfileOut), "venue.recognition": (VenueRecognitionIn, VenueRecognitionOut), "venue.submit_booking": (VenueSubmitBookingIn, VenueSubmitBookingOut), "venue.unhandled": (VenueUnhandledIn, VenueUnhandledOut), "venues.find_venues": (VenuesFindVenuesIn, VenuesFindVenuesOut), "webhooks.register": (WebhooksRegisterIn, WebhooksRegisterOut), "webhooks.revoke": (WebhooksRevokeIn, WebhooksRevokeOut)}
+OPERATION_TYPES = {"access.get": (AccessGetIn, AccessGetOut), "activities.suggest": (ActivitiesSuggestIn, ActivitiesSuggestOut), "activities.verify": (ActivitiesVerifyIn, ActivitiesVerifyOut), "activity.list": (ActivityListIn, ActivityListOut), "acts.status": (ActsStatusIn, ActsStatusOut), "approvals.in_app_tap": (ApprovalsInAppTapIn, ApprovalsInAppTapOut), "approvals.mandate": (ApprovalsMandateIn, ApprovalsMandateOut), "approvals.request": (ApprovalsRequestIn, ApprovalsRequestOut), "approvals.status": (ApprovalsStatusIn, ApprovalsStatusOut), "calendar.add_event": (CalendarAddEventIn, CalendarAddEventOut), "cards.accident_notify": (CardsAccidentNotifyIn, CardsAccidentNotifyOut), "cards.accident_photo": (CardsAccidentPhotoIn, CardsAccidentPhotoOut), "cards.accident_start": (CardsAccidentStartIn, CardsAccidentStartOut), "cards.accident_step": (CardsAccidentStepIn, CardsAccidentStepOut), "cards.ask": (CardsAskIn, CardsAskOut), "cards.claim_attach": (CardsClaimAttachIn, CardsClaimAttachOut), "cards.claim_file": (CardsClaimFileIn, CardsClaimFileOut), "cards.claim_simulate_reply": (CardsClaimSimulateReplyIn, CardsClaimSimulateReplyOut), "cards.claim_start": (CardsClaimStartIn, CardsClaimStartOut), "cards.claim_status": (CardsClaimStatusIn, CardsClaimStatusOut), "cards.intake": (CardsIntakeIn, CardsIntakeOut), "cards.mine": (CardsMineIn, CardsMineOut), "cards.moment": (CardsMomentIn, CardsMomentOut), "cards.moment_settings": (CardsMomentSettingsIn, CardsMomentSettingsOut), "cards.products": (CardsProductsIn, CardsProductsOut), "cards.rental_cover": (CardsRentalCoverIn, CardsRentalCoverOut), "cards.rental_dispute": (CardsRentalDisputeIn, CardsRentalDisputeOut), "cards.terms": (CardsTermsIn, CardsTermsOut), "cards.which": (CardsWhichIn, CardsWhichOut), "dive.onboard": (DiveOnboardIn, DiveOnboardOut), "entry.check": (EntryCheckIn, EntryCheckOut), "entry.prepare": (EntryPrepareIn, EntryPrepareOut), "evidence.get": (EvidenceGetIn, EvidenceGetOut), "evidence.verify": (EvidenceVerifyIn, EvidenceVerifyOut), "group.book": (GroupBookIn, GroupBookOut), "group.bookings": (GroupBookingsIn, GroupBookingsOut), "group.cancel": (GroupCancelIn, GroupCancelOut), "group.swap": (GroupSwapIn, GroupSwapOut), "keep.activity": (KeepActivityIn, KeepActivityOut), "keep.delete": (KeepDeleteIn, KeepDeleteOut), "keep.list": (KeepListIn, KeepListOut), "keep.put": (KeepPutIn, KeepPutOut), "keep.use": (KeepUseIn, KeepUseOut), "magellan.read_site": (MagellanReadSiteIn, MagellanReadSiteOut), "messages.ad_cases": (MessagesAdCasesIn, MessagesAdCasesOut), "messages.replies": (MessagesRepliesIn, MessagesRepliesOut), "messages.send_email": (MessagesSendEmailIn, MessagesSendEmailOut), "messages.send_whatsapp": (MessagesSendWhatsappIn, MessagesSendWhatsappOut), "messages.typing": (MessagesTypingIn, MessagesTypingOut), "messages.whatsapp_inbound": (MessagesWhatsappInboundIn, MessagesWhatsappInboundOut), "messages.whatsapp_switch": (MessagesWhatsappSwitchIn, MessagesWhatsappSwitchOut), "money.bag_check": (MoneyBagCheckIn, MoneyBagCheckOut), "money.bag_claim": (MoneyBagClaimIn, MoneyBagClaimOut), "money.claim_simulate_reply": (MoneyClaimSimulateReplyIn, MoneyClaimSimulateReplyOut), "money.claim_status": (MoneyClaimStatusIn, MoneyClaimStatusOut), "money.flight_check": (MoneyFlightCheckIn, MoneyFlightCheckOut), "money.flight_claim": (MoneyFlightClaimIn, MoneyFlightClaimOut), "outcomes.list": (OutcomesListIn, OutcomesListOut), "outcomes.mark_test": (OutcomesMarkTestIn, OutcomesMarkTestOut), "outcomes.record": (OutcomesRecordIn, OutcomesRecordOut), "outcomes.report": (OutcomesReportIn, OutcomesReportOut), "outcomes.update": (OutcomesUpdateIn, OutcomesUpdateOut), "registry.change_list": (RegistryChangeListIn, RegistryChangeListOut), "registry.countries": (RegistryCountriesIn, RegistryCountriesOut), "registry.documents": (RegistryDocumentsIn, RegistryDocumentsOut), "registry.get": (RegistryGetIn, RegistryGetOut), "registry.obtain_plan": (RegistryObtainPlanIn, RegistryObtainPlanOut), "registry.row_results": (RegistryRowResultsIn, RegistryRowResultsOut), "registry.verify": (RegistryVerifyIn, RegistryVerifyOut), "registry.wave_resume": (RegistryWaveResumeIn, RegistryWaveResumeOut), "registry.wave_run": (RegistryWaveRunIn, RegistryWaveRunOut), "registry.wave_status": (RegistryWaveStatusIn, RegistryWaveStatusOut), "sandbox.ad_case": (SandboxAdCaseIn, SandboxAdCaseOut), "sandbox.ad_open_case": (SandboxAdOpenCaseIn, SandboxAdOpenCaseOut), "sandbox.link_proof": (SandboxLinkProofIn, SandboxLinkProofOut), "sandbox.messages": (SandboxMessagesIn, SandboxMessagesOut), "sandbox.platform_prepare": (SandboxPlatformPrepareIn, SandboxPlatformPrepareOut), "sandbox.platform_walk": (SandboxPlatformWalkIn, SandboxPlatformWalkOut), "sandbox.simulate_approval": (SandboxSimulateApprovalIn, SandboxSimulateApprovalOut), "sandbox.simulate_call": (SandboxSimulateCallIn, SandboxSimulateCallOut), "sandbox.simulate_reply": (SandboxSimulateReplyIn, SandboxSimulateReplyOut), "sandbox.wa_template": (SandboxWaTemplateIn, SandboxWaTemplateOut), "sources.get": (SourcesGetIn, SourcesGetOut), "subscriptions.cancel": (SubscriptionsCancelIn, SubscriptionsCancelOut), "subscriptions.cancel_plan": (SubscriptionsCancelPlanIn, SubscriptionsCancelPlanOut), "subscriptions.find": (SubscriptionsFindIn, SubscriptionsFindOut), "travel.find_flights": (TravelFindFlightsIn, TravelFindFlightsOut), "travel.find_stays": (TravelFindStaysIn, TravelFindStaysOut), "trip.cancel": (TripCancelIn, TripCancelOut), "trip.complete": (TripCompleteIn, TripCompleteOut), "trip.hold": (TripHoldIn, TripHoldOut), "trip.plan": (TripPlanIn, TripPlanOut), "trip.plan_get": (TripPlanGetIn, TripPlanGetOut), "usage.get": (UsageGetIn, UsageGetOut), "users.confirm_whatsapp": (UsersConfirmWhatsappIn, UsersConfirmWhatsappOut), "users.link_whatsapp": (UsersLinkWhatsappIn, UsersLinkWhatsappOut), "users.register": (UsersRegisterIn, UsersRegisterOut), "users.verify_destination": (UsersVerifyDestinationIn, UsersVerifyDestinationOut), "venue.booking_status": (VenueBookingStatusIn, VenueBookingStatusOut), "venue.bookings": (VenueBookingsIn, VenueBookingsOut), "venue.call_again": (VenueCallAgainIn, VenueCallAgainOut), "venue.call_attempt": (VenueCallAttemptIn, VenueCallAttemptOut), "venue.cancel_booking": (VenueCancelBookingIn, VenueCancelBookingOut), "venue.change_booking": (VenueChangeBookingIn, VenueChangeBookingOut), "venue.confirmation": (VenueConfirmationIn, VenueConfirmationOut), "venue.discover": (VenueDiscoverIn, VenueDiscoverOut), "venue.handed_over": (VenueHandedOverIn, VenueHandedOverOut), "venue.manage_options": (VenueManageOptionsIn, VenueManageOptionsOut), "venue.person_report": (VenuePersonReportIn, VenuePersonReportOut), "venue.prepare_booking": (VenuePrepareBookingIn, VenuePrepareBookingOut), "venue.profile": (VenueProfileIn, VenueProfileOut), "venue.recognition": (VenueRecognitionIn, VenueRecognitionOut), "venue.submit_booking": (VenueSubmitBookingIn, VenueSubmitBookingOut), "venue.unhandled": (VenueUnhandledIn, VenueUnhandledOut), "venues.find_venues": (VenuesFindVenuesIn, VenuesFindVenuesOut), "webhooks.register": (WebhooksRegisterIn, WebhooksRegisterOut), "webhooks.revoke": (WebhooksRevokeIn, WebhooksRevokeOut)}

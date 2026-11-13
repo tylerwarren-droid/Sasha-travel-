@@ -348,6 +348,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T97": ("two gate runs never share a test identity: the voice loop's WhatsApp numbers are THIS run's (its deployment id), never a "
             "number linked to anyone; two runs in the same minute each keep their own mobiles (Sasha 381k)",
             ["tests.test_s381k_gate_runs_apart"]),
+    "T98": ("every product switch on the shared WhatsApp number goes to AgAPI's ONE writer (messages.whatsapp_switch, CR 202), from ONE "
+            "place (products.space.conversation_switched): every switch path — keyword, tool row, back row, either direction — exactly once "
+            "with the inbound's message id, before AgAPI's inbound reads it (Sasha 383)",
+            ["tests.test_s383_one_switch_writer"]),
 }
 
 _RUNNER = """

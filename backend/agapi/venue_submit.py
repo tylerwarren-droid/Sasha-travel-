@@ -170,6 +170,18 @@ async def whatsapp_inbound(sender: str, text: str, message_id: str, guest: bool 
             **({k: res[k] for k in ("kept", "why", "opted_out", "booking", "ad", "replied", "conversation_role") if k in res})}
 
 
+async def whatsapp_switch(sender: str, product: str, message_id: str) -> Dict[str, Any]:
+    """Sasha 383 · CR 202 · the person switched product on Kanoe's shared number → AgAPI's ONE writer of which product the conversation is
+    in (messages.whatsapp_switch {from, product, message_id}) — the same AgAPI the inbound goes to. Leaving Applied Diligence drops AD's
+    held context there. AgAPI not answering (or without the op yet): logged, never in the way of the switch itself."""
+    r = await _call(None, OP.MESSAGES_WHATSAPP_SWITCH, {"from": str(sender)[:24], "product": str(product)[:24],
+                                                       "message_id": str(message_id)[:80]})
+    if not r.get("ok"):
+        log.warning("[venue_submit] whatsapp_switch not recorded: %s", (r.get("error") or {}).get("code"))
+        return {"ok": False, "why": (r.get("error") or {}).get("code") or "unavailable"}
+    return {"ok": True, **(r.get("result") or {})}
+
+
 # ── CR 132 · AgAPI's booking record holds every route now: a hand-over is an act (venue.handed_over), and ONE list reads them all ─────
 
 _LATER_HANDED: set = set()   # the hand-over writes in flight (held so they finish; never awaited by the answer)

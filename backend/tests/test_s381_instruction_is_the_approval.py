@@ -147,6 +147,8 @@ class TheProof(unittest.TestCase):
             calls.append((op, body))
             return {"ok": True, "result": {"mandate_id": "mdt_1", "expires_at": "2099-01-01T00:00:00Z", "proof": {"kind": "in_app"}}}
         ctx = API.Ctx(account="acct_1", user_said="book  Casa Gate\n for 4", session="conv_1", surface="s2", via="page")
+        tok = VS.TAP.set({"kind": "supabase", "token": "t"})   # Sasha 381e · the in-app door, as its entry point records it
+        self.addCleanup(VS.TAP.reset, tok)
         with mock.patch.dict(os.environ, {"SASHA_AGAPI_TAP_SECRET": "s381-secret"}), mock.patch.object(VS, "CALL", call):
             got = run(AM.for_booking(ctx, "eu_1", ctx.user_said, {"prepared_id": "vpr_" + "a" * 32, "party": 4, "date": "2026-11-20",
                                                                    "time": "21:00"}))

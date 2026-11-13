@@ -41,6 +41,21 @@ WA: _cv.ContextVar = _cv.ContextVar("sasha_whatsapp_tap", default=None)
 TAP_REFUSALS = (ERR.APPROVAL_VOID, ERR.APPROVAL_EXPIRED, ERR.APPROVAL_UNTRUSTED_ORIGIN, ERR.APPROVAL_CONSUMED)
 
 
+def door() -> Optional[Dict[str, str]]:
+    """Sasha 381e · THE ONE answer to "which door did THIS turn come through" — read from what that door's own entry point recorded, never
+    from how Sasha speaks on it (ctx.via):
+      · a request carrying the person's verified in-app session (TAP — set by sasha.agent_turn for S2 and /next, by voice_turn for the
+        voice avatar and the REST chat, by the /group page; each from session_of(request))     → {"kind": "in_app"}
+      · a signed WhatsApp message (WA — set by inbound_phone after Twilio's signature)          → {"kind": "whatsapp", wa_id, message_id}
+      · neither                                                                                   → None (nothing can be proved: nothing acts)
+    Every proof of an instruction (agapi_mandate.proof_from) and every yes's approval (in_app_tap / whatsapp_tap) reads this."""
+    if TAP.get() is not None:
+        return {"kind": "in_app"}
+    w = WA.get() or {}
+    wa_id, mid = re.sub(r"\D", "", str(w.get("wa_id") or "")), str(w.get("message_id") or "")
+    return {"kind": "whatsapp", "wa_id": wa_id, "message_id": mid} if wa_id and mid else None
+
+
 def session_of(request) -> Optional[dict]:
     """Sasha 258 / 321 · THE ONE PLACE a request's in-app session for approvals.in_app_tap is read — /s2, /next, the voice avatar and
     the REST chat alike: the person's own Supabase token as the request carries it (chat_account verified it), or the founder's proxy
@@ -315,12 +330,13 @@ async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|confirm_number, …}
     (A card's yes — the health product's call. A venue booking is instructed: submit_instructed, Sasha 381.)"""
     rid, pid, uid = held["read_back_id"], held["prepared_id"], held.get("end_user") or await end_user(account)
-    if TAP.get() is not None or WA.get() is not None:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
+    d = door()   # Sasha 381e · the door THIS turn came through (the ONE reader)
+    if d:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
         # Sasha 265 · item 4 (CR 99 §4d): on WhatsApp, their reply (signed webhook) is the same in_app_tap, session kind "whatsapp"
-        r = await (in_app_tap(account, rid, held.get("sha") or held.get("sha256") or "") if TAP.get() is not None
+        r = await (in_app_tap(account, rid, held.get("sha") or held.get("sha256") or "") if d["kind"] == "in_app"
                    else whatsapp_tap(account, rid, held.get("sha") or held.get("sha256") or ""))
-        if not r.get("ok") and TAP.get() is None and r["error"]["code"] == ERR.APPROVAL_UNTRUSTED_ORIGIN and WA.get() is not None \
-                and not await whatsapp_verified(account, (WA.get() or {}).get("wa_id")):
+        if not r.get("ok") and d["kind"] == "whatsapp" and r["error"]["code"] == ERR.APPROVAL_UNTRUSTED_ORIGIN \
+                and not await whatsapp_verified(account, door()["wa_id"]):
             # Sasha 311 · a WhatsApp yes from a number AgAPI hasn't verified (read back): its one-time code, from that number — on any
             # target (an SMS link verifies a phone, never this WhatsApp number)
             return {"ok": True, "status": "confirm_number"}
@@ -450,7 +466,7 @@ def _message_of(res: dict, held: dict, said: str) -> dict:
     channel = "whatsapp" if how.startswith("whatsapp") else "email" if how == "email" else None
     if not (channel and res.get("status") == "sent"):
         return {}
-    consent = held.get("consent") or {"kind": "in_app_tap" if TAP.get() is not None else "whatsapp_reply" if WA.get() is not None
+    consent = held.get("consent") or {"kind": "in_app_tap" if (door() or {}).get("kind") == "in_app" else "whatsapp_reply" if door()
                                        else "their_yes", "said": str(said or "")[:300]}
     return {"channel": channel, "consent": consent}
 
@@ -785,11 +801,11 @@ async def cancel_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     """On their yes (a later turn): the approval → venue.cancel_booking → {status sent, cancel_act_id}; the cancellation is kept as
     its own act (its reply comes through venue.booking_status, like any request)."""
     rid, act_id, uid = held["read_back_id"], held["act_id"], held.get("end_user") or await end_user(account)
-    if TAP.get() is not None or WA.get() is not None:   # Sasha 258 · in the app / 314 · on WhatsApp: their yes IS the approval, at once
+    if door() is not None:   # Sasha 258 · in the app / 314 · on WhatsApp: their yes IS the approval, at once
         sha = held.get("read_back_sha256") or held.get("sha") or ""   # AgAPI's own hash of the card
-        r = await (in_app_tap(account, rid, sha) if TAP.get() is not None else whatsapp_tap(account, rid, sha))
-        if not r.get("ok") and TAP.get() is None and r["error"]["code"] == ERR.APPROVAL_UNTRUSTED_ORIGIN \
-                and not await whatsapp_verified(account, (WA.get() or {}).get("wa_id")):
+        r = await (in_app_tap(account, rid, sha) if door()["kind"] == "in_app" else whatsapp_tap(account, rid, sha))
+        if not r.get("ok") and door()["kind"] == "whatsapp" and r["error"]["code"] == ERR.APPROVAL_UNTRUSTED_ORIGIN \
+                and not await whatsapp_verified(account, door()["wa_id"]):
             return {"ok": True, "status": "confirm_number"}   # Sasha 311's one-time code, never a link
         if not r.get("ok"):
             return r
@@ -847,9 +863,9 @@ async def change_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     """On his yes (a later turn): the approval → venue.change_booking → {status sent, change_act_id} | {status person_sends, message}.
     A change sent is kept as its own act (`changes`: its reply comes through venue.booking_status, like any request)."""
     rid, act_id, uid = held["read_back_id"], held["act_id"], held.get("end_user") or await end_user(account)
-    if TAP.get() is not None or WA.get() is not None:   # in the app / a signed WhatsApp reply: their yes is the approval
+    if door() is not None:   # in the app / a signed WhatsApp reply: their yes is the approval
         sha = held.get("read_back_sha256") or held.get("sha") or ""
-        r = await (in_app_tap(account, rid, sha) if TAP.get() is not None else whatsapp_tap(account, rid, sha))
+        r = await (in_app_tap(account, rid, sha) if door()["kind"] == "in_app" else whatsapp_tap(account, rid, sha))
         if not r.get("ok"):
             return r
         res = r.get("result") or {}

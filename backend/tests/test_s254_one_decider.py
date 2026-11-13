@@ -90,10 +90,14 @@ def signed_in(test: unittest.TestCase) -> None:
     (sasha.agent_turn) with the turn's id; on WhatsApp the signed inbound message (inbound_phone, after Twilio's signature). The
     instruction is the approval (agapi_mandate.proof_from reads whichever this turn came by)."""
     from agapi import venue_submit as VS
-    tok = VS.TAP.set({"kind": "supabase", "token": "test-token"})
-    test.addCleanup(VS.TAP.reset, tok)
-    wtok = VS.WA.set({"wa_id": "447700900254", "message_id": "SM" + "4" * 32})
-    test.addCleanup(VS.WA.reset, wtok)
+    # Sasha 381e · ONE door per turn, as its entry point records it (none records both): asked on WhatsApp (via "wa", the harness's
+    # default) → the signed inbound message; else the app → the verified session
+    if getattr(test, "via", "wa") == "wa":
+        tok = VS.WA.set({"wa_id": "447700900254", "message_id": "SM" + "4" * 32})
+        test.addCleanup(VS.WA.reset, tok)
+    else:
+        tok = VS.TAP.set({"kind": "supabase", "token": "test-token"})
+        test.addCleanup(VS.TAP.reset, tok)
     API._CLAIMED.clear()   # each test its own conversation: a booking claimed by another test is not this one
     for p in (mock.patch("booking_signer.basket._run", lambda: None),   # claims in-process (no database in a unit test), as s287 / s328 do
               mock.patch.dict("os.environ", {"SASHA_AGAPI_TAP_SECRET": "test-tap-secret"})):

@@ -328,6 +328,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "CR 196; on WhatsApp its signed message), ONCE, said in ONE line \"Booking now: <AgAPI's venue (CR 194)>, <N> people, <date> at "
             "<time>.\" + Booked / Requested (Sasha 381)",
             ["tests.test_s381_instruction_is_the_approval"]),
+    "T93": ("an instruction's proof follows the door the turn came through, from ONE reader (venue_submit.door: what that door's entry point "
+            "recorded) on EVERY door that books — S2, /next, voice / REST, /group (the verified session → in_app, this turn's id), WhatsApp "
+            "(the signed message → its id); neither → no proof; never ctx.via (Sasha 381e)",
+            ["tests.test_s381e_every_door"]),
 }
 
 _RUNNER = """

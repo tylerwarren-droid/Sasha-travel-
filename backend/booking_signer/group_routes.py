@@ -208,18 +208,22 @@ async def group_act(request: Request):
     account, action = account_for(request), str(body.get("action") or "")
     # Sasha 346 · EVERY action answers from the record (group_outcome — the ONE place): what was done, or exactly why not and what's
     # missing. book → its background job (Sasha 339) only when someone can be booked; swap/cancel → AgAPI's card, or the list's own swap
-    out = await GO.run(account, action if action in ("book", "swap", "cancel") else "?" + action,
-                       {"who": body.get("who") or None, "to": body.get("to"), "to_city": body.get("to_city"), "to_grade": body.get("to_grade"),
-                        "over_ok": bool(body.get("over_ok")),
-                        # Sasha 367 · Book all on the page IS the instruction: its in-app proof is THIS signed-in request (its own id, once)
-                        # Sasha 372 · the tap IS the instruction: its own id (the page has no conversation, so its session is the tap too)
-                        **({"said": "Book all", "door": "s2", "proof": _tap_proof()} if action == "book" else {})})
+    # Sasha 367 · Book all on the page IS the instruction. Sasha 381e · its proof comes from the ONE door reader like every door's: this
+    # request records its door (the person's verified session, session_of) and proof_from gives THIS tap's own id (Sasha 372); the page has
+    # no conversation, so its session is the tap too. No session on the request → no proof → nothing acts.
+    from agapi import v0 as API, venue_submit as VS
+    from . import agapi_mandate as AM
+    tok = VS.TAP.set(VS.session_of(request))
+    try:
+        tap = "tap_" + __import__("uuid").uuid4().hex
+        proof = AM.proof_from(API.Ctx(account=account, session=tap, turn=tap)) if action == "book" else None
+        out = await GO.run(account, action if action in ("book", "swap", "cancel") else "?" + action,
+                           {"who": body.get("who") or None, "to": body.get("to"), "to_city": body.get("to_city"),
+                            "to_grade": body.get("to_grade"), "over_ok": bool(body.get("over_ok")),
+                            **({"said": "Book all", "door": "s2", "proof": proof} if action == "book" else {})})
+    finally:
+        VS.TAP.reset(tok)
     return _with_buttons(out)
-
-
-def _tap_proof() -> dict:
-    tap = "tap_" + __import__("uuid").uuid4().hex
-    return {"kind": "in_app", "session_id": tap, "instruction_id": tap}
 
 
 def _with_buttons(out: dict) -> dict:

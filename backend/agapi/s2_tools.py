@@ -119,8 +119,8 @@ async def agapi_email(account: str, msg: dict, said: str) -> Dict[str, Any]:
         return {"ok": False, "error": VS._err(r) if not r.get("ok") else {"code": "sent_without_yes", "message": "it went without the yes"}}
     d = e.get("details") or {}
     rid, rsha = d.get("read_back_id"), d.get("read_back_sha256") or ""
-    if VS.TAP.get() is not None or VS.WA.get() is not None:
-        t = await (VS.in_app_tap(account, rid, rsha) if VS.TAP.get() is not None else VS.whatsapp_tap(account, rid, rsha))
+    if VS.door() is not None:
+        t = await (VS.in_app_tap(account, rid, rsha) if VS.door()["kind"] == "in_app" else VS.whatsapp_tap(account, rid, rsha))
         if not t.get("ok"):
             return t
         approval = t.get("approval_id")

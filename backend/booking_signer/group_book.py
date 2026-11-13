@@ -743,11 +743,9 @@ async def wait(account: str, timeout: float) -> Dict[str, Any]:
 async def _approval(account: str, it: dict, said: str) -> Optional[str]:
     from agapi import agapi_route as AR, venue_submit as VS
     with AR.using(await AR.target_for(FAMILY, account)):   # the read-back is the group family's target (pinned: the sandbox) — its approval goes there too
-        if VS.TAP.get() is not None:
-            r = await VS.in_app_tap(account, it["read_back_id"], it["sha"])
-            return r.get("approval_id") if r.get("ok") else None
-        if VS.WA.get() is not None:
-            r = await VS.whatsapp_tap(account, it["read_back_id"], it["sha"])
+        d = VS.door()   # Sasha 381e · the door THIS turn came through (the ONE reader)
+        if d:
+            r = await (VS.in_app_tap if d["kind"] == "in_app" else VS.whatsapp_tap)(account, it["read_back_id"], it["sha"])
             return r.get("approval_id") if r.get("ok") else None
     r = await _call(account, OP.SANDBOX_SIMULATE_APPROVAL, {"read_back_id": it["read_back_id"], "said": (said or "Yes, go ahead.")[:200]})
     return ((r.get("result") or {}).get("approval_id")) if r.get("ok") else None
@@ -1063,7 +1061,7 @@ async def _card_approvals(account: str, items: List[dict], done: list, failed: l
     each read-back AgAPI refused is said with ITS why — one already done is a STATE (ON_RECORD), never "failed". None: not that case
     (S2's in-app tap, a one-person card, the sandbox's simulated yes) — _approval, per read-back, as before."""
     from agapi import agapi_route as AR, venue_submit as VS
-    if VS.WA.get() is None or VS.TAP.get() is not None or len(items) < 2:
+    if (VS.door() or {}).get("kind") != "whatsapp" or len(items) < 2:   # Sasha 381e · the ONE door reader
         return None
     with AR.using(await AR.target_for(FAMILY, account)):   # the read-backs are the group family's target — their approval goes there too
         r = await VS.whatsapp_card_tap(account, [{"read_back_id": it["read_back_id"], "read_back_sha256": it["sha"]} for it in items])

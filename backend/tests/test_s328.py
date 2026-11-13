@@ -237,7 +237,8 @@ class TheZonaQuestion(Base):
 class NoVerifiedPersonNothingIsPressed(Base):
     def test_a_turn_with_nothing_to_prove_it_by_never_presses_book(self):
         ctx = Ctx("book La Taberna friday 21:00 for 2", surface="voice")
-        ctx.session = None   # Sasha 381 · CR 196: no conversation of its own (and no signed WhatsApp message) — the instruction can't be proved
+        tok = VS.TAP.set(None)   # Sasha 381e · no door recorded: no verified session, no signed WhatsApp message — nothing can be proved
+        self.addCleanup(VS.TAP.reset, tok)
         got = run(VN.follow(ctx, {"name": "La Taberna", "city": "Madrid"}, RD, RES, "2026-11-13T21:00", datetime.now(timezone.utc), CARD, DEC))
         self.assertEqual(got["status"], "not_sent")
         self.assertNotIn("approvals.mandate", self.ag.ops())

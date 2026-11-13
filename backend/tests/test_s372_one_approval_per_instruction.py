@@ -32,6 +32,8 @@ SECRET = T367.SECRET
 
 def _say(w, words, session, dest="London", start="2026-12-15", end="2026-12-17", roles=("executives",)):
     async def go():
+        from agapi import venue_submit as VS
+        VS.TAP.set(T365.S2_SESSION)   # Sasha 381e · the S2 door, as its entry point records it
         ctx = API.Ctx(account=OWNER, user_said=words, surface="s2", session=session)
         r = await API.call(ctx, "group_select", {"change": "new", "destination": dest, "starts_on": start, "ends_on": end, "roles": list(roles)})
         await M.finished(OWNER)
@@ -41,9 +43,14 @@ def _say(w, words, session, dest="London", start="2026-12-15", end="2026-12-17",
 
 class TheInstructionIsTheId(unittest.TestCase):
     def test_every_turn_has_its_own_id_and_the_proof_carries_it(self):
+        from agapi import venue_submit as VS
         a, b = API.Ctx(account=OWNER, session="conv-1"), API.Ctx(account=OWNER, session="conv-1")
         self.assertNotEqual(a.turn, b.turn)                                                   # two instructions, one conversation: two ids
-        pa, pb = AM.proof_from(a), AM.proof_from(b)
+        tok = VS.TAP.set(T365.S2_SESSION)   # Sasha 381e · an in-app turn's door
+        try:
+            pa, pb = AM.proof_from(a), AM.proof_from(b)
+        finally:
+            VS.TAP.reset(tok)
         self.assertEqual((pa["session_id"], pb["session_id"]), ("conv-1", "conv-1"))
         self.assertEqual((pa["instruction_id"], pb["instruction_id"]), (a.turn, b.turn))
         wa = mock.Mock(via="wa")
@@ -81,7 +88,12 @@ class TwoInstructionsOneConversation(unittest.TestCase):
     def test_the_same_instruction_replayed_is_the_same_proof_accepted_once(self):
         with T367.World() as w:
             ctx = API.Ctx(account=OWNER, user_said="Book all executives", surface="s2", session="conv-r")
-            proof = AM.proof_from(ctx)
+            from agapi import venue_submit as VS
+            tok = VS.TAP.set(T365.S2_SESSION)   # Sasha 381e · an in-app turn's door
+            try:
+                proof = AM.proof_from(ctx)
+            finally:
+                VS.TAP.reset(tok)
             mv = run(G.store().movement(OWNER))
             members = run(G.store().members(mv["id"]))
             first = run(AM.register(OWNER, "Book all executives", mv, members, proof))
@@ -100,7 +112,9 @@ class OneProofForm(unittest.TestCase):
     def test_no_door_invents_a_session(self):
         routes = (ROOT / "backend" / "booking_signer" / "group_routes.py").read_text()
         self.assertNotIn('"session_id": "group-page-"', routes)
-        self.assertIn('return {"kind": "in_app", "session_id": tap, "instruction_id": tap}', routes)
+        # Sasha 381e · the tap IS the instruction: its own id, through the ONE proof (proof_from) on the request's recorded door
+        self.assertIn("proof = AM.proof_from(API.Ctx(account=account, session=tap, turn=tap))", routes)
+        self.assertIn("VS.TAP.set(VS.session_of(request))", routes)
 
 
 if __name__ == "__main__":

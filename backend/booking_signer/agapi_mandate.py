@@ -1,8 +1,9 @@
 """Sasha 367 · THE MANAGER'S INSTRUCTION, REGISTERED ONCE AT AgAPI AS A SIGNED MANDATE (CR 182, mailbox 1866) — the ONE source of the yes for
 every worker booked under it. Never the instruction's text sent as a yes, never a contact made up.
 
-  proof_from(ctx)                      the door's proof, as IDS only (kept on the trip record, never a token): WhatsApp → the instruction's
-                                       message id + the organiser's wa_id; in the app → the session id the instruction was typed/spoken in
+  proof_from(ctx)                      the door's proof, as IDS only (kept on the trip record, never a token), from the ONE door reader
+                                       (venue_submit.door): WhatsApp → the instruction's message id + the organiser's wa_id; in the app (a
+                                       verified session: S2, /next, voice, REST, /group) → THIS turn's id, its conversation as context
   limits_for(mv, members)              the company's limits on the record → AgAPI's {flight_max, stay_night_max} (None: none on the record)
   scope_for(mv, members)               {workers (member ids, in order), destination (the city's IATA codes), from, to}
   register(account, words, mv, members, proof) → {mandate_id, expires_at} | {code, why}
@@ -29,17 +30,18 @@ PLACE = None   # tests replace it: (city) → [IATA codes]
 
 
 def proof_from(ctx: Any) -> Optional[Dict[str, str]]:
-    """The door's proof that the instruction came from the organiser — ids only. WhatsApp: the signed inbound (agapi.venue_submit.WA, set by
-    the webhook once Twilio's signature checked); in the app: the conversation's session id. None: neither (nothing can be signed)."""
+    """The door's proof that the instruction came from the person — ids only. Sasha 381e · from the ONE door reader (VS.door: what THIS
+    turn's entry point recorded), never from how she speaks (ctx.via): a signed WhatsApp message → its message id + their wa_id; a request
+    with their verified in-app session → THIS turn's own id (Sasha 372: the instruction), with its conversation as context. None: neither."""
     from agapi import venue_submit as VS
-    if getattr(ctx, "via", "page") == "wa":
-        w = VS.WA.get() or {}
-        wa_id, mid = re.sub(r"\D", "", str(w.get("wa_id") or "")), str(w.get("message_id") or "")
-        return {"kind": "whatsapp", "wa_id": wa_id, "message_id": mid} if wa_id and mid else None
-    sid = str(getattr(ctx, "session", "") or "")
+    d = VS.door()
+    if not d:
+        return None
+    if d["kind"] == "whatsapp":
+        return {"kind": "whatsapp", "wa_id": d["wa_id"], "message_id": d["message_id"]}
     turn = str(getattr(ctx, "turn", "") or "")
-    # Sasha 372 · the INSTRUCTION's own id (this turn), with the conversation it was said in — two instructions, two proofs
-    return {"kind": "in_app", "session_id": sid, "instruction_id": turn} if sid and turn else None
+    # Sasha 372 · the INSTRUCTION's own id (this turn or tap), with the conversation it was said in (context) — two instructions, two proofs
+    return {"kind": "in_app", "session_id": str(getattr(ctx, "session", "") or ""), "instruction_id": turn} if turn else None
 
 
 def _minor(eur: Optional[float]) -> Optional[Dict[str, Any]]:

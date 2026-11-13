@@ -34,9 +34,24 @@ def _executives(names):
         run(G.edit_person(OWNER, roster[n]["id"], {"role": "executive"}))
 
 
+#: Sasha 381e · an S2 turn's door, as sasha.agent_turn records it (VS.TAP ← session_of(request)): the organiser's verified session
+S2_SESSION = {"kind": "supabase", "token": "s365-organiser"}
+
+
+def s2(coro):
+    """Run a coroutine as an S2 turn: its door recorded first, exactly where the entry point records it (that turn's context only)."""
+    async def go():
+        from agapi import venue_submit as VS
+        VS.TAP.set(S2_SESSION)
+        return await coro
+    return go()
+
+
 def _instruction(said=SAID):
     """The chat's door, as the model calls it with the organiser's own words (the filter is theirs; the engine picks the people)."""
     async def go():
+        from agapi import venue_submit as VS
+        VS.TAP.set(S2_SESSION)   # Sasha 381e · the S2 door, as its entry point records it
         events = LE.subscribe(OWNER)
         ctx = API.Ctx(account=OWNER, user_said=said, surface="s2", session="s365-session")
         r = await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15", "ends_on": "2026-12-17",

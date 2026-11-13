@@ -92,12 +92,18 @@ async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +34 
         PA.uninstall(a)
 
 
+#: Sasha 381e · the voice / REST routes hand voice_turn THIS request's verified session (tap=session_of(request)) — the door the turn came
+#: through, and so the instruction's in-app proof; the gate enters that door the same way (a stand-in session: the proof reads only that
+#: there is one — the person is the gate's own scratch guest)
+GATE_SESSION = {"kind": "supabase", "token": "gate-scratch-guest"}
+
+
 async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
     from agapi import venue_submit as VSB
     h, seen, v = [], [], None
     for said in turns:
         AGS._MINUTE.pop(a, None)   # a guest replayed at machine speed is not "going faster than I can keep up" (TURNS_PER_MIN)
-        v = await VT.turn(a, said, h)
+        v = await VT.turn(a, said, h, tap=GATE_SESSION)
         h = (v or {}).get("messages") or h
         seen.append(_said(v))
         print(f"   · {said!r} → {_said(v)[:150]!r}", flush=True)
@@ -113,7 +119,7 @@ async def _voice_turns(a, turns, VT, BR, contact, before, AGS) -> tuple:
         asks_name = re.search(r"(?i)\b(?:need|give me|send me|tell me|what|which|whose)\b[^.?!]{0,40}\bname\b|\bname and (?:a |your )?(?:phone|number|mobile)", s)
         said = ("Handle it" if (BR.PHRASES["ask_book"] in s or re.search(r"(?i)prefilled|handle it", s)) else contact if asks_name else "yes")
         AGS._MINUTE.pop(a, None)
-        v = await VT.turn(a, said, h)
+        v = await VT.turn(a, said, h, tap=GATE_SESSION)
         h = (v or {}).get("messages") or h
         seen.append(_said(v))
         print(f"   · {said!r} → {_said(v)[:150]!r}", flush=True)

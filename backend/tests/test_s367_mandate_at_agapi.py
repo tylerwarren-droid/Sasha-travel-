@@ -55,6 +55,8 @@ class World(W339.World):
 
 def _instruction(w):
     async def go():
+        from agapi import venue_submit as VS
+        VS.TAP.set(T365.S2_SESSION)   # Sasha 381e · the S2 door, as its entry point records it
         q = LE.subscribe(OWNER)
         ctx = API.Ctx(account=OWNER, user_said=SAID, surface="s2", session="s367-session")
         r = await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15", "ends_on": "2026-12-17",
@@ -145,8 +147,8 @@ class TheMissingFactAndTheProof(unittest.TestCase):
             self.assertEqual(run(G.store().movement(OWNER))["rules"]["mandate"]["state"], "waiting")
             gone.stop()                                                                        # the manager gives the limits …
             ctx = API.Ctx(account=OWNER, user_said="limits: 900 a return flight and 140 a hotel night", surface="s2", session="s367-session-2")
-            out = run(API.call(ctx, "group_limits", {"by_grade": {"worker": {"flight_return_eur": 900, "hotel_night_eur": 140},
-                                                                  "supervisor": {"flight_return_eur": 900, "hotel_night_eur": 140}}}))
+            out = run(T365.s2(API.call(ctx, "group_limits", {"by_grade": {"worker": {"flight_return_eur": 900, "hotel_night_eur": 140},
+                                                                  "supervisor": {"flight_return_eur": 900, "hotel_night_eur": 140}}})))
             run(M.finished(OWNER))
             mv = run(G.store().movement(OWNER))
         self.assertIn("carrying on with your instruction", out["result"]["say"])           # … and it carries on, no second instruction

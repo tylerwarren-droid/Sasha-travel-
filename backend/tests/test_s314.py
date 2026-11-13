@@ -100,14 +100,15 @@ class NeverALinkThatWasntSent(unittest.TestCase):
             self.assertIn('["link_sent"] = bool(q.get("ok"))', (ROOT / f).read_text(), f)
 
 
-class TheShortReadBack(unittest.TestCase):
-    def test_tylers_words(self):
-        self.assertEqual(V.kanoe_ask("DiverXO", "Fri 13 Nov", "21:00", 2, "email"), "DiverXO, Fri 13 Nov 21:00 for 2. Send?")   # HER VOICE: no channel
+class TheShortReadBackIsGone(unittest.TestCase):
+    """Sasha 381 (Tyler, 12 Nov 20:11 / 20:20): no short read-back — a term Sasha didn't hear is ASKED (that term only), and the
+    complete instruction is acted on, said in ONE line."""
 
-    def test_the_complete_request_is_sent_and_a_filled_term_is_asked(self):
-        src = inspect.getsource(VN.kanoe_card)
-        self.assertLess(src.index("if all(got.values()):"), src.index("_kanoe_now("))
-        self.assertIn('"read_back": []', src)   # the short line is the card: never the whole template
+    def test_tylers_words(self):
+        self.assertFalse(hasattr(V, "kanoe_ask"))
+        self.assertEqual(V.acted_line("Booking now: DiverXO, 2 people, Fri 13 Nov at 21:00.", False),
+                         "Booking now: DiverXO, 2 people, Fri 13 Nov at 21:00. Requested — I'll tell you when they reply.")   # HER VOICE: no channel
+        self.assertEqual(V.TERM_ASK["party"], "For how many people?")
 
 
 class TheShortReadBackIsShown(unittest.TestCase):   # found by the proof: the short card wasn't recorded, so his yes got a second confirmation

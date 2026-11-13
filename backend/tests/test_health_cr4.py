@@ -48,7 +48,7 @@ class AgAPI:
         lines = [f"Call {p['place']['name']} for {p['notes']}, {p['date']} {p['time']}, 1 person.", "I'll call them now and let you know."]
         return {"ok": True, "read_back_id": "rb_health_1", "sha256": "d" * 64, "lines": lines, "end_user": "eu_1"}
 
-    async def submit(self, account, held, said):
+    async def submit(self, account, held, said, instruction=None):   # Sasha 381 · + the instruction (the approval)
         self.calls.append(("submit", {"held": held, "said": said}))
         return dict(self.submit_result)
 

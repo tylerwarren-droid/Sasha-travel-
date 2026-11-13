@@ -876,7 +876,8 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     first_text_ms = None
     from agapi import agapi_route as _AR   # Sasha 249 · ONE ROUTE: the v0 mode comes from the route ("test": v0 is Duffel TEST only)
     ctx = API.Ctx(account=account, mode=_AR.ctx_mode(), user_said=message, session=session, surface=surface,
-                  space=_now_space.get("space") or "sasha", via="wa" if wa else "page")   # Sasha 276 · WhatsApp's brain keeps find until 277
+                  space=_now_space.get("space") or "sasha", via="wa" if wa else "page",   # Sasha 276 · WhatsApp's brain keeps find until 277
+                  said_before="\n".join(str(m.get("content") or "") for m in (history or []) if m.get("role") == "user")[-4000:])   # Sasha 381
     voice["ctx"] = ctx   # Sasha 215 · what already happened this turn, for the line said if the turn fails or runs out of time
     msgs: List[dict] = [{"role": m["role"], "content": str(m.get("content") or "")} for m in (history or [])
                         if m.get("role") in ("user", "assistant") and str(m.get("content") or "").strip()][-40:]

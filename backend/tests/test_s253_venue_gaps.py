@@ -26,7 +26,7 @@ from datetime import date, time, timedelta
 from unittest import mock
 
 from agapi import s2_outcomes as OC, v0 as API, venues as VN
-from app.agent import sasha as AG
+from app.agent import sasha as AG, voice as V
 from app.agent.fakes import Block
 from booking_signer import emailing as E, guest_accounts as GA, guest_receipt as GR, guest_whatsapp as GW, loyalty as LY
 from booking_signer import wa_brain as WB
@@ -124,8 +124,9 @@ class Base(unittest.TestCase):
     def hold(self, rungs, venue="Casa Gate", country="ES", said="", surface=None, **a):
         args = {"name": venue, "city": "Madrid", "country": country, "what": "dinner", "party": 2, **a}
         self._rungs = rungs   # Sasha 270 · MOVED: on the one path their form is the engine's read (setUp's engine_channel)
-        with mock.patch.object(VN, "_read", reader(rungs, venue, country)):
-            return run(VN.hold_venue(self.ctx(said, surface), args))
+        from tests.test_s254_one_decider import said as instruction
+        with mock.patch.object(VN, "_read", reader(rungs, venue, country)):   # Sasha 381 · their words give every term (else it's asked)
+            return run(VN.hold_venue(self.ctx(said or instruction(args), surface), args))
 
     def yes(self):
         return run(VN.book_venue(self.ctx("yes, go ahead", later=True), {"approval": {"said": "yes, go ahead"}}))
@@ -213,11 +214,14 @@ class G7NoSlot(Base):
         self.assertEqual(self.api.bodies("/api/booking/links"), [])
         self.assertEqual(self.api.bodies("/api/booking/emails"), [])
 
-    def test_no_time_and_no_open_slot_says_how(self):
-        with self.assertRaises(API.ToolError) as e:
-            self.hold({"email": {}}, day=LATER)
-        self.assertEqual(e.exception.code, "when_invalid")
-        self.assertIn("open_slot", e.exception.message)
+    def test_no_time_and_no_open_slot_is_agapis_question(self):
+        # Sasha 381 · CR 196: a time they didn't give is AgAPI's to name (term_not_given) and hers to ask — "whenever they have space" is
+        # their answer to it (open_slot then), never a time picked for them
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        fake = use_fake_agapi(self)
+        out = self.hold({"email": {}}, day=LATER)
+        self.assertEqual((out["status"], out["ask"]), ("need_term", "What time?"))
+        self.assertNotIn("venue.prepare_booking", fake.ops())
 
     def test_a_given_time_wins_over_open_slot(self):   # Sasha 319 · the slot goes to AgAPI's booking record (the one sender)
         from agapi import venue_submit as VS
@@ -246,7 +250,7 @@ class G8HotelOnTheLadder(Base):
         from tests.test_s254_handle_it_live import use_fake_agapi
         fake = use_fake_agapi(self)
         out = self.hold(self.HOTEL, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
-        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("awaiting_yes", "agapi", "request_email"))
+        self.assertEqual((out["status"], out["route"], out["rules"]["action"]), ("requested", "agapi", "request_email"))   # Sasha 381
         self.assertEqual(fake.body("venue.prepare_booking")["stay"], {"nights": 2})
         self.assertEqual(self.api.bodies("/api/booking/emails"), [])
         VN._HELD.pop(ACCT, None)
@@ -283,8 +287,8 @@ class G8HotelOnTheLadder(Base):
                          "facts": [], "rungs": [{"rung": "link", "available": True, "fact_index": 1, "value": "SynXis"}]}
         VN._READS.pop(ACCT, None)
         self.addCleanup(VN._READS.pop, ACCT, None)
-        run(VN.hold_venue(self.ctx(), {"name": "Hotel Test", "city": "Madrid", "country": "ES", "what": "hotel", "party": 2,
-                                       "day": LATER, "nights": 2}))
+        run(VN.hold_venue(self.ctx(f"book Hotel Test on {LATER} for 2"), {"name": "Hotel Test", "city": "Madrid", "country": "ES",
+                                                                          "what": "hotel", "party": 2, "day": LATER, "nights": 2}))
         self.assertEqual(len(self.api.bodies("/api/booking/venues/read")), 1)
         self.assertEqual(self.api.bodies("/api/booking/links")[0]["read_id"], "r-h")
         self.assertNotIn(ACCT, API._HELD)                                                            # no TEST stay held
@@ -307,8 +311,8 @@ class G8HotelOnTheLadder(Base):
         from tests.test_s254_handle_it_live import use_fake_agapi
         use_fake_agapi(self)
         out = self.hold({"email": {}}, venue="Anantara", country="VN", what="hotel", day=LATER, nights=2)
-        self.assertIn("it's booked only when they confirm", out["what_happens"])
-        self.assertEqual(self.yes()["status"], "requested")
+        self.assertEqual(out["status"], "requested")                                                # Sasha 381 · on the instruction
+        self.assertTrue(out["line"].endswith(V.REQUESTED), out["line"])
 
     def test_the_room_email(self):
         """travel_s132 Hotels.test_the_room_email: the room email's particulars (N nights).
@@ -325,7 +329,7 @@ class G8HotelOnTheLadder(Base):
         self.hold(hotel, venue="Hotel Test Madrid", what="hotel", day=LATER, nights=2)
         VN._HELD[ACCT]["at"] -= timedelta(minutes=1)
         with mock.patch.object(VN, "_read", reader(hotel, "Hotel Test Madrid")):
-            again = run(VN.hold_venue(self.ctx(), {"name": "Hotel Test Madrid", "city": "Madrid", "country": "ES", "what": "hotel",
+            again = run(VN.hold_venue(self.ctx(f"book Hotel Test Madrid on {LATER} for 2"), {"name": "Hotel Test Madrid", "city": "Madrid", "country": "ES", "what": "hotel",
                                                    "party": 2, "day": LATER, "nights": 2}))
         self.assertIn("same_read_back", again)
         self.assertEqual(len(self.api.bodies("/api/booking/links")), 1)
@@ -502,10 +506,11 @@ class OldS1Untouched(Base):
         p.start()
         self.addCleanup(p.stop)
 
-    def test_no_time_is_when_invalid_as_before(self):
-        with self.assertRaises(API.ToolError) as e:
-            self.hold({"email": {}}, open_slot="quote", day=LATER)
-        self.assertEqual((e.exception.code, e.exception.message), ("when_invalid", "day is YYYY-MM-DD and time HH:MM"))
+    def test_no_time_is_asked_as_everywhere(self):   # Sasha 381 · Tyler's 20:20 decision is every surface's: old S1 too
+        from tests.test_s254_handle_it_live import use_fake_agapi
+        use_fake_agapi(self)
+        out = self.hold({"email": {}}, open_slot="quote", day=LATER)
+        self.assertEqual((out["status"], out["ask"]), ("need_term", "What time?"))
 
     def test_nothing_of_sashas_own_reaches_the_venue(self):   # Sasha 319 · old S1 too: AgAPI's acts are the one sender
         LY.find_for.return_value = ITEM

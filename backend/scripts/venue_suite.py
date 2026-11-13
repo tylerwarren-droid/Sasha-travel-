@@ -1,15 +1,17 @@
 """Sasha 211 Part B · VENUE BOOKINGS ON THE AGENT, every route — part of the deploy gate (scripts/gate.py).
 
-  REAL, in-process, on a scratch guest: our own Sasha Test Venue (its form) — read → hold_venue (the read-back) → book_venue
-  refused in the same turn → the yes in the next turn → their confirmation page → CONFIRMED in Pacioli's rows (get_status),
-  then cancel_venue's two steps. No real venue is contacted.
+  Sasha 381 · THE INSTRUCTION IS THE APPROVAL (Tyler, 12 Nov 20:11): no yes card for a venue — a term not given is asked (only that
+  term), and the complete instruction is acted on in the same turn, said in ONE line ("Booking now: …" + Booked / Requested).
+  REAL, in-process, on a scratch guest signed in (the in-app session the instruction is proved by): our own Sasha Test Venue (its
+  form) — read → hold_venue with the party missing (asked, nothing prepared) → their answer (acted on: AgAPI's act) → the same
+  instruction again (never twice) → CONFIRMED in Pacioli's rows (get_status), then cancel_venue's two steps. No real venue is contacted.
   EVERY OTHER ROUTE, against a stand-in for the booking API (it records what was asked of it; nothing leaves the process):
   the booking rules' answers (the ONE question for a form; > 48 h a request; within 48 h a call), the platform page to the phone,
   the email, the call, the form filled in the cloud browser with "Tap to finish" on the phone (the founder's override), the
   WhatsApp-only draft — and never a send without the person's explicit yes in a LATER turn.
 """
 from __future__ import annotations
-from kanoe_contract import ERR  # Sasha 374 · THE ONE generated contract (CR 186)
+from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
 import os
@@ -22,9 +24,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
 
-def _ctx(a: str, said: str = "", via: str = "page"):
-    from agapi import v0 as API
-    return API.Ctx(account=a, mode="test", user_said=said, via=via)   # Sasha 326 · via "wa": asked on WhatsApp
+def _ctx(a: str, said: str = "", via: str = "page", before: str = "", session: str = "venue-suite-real"):
+    from agapi import v0 as API   # Sasha 381 · CR 196: a conversation's turn — its id is the instruction's proof in the app
+    return API.Ctx(account=a, mode="test", user_said=said, via=via, said_before=before, session=session)   # Sasha 326 · via "wa": asked on WhatsApp
+
+
+def _words(args: dict) -> str:
+    """Sasha 381 · the person's instruction in their own words: every term of the booking given."""
+    when = (f" on {args['day']}" if args.get("day") else "") + (f" at {args['time']}" if args.get("time") else "")
+    return f"book {args.get('name')}{when} for {args.get('party')}"
 
 
 async def real_test_venue(a: str) -> None:
@@ -42,19 +50,25 @@ async def real_test_venue(a: str) -> None:
     ok("VENUE 1 (Sherlock): read_booking_route says AgAPI's ONE decision for it — their own form, Kanoe sends it (Sasha 378 · CR 188)",
        r.get("ok") and r["result"]["routes"] == ["send_form"] and (r["result"].get("decision") or {}).get("route") == "send_form",
        str(r.get("error") or r.get("result"))[:200])
-    turn1 = _ctx(a, "Book it, the form please")
-    h = await API.call(turn1, "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form", "idempotency_key": "venue-suite-h1"})
-    ok("VENUE 2 (Austen): hold_venue → AgAPI's read-back, nothing sent", h.get("ok") and h["result"]["status"] == "awaiting_yes" and h["result"]["route"] == "agapi",
+    first = f"Book the Sasha Test Venue on {day} at 21:00, the form please"
+    h = await API.call(_ctx(a, first), "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form",
+                                                     "idempotency_key": "venue-suite-h1"})
+    ok("VENUE 2 (Austen): the party they didn't give is ASKED — only that — never 2, nothing prepared (Sasha 381)",
+       h.get("ok") and h["result"]["status"] == "need_term" and h["result"]["ask"] == "For how many people?",
        str(h.get("error") or h.get("result"))[:200])
-    same = await API.call(turn1, "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": "venue-suite-b0"})
-    ok("VENUE 3: a yes in the SAME turn as the read-back books nothing", (same.get("error") or {}).get("code") == "read_back_first", str(same)[:160])
-    no = await API.call(_ctx(a, "hmm, maybe"), "book_venue", {"approval": {"said": "hmm, maybe"}, "idempotency_key": "venue-suite-b1"})
-    ok("VENUE 4: without an explicit yes, nothing is sent", (no.get("error") or {}).get("code") == ERR.NO_EXPLICIT_YES, str(no)[:160])
-    b = await API.call(_ctx(a, "Yes, book it"), "book_venue", {"approval": {"said": "Yes, book it"}, "idempotency_key": "venue-suite-b2"})
+    b = await API.call(_ctx(a, "for 2", before=first), "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form",
+                                                                      "idempotency_key": "venue-suite-h2"})
     res = b.get("result") or {}
-    # Sasha 319 · ONE SENDER: the yes goes through AgAPI's act (venue.submit_booking) — never Sasha's own form send
-    ok("VENUE 5 (our test venue): the yes in the next turn → AgAPI's act → requested, until the venue's answer says more",
-       b.get("ok") and res.get("status") in ("requested", "confirmed") and bool(res.get("act_id")), str(b.get("error") or res)[:220])
+    # Sasha 319 · ONE SENDER · Sasha 381: their answer completes the instruction — AgAPI's act, in the same turn, Tyler's ONE line
+    ok("VENUE 3 (our test venue): the instruction is the approval → AgAPI's act → requested, said “Booking now: …”",
+       b.get("ok") and res.get("status") in ("requested", "confirmed") and bool(res.get("act_id"))
+       and str(res.get("line") or "").startswith("Booking now: "), str(b.get("error") or res)[:220])
+    again = await API.call(_ctx(a, "for 2", before=first), "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form",
+                                                                          "idempotency_key": "venue-suite-h3"})
+    ok("VENUE 4: the same booking again in the conversation is never sent twice",
+       again.get("ok") and again["result"]["status"] == "already_sent", str(again.get("error") or again.get("result"))[:160])
+    no = await API.call(_ctx(a, "Yes, send it"), "book_venue", {"approval": {"said": "Yes, send it"}, "idempotency_key": "venue-suite-b1"})
+    ok("VENUE 5: no card waits for a yes — “yes” alone sends nothing", not (no.get("result") or {}).get("act_id"), str(no)[:160])
     st = await API.call(_ctx(a), "get_status", {})
     vb = (st.get("result") or {}).get("venues") or []
     ok("VENUE 6 (Pacioli): get_status lists it on its day as AgAPI's act — never booked before the venue says so",
@@ -144,86 +158,88 @@ async def routes_offline(a: str) -> None:
     later = (date.today() + timedelta(days=6)).isoformat()
     v = {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": "dinner", "party": 2, "place_id": "ChIJcasagatevs"}
 
-    async def two_turns(args: dict, key: str, via: str = "page") -> tuple:
-        VN._SENT.pop(a, None)   # Sasha 319 · each route is its own booking here (AgAPI's path answers a repeated yes "already sent")
+    async def instruct(args: dict, key: str, via: str = "page") -> dict:
+        """Sasha 381 · ONE turn: their whole instruction (every term theirs) → hold_venue → AgAPI's act, or its hand-over."""
+        VN._SENT.pop(a, None)
         VN._HELD.pop(a, None)
-        h = await API.call(_ctx(a, "book it", via), "hold_venue", {**v, **args, "idempotency_key": key + "h"})
-        b = await API.call(_ctx(a, "Yes", via), "book_venue", {"approval": {"said": "Yes"}, "idempotency_key": key + "b"})
-        return h, b
+        # each route is its own conversation (the same booking twice in ONE conversation is "already sent" — VENUE 4)
+        return await API.call(_ctx(a, _words({**v, **args}), via, session=f"venue-suite-{key}-{uuid.uuid4().hex[:8]}"), "hold_venue",
+                              {**v, **args, "idempotency_key": key + "h"})
     try:
         # Sasha 378 · CR 188 · every route below is AgAPI's ONE decision (venue.profile → handoff.decide), followed — never Sasha's
         VN._HELD.pop(a, None)
         VN._read = read_with({"link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}}, PHONE)   # a platform venue + its own email
-        q = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-q1"})
-        ok("VENUE ROUTE · their own email AND a platform → AgAPI's request (CR 188: own channels first), its read-back, nothing sent",
-           q.get("ok") and q["result"]["status"] == "awaiting_yes" and q["result"]["route"] == "agapi"
+        q = await instruct({"day": later, "time": "21:00"}, "vo-q1")
+        ok("VENUE ROUTE · their own email AND a platform → AgAPI's request (CR 188: own channels first), sent on the instruction",
+           q.get("ok") and q["result"]["status"] == "requested" and q["result"]["route"] == "agapi"
            and not any(p.endswith("/send") for _m, p, _b in fake.calls), str(q.get("result"))[:200])
         VN._HELD.pop(a, None)
         VN._read = read_with({"phone": {"fact_index": 0}}, PHONE)
-        q2 = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": soon[0], "time": soon[1], "idempotency_key": "vo-q2"})
-        ok("VENUE ROUTE · their phone → AgAPI's call act, its read-back first", q2.get("ok") and q2["result"]["status"] == "awaiting_yes"
-           and q2["result"]["route"] == "agapi_call", str(q2.get("error") or q2.get("result"))[:200])
+        q2 = await instruct({"day": soon[0], "time": soon[1]}, "vo-q2")
+        ok("VENUE ROUTE · their phone → AgAPI's call act on the instruction, dialled only from its plan (simulated here)",
+           q2.get("ok") and q2["result"]["status"] == "calling" and q2["result"]["route"] == "agapi_call", str(q2.get("error") or q2.get("result"))[:200])
         VN._read = read_with({"form": {}, "link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}})
-        d = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-q3"})
-        ok("VENUE ROUTE · their own form → AgAPI's send_form: its read-back for the ONE yes — no question of Sasha's own",
-           d.get("ok") and d["result"]["status"] in ("awaiting_yes", "yes_heard") and d["result"]["route"] == "agapi" and "options" not in d["result"],
+        d = await instruct({"day": later, "time": "21:00"}, "vo-q3")
+        ok("VENUE ROUTE · their own form → AgAPI's send_form on the instruction — no card, no question of Sasha's own",
+           d.get("ok") and d["result"]["status"] in ("requested", "confirmed") and d["result"]["route"] == "agapi" and "options" not in d["result"],
            str(d.get("result"))[:160])
         VN._read = read_with({"link": {"value": "TheFork"}})
-        h, b = await two_turns({"day": later, "time": "21:00", }, "vo-p", via="wa")
+        h = await instruct({"day": later, "time": "21:00"}, "vo-p", via="wa")
         hp = h.get("result") or {}
         ok("VENUE ROUTE · a platform the policy keeps closed (TheFork), on WhatsApp: AgAPI's hand-over at once, in its words — never booked",
            h.get("ok") and hp.get("status") == "page_on_phone" and hp.get("route") == "platform" and not hp.get("booked")
            and "You press Book there" in str(hp.get("say")), str(hp or h.get("error"))[:200])
         nt = len(taps)
-        h, b = await two_turns({"day": later, "time": "21:00", }, "vo-p2")
+        h = await instruct({"day": later, "time": "21:00"}, "vo-p2")
         hp = h.get("result") or {}
         ok("VENUE ROUTE · the same on S2: S2's card only — nothing to his WhatsApp (326)",
            h.get("ok") and hp.get("status") in ("page_link", "page_on_phone") and len(taps) == nt and not hp.get("booked"),
            f"{hp or h.get('error')} taps={taps[nt:]}")
         own = lambda: [p for _m, p, _b in fake.calls if p.startswith(("/api/booking/emails", "/api/booking/calls", "/api/booking/forms"))]
         VN._read = read_with({"email": {}, "phone": {"fact_index": 0}}, PHONE)
-        h, b = await two_turns({"day": later, "time": "21:00"}, "vo-e")
-        ok("VENUE ROUTE · the request: AgAPI's act on the yes, Requested until they reply — never Sasha's own email (319)",
+        b = await instruct({"day": later, "time": "21:00"}, "vo-e")
+        ok("VENUE ROUTE · the request: AgAPI's act on the instruction, Requested until they reply — never Sasha's own email (319)",
            b.get("ok") and b["result"]["status"] == "requested" and b["result"].get("act_id") and not own(), str(b.get("error") or b.get("result"))[:160])
         VN._read = read_with({"phone": {"fact_index": 0}}, PHONE)
-        h, b = await two_turns({"day": soon[0], "time": soon[1]}, "vo-c")
-        ok("VENUE ROUTE · call: AgAPI's call act on the yes, dialled only from its plan (simulated here)",
+        b = await instruct({"day": soon[0], "time": soon[1]}, "vo-c")
+        ok("VENUE ROUTE · call: AgAPI's call act on the instruction, dialled only from its plan (simulated here)",
            b.get("ok") and b["result"]["status"] == "calling" and not own(), str(b.get("error") or b.get("result"))[:160])
         VN._read = read_with({"form": {}, "link": {"value": "TheFork"}, "email": {}, "phone": {"fact_index": 0}}, PHONE)
-        h, b = await two_turns({"day": later, "time": "21:00"}, "vo-f")
+        b = await instruct({"day": later, "time": "21:00"}, "vo-f")
         ok("VENUE ROUTE · “handle it” — their form: AgAPI's act sends it (never Sasha's cloud-browser fill, 319)",
            b.get("ok") and b["result"]["status"] in ("requested", "confirmed") and not own(), str(b.get("error") or b.get("result"))[:160])
         VN._HELD.pop(a, None)
         VN._read = read_with({"whatsapp": {"value": "+34 600 000 211"}})
-        w = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-w"})
+        w = await instruct({"day": later, "time": "21:00"}, "vo-w")
         ok("VENUE ROUTE · WhatsApp-only: AgAPI's decision (they send it from their phone) followed — nothing sent by Sasha",
            w.get("ok") and w["result"].get("route") != "agapi" and not w["result"].get("booked") and not own(),
            str(w.get("error") or w.get("result"))[:200])
         # Sasha 378 · CR 188 · a platform the policy permits (CoverManager — channel-policy/7): Sasha books it on the yes (platform_book)
         VN._read = read_with({"link": {"value": "CoverManager"}})
-        h, b = await two_turns({"day": later, "time": "11:00", "what": "a massage", "name": "Spa Gate"}, "vo-spa1", via="wa")
+        h = await instruct({"day": later, "time": "11:00", "what": "a massage", "name": "Spa Gate"}, "vo-spa1", via="wa")
         hp = h.get("result") or {}
-        ok("VENUE ROUTE · a permitted platform: AgAPI's platform_book — its read-back, the yes, AgAPI's act (never Sasha's own send)",
-           h.get("ok") and hp.get("status") == "awaiting_yes" and hp.get("route") == "platform_book" and b.get("ok") and not own(),
-           f"{hp or h.get('error')} → {b.get('error') or b.get('result')}"[:240])
+        ok("VENUE ROUTE · a permitted platform: AgAPI's platform_book on the instruction — AgAPI presses Book, Booked with its reference",
+           h.get("ok") and hp.get("status") == "confirmed" and hp.get("reference") == "GATE-PB" and not own(),
+           f"{hp or h.get('error')}"[:240])
         VN._read = read_with({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}])
-        h, b = await two_turns({"day": later, "time": "11:00", "what": "a massage", "name": "Spa Gate"}, "vo-spa2")
+        h = await instruct({"day": later, "time": "11:00", "what": "a massage", "name": "Spa Gate"}, "vo-spa2")
         ok("VENUE ROUTE · a spa's own form behind a CAPTCHA: never zero-touch (R13) — their page, never a form Sasha fills (319)",
            h.get("ok") and h["result"].get("status") != "tap_to_finish" and not own(), str(h.get("error") or h.get("result"))[:160])
         # a TATTOO studio that books only on Instagram: AgAPI decides none — THE FLOOR (their page), never booked; nothing sent
         VN._read = read_with({"instagram": {"value": "inkgate.madrid"}})
-        h = await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "17:00", "what": "a tattoo consultation",
-                                                              "name": "Ink Gate", "idempotency_key": "vo-tat-h"})
+        h = await instruct({"day": later, "time": "17:00", "what": "a tattoo consultation", "name": "Ink Gate"}, "vo-tat")
         res = h.get("result") or {}
         ok("VENUE ROUTE · a tattoo studio on Instagram only: AgAPI's none — their page (the floor), never booked, nothing sent",
            h.get("ok") and res.get("status") in ("page_link", "page_on_phone", "awaiting_yes") and not res.get("booked") and not own(),
            str(res or h.get("error"))[:200])
-        n0 = len(fake.calls)
+        from scripts import venue_engine_fake as VF
+        n0 = len(VF.CALLS)
         VN._read = read_with({"email": {}})
-        await API.call(_ctx(a, "book it"), "hold_venue", {**v, "day": later, "time": "21:00", "idempotency_key": "vo-n"})
-        nb = await API.call(_ctx(a, "no, wait"), "book_venue", {"approval": {"said": "no, wait"}, "idempotency_key": "vo-nb"})
-        ok("VENUE ROUTE · “no, wait” never sends", (nb.get("error") or {}).get("code") == ERR.NO_EXPLICIT_YES
-           and not any(p.endswith("/send") for _, p, _ in fake.calls[n0:]), str(nb.get("error")))
+        nt = await API.call(_ctx(a, "book Casa Gate for 2 this week at 21:00"), "hold_venue", {**v, "day": later, "time": "21:00",
+                                                                                     "idempotency_key": "vo-n"})
+        ok("VENUE ROUTE · a day they didn't give: AgAPI names it (term_not_given), she asks ONLY it — nothing prepared, nothing sent (381)",
+           nt.get("ok") and nt["result"]["status"] == "need_term" and nt["result"]["ask"] == "Which day?"
+           and not {OP.VENUE_PREPARE_BOOKING, OP.VENUE_SUBMIT_BOOKING} & set(VF.CALLS[n0:]), str(nt.get("error") or nt.get("result"))[:160])
     finally:
         GW.api, GW.tap_platform, VN._read, WB.trip_day_words, GW._tell, GW.STORE, VN.engine_channel = real
         PA.uninstall(a)
@@ -258,12 +274,25 @@ async def _main() -> int:
         ok("venue suite: scratch guest", False, why)
         return 1
     a = g["account_id"]
+    # Sasha 381 · CR 196 · the scratch guest's instruction is PROVED as production proves it: in the app its turn (signed in), on WhatsApp
+    # its signed message — AgAPI is the gate's double here, so the proof is signed with the server's own secret, or a scratch one only for
+    # this run when the server has none
+    from agapi import venue_submit as VS
+    tok = VS.TAP.set({"kind": "supabase", "token": "venue-suite"})
+    wtok = VS.WA.set({"wa_id": "447700900211", "message_id": "SM" + uuid.uuid4().hex})
+    scratch = not os.getenv("SASHA_AGAPI_TAP_SECRET")
+    if scratch:
+        os.environ["SASHA_AGAPI_TAP_SECRET"] = "venue-suite-" + uuid.uuid4().hex
     try:
         await real_test_venue(a)
         await routes_offline(a)
     except Exception as e:
         ok("the venue suite itself", False, f"{type(e).__name__}: {e}")
     finally:
+        VS.TAP.reset(tok)
+        VS.WA.reset(wtok)
+        if scratch:
+            os.environ.pop("SASHA_AGAPI_TAP_SECRET", None)
         try:
             s, _ = await ops.ADMIN("DELETE", f"/admin/users/{a}", {})
             print(f"scratch guest {a[:8]} deleted (HTTP {s})")

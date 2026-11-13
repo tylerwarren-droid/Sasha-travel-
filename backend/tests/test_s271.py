@@ -39,15 +39,12 @@ PLAN = {"call_id": "vcp_r6", "reason": "R6", "phone": "+34910000000", "source": 
 class TheStayIsTheEnginesAct(Base):
     def test_a_stay_is_prepared_with_its_stay_and_the_hotels_number(self):
         fake = use_fake_agapi(self)
-        out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=96, what="a room", venue="Hotel Gate", nights=3, room="a double")
-        self.assertEqual((out["status"], out["route"]), ("awaiting_yes", "agapi"))
+        got = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=96, what="a room", venue="Hotel Gate", nights=3, room="a double")
+        self.assertEqual((got["status"], got["route"]), ("requested", "agapi"))            # Sasha 381 · sent on the instruction
         body = fake.body("venue.prepare_booking")
         self.assertEqual((body["stay"], body["party"], body["call"]), ({"nights": 3, "room": "a double"}, 2, {"phone": "+34910000000", "source": "venue"}))
         self.assertNotIn("notes", body)                                                     # the stay says it — never free text
-        self.assertEqual(out["read_back"][0], "I'll send Casa Gate's own booking form: 2 people, under Alex Gate.")   # the ENGINE's read-back
         self.assertEqual(self.api.bodies("/api/booking/emails"), [])                        # never Sasha's own room email
-        got = self.yes()
-        self.assertEqual(got["status"], "requested")
         self.assertNotIn("call", got)                                                       # far out: a request, no call yet
 
     def test_a_table_carries_no_stay_and_no_number(self):
@@ -65,11 +62,11 @@ class TheStayIsTheEnginesAct(Base):
             dialled.append((res["act_id"], res["call_plan"]["call_id"]))
             return {"status": "simulated"}
         with mock.patch.object(VC, "dial", dial), mock.patch.object(VC, "again", mock.AsyncMock(side_effect=AssertionError("Sasha's own R6"))):
-            self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=10, what="a room", venue="Hotel Gate", nights=1)
-            got = self.yes()
-        self.assertEqual((got["line"], got["call"]["status"], got["call"]["reason"]), (R6_SAY, "calling", "R6"))
+            got = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=10, what="a room", venue="Hotel Gate", nights=1)
+        self.assertEqual((got["call"]["status"], got["call"]["reason"]), ("calling", "R6"))
+        self.assertTrue(got["line"].endswith(V.REQUESTED), got["line"])                      # Sasha 381 · Tyler's ONE line
         self.assertEqual(dialled, [("act_1", "vcp_r6")])
-        self.assertEqual(fake.ops().count("venue.submit_booking"), 2)                      # the read-back, then the ONE send
+        self.assertEqual((fake.ops().count("approvals.mandate"), fake.ops().count("venue.submit_booking")), (1, 1))   # the instruction, ONE send
 
     def test_no_booking_service_a_stay_is_said_never_sasha_s_own_email(self):
         async def none(*a, **k):

@@ -1,5 +1,5 @@
 {
- "version": "booking-rules/3.0 · 2026-11-12",
+ "version": "booking-rules/4.0 · 2026-11-12",
  "vectors": [
   {
    "rule": "R1",
@@ -3414,7 +3414,7 @@
   },
   {
    "rule": "R14",
-   "name": "3.0 · Peñalver-shaped: CoverManager + their own email + their phone, 3 days away → their email, Kanoe sends (own first)",
+   "name": "4.0 · Peñalver-shaped: CoverManager + their own email + their phone, 3 days away → Sasha books CoverManager (instant first)",
    "fn": "decide",
    "input": {
     "venue": {
@@ -3453,12 +3453,13 @@
     }
    },
    "expect": {
-    "action": "request_email"
+    "action": "fill_platform_form",
+    "!action": "request_email"
    }
   },
   {
    "rule": "R14",
-   "name": "3.0 · a platform + their own phone only, within 48 h → a call (own phone before the platform)",
+   "name": "4.0 · a platform Sasha books + their own phone, within 48 h → the platform (instant before a call)",
    "fn": "decide",
    "input": {
     "venue": {
@@ -3493,12 +3494,13 @@
     }
    },
    "expect": {
-    "action": "ask_call"
+    "action": "fill_platform_form",
+    "!action": "ask_call"
    }
   },
   {
    "rule": "R14",
-   "name": "3.0 · a platform + their own phone only, 3 days away → wait, then call (never the platform)",
+   "name": "4.0 · a platform Sasha books + their own phone, 3 days away → the platform (never wait to call)",
    "fn": "decide",
    "input": {
     "venue": {
@@ -3533,7 +3535,8 @@
     }
    },
    "expect": {
-    "action": "wait"
+    "action": "fill_platform_form",
+    "!action": "wait"
    }
   },
   {
@@ -3725,6 +3728,261 @@
    "expect": {
     "action": "hand_over_platform_link",
     "say": "platform"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "CR 195 · a platform Sasha books comes BEFORE their email and phone (Peñalver)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/x",
+       "host": "www.covermanager.com",
+       "name": "CoverManager",
+       "submit_ok": true
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34915550195"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-12T10:00:00Z",
+     "booking_at": "2026-11-15T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "fill_platform_form",
+    "!action": "request_email"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "CR 195 · …in any order the channels are listed",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      },
+      {
+       "kind": "phone",
+       "value": "+34915550195"
+      },
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/x",
+       "host": "www.covermanager.com",
+       "name": "CoverManager",
+       "submit_ok": true
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-12T10:00:00Z",
+     "booking_at": "2026-11-15T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "fill_platform_form"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "CR 195 · their own form Sasha can send comes first (it confirms on their page)",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/x",
+       "host": "www.covermanager.com",
+       "name": "CoverManager",
+       "submit_ok": true
+      },
+      {
+       "kind": "form",
+       "value": "https://venue.example/reserva"
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-12T10:00:00Z",
+     "booking_at": "2026-11-15T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "ask_one_question",
+    "!action": "fill_platform_form"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "CR 195 · a platform Sasha can't book (closed by policy) never comes before their email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/x",
+       "host": "www.covermanager.com",
+       "name": "CoverManager",
+       "submit_ok": false
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-12T10:00:00Z",
+     "booking_at": "2026-11-15T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "request_email"
+   }
+  },
+  {
+   "rule": "R14",
+   "name": "CR 195 · a platform with a step only the person can do never comes before their email",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/x",
+       "host": "www.covermanager.com",
+       "name": "CoverManager",
+       "submit_ok": true,
+       "captcha": true
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-12T10:00:00Z",
+     "booking_at": "2026-11-15T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "live",
+      "calls": "on"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "request_email"
+   }
+  },
+  {
+   "rule": "access",
+   "name": "CR 195 · a test person never reaches the platform first either",
+   "fn": "decide",
+   "input": {
+    "venue": {
+     "type": "restaurant",
+     "test": false,
+     "channels": [
+      {
+       "kind": "platform",
+       "value": "https://www.covermanager.com/reserve/x",
+       "host": "www.covermanager.com",
+       "name": "CoverManager",
+       "submit_ok": true
+      },
+      {
+       "kind": "email",
+       "value": "reservas@venue.example"
+      }
+     ]
+    },
+    "when": {
+     "now": "2026-11-12T10:00:00Z",
+     "booking_at": "2026-11-15T21:00:00Z"
+    },
+    "person": {
+     "access": {
+      "mode": "test"
+     }
+    },
+    "state": {
+     "prepared_link": "https://agapi.kanoe.ai/prepared/x"
+    }
+   },
+   "expect": {
+    "action": "prepared_link",
+    "say": "not_live"
    }
   }
  ]

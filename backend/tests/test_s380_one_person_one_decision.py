@@ -38,15 +38,14 @@ class OnePersonOneDecision(Base):
             out = self.hold({"email": ALL4["email"], "phone": ALL4["phone"]})       # AgAPI's decision: their email, Kanoe sends it
             seen[surface] = (out["status"], out["route"], out["rules"]["action"])
         self.assertEqual(seen["wa"], seen["s2"])
-        self.assertEqual(seen["s2"], ("awaiting_yes", "agapi", "request_email"))       # the request, read back for the ONE yes
+        self.assertEqual(seen["s2"], ("requested", "agapi", "request_email"))          # Sasha 381 · AgAPI's request, sent on the instruction
 
     def test_a_refusal_hands_over_their_page_and_keeps_agapis_reason(self):
         why = "I can't send this one for you (this person is a test person — a real venue is never contacted for them). The link I prepared is yours to finish — open it and confirm."
         self.agapi.submit.update(status="not_allowed", submitted=False, act_id=None, say=why)
-        self.hold({"email": ALL4["email"]})
         with self.assertLogs("agapi.venues", "WARNING") as logs:
-            got = self.yes()
-        self.assertIn(got["status"], ("page_link", "page_on_phone", "not_contacted"), got)        # handed over (Sasha 288), nothing sent
+            got = self.hold({"email": ALL4["email"]})
+        self.assertIn(got["status"], ("page_link", "page_on_phone", "not_contacted", "not_allowed"), got)   # handed over (Sasha 288), nothing sent
         self.assertNotIn("on this account", str(got))
         self.assertNotIn("can't", (got.get("line") or got.get("say") or "").lower())
         self.assertTrue(any("test person" in l for l in logs.output), logs.output)      # the reason, kept

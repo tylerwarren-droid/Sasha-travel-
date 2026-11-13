@@ -161,7 +161,7 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             ["tests.test_s262"]),
     # Sasha 263 · row 914 (S2 item 10): the yes sent item 7's older booking — 262's second memory (_ASKED_ROUTE) is gone; the in-app
     # yes sends only the latest unanswered card (read_back_id + sha, in_app_tap); no card → "There's nothing waiting to send."
-    "T45": ("item 10: \"Yes, send it\" sends exactly the card on screen; a prefilled form or no card → nothing sent",
+    "T45": ("item 10: each instruction books the slot IT gave (Sasha 381: no card); \"Yes, send it\" with nothing waiting → nothing sent",
             ["tests.test_s263"]),
     # Sasha 264 · Tyler's beta (14 Oct) + rows 928/929: no silence over voice.PROGRESS_S; an empty form never called filled; a platform
     # page always the card (one line, one button, its phone failure said); the payment is the trip's one figure; short, never twice;
@@ -312,8 +312,8 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "a calendar source (Sasha 313)",
             ["tests.test_s313"]),
     "T89": ("one instruction, one action: his complete instruction (a booking naming venue, day, time and party; \"cancel my <venue> "
-            "booking\" naming exactly one) IS the approval from his verified WhatsApp / the app; a short read-back only when Sasha filled "
-            "a term; no SMS-link fallback, never \"I've sent you a link\" unless one went (Sasha 314)",
+            "booking\" naming exactly one) IS the approval from his verified WhatsApp / the app; no short read-back (Sasha 381: a term "
+            "not given is asked); no SMS-link fallback, never \"I've sent you a link\" unless one went (Sasha 314)",
             ["tests.test_s314"]),
     "T90": ("ONE decision per inbound WhatsApp about its product, and it is AgAPI's, on the FIRST call (CR 192 · Sasha 379b): AD's words → "
             "matched, AD's answer the only one; unmatched → Sasha (her own tools by their word, else travel); no memory of a choice, no "
@@ -323,6 +323,11 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "\"opens on\" the slot only when the link carries it, never \"filled\", no way-back line and nothing after it on WhatsApp; his "
             "\"booked\" answered in one line on its record (Sasha 316)",
             ["tests.test_s316"]),
+    "T92": ("THE INSTRUCTION IS THE APPROVAL for a venue booking (Tyler, 12 Nov 20:11): no yes card — a term the person didn't give is "
+            "asked, only that term, never guessed (20:20); the complete instruction is acted on in the same turn (in the app its proof, "
+            "CR 196; on WhatsApp its signed message), ONCE, said in ONE line \"Booking now: <AgAPI's venue (CR 194)>, <N> people, <date> at "
+            "<time>.\" + Booked / Requested (Sasha 381)",
+            ["tests.test_s381_instruction_is_the_approval"]),
 }
 
 _RUNNER = """

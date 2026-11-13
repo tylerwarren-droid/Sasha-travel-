@@ -134,9 +134,9 @@ class NewChatClearsTheConversationOnly(unittest.TestCase):
 # (docs/sasha/S-329-cr161.md): the follow-up reads it from AgAPI
 # Sasha 378 · CR 188 · booking-rules/3.0, byte for byte from AgAPI cr/188's agapi_service/booking_rules (its SHA256SUMS) — words and
 # vectors only: Sasha calls no decide of it (tests/test_s378_follows_agapi)
-ROW_965 = {"booking_rules.py": "6d90a8b57542a3f5f8bf50d9304019a313df1188d4e858a9b8bf23bda41eb605",
-           "vectors.json": "1439ca5bf62791807d883b0589883d3fc4a948bf792983efd68f68d3e4aafcd4",
-           "test_booking_rules.py": "5b6aa3de445a70c604c3bddea17cb71de57ed299b7fe1878eeac162ea6801e3e"}
+ROW_965 = {"booking_rules.py": "5e43388d1a39f6b97914c1208d9909c0b5db497634a75afdaa970109f8835a72",
+           "vectors.json": "37fb532216a0f96d6bd63d6f94b895ad824beaa2c3bef19ea3c547b64a81ddc7",
+           "test_booking_rules.py": "5b6aa3de445a70c604c3bddea17cb71de57ed299b7fe1878eeac162ea6801e3e"}   # Sasha 381 · CR 195 (row 1948): booking-rules/4.0, byte for byte from AgAPI cr/196
 PHONE = {"phone": {"fact_index": 0, "value": "+34910000000"}}   # Sasha 378 · AgAPI's decision for it: call
 
 
@@ -145,7 +145,7 @@ class BookingRules2(unittest.TestCase):
         d = BACKEND / "agapi" / "booking_rules"
         for name, want in ROW_965.items():
             self.assertEqual(hashlib.sha256((d / name).read_bytes()).hexdigest(), want, name)
-        self.assertTrue(BR.VERSION.startswith("booking-rules/3"))
+        self.assertTrue(BR.VERSION.startswith("booking-rules/4"))
 
     def test_the_booking_words_are_local(self):
         now = datetime(2026, 10, 14, 10, 0, tzinfo=timezone.utc)
@@ -155,30 +155,16 @@ class BookingRules2(unittest.TestCase):
 
 
 class TheCardIsTheQuestion(T254.Base):
-    def test_gate_a_call_is_its_card_one_ok(self):
-        # Sasha 378 · CR 188: AgAPI decided the call — its read-back on a card with ONE "OK" (no page of Sasha's choosing beside it)
+    def test_gate_a_call_is_placed_on_the_instruction(self):
+        # Sasha 381 · AgAPI decided the call: no card, no OK — the instruction is the approval; the act places it, Tyler's line said by code
         out = self.hold(PHONE, hours=20)
-        self.assertEqual(out["status"], "awaiting_yes")
-        self.assertEqual(out["choices"], list(BD.OK_CHOICES))
+        self.assertEqual(out["status"], "calling")
+        self.assertNotIn("choices", out)
         self.assertIn(("prepare", {"phone": "+34910000000", "source": "venue", "open_now": False}), self.vs_calls)   # the act carries the call
-        self.assertIn(("read_back", "call"), self.vs_calls)                              # the CALL's read-back
-        self.assertEqual(V.read_back_line("hold_venue", {"ok": True, "result": out}), out["ask"])   # said by code, word for word
-        ev = S.render("hold_venue", out, {})
-        self.assertEqual((ev["kind"], ev["read_back_id"], ev["choices"]), ("read_back", "rbk_1", list(BD.OK_CHOICES)))
-        self.assertNotIn("/api/booking/calls", self.api.paths())
-
-    def test_gate_the_tap_is_the_approval_and_only_on_it_is_said(self):
-        self.hold(PHONE, hours=20)
-        VN._HELD[T254.ACCT]["at"] -= timedelta(minutes=1)
-        tok = VS.TAP.set({"kind": "supabase", "token": "t"})
-        try:
-            evs = run(collect(S.card_tap(T254.ACCT, "s254d", "s2", {"read_back_id": "rbk_1", "choice": "call"}, "Call them")))
-        finally:
-            VS.TAP.reset(tok)
-        text = next(e["delta"] for e in evs if e["type"] == "text")
-        self.assertEqual(text, "On it — I'll call them now and let you know.")             # ONLY the act's say
-        self.assertIn(("submit", "rbk_1"), self.vs_calls)
-        self.assertNotIn("/api/booking/calls", self.api.paths())                            # never Sasha's own call
+        self.assertIn(("submit", "mdt_" + "c" * 26), self.vs_calls)                     # ONE submit, approved BY the instruction (CR 196)
+        self.assertEqual(V.yes_line("hold_venue", {"ok": True, "result": out}), out["line"])   # said by code, word for word
+        self.assertTrue(out["line"].startswith("Booking now: Casa Gate, 2 people, ") and out["line"].endswith(V.REQUESTED), out["line"])
+        self.assertNotIn("/api/booking/calls", self.api.paths())                         # never Sasha's own call
 
     def test_a_tap_on_a_card_no_longer_there_sends_nothing(self):
         self.hold(PHONE, hours=20)

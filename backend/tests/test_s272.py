@@ -45,8 +45,7 @@ class TheCallIsGivenOnce(Base):
         fake = use_fake_agapi(self)
         self.hold({"email": ALL4["email"], "phone": {"value": LISTED}}, hours=96, what="a room", venue="Hotel Gate", nights=2,
                   facts=LISTING_FACTS, place_id=PID)
-        self.assertEqual(fake.body("venue.prepare_booking")["call"], {"source": "listing", "place_id": PID})
-        self.yes()
+        self.assertEqual(fake.body("venue.prepare_booking")["call"], {"source": "listing", "place_id": PID})   # acted on the instruction (381)
         for op, body, _a in fake.calls:
             if op != "venue.prepare_booking":
                 self.assertNotIn("call", body, op)                                            # 2: never passed again
@@ -59,8 +58,7 @@ class TheCallIsGivenOnce(Base):
         fake = use_fake_agapi(self)
         self.hold({"email": ALL4["email"], "phone": ALL4["phone"]}, hours=96, what="a room", venue="Hotel Gate", nights=2)
         self.assertEqual(fake.body("venue.prepare_booking")["call"], {"phone": "+34910000000", "source": "venue"})
-        self.yes()
-        self.assertNotIn("call", [b for o, b, _a in fake.calls if o == "venue.submit_booking"][-1])
+        self.assertNotIn("call", [b for o, b, _a in fake.calls if o == "venue.submit_booking"][-1])   # given once, at prepare
 
     def test_call_of_never_reads_the_digits(self):
         rd = {"facts": LISTING_FACTS}
@@ -103,23 +101,20 @@ class SaidFromTheRecord(Base):
         use_fake_agapi(self, {"call_plan": None, "takeover": {"kind": "their_listing", "link": LINK},
                               "say": f"On it — I've emailed Hotel Gate. {BR.PHRASES['no_channel']} {LINK}"})
         with mock.patch.object(VC, "dial", mock.AsyncMock(side_effect=AssertionError("dialled with no number"))):
-            self.hold({"email": ALL4["email"], "phone": {"value": LISTED}}, hours=10, what="a room", venue="Hotel Gate", nights=1,
-                      facts=LISTING_FACTS, place_id=PID)
-            got = self.yes()
-        self.assertEqual(got["call"]["status"], "no_number")
-        self.assertIn(BR.PHRASES["no_channel"], got["line"])
-        self.assertEqual(got["line"].count(LINK), 1)
-        self.assertEqual(got["open"], LINK)
+            got = self.hold({"email": ALL4["email"], "phone": {"value": LISTED}}, hours=10, what="a room", venue="Hotel Gate", nights=1,
+                            facts=LISTING_FACTS, place_id=PID)
+        # Sasha 381 · the email went (a request until they reply): Tyler's ONE line — never a call promised, never a link to finish it
+        self.assertEqual(got["status"], "requested")
+        self.assertTrue(got["line"].endswith(V.REQUESTED), got["line"])
+        self.assertNotIn("call", got["line"].lower())
 
     def test_no_call_from_the_engine_no_call_promised(self):
         # gate D2: her own rules said call AND email; the engine's read-back named no call (their listing shows no number) → the sent line
         use_fake_agapi(self)   # submit_booking: sent, no call_plan, no takeover
         with mock.patch.object(VC, "dial", mock.AsyncMock(side_effect=AssertionError("dialled with no plan"))):
-            self.hold({"email": ALL4["email"], "phone": {"value": LISTED}}, hours=10, what="a room", venue="Hotel Gate", nights=1,
-                      facts=LISTING_FACTS, place_id=PID)
-            self.assertNotIn("call", VN._HELD[ACCT]["rules_say"].lower())                    # Sasha 378: AgAPI's email decision — no call of hers
-            got = self.yes()
-        self.assertEqual(got["line"], BR.PHRASES["sent"] + " " + BR.PHRASES["takeover"])
+            got = self.hold({"email": ALL4["email"], "phone": {"value": LISTED}}, hours=10, what="a room", venue="Hotel Gate", nights=1,
+                            facts=LISTING_FACTS, place_id=PID)
+        self.assertTrue(got["line"].endswith(V.REQUESTED), got["line"])                       # Sasha 381 · Tyler's line
         self.assertNotIn("call", got["line"].lower())
 
     def test_takeover_line_is_the_no_channel_line_and_the_link(self):

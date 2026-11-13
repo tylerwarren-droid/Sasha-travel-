@@ -114,28 +114,25 @@ class TheYesSendsItself(Base):
         self.assertNotIn("approvals.in_app_tap", self.ops())                 # never sent twice
 
 
-class AStaleCard(Base):
+class AStaleReadBack(Base):
+    """Sasha 381 · the booking changed or timed out under the instruction: never "here's the card again" — said, nothing sent, nothing
+    held (the read-back is AgAPI's, approved BY the instruction or not at all — CR 196)."""
     TAP_ERROR = "approval_void"
 
-    def test_the_new_read_back_is_shown_and_asked(self):
-        held = self.hold()
-        r = run(VS.submit(ACCT, held, "Yes, send it."))
-        self.assertEqual(r["error"]["code"], "approval_void")
-        fresh = r["error"]["details"]["fresh"]
-        self.assertIn("(v2)", fresh["lines"][0])
+    def test_said_nothing_sent_nothing_held(self):
+        held = {**self.hold(), "rung": "agapi"}
 
         class Ctx:
             account = ACCT
-        out = run(VN._tap_refused(Ctx(), held, "approval_void", r["error"], "Taverna Sandbox"))
-        self.assertEqual(out["status"], "awaiting_yes")
-        self.assertEqual(out["ask"], V.TAP_SAYS["approval_void"])
-        self.assertEqual(VN._HELD[ACCT]["sha"], "a" * 64)                    # their next yes binds to the NEW card
+        out = run(VN._tap_refused(Ctx(), held, "approval_void", {"code": "approval_void"}, "Taverna Sandbox"))
+        self.assertEqual((out["status"], out["say"]), ("not_sent", V.TAP_SAYS["approval_void"]))
+        self.assertNotIn(ACCT, VN._HELD)
 
 
 class NotTheirSession(Base):
     TAP_ERROR = "approval_untrusted_origin"
 
-    def test_sign_in_again_and_the_card_stays(self):
+    def test_sign_in_and_ask_again_nothing_held(self):
         held = self.hold()
         r = run(VS.submit(ACCT, held, "Yes, send it."))
 
@@ -143,7 +140,7 @@ class NotTheirSession(Base):
             account = ACCT
         out = run(VN._tap_refused(Ctx(), held, r["error"]["code"], r["error"], "Taverna Sandbox"))
         self.assertEqual(out["say"], V.TAP_SAYS["approval_untrusted_origin"])
-        self.assertIn(ACCT, VN._HELD)
+        self.assertNotIn(ACCT, VN._HELD)                                      # Sasha 381 · no card waits
 
 
 class TheFoundersProxySession(Base):

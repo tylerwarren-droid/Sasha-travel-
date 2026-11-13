@@ -312,7 +312,8 @@ async def read_back(account: str, prepared_id: str, route: Optional[str] = None,
 
 
 async def submit(account: str, held: dict, said: str) -> Dict[str, Any]:
-    """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|confirm_number, …}"""
+    """On their yes (a later turn): the approval → venue.submit_booking. → {ok, status ∈ confirmed|sent|failed|not_allowed|confirm_number, …}
+    (A card's yes — the health product's call. A venue booking is instructed: submit_instructed, Sasha 381.)"""
     rid, pid, uid = held["read_back_id"], held["prepared_id"], held.get("end_user") or await end_user(account)
     if TAP.get() is not None or WA.get() is not None:   # Sasha 258 · in the app: their own yes is the approval, and it sends at once
         # Sasha 265 · item 4 (CR 99 §4d): on WhatsApp, their reply (signed webhook) is the same in_app_tap, session kind "whatsapp"
@@ -873,6 +874,40 @@ async def change_submit(account: str, held: dict, said: str) -> Dict[str, Any]:
     return {"ok": True, **res}
 
 
+async def submit_instructed(account: str, held: dict, said: str) -> Dict[str, Any]:
+    """Sasha 381 · CR 196 · THE INSTRUCTION IS THE APPROVAL: ONE venue.submit_booking {end_user, prepared_id, mandate_id (+ route "call",
+    + the person's choices)} — AgAPI approves it BY the instruction when the prepared booking says exactly its terms, and acts at once
+    (instructed.say: "Booking now: …"). Outside the instruction (another booking, party or time; already used) → nothing sent, each reason
+    as AgAPI gives it. → {ok, status, instructed, …} | {ok: False, error: {code, message, outside?}}"""
+    pid, uid = held["prepared_id"], held.get("end_user") or await end_user(account)
+    if not uid:
+        return {"ok": False, "error": {"code": "no_end_user", "message": "the venue booking service doesn't know this person yet"}}
+    route = {"route": "call"} if held.get("rung") == "agapi_call" else {}
+    picked = {"choices": dict(held["choices"])} if held.get("choices") else {}   # Sasha 329 · CR 161 · the person's answer, on THIS booking
+    r = await _call(account, OP.VENUE_SUBMIT_BOOKING, {"end_user": uid, "prepared_id": pid, "mandate_id": held["mandate_id"], **route, **picked})
+    if not r.get("ok"):
+        e = r.get("error") or {}
+        outside = ((e.get("details") or {}).get("mandate") or {}).get("outside")
+        if e.get("code") == ERR.APPROVAL_REQUIRED and outside:   # never approved by the instruction: nothing reached the venue
+            d = e.get("details") or {}
+            lines = list((d.get("read_back") or {}).get("lines") or d.get("lines") or [])
+            log.info("[venue_submit] outside the instruction: %s", [o.get("why") for o in outside])
+            # CR 196 · its read-back keeps its own yes: AgAPI's read_back_id + its sha, for the person's yes to THESE terms
+            return {"ok": False, "error": {"code": "outside_instruction", "message": "the booking came out different from what they said",
+                                           "outside": list(outside), "read_back_id": d.get("read_back_id"), "lines": lines,
+                                           "sha256": d.get("read_back_sha256") or hashlib.sha256("\n".join(str(x) for x in lines).encode()).hexdigest()}}
+        return {"ok": False, "error": _err(r)}
+    res = r.get("result") or {}
+    if res.get("act_id"):
+        await _remember(account, {"act_id": res["act_id"], "venue": res.get("venue") or held.get("venue"), "when": held.get("when"),
+                                  "party": held.get("party"), "state": res.get("status"), "say": res.get("say"), **_follow_up_of(held),
+                                  **({"country": held["country"]} if held.get("country") else {}),
+                                  **({"route": "call"} if res.get("route") == "call" else {}), **_message_of(res, held, said),
+                                  **_platform_of(res, held),
+                                  **({"reference": res["reference"]} if res.get("reference") else {}), **_pointer_of(account, held)})
+    return {"ok": True, **res}
+
+
 def in_app_session() -> Optional[dict]:
     """This turn's session as in_app_tap takes it — None when there is none to give (the founder's proxy session: see below)."""
     s = TAP.get()
@@ -1087,7 +1122,7 @@ async def _approval(account: str, rid: str, said: str):
 
 __all__ = ["prepare", "read_back", "submit", "status", "acts_of", "bookings", "end_user", "cancel_read_back", "cancel_submit", "CALL",
            "handed_over", "handed_over_later", "agapi_bookings",
-           "TAP", "in_app_tap", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt",
+           "TAP", "in_app_tap", "submit_instructed", "in_app_session", "TAP_REFUSALS", "WA", "whatsapp_session", "whatsapp_tap", "call_attempt",
            "call_again", "link_whatsapp", "confirm_whatsapp", "whatsapp_link_signature", "stay_of", "unkept"]
 
 

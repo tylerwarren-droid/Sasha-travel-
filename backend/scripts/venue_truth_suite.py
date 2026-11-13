@@ -13,6 +13,8 @@ from __future__ import annotations
 from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
 
 import asyncio
+import os
+import uuid
 from datetime import datetime, timedelta, timezone
 
 OK: list = []
@@ -67,21 +69,34 @@ async def main() -> bool:
     GR.address_of = addr
     VS.CALL = venue_engine_fake.submit_answer   # AgAPI's sender, answered from the saved shape — nothing reaches AgAPI or the venue
     acct = "00000000-0000-4000-8000-000000000248"
+    # Sasha 381 · a signed-in turn (the in-app session its instruction is proved by, CR 196); AgAPI is the gate's double here
+    tok = VS.TAP.set({"kind": "supabase", "token": "venue-truth"})
+    scratch = not os.getenv("SASHA_AGAPI_TAP_SECRET")
+    if scratch:
+        os.environ["SASHA_AGAPI_TAP_SECRET"] = "venue-truth-" + uuid.uuid4().hex
     try:
-        ctx = type("C", (), {"account": acct, "surface": "s2", "started": datetime.now(timezone.utc), "user_said": "a spa for two tomorrow at 17:00"})()
+        ctx = type("C", (), {"account": acct, "surface": "s2", "started": datetime.now(timezone.utc), "user_said": "a spa for two tomorrow at 17:00",
+                             "idem": None, "act_name": None, "claimed": None, "session": "venue-truth-" + uuid.uuid4().hex,
+                             "turn": "turn_" + uuid.uuid4().hex, "said_before": ""})()
         rd = {"venue": HAMMAM["name"], "place_id": HAMMAM["place_id"], "rungs": {}, "country": "ES"}
         res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
                "when": {"at": (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT17:00")}, "what": {"category": "spa"}}
         before = len(venue_engine_fake.CALLS)
         out = await VN.one_decision(ctx, {}, rd, res, res["when"]["at"], datetime.now(timezone.utc), dict(HAMMAM), VT.decision(dict(HAMMAM)))
-        sent = [c for c in venue_engine_fake.CALLS[before:] if c == OP.VENUE_SUBMIT_BOOKING]
-        check("(b) followed: AgAPI's read-back, held for their ONE yes", out.get("status") == "awaiting_yes"
-              and (VN._HELD.get(acct) or {}).get("rung") == "agapi" and (VN._HELD.get(acct) or {}).get("read_back_id") == "rbk_gate", str(out)[:240])
-        check("(b) prepared by AgAPI (venue.prepare_booking), nothing submitted without the yes",
-              OP.VENUE_PREPARE_BOOKING in venue_engine_fake.CALLS[before:] and len(sent) <= 1, str(venue_engine_fake.CALLS[before:]))
+        calls = venue_engine_fake.CALLS[before:]
+        check("(b) followed: AgAPI's act on the instruction — sent in the same turn, nothing waits for a yes (Sasha 381)",
+              out.get("status") in ("requested", "confirmed") and str(out.get("line") or "").startswith("Booking now: ")
+              and acct not in VN._HELD, str(out)[:240])
+        after = calls[calls.index(OP.VENUE_PREPARE_BOOKING):] if OP.VENUE_PREPARE_BOOKING in calls else []
+        check("(b) prepared by AgAPI (venue.prepare_booking), the instruction recorded (approvals.mandate, CR 196), then ONE submit — no tap",
+              [c for c in after if c != OP.USERS_REGISTER] == [OP.VENUE_PREPARE_BOOKING, OP.APPROVALS_MANDATE, OP.VENUE_SUBMIT_BOOKING],
+              str(calls))
     finally:
         GR.address_of, VS.CALL = real_addr, real_call
         VN._HELD.pop(acct, None)
+        VS.TAP.reset(tok)
+        if scratch:
+            os.environ.pop("SASHA_AGAPI_TAP_SECRET", None)
 
     ch2 = (await VT.profile(dict(CASA))).get("channel") or {}
     check("(b) a WhatsApp venue: AgAPI's decision — a message they send", (ch2.get("route"), ch2.get("channel")) == ("message", "WhatsApp"), str(ch2))

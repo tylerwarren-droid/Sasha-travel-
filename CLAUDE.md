@@ -1,3 +1,5 @@
+Before building, read ~/Developer/KANOE_DECISIONS.md — Tyler's product decisions. A ticket that contradicts a line STOPS and asks; a request with two readings not settled there STOPS and asks.
+
 ## ⛔ NO PATCHES — ROOT CAUSES ONLY (Tyler, 6 Nov 2026)
 Kanoe does NOT ship patches. Ever.
 1. Before any fix, name the CAUSE and the ONE source of truth for the behaviour.

@@ -56,6 +56,21 @@ def total_line(figures: dict, text: str) -> str:
     return TOTAL_LINE.format(eur=f"{round(t):,}")
 
 
+#: Sasha 384 · CR 203 · only when AgAPI's answer carries its options but no sentence (its `say` is the line): never her own ranking
+ALTERNATIVES_ASK = "{venue} has no table at that time — here are the options. Tap one and I'll book it."
+
+
+def alternative_title(x: dict) -> str:
+    """Sasha 384 · an option of AgAPI's as a tap's title: its time and day, and its venue when it's another one ("21:45 · Sat 14 Nov",
+    "Casa Gate · 21:00") — AgAPI's own facts, nothing added."""
+    from datetime import date as _d
+    b = x.get("book") or {}
+    day = _d.fromisoformat(str(b.get("date"))).strftime("%a %-d %b") if b.get("date") else ""
+    if x.get("kind") == "nearby_venue":
+        return f"{x.get('venue')} · {b.get('time')}"
+    return f"{b.get('time')} · {day}".strip(" ·")
+
+
 def read_back_line(tool: str, r: dict) -> str:
     """The read-back line a booking tool's result carries on a screen (hold_venue / book_venue: awaiting_yes + its card), else ""."""
     res = (r or {}).get("result") if (r or {}).get("ok") else None
@@ -1269,7 +1284,7 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "route_line", "is_route_line", "route_told", "ROUTE_LINES", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
-           "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "TERM_ASK", "hour_ask", "term_ask", "REFUSED", "ACTING", "booked_now", "acted_line", "OUTSIDE", "outside_line", "outside_ask",
+           "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "ALTERNATIVES_ASK", "alternative_title", "TERM_ASK", "hour_ask", "term_ask", "REFUSED", "ACTING", "booked_now", "acted_line", "OUTSIDE", "outside_line", "outside_ask",
            "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]
 
 

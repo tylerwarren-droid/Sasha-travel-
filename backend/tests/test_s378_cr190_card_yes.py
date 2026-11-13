@@ -34,7 +34,7 @@ WA = {"wa_id": "15005550375", "message_id": "SM190card"}   # the fictional +1 50
 class TheVector(unittest.TestCase):
     def test_vendored_byte_identical(self):
         v = json.loads((BACKEND / "kanoe_contract" / "VENDORED.json").read_text())
-        self.assertEqual((KC.CONTRACT_VERSION, v["version"]), ("1.93.0", "1.93.0"))   # Sasha 383 · CR 202
+        self.assertEqual((KC.CONTRACT_VERSION, v["version"]), ("1.94.0", "1.94.0"))   # Sasha 384 · CR 203
         for name, sha in v["vectors"].items():
             self.assertEqual(hashlib.sha256((BACKEND / "kanoe_contract" / name).read_bytes()).hexdigest(), sha, name)
 

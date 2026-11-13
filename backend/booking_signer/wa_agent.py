@@ -148,6 +148,14 @@ def _options(ev: dict, out) -> None:
 
 def _read_back(ev: dict, out) -> None:
     lines = [l for l in ev.get("read_back") or [] if str(l).strip() and not str(l).lstrip().startswith("⚠")]
+    alts = [c for c in ev.get("choices") or [] if isinstance(c, dict) and str(c.get("route") or "").startswith("alt:")]
+    if ev.get("ask") and alts and ev.get("read_back_id"):   # Sasha 384 · CR 203 · AgAPI's options as taps; ONE tap books it (card_tap)
+        rid = str(ev["read_back_id"])[:80]
+        if len(alts) <= 3:
+            out.ask(str(ev["ask"]), [(_cut(c["title"], 20), f"card:{rid}:{c['route']}") for c in alts])
+        else:
+            out.pick(str(ev["ask"]), "See the options", [(_cut(c["title"], TITLE), "", f"card:{rid}:{c['route']}") for c in alts[:LIST_ROWS]])
+        return
     picks = [str(c.get("title") or "") for c in ev.get("choices") or [] if isinstance(c, dict) and str(c.get("route") or "").startswith("pick:")]
     if ev.get("ask") and picks:   # Sasha 328 · the platform's ONE question (their "Zona"): its options as taps, exactly AgAPI's — a tap
         if len(picks) <= 3:       # says the option (say:…), which answers it; never Yes / No

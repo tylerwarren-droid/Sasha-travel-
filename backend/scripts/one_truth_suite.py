@@ -345,6 +345,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "a time is read by what it is and how it reached her — typed \"11:37\" is 11:37, a spoken \"09:00\" is asked — from the "
             "ONE door reader (Sasha 381i)",
             ["tests.test_s381i_said_from_the_result"]),
+    "T97": ("two gate runs never share a test identity: the voice loop's WhatsApp numbers are THIS run's (its deployment id), never a "
+            "number linked to anyone; two runs in the same minute each keep their own mobiles (Sasha 381k)",
+            ["tests.test_s381k_gate_runs_apart"]),
 }
 
 _RUNNER = """

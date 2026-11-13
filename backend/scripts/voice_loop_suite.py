@@ -71,7 +71,13 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, country:
     if not g:
         return {"name": name, "fail": [f"no scratch guest: {why}"], "turns": []}
     a = g["account_id"]
-    number = f"+3461{n:07d}"   # Sasha 363 · a mobile a supplier accepts (the airline refuses Ofcom's drama range); captured, never sent
+    # Sasha 363 · a mobile a supplier accepts (the airline refuses Ofcom's drama range); captured, never sent. Sasha 381k · THIS run's
+    # (scripts/gate_identity): two gates at once never share it, and a number linked to anyone is never taken from them
+    from scripts import gate_identity as GI
+
+    async def _taken(num: str) -> bool:
+        return await GW.STORE.channel_for(GW.wa_key(num)) is not None
+    number = await GI.run_mobile(n, _taken)
     c = GW.consent()
     now = datetime.now(timezone.utc)
     await GW.STORE.link({"account_id": a, "wa_id_sha256": GW.wa_key(number), "number_e164": number, "linked_at": now, "consent_at": now,

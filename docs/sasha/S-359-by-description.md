@@ -32,6 +32,31 @@ Tyler, 7 Nov: "I want to choose people by description. I want the user to be abl
 - `SASHA_GATE_RECORD=1` was set in **Doppler** sasha/prd; the synced deploy (e240be31) recorded only the missing replies.
 - It was then deleted from Doppler; Railway no longer has it, and the next deploy (eadd20cd) passed on the recordings.
 
+## Recording the gate's replies: ONE build, never two (Sasha 381k, 13 Nov)
+
+**Why the procedure started TWO builds.** Two things each start a Railway build of the service:
+- a `git push` to main — Railway builds the new commit from GitHub;
+- a change to a Doppler secret — the Doppler → Railway sync changes the service's variables, and Railway redeploys its **latest
+  deployment**.
+Pushing and then setting `SASHA_GATE_RECORD` straight away therefore built the same commit twice, at the same time: one gate replaying
+(no recordings yet, so it fails), one recording. Two gates at once shared the test identities the gate links (found 13 Nov: both voice
+loops linked the same fixed WhatsApp numbers, each took the other's mobile → `mobile_needed`, row 1998). Setting the flag *before* the
+push doesn't help: setting it redeploys the current latest (the old commit), and the push then builds again.
+
+**The procedure — one build at a time:**
+1. Push to main (no flag). **Wait until that build has ended** (it fails with ReplayMissing when replies are new; that's expected).
+2. Set the flag, output discarded: `doppler secrets set SASHA_GATE_RECORD=1 --project sasha --config prd --silent --no-interactive
+   >/dev/null 2>&1`. The sync redeploys the latest deployment — that commit — **alone**: the recording build.
+3. The moment its gate ends, delete the flag, output discarded: `doppler secrets delete SASHA_GATE_RECORD --project sasha --config prd
+   --yes --silent >/dev/null 2>&1`; check by name only (`doppler secrets --only-names | grep -c SASHA_GATE_RECORD` = 0). The sync
+   redeploys once more — the **replay** build, alone. Its gate must pass on the recordings (a recording from a build whose gate failed is
+   never replayed, Sasha 381f).
+Never push while a recording or replay build is running.
+
+**And the gate never shares an identity between runs anyway** (`backend/scripts/gate_identity.py`): the voice loop's WhatsApp numbers
+come from the run's own deployment id, and a number already linked to anyone is never taken. Its docstring lists every identity the
+gate suites use and why only that one was shared.
+
 ## Proven (8 Nov)
 
 ### S2, as the test organiser

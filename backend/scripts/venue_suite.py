@@ -160,7 +160,6 @@ async def routes_offline(a: str) -> None:
 
     async def instruct(args: dict, key: str, via: str = "page") -> dict:
         """Sasha 381 · ONE turn: their whole instruction (every term theirs) → hold_venue → AgAPI's act, or its hand-over."""
-        VN._SENT.pop(a, None)
         VN._HELD.pop(a, None)
         # each route is its own conversation (the same booking twice in ONE conversation is "already sent" — VENUE 4)
         return await API.call(_ctx(a, _words({**v, **args}), via, session=f"venue-suite-{key}-{uuid.uuid4().hex[:8]}"), "hold_venue",

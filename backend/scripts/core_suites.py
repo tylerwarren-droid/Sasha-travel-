@@ -78,7 +78,6 @@ async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +34 
     → (the acts AgAPI made in it, every line she said). The one brain decides how many questions; the gate checks the act."""
     from agapi import person_access as PA, venue_submit as VSB, venues as VNS
     from app.agent import sasha as AGS
-    VNS._SENT.pop(a, None)   # each booking here is its own (AgAPI's path answers a repeated yes "already sent")
     VNS._HELD.pop(a, None)
     # as venue_suite: this scratch guest's own record (person_access test hook — never a real grant), mode "test" so every AgAPI call
     # goes to the sandbox (the gate's stand-in, or the real sandbox in voice_proof); without it the guest reads CLOSED (no venue sends)
@@ -147,9 +146,16 @@ async def restaurant(a: str) -> None:
         ok("REST typed → the test venue booked through AgAPI: an act, never handed to Tyler (321)",
            bool(made) and all(str(m.get("act_id") or "").startswith("act_") for m in made) and not any(TO_TYLER_WORDS in x for x in seen),
            f"acts {[m.get('act_id') for m in made]} · " + " | ".join(seen)[-160:])
-        made, seen = await _book_by_voice(a, ("Uh, a table for two at the Sasha Test Venue in Madrid, Saturday at nine at night, please.",), VT, BR)
+        # Sasha 381g · Tyler chose A (13 Nov 16:10): the spoken check is a DIFFERENT booking (another time, another party) — the same
+        # booking twice is ONE booking, sent once (the durable claim: account | session | venue | when | party), never two acts
+        spoken = "Uh, a table for three at the Sasha Test Venue in Madrid, Saturday at half past nine at night, please."
+        made, seen = await _book_by_voice(a, (spoken,), VT, BR)
         ok("REST voice phrasing → the test venue booked through AgAPI: an act, never handed to Tyler (321)",
            bool(made) and not any(TO_TYLER_WORDS in x for x in seen), f"acts {[m.get('act_id') for m in made]} · " + " | ".join(seen)[-160:])
+        made, seen = await _book_by_voice(a, (spoken,), VT, BR)
+        ok("REST the same instruction spoken again → “already sent”, nothing acted (381: sent once)",
+           not made and "already" in seen[0].lower() and not any(TO_TYLER_WORDS in x for x in seen),
+           f"acts {[m.get('act_id') for m in made]} · " + " | ".join(seen)[:160])
     finally:
         GW.rehearsal = real
 

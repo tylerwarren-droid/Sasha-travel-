@@ -1,10 +1,10 @@
 """GENERATED from AgAPI's spec/ by tools/contract/generate.py (CR 186) — DO NOT EDIT. Change spec/, regenerate, bump the release.
-kanoe_contract 1.93.0 · AgAPI 1.93.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
+kanoe_contract 1.94.0 · AgAPI 1.94.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, TypedDict, Union  # noqa: F401
 
-CONTRACT_VERSION = "1.93.0"
+CONTRACT_VERSION = "1.94.0"
 
 
 class OP:
@@ -747,16 +747,16 @@ SandboxMessagesIn = TypedDict('SandboxMessagesIn', {"end_user_id": str, "since":
 SandboxMessagesOut = TypedDict('SandboxMessagesOut', {"messages": List[Dict[str, Any]]}, total=False)
 
 # sandbox.platform_prepare — input
-SandboxPlatformPrepareIn = TypedDict('SandboxPlatformPrepareIn', {"end_user": str, "date": str, "time": str, "party": int, "person": Dict[str, Any], "variant": Literal['basic', 'lists'], "choices": Dict[str, Any]}, total=False)
+SandboxPlatformPrepareIn = TypedDict('SandboxPlatformPrepareIn', {"end_user": str, "date": str, "time": str, "party": int, "person": Dict[str, Any], "variant": Literal['basic', 'lists', 'no_table'], "choices": Dict[str, Any]}, total=False)
 
 # sandbox.platform_prepare — output
 SandboxPlatformPrepareOut = TypedDict('SandboxPlatformPrepareOut', {"prepared_id": str, "page": str, "decision": str, "say": str}, total=False)
 
 # sandbox.platform_walk — input
-SandboxPlatformWalkIn = TypedDict('SandboxPlatformWalkIn', {"end_user": str, "url": str, "date": str, "time": str, "party": int, "first_name": str, "last_name": str, "phone": str, "email": str, "notes": str, "choices": Dict[str, Any], "press": bool}, total=False)
+SandboxPlatformWalkIn = TypedDict('SandboxPlatformWalkIn', {"end_user": str, "url": str, "date": str, "time": str, "party": int, "first_name": str, "last_name": str, "phone": str, "email": str, "notes": str, "choices": Dict[str, Any], "press": bool, "venue": str, "city": str}, total=False)
 
 # sandbox.platform_walk — output
-SandboxPlatformWalkOut = TypedDict('SandboxPlatformWalkOut', {"decision": str, "say": str, "walked": bool, "dry_run": bool, "state": str, "why": Union[str, None], "pressed": bool, "confirmation": Union[Dict[str, Any], None], "steps": List[Any], "shot": Union[str, None], "final_button": Any, "hand_over": Any, "refused": Any, "stand_in": Any, "stopped_say": Any, "target": Any}, total=False)
+SandboxPlatformWalkOut = TypedDict('SandboxPlatformWalkOut', {"decision": str, "say": str, "walked": bool, "dry_run": bool, "state": str, "why": Union[str, None], "pressed": bool, "confirmation": Union[Dict[str, Any], None], "steps": List[Any], "shot": Union[str, None], "final_button": Any, "hand_over": Any, "refused": Any, "stand_in": Any, "stopped_say": Any, "target": Any, "alternatives": List[Dict[str, Any]], "times": List[str]}, total=False)
 
 # sandbox.simulate_approval — input
 SandboxSimulateApprovalIn = TypedDict('SandboxSimulateApprovalIn', {"read_back_id": str, "said": str, "after_seconds": int}, total=False)
@@ -966,7 +966,7 @@ VenueRecognitionOut = TypedDict('VenueRecognitionOut', {"place": Dict[str, Any],
 VenueSubmitBookingIn = TypedDict('VenueSubmitBookingIn', {"end_user": str, "prepared_id": str, "choices": Dict[str, Any], "route": Literal['auto', 'call'], "mandate_id": str}, total=False)
 
 # venue.submit_booking — output
-VenueSubmitBookingOut = TypedDict('VenueSubmitBookingOut', {"prepared_id": str, "status": Literal['confirmed', 'sent', 'failed', 'not_allowed', 'calling'], "submitted": bool, "rung": str, "how": str, "venue": str, "act_id": str, "evidence_id": str, "outcome_id": Union[str, None], "reference": Union[str, None], "venue_words": Dict[str, Any], "why": List[Any], "say": str, "route": str, "call_plan": Dict[str, Any], "approval": Dict[str, Any], "takeover": Dict[str, Any], "hand_over": Dict[str, Any], "ask": Dict[str, Any], "instructed": Dict[str, Any]}, total=False)
+VenueSubmitBookingOut = TypedDict('VenueSubmitBookingOut', {"prepared_id": str, "status": Literal['confirmed', 'sent', 'failed', 'not_allowed', 'calling'], "submitted": bool, "rung": str, "how": str, "venue": str, "act_id": str, "evidence_id": str, "outcome_id": Union[str, None], "reference": Union[str, None], "venue_words": Dict[str, Any], "why": List[Any], "say": str, "route": str, "call_plan": Dict[str, Any], "approval": Dict[str, Any], "takeover": Dict[str, Any], "hand_over": Dict[str, Any], "ask": Dict[str, Any], "instructed": Dict[str, Any], "alternatives": List[Dict[str, Any]]}, total=False)
 
 # venue.unhandled — input
 VenueUnhandledIn = TypedDict('VenueUnhandledIn', {"since": str, "limit": int}, total=False)

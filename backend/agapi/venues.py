@@ -1064,7 +1064,8 @@ async def _platform_book(ctx, a: dict, rd: dict, res: dict, at: str, card: Optio
     return await _act(ctx, "agapi", p, rd, res,
                       extra={"agapi_action": PLATFORM_ACTION, "platform_book": True, "platform": platform,
                              **({"link": page} if page else {}), "booking": {k: v for k, v in a.items() if k not in _NOT_BOOKING},
-                             "category": (res.get("what") or {}).get("category")})
+                             "category": (res.get("what") or {}).get("category"),
+                             "place": place, "person": person})   # Sasha 384 · an option's tap is prepared for the SAME person
 
 
 def _option_named(held: dict, words: Optional[str]) -> Optional[str]:
@@ -1150,6 +1151,9 @@ async def _platform_result(ctx, held: dict, r: dict, venue: str, where) -> dict:
                 **({"platform": held["platform"]} if held.get("platform") else {}), **({"area": area} if area else {}),
                 **({"reference": ref} if ref else {}), "act_id": r.get("act_id"), "line": _acted(held, r, True, ref), **in_app,
                 "how": "Say `line` word for word, then at most ONE short question (e.g. the calendar) — nothing else."}
+    alts = alternatives_of(r)
+    if alts:   # Sasha 384 · CR 203 · no table at that time is NOT a refusal: AgAPI's options, as taps — never their page while any remains
+        return _alternatives(ctx, held, r, venue, alts)
     q = VS.ask_of(r)
     asked = {str(k).casefold() for k in (held.get("choices") or {})}
     if q and q["choice"].casefold() not in asked:
@@ -1163,6 +1167,99 @@ async def _platform_result(ctx, held: dict, r: dict, venue: str, where) -> dict:
         say = str(r.get("say") or f"{venue}'s page stopped me before Book — nothing is booked.")
     return {"status": "not_booked", "venue": venue, "when": held["summary"], "booked": False, "route": "platform", "say": say,
             **_link_out(link), **in_app, "how": "Say `say` word for word — nothing is booked."}
+
+
+def alternatives_of(r: dict) -> List[dict]:
+    """Sasha 384 · CR 203 · AgAPI's `alternatives` on its booking answer, exactly as it gave them (its rank, kind, venue, date, time, reason
+    and `book` terms) — re-ranked, added to and filtered by nothing here; only an item AgAPI made bookable (its `book`) is one."""
+    return [x for x in (r or {}).get("alternatives") or [] if isinstance(x, dict) and isinstance(x.get("book"), dict)
+            and x["book"].get("date") and x["book"].get("time")]
+
+
+def _alternatives(ctx, held: dict, r: dict, venue: str, alts: List[dict]) -> dict:
+    """Sasha 384 · CR 203 · KANOE 13 Nov 18:44 — no table at the asked time: AgAPI's ONE sentence ("… tap one and I'll book it") and its
+    options as taps, on the channel they asked on; ONE tap books that option (alternative_answer). No page, no link, no "Tap to finish"
+    while any option remains — those are for a true refusal (no alternatives). Held for their tap (15 min)."""
+    import hashlib as _h
+    from app.agent import voice as V
+    aid = "alt_" + _h.sha256(f"{held.get('prepared_id')}|{'|'.join(str(x.get('rank')) + x['book']['date'] + x['book']['time'] for x in alts)}"
+                             .encode()).hexdigest()[:24]
+    say = str(r.get("say") or V.ALTERNATIVES_ASK.format(venue=venue))
+    choices = [{"title": V.alternative_title(x), "route": f"alt:{x.get('rank')}"} for x in alts]
+    out = {"status": "awaiting_yes", "venue": venue, "when": held.get("summary"), "booked": False, "route": "platform_book",
+           "options": len(alts), "ask": say, "say": say, "choices": choices, "read_back_id": aid, "read_back": [],
+           "how": "Say `ask` word for word — the options are taps on their screen; ONE tap books it. Never choose for them and never offer "
+                  "their page. Typed words naming one option: call book_venue with them."}
+    _HELD[ctx.account] = {**{k: v for k, v in held.items() if k not in ("out", "mandate_id")}, "rung": "alternatives", "id": aid,
+                          "read_back_id": aid, "alts": alts, "asked_at": datetime.now(timezone.utc), "failed_act": r.get("act_id"), "out": out}
+    return out
+
+
+def _alt_named(held: dict, words: Optional[str]) -> Optional[dict]:
+    """Their typed words name exactly ONE of AgAPI's options (its time — and its venue when the options are at several) — else None."""
+    from agapi import said as SD
+    times = set(SD.times_matching(words or ""))
+    w = _base(words or "")
+    hits = [x for x in held.get("alts") or [] if x["book"]["time"] in times]
+    if len(hits) > 1:   # the time names several: their words must name its venue or its day too
+        hits = [x for x in hits if _base(x.get("venue") or "") in w
+                or SD.day(words or "", date.fromisoformat(x["book"]["date"]), _today(held.get("country")))] or hits
+    return hits[0] if len(hits) == 1 else None
+
+
+async def alternative_answer(ctx, read_back_id: Optional[str], rank: Optional[str] = None, words: Optional[str] = None) -> dict:
+    """Sasha 384 · CR 203 · their tap on ONE of AgAPI's options (or their words naming exactly one) IS the instruction: that option is
+    booked at once, through the ONE act path (CR 203's SEAM): venue.prepare_booking with the option's own `book` terms and the SAME person
+    → _act (the tap's words are the instruction — approvals.mandate, its proof this tap's door) → venue.submit_booking → "Booking now: …".
+    AgAPI deciding that option another way → the whole path (hold_venue). Never a second card, never their page."""
+    from agapi.v0 import stale
+    held = _HELD.get(ctx.account)
+    if not held or held.get("rung") != "alternatives" or (read_back_id and held.get("read_back_id") != read_back_id):
+        return {"status": "nothing_waiting", "booked": False, "in_app": True}
+    alt = next((x for x in held["alts"] if str(x.get("rank")) == str(rank)), None) if rank is not None else _alt_named(held, words)
+    if alt is None:
+        return {**held["out"], "same_read_back": "the options are taps on their screen — never choose for them"}
+    if stale(held.get("asked_at")):
+        _HELD.pop(ctx.account, None)
+        raise _err("read_back_stale", "those options were offered over 15 minutes ago — call hold_venue again for the booking")
+    _HELD.pop(ctx.account, None)
+    from agapi import venue_submit as VS
+    if held.get("failed_act"):   # the stop that offered them is not a booking (My bookings skips it); the booking is the act that follows
+        await VS._amend(ctx.account, held["failed_act"], question="alternatives", answered=f"{alt['book']['date']} {alt['book']['time']}")
+    b = alt["book"]
+    same = _base(alt.get("venue") or "") == _base(held.get("venue") or "")
+    party = int(b.get("party") or held.get("party") or 2)
+    place0 = dict(held.get("place") or {})
+    place = {**(place0 if same else {"city": place0.get("city"), "category": place0.get("category")}),
+             "name": alt.get("venue") or held.get("venue"),
+             **({"place_id": b["place_id"]} if b.get("place_id") else {}),
+             **({"website": b["url"]} if str(b.get("url") or "").startswith("https://") else {})}
+    # the tap's own words: exactly the option they tapped — THEIR instruction (CR 196), every term in it; its proof is this tap's door
+    ctx.user_said = f"Book {place['name']} on {b['date']} at {b['time']} for {party}"
+    ctx.said_before = ""
+    person = held.get("person")
+    if not person:   # an older hold with no person kept: the whole path (it reads the person again)
+        return await hold_venue(ctx, {**dict(held.get("booking") or {}), "name": place["name"], "day": b["date"], "time": b["time"],
+                                      "party": party, **({"place_id": place["place_id"]} if place.get("place_id") else {})})
+    # CR 203's SEAM: venue.prepare_booking with the option's `book` terms and the SAME person → the ONE act (the instruction → submit)
+    pr = await VS.prepare(ctx.account, place, person, b["date"], b["time"], party)
+    if not pr.get("ok"):
+        return {"status": "not_sent", "venue": place["name"], "booked": False,
+                "say": f"I couldn't prepare {place['name']} at {b['time']} from here just now, so nothing was booked — tap it again in a minute."}
+    pdec = pr.get("decision") if isinstance(pr.get("decision"), dict) else {}
+    if pdec.get("route") != "platform_book":   # AgAPI decides this option another way: the whole path, as for any instruction
+        return await hold_venue(ctx, {**dict(held.get("booking") or {}), "name": place["name"], "day": b["date"], "time": b["time"],
+                                      "party": party, **({"place_id": place["place_id"]} if place.get("place_id") else {})})
+    rd = {"venue": place["name"], "place_id": place.get("place_id"), "country": held.get("country")}
+    res = {"who": {"name": person.get("name"), "contact": {"mobile_e164": person.get("phone")}}, "how_many": {"count": party},
+           "when": {"at": f"{b['date']}T{b['time']}"}, "what": {"category": held.get("category") or "restaurant"}}
+    ho = pr.get("hand_over") if isinstance(pr.get("hand_over"), dict) else {}
+    page = ho.get("link") if _platform_page(ho.get("link")) else None
+    return await _act(ctx, "agapi", pr, rd, res,
+                      extra={"agapi_action": PLATFORM_ACTION, "platform_book": True, "platform": ho.get("platform") or held.get("platform"),
+                             **({"link": page} if page else {}), "booking": {**dict(held.get("booking") or {}), "name": place["name"],
+                                                                             "day": b["date"], "time": b["time"], "party": party},
+                             "category": held.get("category"), "place": place, "person": person})
 
 
 def kanoe_route(dec: Optional[dict]) -> bool:
@@ -1429,6 +1526,8 @@ async def answer_card(ctx, read_back_id: str, choice: str) -> dict:
     """Sasha 265 · item 4 · THE TAP: the card's button, straight from the page (no model between). "call" → the tap IS the approval
     (approvals.in_app_tap on THIS read-back) → the act → "On it — …". "page" → their prepared page (nothing sent, no approval)."""
     held = _HELD.get(ctx.account)
+    if str(choice or "").startswith("alt:"):   # Sasha 384 · CR 203 · a tap on one of AgAPI's options: THAT option, booked
+        return await alternative_answer(ctx, read_back_id, choice[4:])
     if str(choice or "").startswith("pick:"):   # Sasha 328 · a tap on the platform question's card: THAT card's option, as AgAPI wrote it
         if not held or held.get("rung") != "platform_choice" or held.get("read_back_id") != read_back_id:
             return {"status": "nothing_waiting", "booked": False, "in_app": True}
@@ -1757,6 +1856,8 @@ async def book_venue(ctx, a: dict) -> dict:
             return got
         raise _err("which_option", f"their booking asks for {q['field']}: {', '.join(q['options'])} — the options are buttons on their "
                                    "screen; ask them which (never choose for them), then call book_venue with their answer this turn")
+    if q and q.get("rung") == "alternatives":   # Sasha 384 · CR 203 · their words naming ONE of AgAPI's options: that one, booked
+        return await alternative_answer(ctx, None, words=getattr(ctx, "user_said", None) or ((a.get("approval") or {}).get("said")))
     said = ((a.get("approval") or {}).get("said")) or ""
     if not yes_to_book(said):
         raise _err("no_explicit_yes", "booking needs the person's explicit yes in this turn — ask them, then call book_venue")

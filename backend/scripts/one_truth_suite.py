@@ -355,6 +355,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T99": ("the gate's pass mark is written (a replay-store record the database accepts) and every kind written to sasha_measures is one "
             "its CHECK accepts — so a passed build's recordings are replayed (Sasha 383; 381f's 'gate_pass' was refused on every pass)",
             ["tests.test_s383_gate_pass_mark"]),
+    "T100": ("no table at the asked time → AgAPI's options as TAPS (its sentence, its rank — nothing re-ranked, added or filtered), on S2, "
+             "/next and WhatsApp; ONE tap books it through the one act path (prepare with the option's terms → the tap as the instruction → "
+             "submit); never their page while any option remains (Sasha 384 · CR 203)",
+             ["tests.test_s384_alternatives_as_taps"]),
 }
 
 _RUNNER = """

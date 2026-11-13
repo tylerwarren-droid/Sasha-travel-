@@ -2078,7 +2078,7 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
     rid = str(tap.get("read_back_id") or "")[:80]
     # Sasha 287 · "send": Kanoe's one line, its yes · Sasha 330 · "cancel" / "keep": the cancel read-back's Yes / No (same claim, same card)
     choice = tap.get("choice") if tap.get("choice") in ("page", "send", "cancel", "keep", "group_yes", "group_no") else "call"
-    if str(tap.get("choice") or "").startswith("pick:"):   # Sasha 328 · an option of the platform's ONE question (their "Zona")
+    if str(tap.get("choice") or "").startswith(("pick:", "alt:")):   # Sasha 328 · the platform's ONE question · 384: one of AgAPI's options
         choice = str(tap["choice"])[:200]
     ctx.idem = f"card_tap:{account}:{rid}:{choice}"   # THE CLAIM-ONCE RULE: this card, this choice — once, durably
     if choice in ("group_yes", "group_no"):   # Sasha 334 · a master-list action's card: the same claim, then group_book.confirm

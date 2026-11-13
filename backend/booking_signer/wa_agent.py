@@ -199,6 +199,8 @@ def _card(ev: dict, out, title: str) -> None:
         lines = [ev.get("title") or ""] + ([ev["empty"]] if ev.get("empty") else
                                            [" · ".join(x for x in (r.get("name"), r.get("status"), f"€{round(r['price_eur']):,}" if isinstance(r.get("price_eur"), (int, float)) else None) if x)
                                             for r in (ev.get("rows") or [])[:12]])
+        if str(ev.get("report") or "").startswith("https://"):   # Sasha 385 · the trip's final report, traveller by traveller
+            lines.append(f"Full report → {ev['report']}")
     elif k == "plans":
         for it in (ev.get("items") or [])[:8]:
             lines.append(" · ".join(x for x in (str(it.get("when") or "")[:16].replace("T", " "), it.get("title"), it.get("status")) if x))

@@ -435,7 +435,7 @@ def record_whys(records: List[dict], members: List[dict]) -> Dict[str, str]:
 
 
 async def reconcile(account: str, movement_id: str, members: List[dict], records: Optional[List[dict]] = None, booked: Optional[dict] = None,
-                    whys: Optional[dict] = None) -> Dict[str, str]:
+                    whys: Optional[dict] = None, parts: Optional[dict] = None) -> Dict[str, str]:
     """Sasha 339 (Tyler) · THE ONE BOOKING RECORD DECIDES: each worker's trip follows AgAPI's group.bookings — their latest record booked →
     their current plan's rows booked (with its references); cancelled / swapped out → cancelled. Run on every master-list read and once
     after every yes, so a trip row and AgAPI's record can never disagree for longer than one read. → rows changed."""
@@ -461,6 +461,11 @@ async def reconcile(account: str, movement_id: str, members: List[dict], records
         booked.update(record_booked(records, members))
     if whys is not None:
         whys.update(record_whys(records, members))
+    if parts is not None:   # Sasha 385 · what an incomplete record DID book (its parts' kinds): the rest is what they need
+        for m in members:
+            b = record_of(records, m["id"])
+            if b and b.get("state") == "incomplete":
+                parts[m["id"]] = sorted({"flight" if p.get("kind") == "flight" else "stay" for p in b.get("parts") or [] if isinstance(p, dict)})
     return record_states(records, members)
 
 
@@ -881,7 +886,8 @@ FACTS = {"approval_refused": "the booking system didn't take your instruction as
          "upstream_failed": "the airline's system failed on the booking","not_cancellable": "their fare can only be cancelled by the airline", "price_changed": "their fare's price moved",
          "offer_expired": "their fare expired", "upstream_unreachable": "the airline didn't answer", "over_limit": "over the company's limit",
          "over_at_booking": "over the company's limit at today's price", "needs_vault": "no passport in their vault yet",
-         "passport": "no passport in their vault yet", "not planned": "not planned yet", "not_found": "no flight found for them"}
+         "passport": "no passport in their vault yet", "not planned": "not planned yet", "not_found": "no flight found for them",
+         "no_order": "the booking system didn't answer, and it has no order for them — nothing was booked or charged"}
 
 
 def one_question(asks: List[Dict[str, Any]]) -> str:
@@ -917,34 +923,6 @@ def decision(e: Dict[str, Any]) -> Dict[str, Any]:
                                           "them off this trip?", "code": code or "unknown", **airline_reason(e)}
 
 
-async def _confirmations(account: str, mv: Dict[str, Any], booked_names: List[str]) -> Dict[str, List[str]]:
-    """Each booked traveller's confirmation, to THEIR registered email (the roster's), through the ONE sender (live_events.send_email),
-    TEST-tagged. → {sent: [names], no_email: [names], not_sent: [names]}."""
-    from . import groups as G, live_events as LE
-    view = await G.view(account, mv["id"])
-    rows = {r["name"]: r for r in view.get("rows") or []}
-    people = {p["name"]: p for p in (await G.roster(account)).get("people") or []}
-    out: Dict[str, List[str]] = {"sent": [], "no_email": [], "not_sent": []}
-    for name in booked_names:
-        email = (people.get(name) or {}).get("email")
-        if not email:
-            out["no_email"].append(name)
-            continue
-        r = rows.get(name) or {}
-        msg = {"from": os.getenv("SASHA_EMAIL_FROM", "").strip(), "to": email,
-               "subject": f"Booked (TEST): {mv.get('destination')} {str(mv.get('starts_on') or '')[:10]} – {str(mv.get('ends_on') or '')[:10]}",
-               "text": "\n".join([f"Hello {name.split()[0]},", "", f"You're booked for {mv.get('company')}'s trip to {mv.get('destination')} (TEST).", "",
-                                  f"Travel: {r.get('transport') or '—'}", f"Hotel: {r.get('hotel') or '—'}",
-                                  "References: " + (", ".join(r.get("references") or []) or "on the trip's master list"), "",
-                                  "TEST: a demo booking — no airline or hotel charge.", "", "— Sasha (AI concierge, Kanoe Technologies SL)"])}
-        try:
-            sent = await LE.send_email(msg)
-        except Exception as ex:
-            sent = {"sent": False, "why": type(ex).__name__}
-        out["sent" if sent.get("sent") else "not_sent"].append(name)
-    return out
-
-
 def _names(xs: List[str]) -> str:
     return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " and " + xs[-1] if xs else ""
 
@@ -954,74 +932,36 @@ UNREAD_SAY = ("AgAPI's booking record didn't answer just now, so I can't say yet
 INVOICE_UNREAD_SAY = "The invoice couldn't be read just now — ask me for it again in a minute."
 
 
-async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]], ask_once: bool = False) -> Dict[str, Any]:
-    """THE ONE FINISH of a group booking, composed from the trip record (the master list as it is now — AgAPI's record for the booked):
-    how many are booked, where the references are, the confirmations sent (to each traveller's registered email; anyone without one
-    named), the invoice — and anything not done as a named decision, never an error."""
-    from . import groups as G
+async def finish(account: str, movement_id: str, done: List[Dict[str, Any]], failed: List[Dict[str, Any]], ask_once: bool = False,
+                 notes: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Sasha 385 · THE ONE FINISH of a group booking — ONE short "so what" by code and the report's link, from the ONE source (the master
+    list, group_report): "Yerevan, 15–20 Dec: 1 of 7 fully booked · 2 waiting on the airline · 3 need a new flight · 1 not booked." + the
+    ONE grouped question (its taps on the card) · "Full report →". Each fully booked traveller's own itinerary goes once, through the one
+    sender, recorded — "sent" is never said here: the report shows "emailed" from the record. Never a paragraph, never a claim the list
+    doesn't hold, every traveller counted exactly once (a traveller absent from the list is said as missing). `done` / `failed` / `notes`
+    are not the source: the list is (kept for the callers' own bookkeeping)."""
+    from . import groups as G, group_report as GR
     mv = await G.store().movement(account, movement_id)
     view = await G.view(account, movement_id)
     if view.get("record_unread"):   # Sasha 376 · nothing said as booked or not, no money said: the record, as unread
-        return {"say": UNREAD_SAY, "booked": [], "total": len(view.get("rows") or []), "confirmations": {"sent": [], "no_email": [], "not_sent": []},
-                "invoice": {}, "decisions": [], "unread": True}
+        return {"say": UNREAD_SAY, "line": UNREAD_SAY, "booked": [], "total": len(view.get("rows") or []), "unread": True, "card": None,
+                "report_url": None, "decisions": []}
     rows = view.get("rows") or []
-    booked = [r["name"] for r in rows if r.get("status") == "booked"]
-    confirming = [r["name"] for r in rows if r.get("status") == "confirming"]   # Sasha 371b · AgAPI's record: an order may exist
-    incomplete = [r for r in rows if r.get("status") == "incomplete"]
-    failed = [f for f in failed if f.get("name") not in set(confirming) | {r["name"] for r in incomplete}]   # a state, never asked as "not booked"
-    total = len(rows)
-    conf = await _confirmations(account, mv, booked) if booked else {"sent": [], "no_email": [], "not_sent": []}
-    try:
-        inv = await invoice(account, movement_id)
-    except Exception as e:
-        log.warning("[group_book] the invoice wasn't read for the finish: %s", type(e).__name__)
-        inv = {}
-    head = (f"All {total} booked" if booked and len(booked) == total else f"{len(booked)} of {total} booked" if booked else "Nobody was booked")
-    parts = [head + (" (TEST)." if booked else ".")]
-    if booked:
-        parts.append("Their references are on the master list.")
-        if conf["sent"]:
-            parts.append(("Confirmations have been sent to each traveller's registered email" if not conf["no_email"] and not conf["not_sent"]
-                          else f"Confirmations sent to {_names(conf['sent'])}") + ".")
-        if conf["no_email"]:
-            parts.append(f"No email on file for {_names(conf['no_email'])} — add it on the Group page and I'll send theirs.")
-        if conf["not_sent"]:
-            parts.append(f"{_names(conf['not_sent'])}'s confirmation didn't go out just now — I'll send it again.")
-        if inv.get("unread"):   # Sasha 376 · never "€0.00" for a record that didn't answer
-            parts.append(INVOICE_UNREAD_SAY)
-        elif inv.get("number") and inv.get("total"):
-            parts.append(f"The invoice {inv['number']}: {inv['total']}.")
-    for d in done:   # Sasha 367 · each booked fare's own conditions (CR 181: parts[].conditions / cancel_by), said plainly
-        said_for: set = set()
-        for c in d.get("conditions") or []:
-            words = [w for w in (("only the airline can cancel it" if c.get("cancel_by") == "airline" else ""),
-                                 ("it can't be refunded" if c.get("refund") in (False, "none", "no") else ""),
-                                 ("it can't be changed" if c.get("change") in (False, "none", "no") else "")) if w]
-            line = f"{d['name']}'s {c.get('kind') or 'booking'}: " + ", ".join(words) + "."
-            if words and line not in said_for:   # Sasha 371b · found live: both legs said the same line twice — once per fact
-                said_for.add(line)
-                parts.append(line)
-    if confirming:
-        parts.append(f"{_names(confirming)}: the airline hasn't confirmed yet — I'm checking, and nothing will be ordered twice.")
-    # Sasha 371b · found by the live drill: no answer after every re-send, and AgAPI's record has NOTHING for them (no order was made) —
-    # said from the record, never left out of the finish and never "booked"
-    on_record = set(booked) | set(confirming) | {r["name"] for r in incomplete}
-    unanswered = [d["name"] for d in done if d.get("state") == "unknown" and d["name"] not in on_record]
-    if unanswered:
-        parts.append(f"{_names(unanswered)}: the booking system didn't answer, and it has no order for "
-                     f"{'them' if len(unanswered) > 1 else unanswered[0].split()[0]} — nothing was booked or charged, and nothing will be ordered "
-                     f"twice. Say \"book {unanswered[0].split()[0]}\" to try again.")
-    for r in incomplete:
-        parts.append(f"{r['name']}: part of the trip is booked and the rest isn't"
-                     + (f" ({FACTS.get(r.get('record_why') or '', str(r.get('record_why')).replace('_', ' '))})" if r.get("record_why") else "") + ".")
-    if ask_once:   # Sasha 365 · the mandate: ONE grouped question for everything outside the limits
-        q = one_question(failed)
-        if q:
-            parts.append(q)
-    else:
-        for f in failed:
-            parts.append(f"{f['name']}: {f['why']}")
-    return {"say": " ".join(parts), "booked": booked, "total": total, "confirmations": conf, "invoice": {k: inv.get(k) for k in ("number", "total")},
+    b = GR.buckets(rows)
+    gone = GR.missing(view, await G.store().members(movement_id))
+    # Sasha 371b · a booking with no answer AND no order on the record: a named reason, never left out (and never "booked")
+    on_record = {r["name"] for r in rows if r.get("status") in ("booked", "confirming", "incomplete")}
+    failed = list(failed) + [{"name": d["name"], "code": "no_order"} for d in done if d.get("state") == "unknown" and d["name"] not in on_record]
+    await GR.keep(account, mv, rows, failed, done)   # each reason and each fare's conditions ON the trip: the report reads them there
+    sent = await GR.send_itineraries(account, mv, rows) if b["booked"] else {"sent": [], "already": [], "no_email": [], "not_sent": []}
+    named = [f for f in failed if f.get("name") in {r["name"] for r in b["not_booked"]}]
+    q = GR.question(b, one_question(named) if named else None)
+    head = GR.line(mv, b, gone)
+    url = GR.report_url(account, movement_id)
+    return {"say": head + (f" {q['ask']}" if q else ""), "line": head, "question": q, "card": GR.card(mv, q), "report_url": url,
+            "booked": [r["name"] for r in b["booked"]], "total": len(rows) + len(gone), "emails": sent,
+            "list": {"title": f"{mv.get('company')} → {mv.get('destination')}", "counts": head, "link": "/group", "report": url,
+                     "rows": [{"name": r["name"], "role": r.get("role"), "status": GR.LABEL[GR.bucket(r)], "price_eur": r.get("price_eur")} for r in rows]},
             "decisions": [{"name": f["name"], "code": f.get("code") or f.get("kind"),
                            "why": f.get("why") or FACTS.get(f.get("code") or f.get("kind") or "", "not booked just now")} for f in failed]}
 

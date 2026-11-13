@@ -65,7 +65,7 @@ type Card =
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
   | { k: 'plans'; items: Plan[]; on?: string; updates?: CalUpdate[] }
   | { k: 'notice'; title: string; lines: string[]; status?: string }
-  | { k: 'group_list'; title: string; rows: { name: string; role?: string | null; grade?: string | null; status: string; price_eur?: number | null }[]; counts?: string; link: string; empty?: string | null }   // Sasha 345 · the master list's card (364: role)
+  | { k: 'group_list'; title: string; rows: { name: string; role?: string | null; grade?: string | null; status: string; price_eur?: number | null }[]; counts?: string; link: string; empty?: string | null; report?: string }   // Sasha 345 · the master list's card (364: role)
   | { k: 'counter_card'; card: Ev }   // CR 75 · fine print: the counter card (each line quoted)
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
@@ -187,7 +187,8 @@ function cardsOf(ev: Ev): Card[] {
   if (k === 'capabilities' && Array.isArray(ev.groups)) return [{ k: 'capabilities', groups: ev.groups }]
   if (k === 'kind_ask' && Array.isArray(ev.choices) && ev.choices.length) return [{ k: 'kind_ask', ask: String(ev.ask || ''), choices: ev.choices.map(String) }]   // Sasha 297
   if (k === 'plans' && Array.isArray(ev.items)) return [{ k: 'plans', items: ev.items, on: ev.on, updates: ev.calendar_updates }]   // Sasha 312
-  if (k === 'group_list' && ev.title) return [{ k: 'group_list', title: String(ev.title), rows: Array.isArray(ev.rows) ? ev.rows : [], counts: ev.counts, link: String(ev.link || '/group'), empty: ev.empty ?? null }]   // Sasha 345
+  if (k === 'group_list' && ev.title) return [{ k: 'group_list', title: String(ev.title), rows: Array.isArray(ev.rows) ? ev.rows : [], counts: ev.counts, link: String(ev.link || '/group'), empty: ev.empty ?? null,
+    ...(typeof ev.report === 'string' && ev.report.startsWith('https://') ? { report: ev.report } : {}) }]   // Sasha 345 · 385: + the trip's final report
   if (k === 'notice' && ev.title) return [{ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status }]
   if (k === 'pay_here') return [{ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid }]
   if (k === 'pay' && typeof ev.url === 'string' && ev.url.startsWith('https://')) return [{ k: 'paylink', url: ev.url, label: typeof ev.label === 'string' ? ev.label : undefined }]   // Sasha 349
@@ -785,8 +786,9 @@ export default function S2App() {
   useEffect(() => { backLineRef.current = backLine }, [backLine])
   /** Sasha 273 · item 4 · RULE 4 now (lib/presence-rule.mjs reappear): the last activity known, the news that came, paused or not. */
   // Sasha 274 · item 1: + mid-booking (her question waiting on screen — greeting-rule.mjs midFlow — or, at load, the record's pending)
+  // Sasha 385 · + a flow still running: a turn in flight, or a group trip still being booked ("Working on it") — never "Hey <name>" inside it
   const rule4 = useCallback((mid?: boolean) => reappear({ lastAt: lastAt.current, now: Date.now(), tz: tzNow(), news: newsRef.current, asleep: asleepRef.current,
-    midFlow: mid ?? midFlow(msgsRef.current) }), [])
+    midFlow: mid ?? (midFlow(msgsRef.current) || busyRef.current || msgsRef.current.some(m => m.cards.some(c => c.k === 'notice' && c.status === 'Working on it'))) }), [])
   useEffect(() => {
     if (!signedIn) return
     let live = true
@@ -873,11 +875,14 @@ export default function S2App() {
             const card: Card = { k: 'notice', title: 'Your group trip', lines: [text], status: 'Working on it' }
             return i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? card : c)) } : m)) : [...ms, { role: 'sasha', text: '', cards: [card] }]
           }
-          const doneCard: Card = { k: 'notice', title: 'Your group trip', lines: ['Done — the master list has every reference.'], status: 'Done' }
-          // Sasha 367 · anyone outside the mandate: AgAPI's read-backs on ONE card, answered with the explicit tap (Yes, book them / No)
+          // Sasha 385 · THE ONE FINISH: the record's own line on the live card (never "every reference" when not everyone is booked),
+          // the master list with the trip's final report, and ONE question — the mandate's card or the list's grouped question
+          const doneCard: Card = { k: 'notice', title: 'Your group trip', lines: [untag(String(ev.list?.counts || text))], status: 'Finished' }
+          const list: Card[] = ev.list && ev.list.title ? cardsOf({ kind: 'group_list', ...ev.list }) : []
           const ask: Card[] = ev.card && Array.isArray(ev.card.read_back) && ev.card.read_back_id
-            ? [{ k: 'read_back', lines: ev.card.read_back, ask: String(ev.card.ask || ''), choices: Array.isArray(ev.card.choices) ? ev.card.choices : [], read_back_id: String(ev.card.read_back_id), head: 'Outside your instruction · your tap' }] : []
-          return [...(i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? doneCard : c)) } : m)) : ms), { role: 'sasha', text, cards: ask }]
+            ? [{ k: 'read_back', lines: ev.card.read_back, ask: String(ev.card.ask || ''), choices: Array.isArray(ev.card.choices) ? ev.card.choices : [], read_back_id: String(ev.card.read_back_id),
+                 ...(ev.card.read_back.length ? { head: 'Outside your instruction · your tap' } : {}) }] : []
+          return [...(i >= 0 ? ms.map((m, j) => (j === i ? { ...m, cards: m.cards.map(c => (live(c) ? doneCard : c)) } : m)) : ms), { role: 'sasha', text, cards: [...list, ...ask] }]
         })
         if (ev.type === 'group_done') {
           window.dispatchEvent(new Event('sasha-plan-refresh'))   // the trip card and the Trip tab follow the record

@@ -301,6 +301,12 @@ function main() {
     console.error("check-outcome-surfaces: SashaChat.tsx lacks the Sasha 381i spoken lines (the mic's channel \"voice\") — re-apply them (CLAUDE.md, Stage B).");
     process.exit(1);
   }
+  // Sasha 385 · never "Hey <name>, what can I help you with?" inside a running flow: a turn in flight or a group trip still being booked
+  const s2app = readFileSync(join(ROOT, "app/s2/S2App.tsx"), "utf8");
+  if (!s2app.includes("busyRef.current || msgsRef.current.some(m => m.cards.some(c => c.k === 'notice' && c.status === 'Working on it'))")) {
+    console.error("check-outcome-surfaces: S2App's rule 4 no longer counts a running flow as mid-flow (Sasha 385) — she would greet inside it.");
+    process.exit(1);
+  }
   const you = readFileSync(join(ROOT, "app/components/workspace/YouPanel.tsx"), "utf8");
   if (!you.includes("S-45 Sasha reservations") || !you.includes("<SashaReservations />")) {
     console.error("check-outcome-surfaces: YouPanel.tsx lacks the S-45 Sasha reservations block — run Stage B's reservations re-apply (CLAUDE.md).");

@@ -70,7 +70,7 @@ class TheRetryIsTheSameRequest(unittest.TestCase):
             r, evs = T367._instruction(w)
             mv = run(G.store().movement(OWNER))
         fin = T367._finish(evs)["text"]
-        self.assertTrue(fin.startswith("All 6 booked (TEST)."), fin)
+        self.assertEqual(fin, "London, 15–17 Dec: 6 of 6 fully booked.")
         self.assertEqual(len(w.agapi.supplier), 6 * 1)                                        # ONE order per traveller (the passport opened once each)
         self.assertEqual(len([b for b in w.agapi.records if b["movement_id"] == str(mv["id"])]), 6)   # ONE record each
         sent = [k for op, k in GB.KEYS if op == "group.book"]
@@ -116,7 +116,7 @@ class EachWorkersOwnLimit(unittest.TestCase):
         self.assertEqual(len(mand["limits"]["per_worker"]), 5)                                # Amara left out: AgAPI asks (limits_missing)
         fin = T367._finish(evs)["text"]
         self.assertIn("Amara Sample: no limit is set for them yet", fin)
-        self.assertTrue(fin.startswith("5 of 6 booked (TEST)."), fin)
+        self.assertTrue(fin.startswith("London, 15–17 Dec: 5 of 6 fully booked · 1 not booked."), fin)
 
 
 class Ratchet(unittest.TestCase):
@@ -150,15 +150,20 @@ class FoundLive(unittest.TestCase):
         with T367.World() as w:
             mv = run(G.store().movement(OWNER))
             leg = {"kind": "flight", "cancel_by": "airline"}
-            fin = run(GB.finish(OWNER, mv["id"], [{"name": "Carmen Castro", "conditions": [leg, dict(leg)]}], []))
-        self.assertEqual(fin["say"].count("Carmen Castro's flight: only the airline can cancel it."), 1)
+            who = run(G.view(OWNER, mv["id"]))["rows"][0]["name"]   # a traveller ON the list
+            run(GB.finish(OWNER, mv["id"], [{"name": who, "conditions": [leg, dict(leg)]}], []))
+            from booking_signer import group_report as GR   # Sasha 385 · a fare's conditions are the report's, kept on the trip, once
+            kept = run(G.store().movement(OWNER, mv["id"]))["rules"]
+        conds = [v for k, v in kept.items() if k.startswith("cond:")]
+        self.assertEqual(conds, [["flight: only the airline can cancel it"]])
 
     def test_no_answer_and_no_record_is_said_never_left_out(self):
         with T367.World() as w:
             mv = run(G.store().movement(OWNER))
-            fin = run(GB.finish(OWNER, mv["id"], [{"name": "Ana Sample", "state": "unknown", "parts": []}], []))
-        self.assertIn("Ana Sample: the booking system didn't answer, and it has no order for Ana", fin["say"])
-        self.assertIn('Say "book Ana" to try again.', fin["say"])
+            who = run(G.view(OWNER, mv["id"]))["rows"][0]["name"]   # a traveller ON the list
+            fin = run(GB.finish(OWNER, mv["id"], [{"name": who, "state": "unknown", "parts": []}], []))
+        self.assertIn(f"{who}: the booking system didn't answer, and it has no order for them", fin["say"])   # named, never left out
+        self.assertEqual(fin["say"].count("?"), 1, fin["say"])
 
     def test_only_an_approved_act_takes_the_acts_timeout(self):
         with mock.patch.dict("os.environ", {"SASHA_GROUP_ACT_TIMEOUT_S": "4"}):

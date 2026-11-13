@@ -82,7 +82,7 @@ class InsideTheLimits(unittest.TestCase):
             view = run(G.view(OWNER))
         self.assertTrue(r["ok"], r)
         fin = _finish(evs)["text"]
-        self.assertTrue(fin.startswith("All 6 booked (TEST)."), fin)
+        self.assertEqual(fin, "London, 15–17 Dec: 6 of 6 fully booked.")
         self.assertNotIn("?", fin)                                                            # zero questions
         calls = w.agapi.calls
         mand = [b for op, b in calls if op == "approvals.mandate"]
@@ -115,7 +115,7 @@ class OutsideIsAskedOnce(unittest.TestCase):
         with World(MandateAgAPI(outside={"Bruno Example": "fare_not_refundable"})) as w:
             r, evs = _instruction(w)
         done = _finish(evs)
-        self.assertTrue(done["text"].startswith("5 of 6 booked (TEST)."), done["text"])
+        self.assertTrue(done["text"].startswith("London, 15–17 Dec: 5 of 6 fully booked · 1 not booked."), done["text"])
         self.assertIn("Bruno Example: their fare can't be refunded", done["text"])
         self.assertEqual(done["text"].count("?"), 1, done["text"])                          # the ONE grouped question
         self.assertTrue(done["card"]["read_back_id"].startswith("grp_"))                    # … with its explicit tap

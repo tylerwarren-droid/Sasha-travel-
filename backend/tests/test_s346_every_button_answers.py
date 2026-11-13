@@ -66,11 +66,14 @@ class BookAll(unittest.TestCase):
             self.assertEqual((out["done"], out["status"]), (True, "booking"))
             self.assertTrue(out["say"].startswith("On it"))
             fin = [e["text"] for e in evs if e.get("type") == "group_done"][0]
-            self.assertTrue(fin.startswith("18 of 20 booked (TEST)."), fin)
+            self.assertTrue(fin.startswith("Madrid, 1–19 Dec: 18 of 20 fully booked · 2 not booked."), fin)
             self.assertEqual(fin.count("?"), 1, fin)                                            # ONE grouped question (Rania) …
             self.assertIn("Rania Mithal: over the company's limit", fin)
-            self.assertIn("No email on the list for Hanna Dummy — their passport link is on the Group page", fin)   # … Hanna: invited, said
-            self.assertNotIn("Hanna Dummy:", fin)
+            self.assertNotIn("Hanna Dummy:", fin)   # … Hanna: her passport link is the report's (Sasha 385), never asked about
+            from booking_signer import group_report as GR
+            rep = run(GR.report(OWNER, run(G.store().movement(OWNER))["id"]))
+            self.assertEqual(next(x for x in rep["rows"] if x["name"] == "Hanna Dummy")["fix"],
+                             "their secure passport link is on the Group page to forward (no email on file)")
 
     def test_everyone_booked_says_so(self):
         with World() as w:

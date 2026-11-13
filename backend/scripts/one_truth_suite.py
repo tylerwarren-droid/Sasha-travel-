@@ -355,6 +355,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T99": ("the gate's pass mark is written (a replay-store record the database accepts) and every kind written to sasha_measures is one "
             "its CHECK accepts — so a passed build's recordings are replayed (Sasha 383; 381f's 'gate_pass' was refused on every pass)",
             ["tests.test_s383_gate_pass_mark"]),
+    "T101": ("the group finish is ONE \"so what\" by code and ONE report, traveller by traveller, from the master list and the trip's "
+             "record: every traveller counted once (a missing one said), the half-booked offered the fix, \"emailed\" only from the send "
+             "record, each itinerary once (Sasha 385)",
+             ["tests.test_s385_one_group_finish"]),
 }
 
 _RUNNER = """

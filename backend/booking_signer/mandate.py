@@ -248,18 +248,30 @@ async def _run(account: str, movement_id: str, m: Dict[str, Any]) -> None:
             got = await GB.book_under_mandate(account, mid, ready, movement_id, over_ok=over_ok, progress=acted)
             asks = [x for x in got["asks"] if x.get("kind") != "needs_vault"] + got["outside"]   # invited above: said as done, never asked
             card = got["card"]
+            fin = None
             if any(x.get("code") == ERR.APPROVAL_EXPIRED for x in got["asks"]):
                 text = "Your instruction expired before I could book everyone — say it again and I'll carry on from the master list."
             else:
-                text = (await GB.finish(account, movement_id, got["done"], held + asks, ask_once=True))["say"]
+                fin = await GB.finish(account, movement_id, got["done"], held + asks, ask_once=True)
+                text = fin["say"]
             done = got["done"]
         else:
-            text = (await GB.finish(account, movement_id, [], held, ask_once=True))["say"]
-        said_inv = invited_words(inv)   # done things first, the ONE question last
-        text = text.replace(" Not booked — ", said_inv + " Not booked — ", 1) if " Not booked — " in text else text + said_inv
-        # THE ONE FINISH, to the door that started it (channel.tell: their last turn's channel — WhatsApp, or the S2 page / its news)
-        await CH.tell(account, text, event={"type": "group_done", "text": text, **({"card": card} if card else {})},
-                      news_key=f"group:{movement_id}", card=card)   # Sasha 367 · the outside ones: the explicit tap, with the ONE question
+            card, fin = None, await GB.finish(account, movement_id, [], held, ask_once=True)
+            text = fin["say"]
+        # Sasha 385 · THE ONE FINISH, to the door that started it (channel.tell: their last turn's channel — WhatsApp, or the S2 page / its
+        # news): the "so what" line; ONE question — the mandate's own card for anyone outside the instruction (its explicit tap), else the
+        # list's grouped question; and the report's link. The passport invitations are on the report (its "fix"), never a second paragraph.
+        try:   # Sasha 385 · each passport link that went, on the trip: the report says it (never a second paragraph here)
+            from . import group_report as GR
+            await GR.invited(account, movement_id, list(inv.get("emailed") or []), rows)
+        except Exception as e:
+            log.warning("[mandate] the invitations weren't kept on the trip: %s", type(e).__name__)
+        ask = card or (fin or {}).get("card")
+        url = (fin or {}).get("report_url")
+        await CH.tell(account, text, wa_text=text + (f"\nFull report → {url}" if url else ""),
+                      event={"type": "group_done", "text": text, **({"card": ask} if ask else {}),
+                             **({"report": url, "list": fin["list"]} if fin and url else {})},
+                      news_key=f"group:{movement_id}", card=ask)
         await _close(account, movement_id, m, "done", text)
         j = GB._JOBS.get(account)
         if j is not None and j.get("kind") == "mandate":

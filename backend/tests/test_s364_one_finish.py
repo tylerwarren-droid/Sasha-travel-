@@ -90,11 +90,12 @@ class TheFinish(unittest.TestCase):
                 fin = await GB.finish(OWNER, (await G.store().movement(OWNER))["id"], [{"name": n} for n in booked], [{"name": "Ana Example", **GB.decision({"code": "not_cancellable"})}])
             return fin, sent
         fin, sent = _in_world(go)
-        self.assertTrue(fin["say"].startswith("2 of 3 booked (TEST)."), fin["say"])
-        self.assertIn("references are on the master list", fin["say"])
-        self.assertIn("Confirmations have been sent to each traveller's registered email", fin["say"])
-        self.assertIn("The invoice KAN-TEST: €1,234.00.", fin["say"])
+        # Sasha 385 · ONE "so what" by code + the ONE grouped question; "sent" and the invoice are the report's, from the record
+        self.assertTrue(fin["say"].startswith("Lisbon, 9–12 Dec: 2 of 3 fully booked · 1 not booked."), fin["say"])
         self.assertIn("Ana Example: their fare can only be cancelled by the airline", fin["say"])   # a decision, named
+        self.assertNotIn("Confirmations have been sent", fin["say"])
+        self.assertNotIn("invoice", fin["say"].lower())
+        self.assertTrue(fin["report_url"].startswith("https://"))
         self.assertEqual(sorted(sent), ["bo@example.test", "cy@example.test"])           # each traveller, to THEIR email, the one sender
 
     def test_a_traveller_with_no_email_is_named(self):
@@ -113,8 +114,8 @@ class TheFinish(unittest.TestCase):
             with mock.patch.object(G, "view", view), mock.patch.object(GB, "invoice", mock.AsyncMock(return_value={})):
                 return await GB.finish(OWNER, (await G.store().movement(OWNER))["id"], [{"name": "Ana Example"}], [])
         fin = _in_world(go)
-        self.assertTrue(fin["say"].startswith("All 1 booked (TEST)."), fin["say"])
-        self.assertIn("No email on file for Ana Example", fin["say"])
+        self.assertEqual(fin["say"], "Lisbon, 9–12 Dec: 1 of 1 fully booked.")   # Sasha 385 · the report names what's missing
+        self.assertEqual(fin["emails"]["no_email"], ["Ana Example"])
 
     def test_the_yes_ends_in_the_finish(self):
         src = (ROOT / "booking_signer" / "group_book.py").read_text()

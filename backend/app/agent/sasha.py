@@ -1912,6 +1912,19 @@ async def agent_ics(token: str):
     return Response(text, media_type="text/calendar; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="sasha.ics"'})
 
 
+@router.get("/group-report/{token}")   # Sasha 385 · THE trip's final report, traveller by traveller — from the master list as it is now
+async def group_report_page(token: str):
+    from fastapi.responses import HTMLResponse
+    from booking_signer import group_report as GR
+    got = GR.read_token(token)   # signed (and dated) like the calendar's .ics link: nobody can make it show another trip
+    if not got:
+        return JSONResponse({"ok": False}, status_code=404)
+    rep = await GR.report(*got)
+    if rep.get("why"):
+        return JSONResponse({"ok": False, "why": rep["why"]}, status_code=404)
+    return HTMLResponse(GR.page(rep), headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
+
+
 @router.post("/s2/statement")
 async def s2_statement(request: Request):
     """CR 72 · /s2 only: the person's statement (CSV, PDF or photo), kept in this server's MEMORY for 30 minutes (never on disk) → a
@@ -2097,6 +2110,11 @@ async def card_tap(account: str, session: Optional[str], surface: str, tap: dict
             ev = render("group_book", x, {})
             if ev:
                 yield ev
+        fin = res.get("finish") or {}   # Sasha 385 · THE ONE FINISH: the master list's card (with the report) and the ONE grouped question
+        if fin.get("list"):
+            yield {"type": "render", "kind": "group_list", **fin["list"]}
+        if fin.get("card"):
+            yield {"type": "render", "kind": "read_back", **fin["card"]}
         yield {"type": "done", "text": line, "guard": [], "tools": [{"tool": "group_confirm", "ok": True, "status": res.get("status")}]}
         return
     cancel = choice in ("cancel", "keep")
@@ -2150,6 +2168,10 @@ async def agent_turn(request: Request):
         return JSONResponse({"ok": False, "rule": "sign_in", "message": "Sasha's agent (/next) is for a signed-in account"}, status_code=403)
     body = await request.json()
     message = str(body.get("message") or "").strip()[:4000]
+    if isinstance(body.get("tap"), dict) and str(body["tap"].get("choice") or "").startswith("say:"):
+        # Sasha 385 · a typed-word tap (/next's card: a grouped question's "Rebook them"): its words ARE the message — a turn like any,
+        # never an answer to a card (card_tap knows no say: route)
+        message, body["tap"] = str(body["tap"]["choice"])[4:].strip()[:4000] or message, None
     if not message:
         return JSONResponse({"ok": False, "rule": "empty"}, status_code=400)
     from app import avatar_gate as _AVATAR

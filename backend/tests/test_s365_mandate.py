@@ -86,8 +86,7 @@ class ZeroQuestionsInsideTheLimits(unittest.TestCase):
         self.assertTrue(any("Hotel: 6 rooms at" in x for x in lines), lines)
         self.assertEqual(len(done), 1, lines)                                              # the ONE finish, unasked
         fin = done[0]["text"]
-        self.assertTrue(fin.startswith("All 6 booked (TEST)."), fin)
-        self.assertIn("references are on the master list", fin)
+        self.assertEqual(fin, "London, 15–17 Dec: 6 of 6 fully booked.")                   # Sasha 385 · the ONE "so what"
         self.assertNotIn("?", fin)                                                         # inside the limits: zero questions
         self.assertEqual(sorted(r["status"] for r in view["rows"]), ["booked"] * 6)
         stays = [b for op, b in w.agapi.calls if op == "travel.find_stays"]
@@ -105,7 +104,7 @@ class OneGroupedQuestionOutsideTheLimits(unittest.TestCase):
             _executives(SIX[:5] + casablanca)
             r, events = _instruction()
         fin = [e for e in events if e.get("type") == "group_done"][0]["text"]
-        self.assertTrue(fin.startswith("5 of 6 booked (TEST)."), fin)
+        self.assertTrue(fin.startswith("London, 15–17 Dec: 5 of 6 fully booked · 1 not booked."), fin)
         self.assertEqual(fin.count("?"), 1, fin)                                           # ONE grouped question
         self.assertIn(casablanca[0], fin)
         self.assertIn("over the company's limit", fin)
@@ -127,9 +126,13 @@ class EveryMissingPassportIsInvited(unittest.TestCase):
             fin = [e for e in events if e.get("type") == "group_done"][0]["text"]
             mails = w.mails[before:]
             self.assertTrue(any("add your passport" in m for m in mails), mails)               # emailed, unasked
-            self.assertIn("I've emailed 1 person their secure link for their passport (Amara Sample)", fin)
+            # Sasha 385 · the invitation is the report's (from the trip record), never a second paragraph in the chat
+            from booking_signer import group_report as GR
+            rep = run(GR.report(OWNER, run(G.store().movement(OWNER))["id"]))
+            row = next(x for x in rep["rows"] if x["name"] == "Amara Sample")
+            self.assertEqual(row["fix"], "their secure passport link was emailed — they're booked once it's in")
             self.assertNotIn("Amara Sample:", fin)                                              # never asked about
-            self.assertTrue(fin.startswith("5 of 6 booked (TEST)."), fin)
+            self.assertTrue(fin.startswith("London, 15–17 Dec: 5 of 6 fully booked · 1 not booked."), fin)
             self.assertNotIn("?", fin)
             view = run(G.view(OWNER))
             self.assertEqual([x["name"] for x in view["rows"] if not x["vault"]["passport"]], ["Amara Sample"])   # the same ONE source
@@ -146,7 +149,7 @@ class ARefusalIsTriedOnceMoreThenNamed(unittest.TestCase):
             _executives(SIX)
             r, events = _instruction()
         fin = [e for e in events if e.get("type") == "group_done"][0]["text"]
-        self.assertTrue(fin.startswith("5 of 6 booked (TEST)."), fin)                     # Amara: booked on the second try
+        self.assertTrue(fin.startswith("London, 15–17 Dec: 5 of 6 fully booked · 1 not booked."), fin)   # Amara: booked on the second try
         self.assertIn("Bruno Example: the airline refused the booking, twice", fin)       # Bruno: named, never "just now"
         self.assertNotIn("not booked just now", fin)
         self.assertTrue(fin.rstrip().endswith("?"), fin)                                  # the ONE question comes last

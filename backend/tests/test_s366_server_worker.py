@@ -65,9 +65,10 @@ class NoClientAttached(unittest.TestCase):
         self.assertTrue(r["ok"], r)
         self.assertTrue(any(x.startswith("Planned 6 of 6") and "Hotel: 6 rooms at" in x for x in w.wa), w.wa)   # progress, unasked
         self.assertTrue(any(x.startswith("Booking 6 now") for x in w.wa), w.wa)
-        fins = [x for x in w.wa if "booked (TEST)." in x]
+        fins = [x for x in w.wa if "fully booked" in x]
         self.assertEqual(len(fins), 1, w.wa)                                                # the ONE finish, on WhatsApp
-        self.assertTrue(fins[0].startswith("All 6 booked (TEST)."), fins[0])
+        self.assertTrue(fins[0].startswith("London, 15–17 Dec: 6 of 6 fully booked."), fins[0])
+        self.assertIn("Full report → https://", fins[0])                                    # Sasha 385 · the report, linked
         self.assertEqual((mv["rules"].get("mandate") or {}).get("state"), "done")         # the record says it's finished
 
     def test_a_restart_never_loses_it(self):
@@ -89,7 +90,7 @@ class NoClientAttached(unittest.TestCase):
                 await M.sweep()                                                         # the ONE server worker, from the record
                 await M.finished(OWNER)
             run(go())
-        self.assertEqual(len([x for x in w.wa if x.startswith("All 6 booked (TEST).")]), 1, w.wa)
+        self.assertEqual(len([x for x in w.wa if x.startswith("London, 15–17 Dec: 6 of 6 fully booked.")]), 1, w.wa)
 
 
 class ARefusedMandateIsSaid(unittest.TestCase):
@@ -127,7 +128,7 @@ class OneRunnerPerMandate(unittest.TestCase):
                 return held, taken
             held, taken = run(go())
         self.assertEqual((held, taken), (0, 1))
-        self.assertEqual(len([x for x in w.wa if x.startswith("All 6 booked (TEST).")]), 1, w.wa)
+        self.assertEqual(len([x for x in w.wa if x.startswith("London, 15–17 Dec: 6 of 6 fully booked.")]), 1, w.wa)
 
 
 class OneSource(unittest.TestCase):

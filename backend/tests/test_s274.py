@@ -29,7 +29,7 @@ class Greeting(unittest.TestCase):
         self.assertIn("if (s.midFlow) return { greet: false, lead: null, why: 'mid_booking' }", rule)
         self.assertIn("export function midFlow(msgs)", _front(self, "lib/greeting-rule.mjs"))
         app = _front(self, "app/s2/S2App.tsx")
-        self.assertIn("midFlow: mid ?? midFlow(msgsRef.current)", app)
+        self.assertIn("midFlow: mid ?? (midFlow(msgsRef.current) || busyRef.current", app)   # Sasha 385 · + a flow still running
         self.assertIn("const r = rule4(mid)", app)
         import re
         self.assertEqual(re.findall(r"['`]Hey[^'`\n]*what can I help you with", app), [])   # the greeting's words: the backend's, never the page's

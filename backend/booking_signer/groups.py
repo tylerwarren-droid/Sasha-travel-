@@ -849,10 +849,11 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     recorded: Dict[str, str] = {}
     unread: Optional[str] = None
     whys: Dict[str, str] = {}   # Sasha 371b · AgAPI's own "why" on a record that isn't booked
+    parts: Dict[str, List[str]] = {}   # Sasha 385 · an incomplete record's booked parts (flight / stay)
     booked_rec: Dict[str, Dict[str, Any]] = {}   # Sasha 340 · a booked worker's price and references, from AgAPI's record
     try:   # Sasha 339 (Tyler) · every read: AgAPI's ONE booking record first — the trips follow it, the status IS it
         from . import group_book as GB
-        recorded = await GB.reconcile(account, mv["id"], members, booked=booked_rec, whys=whys)
+        recorded = await GB.reconcile(account, mv["id"], members, booked=booked_rec, whys=whys, parts=parts)
     except GB.Unread as e:   # Sasha 376 · AgAPI's record unread: the view SAYS so (record_unread) — never a list that reads as nothing booked
         unread = str(e) or "unread"
         log.warning("[groups] AgAPI's record unread: %s", unread)
@@ -878,6 +879,7 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
                     "status": recorded.get(m["id"]) or ("planning…" if m["id"] in _PLANNING.get(account, set()) and not rows
                                                         else status_of(rows, lim, await _has_documents(m))),   # Sasha 364 · live
                     **({"record_why": whys[m["id"]]} if m["id"] in whys else {}),
+                    **({"booked_parts": parts[m["id"]]} if m["id"] in parts else {}),
                     **({"price_eur": booked_rec[m["id"]]["price_eur"], "references": booked_rec[m["id"]]["references"],
                         "transport": _transport(rows) or "Booked · " + " · ".join(booked_rec[m["id"]]["references"])}
                        if m["id"] in booked_rec else {})})

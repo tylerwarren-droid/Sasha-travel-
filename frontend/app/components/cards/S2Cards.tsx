@@ -383,6 +383,8 @@ export function GroupListCard({ c, send }: { c: Ev; send?: (t: string) => void }
         </div>)}
       {send ? <NextButtons actions={cur.actions as NextAction[]} send={send} /> : null}
       <a href={String(cur.link || '/group')} style={{ display: 'inline-block', marginTop: 10, color: C.gold, fontWeight: 600 }}>Open the master list</a>
+      {typeof cur.report === 'string' && cur.report.startsWith('https://') ? (   /* Sasha 385 · the trip's final report, traveller by traveller */
+        <a href={cur.report} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 10, marginLeft: 16, color: C.gold, fontWeight: 600 }}>Full report →</a>) : null}
     </Box>)
 }
 

@@ -53,6 +53,11 @@ push doesn't help: setting it redeploys the current latest (the old commit), and
    never replayed, Sasha 381f).
 Never push while a recording or replay build is running.
 
+Seen on 381k (13 Nov): the recording build (55551406) PASSED its gate and went live — production serves it. Deleting the flag did
+**not** start a redeploy that time, and an empty commit is SKIPPED by Railway (no watched file changed), so no separate replay build
+ran. A redeploy reuses the build (the gate runs inside the build), so it can't replay either. The recordings are replayed by the
+next build of a backend change; until then, the recording build's own gate is the proof.
+
 **And the gate never shares an identity between runs anyway** (`backend/scripts/gate_identity.py`): the voice loop's WhatsApp numbers
 come from the run's own deployment id, and a number already linked to anyone is never taken. Its docstring lists every identity the
 gate suites use and why only that one was shared.

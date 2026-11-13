@@ -352,6 +352,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "place (products.space.conversation_switched): every switch path — keyword, tool row, back row, either direction — exactly once "
             "with the inbound's message id, before AgAPI's inbound reads it (Sasha 383)",
             ["tests.test_s383_one_switch_writer"]),
+    "T99": ("the gate's pass mark is written (a replay-store record the database accepts) and every kind written to sasha_measures is one "
+            "its CHECK accepts — so a passed build's recordings are replayed (Sasha 383; 381f's 'gate_pass' was refused on every pass)",
+            ["tests.test_s383_gate_pass_mark"]),
 }
 
 _RUNNER = """

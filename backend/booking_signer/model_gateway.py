@@ -328,11 +328,18 @@ class _PgReplays:
         return bool(await _db(lambda c: c.fetchval("select 1 from sasha_measures where id = $1", f"gate_pass:{build}")))
 
     async def mark_passed(self, build: str) -> None:
+        # Sasha 383 · kind 'model_replay' (id gate_pass:<build>): sasha_measures' CHECK allows only MEASURE_KINDS — 381f wrote kind
+        # 'gate_pass', the database refused it (CheckViolationError on every pass), no build was ever marked, and every recording made
+        # since was unusable (ReplayMissing on every push). The pass mark is one of the replay store's records.
         await _db(lambda c: c.execute(
-            "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'gate_pass', now(), "
+            "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'model_replay', now(), "
             "(now() at time zone 'Europe/Madrid')::date, $2::jsonb, 0, $3, null, now() + interval '365 days') on conflict (id) do nothing",
             f"gate_pass:{build}", json.dumps({"build": build}), os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
 
+
+#: Sasha 383 · the kinds sasha_measures' CHECK (sasha_measures_kind_check, in the database) accepts — every insert's kind is one of them
+#: (tests/test_s383_gate_pass_mark holds every literal kind written to the table against this list)
+MEASURE_KINDS = ("turn", "client", "booking", "daily", "avatar", "model_day", "model_replay")
 
 REPLAYS: Any = None   # tests replace it: async get(key) / put(key, data)
 

@@ -54,7 +54,7 @@ class Turn(unittest.TestCase):
     def test_a_booking_is_drafted_over_several_turns_asking_one_thing_at_a_time(self):
         t1 = CR.booking_turn("I'd like to book a massage", [], NOW)
         self.assertEqual(t1["response"], "Which day and time — or shall I ask them when they have space?")
-        t2 = CR.booking_turn("3 October at 11:00", t1["messages"], NOW)
+        t2 = CR.booking_turn("3 October at 11am", t1["messages"], NOW)
         self.assertEqual(t2["response"], "How many people is it for?")
         t3 = CR.booking_turn("just me, 1 person", t2["messages"], NOW)
         self.assertEqual(t3["reservation_draft"]["missing"], [])
@@ -65,7 +65,7 @@ class Turn(unittest.TestCase):
     def test_ordinary_chat_is_left_to_the_conductor(self):
         self.assertIsNone(CR.booking_turn("What's the weather in Hanoi?", [], NOW))
         self.assertIsNone(CR.booking_turn("Find me a good massage place", [], NOW))       # no booking verb: not ours
-        self.assertIsNone(CR.booking_turn("3 October at 11:00", [{"role": "assistant", "content": "Hello!"}], NOW))
+        self.assertIsNone(CR.booking_turn("3 October at 11am", [{"role": "assistant", "content": "Hello!"}], NOW))
 
 
 if __name__ == "__main__":

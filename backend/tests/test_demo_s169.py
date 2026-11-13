@@ -99,9 +99,10 @@ class PickByVoice(unittest.TestCase):
 
 class SaidAloud(unittest.TestCase):
     def test_spoken_times(self):
+        from agapi import said as SD   # Sasha 381h · THE ONE reader
         for m, t in (("10 in the morning", "10:00"), ("eight at night", "20:00"), ("3 in the afternoon for 2", "15:00"), ("9pm", "21:00")):
-            self.assertEqual(WB.spoken_time(m), t, m)
-        self.assertIsNone(WB.spoken_time("at 10"))
+            self.assertEqual(SD.times_in(m), [t], m)
+        self.assertEqual((SD.times_in("at 10"), SD.unsure_hours("at 10")), ([], [(10, 0)]))   # its side asked, never guessed
 
     def test_the_16th_is_the_trips_16th(self):
         async def lat(a, hint=None):

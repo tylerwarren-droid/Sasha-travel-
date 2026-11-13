@@ -99,9 +99,9 @@ def pick(message: str, options: List[dict]) -> Union[int, str, None]:
     if airline and len(airline) >= 1 and (_BOOKISH.search(t) or len(t.split()) <= 6
                                           or re.search(r"\b(?:give me|get me|i'?d like|i like|can i|could i|let me have|go for|please)\b", t)):
         return airline[0]
-    # a time: "07:44", "7:44"
-    for hh, mm in re.findall(r"\b(\d{1,2})[:.h](\d{2})\b", t):
-        tm = f"{int(hh):02d}:{mm}"
+    # a time: "07:44", "7:44", "the 7.44pm" — Sasha 381h · THE ONE reader, matched to what was offered
+    from agapi import said as SD
+    for tm in SD.times_matching(t):
         hits = [i for i, b in enumerate(blob) if tm in b]
         if len(hits) == 1:
             return hits[0]

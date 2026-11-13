@@ -336,6 +336,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "today): \"the 13th\", \"el 13\", \"13 Nov\", tomorrow, Saturday… reach scope.booking; \"Which day?\" only when no day is said; "
             "and a recording from a build whose gate FAILED is never replayed (Sasha 381f)",
             ["tests.test_s381f_one_day_reader"]),
+    "T95": ("every way a person says a booking's time is read by ONE reader (agapi.said.times_in — EN and ES): 9:30pm, half past "
+            "nine, nine thirty tonight, a las nueve y media… reach scope.booking; a bare hour without its side is asked \"9am or 9pm?\", "
+            "never guessed; \"nine thirty\" never becomes 21:00; one \"already sent\" memory: the record of what was sent (Sasha 381h)",
+            ["tests.test_s381h_one_time_reader"]),
 }
 
 _RUNNER = """

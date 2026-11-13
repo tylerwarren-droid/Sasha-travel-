@@ -101,7 +101,7 @@ class DirectFirstEveryKind(unittest.TestCase):
         from tests.test_venue_pick_230 import reader
         from tests.test_s254_one_decider import engine_from   # Sasha 270 · MOVED: on the one path their form is the engine's read
         day = (date.today() + timedelta(days=6)).isoformat()
-        ctx = API.Ctx(account=self.ACCT, mode="test", user_said=f"This one, for 1 on {day} at 10:00", session="s232",
+        ctx = API.Ctx(account=self.ACCT, mode="test", user_said=f"This one, for 1 on {day} at 10am", session="s232",
                       surface=surface)   # Sasha 381 · every term in their words (else that term is asked)
         with mock.patch.object(VN, "_read", reader(rungs)), mock.patch.object(VN, "engine_channel", engine_from(rungs)):
             return asyncio.run(VN.hold_venue(ctx, {"name": "Casa Gate", "city": "Madrid", "country": "ES", "what": what, "party": 1,

@@ -92,7 +92,7 @@ class World:
                 mock.patch.object(VS, "end_user", mock.AsyncMock(return_value="u")),
                 mock.patch("booking_signer.agapi_mandate.for_booking", self.for_booking),
                 mock.patch.object(OC, "booked", mock.AsyncMock()), mock.patch.object(WB, "trip_day_words", mock.AsyncMock(return_value=None)),
-                mock.patch.dict(VN._HELD, {}, clear=True), mock.patch.dict(VN._PREV, {}, clear=True), mock.patch.dict(VN._SENT, {}, clear=True)]
+                mock.patch.dict(VN._HELD, {}, clear=True), mock.patch.dict(VN._PREV, {}, clear=True)]
 
 
 def play(turns, in_app=True):

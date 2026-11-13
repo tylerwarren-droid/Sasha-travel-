@@ -149,7 +149,6 @@ class Base(unittest.TestCase):
 
     def setUp(self):
         VN._HELD.pop(ACCT, None)
-        VN._SENT.pop(ACCT, None)
         VN._PREPARED.pop(ACCT, None)
         VS._ACTS.pop(ACCT, None)
         VS._USERS.clear()
@@ -342,11 +341,19 @@ class TheirWords(unittest.TestCase):
 
     def test_the_full_request(self):
         for words in ("book Casa Gate for 2 on Friday at 9pm", "mesa para dos en Casa Gate el viernes a las 21:00",
-                      "Casa Gate, Friday 30 Oct, 21:00, 2 people", "Book Lamucca for 4 Tuesday at 9"):
+                      "Casa Gate, Friday 30 Oct, 21:00, 2 people", "Book Lamucca for 4 Tuesday at 9 tonight"):
             lam = "Lamucca" in words   # Tyler's example: said on a Thursday, for the coming Tuesday
             got = self.w(words, at="2099-11-03T21:00" if lam else None, party=4 if lam else 2, name="Lamucca" if lam else "Casa Gate",
                          today=__import__("datetime").date(2099, 10, 29) if lam else None)
             self.assertTrue(all(got.values()), (words, got))
+
+    def test_a_bare_hour_is_asked_never_the_evening(self):
+        """Sasha 381h · "Book Lamucca for 4 Tuesday at 9" (Tyler's 25 Oct example) gives no side of the day: 21:00 is NOT said — asked
+        "9am or 9pm?" (agapi.said.unsure_hours), never guessed."""
+        from agapi import said as SD
+        got = self.w("Book Lamucca for 4 Tuesday at 9", at="2099-11-03T21:00", party=4, name="Lamucca",
+                     today=__import__("datetime").date(2099, 10, 29))
+        self.assertEqual((got["time"], SD.unsure_hours("Book Lamucca for 4 Tuesday at 9")), (False, [(9, 0)]))
 
     def test_each_detail_s2_filled_in_is_not_said(self):
         self.assertFalse(self.w("book Casa Gate on Friday at 9pm")["people"])          # the default party
@@ -365,8 +372,10 @@ class TheirWords(unittest.TestCase):
 
     def test_every_term_is_read_from_their_words(self):
         src = inspect.getsource(VN.said_terms)   # Sasha 381 · the instruction's terms: their words this conversation, never the model's
-        for read in ("SD.day(", "SD.time_(", "SD.people(", "said_before", "user_said"):
+        for read in ("SD.day(", "SD.time_(", "SD.people(", "_words_of(ctx)"):
             self.assertIn(read, src)
+        words_src = inspect.getsource(VN._words_of)
+        self.assertTrue("said_before" in words_src and "user_said" in words_src)
 
 
 class TheLane(unittest.TestCase):

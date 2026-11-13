@@ -43,7 +43,7 @@ class Complete(unittest.TestCase):
         self.assertEqual((x["parts"]["flow"], x["parts"]["when"]["mode"]), ("availability", "venue_proposes"))
 
     def test_sessions_are_counted_in_sessions(self):
-        x = d("2 sessions of massage on 3 October at 11:00")
+        x = d("2 sessions of massage on 3 October at 11am")
         self.assertEqual(x["parts"]["how_many"], {"count": 2, "unit": "sessions"})
 
 
@@ -58,7 +58,7 @@ class AsksOnlyWhatIsMissing(unittest.TestCase):
 
     def test_then_how_many_in_the_right_unit(self):
         self.assertEqual(d("A table on 2 October at 1pm")["question"], "How many people is it for?")
-        self.assertEqual(d("A massage on 3 October at 11:00")["question"], "How many people is it for?")
+        self.assertEqual(d("A massage on 3 October at 11am")["question"], "How many people is it for?")
 
     def test_between_10_and_1_is_not_guessed(self):
         x = d("A table for 2 on 3 October between 10 and 1")

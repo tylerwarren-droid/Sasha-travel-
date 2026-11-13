@@ -7,7 +7,7 @@ import unittest
 from datetime import date
 
 from booking_signer import emailing as E, guest_whatsapp as GW
-from booking_signer.handoff import booking_handoff, known_place, restaurant_time
+from booking_signer.handoff import booking_handoff, known_place
 
 
 def find(m):
@@ -45,8 +45,8 @@ class NameIt(unittest.TestCase):
     def test_a_venue_by_name(self):
         f = find("book Casa Lucio tomorrow at 9 for 2")
         self.assertEqual((f["what"], f["named"]), ("Casa Lucio", True))
-        self.assertEqual(f["bare_time"]["hour"], 9)
-        self.assertEqual(restaurant_time(f["bare_time"])[-5:], "21:00")   # a restaurant's "9" is the evening
+        self.assertNotIn("open_at", f)   # Sasha 381h · a bare "at 9": its side of the day is asked, never "a restaurant's evening"
+        self.assertNotIn("bare_time", f)
         self.assertEqual(find("book casa lucio in Madrid on Friday at 21:00")["where"], "Madrid")
         self.assertEqual(find("book a table at Botín tonight at 8")["what"], "Botín")
 

@@ -137,7 +137,7 @@ class Private(Base):
     def test_no_test_line_means_nothing_to_call(self):
         os.environ["SASHA_TEST_CALL_NUMBER"] = ""
         self.start("hx:priv")
-        self.say("tomorrow at 9")
+        self.say("tomorrow at 10:00")   # Sasha 381h · the office's hours (7–21) make 10:00 the morning; "at 9" is asked
         self.assertIn("nothing to call. Nothing was dialled", self.bodies()[-1])
 
     def test_a_past_or_vague_time_is_asked_again(self):

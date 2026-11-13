@@ -89,7 +89,7 @@ class TheTurn(unittest.TestCase):
         self.assertIsNone(booking_handoff("what's the weather in Madrid", [], NOW))
 
     def test_the_rest_of_the_message_is_kept_as_the_draft(self):
-        t = booking_handoff("book a massage in Madrid for 2 on 3 October at 11:00", [], NOW)
+        t = booking_handoff("book a massage in Madrid for 2 on 3 October at 11am", [], NOW)
         self.assertEqual(t["reservation_draft"]["parts"]["when"], {"mode": "at", "at": "2026-10-03T11:00"})
         self.assertEqual(t["reservation_draft"]["parts"]["how_many"], {"count": 2, "unit": "people"})
 

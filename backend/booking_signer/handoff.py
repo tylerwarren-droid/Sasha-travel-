@@ -105,18 +105,9 @@ def plain_date(message: str, now: Optional[datetime] = None) -> Optional[str]:
 
 
 def plain_time(message: str) -> Optional[str]:
-    """HH:MM on Psi's served slots, or None. Accepts 8pm · 8:30 pm · 20:00. A bare "at 8" is ambiguous: None."""
-    t = message.lower()
-    m = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", t)
-    if m:
-        h, mi = int(m[1]) % 12 + (12 if m[3] == "pm" else 0), int(m[2] or 0)
-    else:
-        m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", t)
-        if not m:
-            return None
-        h, mi = int(m[1]), int(m[2])
-    hhmm = f"{h:02d}:{mi:02d}"
-    return hhmm if hhmm in PSI_SLOTS else None
+    """HH:MM on Psi's served slots, or None — Sasha 381h: THE ONE reader (agapi.said.times_in); a bare hour without its side is None."""
+    from agapi import said as SD
+    return next((t for t in SD.times_in(message or "") if t in PSI_SLOTS), None)
 
 
 def plain_party(message: str) -> Optional[int]:
@@ -151,33 +142,6 @@ _BARE = re.compile(r"^\s*(?:(?:an?|some)\s+)?(?P<what>(?:[a-záéíóúñ'’-]+
                    r"(?:\s+for\s+\w+(?:\s+(?:people|of us))?)?)" + _WHEN + r"\s+(?:in|near|around)\s+(?P<where>[^?.!;]{2,80})", re.I)
 _BOOKABLE = re.compile(r"\b(table|dinner|lunch|breakfast|brunch|supper|restaurant|bistro|tapas|bar|caf[eé]|spa|massage|tour|"
                        r"hotel|room|studio|salon|class|session|appointment|reservation)s?\b", re.I)
-_DINNER = re.compile(r"\b(dinner|supper|cena|cenar|tonight|evening|noche|night|table|restaurant|mesa)\b", re.I)
-_LUNCH = re.compile(r"\b(lunch|comida|almuerzo|almorzar)\b", re.I)
-_MORNING = re.compile(r"\b(morning|mañana|breakfast|desayuno|a\.?m\.?)\b", re.I)
-
-
-def context_time(message: str) -> Optional[str]:
-    """Sasha 101 · a bare hour as people SAY it — "dinner … at nine" is 21:00, "lunch at two" is 14:00 — unless they
-    say morning or am. Only for a meal said in the same request; otherwise a bare "at 9" stays unknown and is asked."""
-    t = (message or "").lower()
-    m = re.search(r"\bat\s+(\d{1,2}|" + "|".join(_NUMBERS) + r")(?::([0-5]\d))?(?:\s*o'?clock)?\b(?!\s*(?:am|pm|a\.m|p\.m|:))", t)
-    if not m:
-        return None
-    h = int(m[1]) if m[1].isdigit() else _NUMBERS[m[1]]
-    mi = int(m[2] or 0)
-    if not 1 <= h <= 12:
-        return None
-    if _MORNING.search(t):   # breakfast, morning, am: the hour as said
-        return f"{h:02d}:{mi:02d}" if 5 <= h <= 11 else None
-    if _DINNER.search(t) and h <= 11:
-        h += 12
-    elif _LUNCH.search(t) and h <= 5:
-        h += 12
-    elif not (_DINNER.search(t) or _LUNCH.search(t)):
-        return None
-    return f"{h:02d}:{mi:02d}"
-
-
 _WHERE_END = re.compile(r"(?:\s+|\s*,\s*)(?:for|on|at|tomorrow|today|tonight|this|next|by|please|from|open|opened|"
                         r"el\s+\d{1,2}|a\s+las|para|ma[nñ]ana|hoy|esta\s+noche|el\s+(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)|"
                         r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
@@ -197,19 +161,12 @@ def plain_open_at(message: str, now: Optional[datetime] = None) -> Optional[str]
     """S-68 step 4 · the local time a venue must be open at, "YYYY-MM-DDTHH:MM", or None. Taken only when a TIME is
     stated plainly (17:00 · 5pm · 5:30 pm); the day is a weekday (the next one, today included), "today"/"tomorrow"
     or a plain date, else today. Nothing is guessed: "Tuesday" alone, "the evening", "at 5" are None."""
-    t = (message or "").lower()
-    m = re.search(r"\b(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b", t)
-    if m and 1 <= int(m[1]) <= 12:
-        h, mi = int(m[1]) % 12 + (12 if m[3] == "pm" else 0), int(m[2] or 0)
-    else:
-        m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", t)
-        ct = None if m else context_time(message)   # Sasha 101 · "dinner … at nine" said aloud
-        if not (m or ct):
-            return None
-        h, mi = (int(m[1]), int(m[2])) if m else (int(ct[:2]), int(ct[3:]))
-    today = _today(now)
-    day = plain_date(message, now) or today.isoformat()   # Sasha 381f · the ONE reader names weekdays too ("today" when none)
-    return f"{day}T{h:02d}:{mi:02d}"
+    from agapi import said as SD
+    got = SD.times_in(message or "")   # Sasha 381h · THE ONE reader: "dinner … at nine" is 21:00; a bare "at 9" is not read (asked)
+    if not got:
+        return None
+    day = plain_date(message, now) or _today(now).isoformat()   # Sasha 381f · the ONE reader names weekdays too ("today" when none)
+    return f"{day}T{got[0]}"
 
 
 #: S-68 step 7 · a priority the guest STATED, in their words — never inferred from anything else
@@ -411,12 +368,6 @@ _KINDS_NOT_NAMES = re.compile(r"\b(table|dinner|lunch|brunch|breakfast|restauran
                               r"tattoo|barber|salon|hotel|room|flight|car|taxi|something|somewhere)s?\b", re.I)
 
 
-def restaurant_time(bare: dict) -> str:
-    """Sasha 158 · a bare hour at a RESTAURANT is the afternoon or evening ("at 9" → 21:00, "at 2" → 14:00); 12 is noon."""
-    h = bare["hour"] if bare["hour"] == 12 else bare["hour"] + 12
-    return f"{bare['day']}T{h:02d}:{bare['minute']:02d}"
-
-
 def named_request(message: str) -> Optional[dict]:
     m = _NAMED.match(message or "")
     if not m or not (m["rest"] or m["where"]):
@@ -461,11 +412,6 @@ def booking_handoff(message: str, history: Optional[List[dict]] = None, now: Opt
         at = plain_open_at(message, now)
         if at:
             f["open_at"] = at
-        else:   # "tomorrow at 9": the hour is kept, am/pm decided once the venue's kind is known (a restaurant: the evening)
-            hm = re.search(r"\bat\s+(\d{1,2})(?::(\d{2}))?(?!\s*(?:am|pm|h\b|:))\b", message or "", re.I)
-            day = plain_date(message or "", now)
-            if hm and day and 1 <= int(hm[1]) <= 12:
-                f["bare_time"] = {"day": day, "hour": int(hm[1]), "minute": int(hm[2] or 0)}
     if f is None and not named:
         # Sasha 167 · said loosely, as a voice note does: "romantic booking for two at a restaurant in Hoi An, October 27 at 09:00"
         lm = _LOOSE.search(message or "")

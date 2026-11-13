@@ -243,23 +243,16 @@ def sasha_clear(body: str, history: list, now) -> bool:
 
 # ── before a search: the hour (morning or night?) and the day (inside the trip?) ───────────────────────────────────
 
-_HHMM = re.compile(r"\b(0?[1-9]|1[01])[:.h]([0-5]\d)\b(?!\s*(?:am|pm|a\.m|p\.m))", re.I)
-_NIGHT = re.compile(r"\b(at night|tonight|in the evening|evening|pm|p\.m|de la noche|por la noche|noche|night)\b", re.I)
-_MORNING = re.compile(r"\b(in the morning|morning|am|a\.m|de la ma[nñ]ana|breakfast|brunch|desayuno|coffee)\b", re.I)
-_EVENINGISH = re.compile(r"\b(dinner|supper|romantic|restaurant|table|cena|drinks|cocktails?|bar|date night)\b", re.I)
-
-
 def hour_said(body: str) -> Optional[tuple]:
-    """(hour, minute, "night" | "morning" | None) for an HH:MM under 12 said without am/pm — None when there is none."""
-    m = _HHMM.search(body or "")
-    if not m:
-        return None
-    side = "night" if _NIGHT.search(body) else "morning" if _MORNING.search(body) else None
-    return int(m[1]), int(m[2]), side
+    """(hour, minute) of a bare hour they said WITHOUT its side of the day — Sasha 381h: THE ONE reader (agapi.said.unsure_hours) —
+    asked "… in the morning or … at night?", never guessed. None when there is none (a time with its side is read as said)."""
+    from agapi import said as SD
+    got = SD.unsure_hours(body or "")
+    return got[0] if got else None
 
 
 def _set_time(f: dict, parts: dict, hh: int, mm: int) -> None:
-    day = (f.get("open_at") or ((parts.get("when") or {}).get("at")) or "")[:10]
+    day = (f.get("open_at") or ((parts.get("when") or {}).get("at")) or parts.get("day") or "")[:10]   # Sasha 381h · the day said, its hour asked
     if not day:
         return
     at = f"{day}T{hh:02d}:{mm:02d}"
@@ -273,22 +266,20 @@ async def gate(ctx: dict, f: dict, parts: dict, body: str, done: Optional[list] 
     done = list(done or [])
     nonce = uuid.uuid4().hex[:6]
     hs = hour_said(body) if "hour" not in done and not f.get("named") else None
-    if hs and (f.get("open_at") or (parts.get("when") or {}).get("at")):
-        h, mi, side = hs
-        if side == "night":
-            _set_time(f, parts, h + 12, mi)          # "08:00 at night" → 20:00, never asked
-        elif side is None and _EVENINGISH.search(f"{body} {f.get('what') or ''}"):
-            ctx["out"].ask(f"{h} in the morning or {h} at night?", [(f"{h} in the morning", f"am:{nonce}"), (f"{h} at night", f"pm:{nonce}")])
-            ctx["st"]["pending"] = {"kind": "gate", "q": "hour", "at": ctx["now"].isoformat(), "nonce": nonce, "f": f, "parts": parts,
-                                    "body": body, "done": done + ["hour"], "hm": [h, mi]}
-            return
+    if hs and (f.get("open_at") or (parts.get("when") or {}).get("at") or parts.get("day")):
+        h, mi = hs   # Sasha 381h · a bare hour without its side: asked, never guessed (its side said → read by the ONE reader)
+        ctx["out"].ask(f"{h} in the morning or {h} at night?", [(f"{h} in the morning", f"am:{nonce}"), (f"{h} at night", f"pm:{nonce}")])
+        ctx["st"]["pending"] = {"kind": "gate", "q": "hour", "at": ctx["now"].isoformat(), "nonce": nonce, "f": f, "parts": parts,
+                                "body": body, "done": done + ["hour"], "hm": [h, mi]}
+        return
     done.append("hour")
     if "ordinal" not in done:
         done.append("ordinal")
         await _ordinal_day(ctx, f, parts, body)
-    if not f.get("open_at") and not (parts.get("when") or {}).get("at") and parts.get("day") and spoken_time(body):
-        # Sasha 170 · "… on the 13th at 4 in the afternoon": the time said aloud, with the day (it asked "What time?")
-        f["open_at"] = f"{parts['day']}T{spoken_time(body)}"
+    said_t = SD_times(body)
+    if not f.get("open_at") and not (parts.get("when") or {}).get("at") and parts.get("day") and said_t:
+        # Sasha 170 · "… on the 13th at 4 in the afternoon": the time said aloud, with the day (it asked "What time?") — the ONE reader
+        f["open_at"] = f"{parts['day']}T{said_t[0]}"
         parts["when"] = {"mode": "at", "at": f["open_at"]}
     day = (f.get("open_at") or (parts.get("when") or {}).get("at") or parts.get("day") or "")[:10]
     if not f.get("country") and f.get("where"):   # a city on the trip: its country, in Google's words too (venue_read.find_venues)
@@ -344,24 +335,10 @@ _ORD_DAY = re.compile(r"\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)\b", re.I)
 _MONTH_WORD = re.compile(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", re.I)
 
 
-_WORDNUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
-            "twelve": 12}
-_SPOKEN = re.compile(r"\b(\d{1,2}|" + "|".join(_WORDNUM) + r")(?:[:.](\d{2}))?\s*(?:o'?clock\s*)?"
-                     r"(in the morning|am|a\.m\.?|in the afternoon|in the evening|at night|tonight|pm|p\.m\.?|de la ma[nñ]ana|de la tarde|de la noche)",
-                     re.I)
-
-
-def spoken_time(body: str) -> Optional[str]:
-    """Sasha 169 · a time as it is SAID: "10 in the morning", "eight at night", "3 in the afternoon" → HH:MM."""
-    m = _SPOKEN.search(body or "")
-    if not m:
-        return None
-    h = int(m[1]) if m[1].isdigit() else _WORDNUM[m[1].lower()]
-    if not 1 <= h <= 12:
-        return None
-    pm = re.search(r"afternoon|evening|night|tonight|pm|p\.m|tarde|noche", m[3], re.I)
-    h = (h % 12) + (12 if pm else 0)
-    return f"{h:02d}:{int(m[2] or 0):02d}"
+def SD_times(body: str) -> list:
+    """Sasha 381h · the times said — THE ONE reader (agapi.said.times_in)."""
+    from agapi import said as SD
+    return SD.times_in(body or "")
 
 
 async def _ordinal_day(ctx: dict, f: dict, parts: dict, body: str) -> None:
@@ -404,11 +381,12 @@ async def _gate_answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
     n, t = pend["nonce"], body or ""
     if pend["q"] == "hour":
         h, mi = pend["hm"]
-        pm = payload == f"pm:{n}" or (not payload and bool(_NIGHT.search(t) or re.search(r"\b(dinner|cena|evening)\b", t, re.I)))
-        am = payload == f"am:{n}" or (not payload and bool(_MORNING.search(t)))
-        if pm == am:
+        # Sasha 381h · their answer read by THE ONE reader, with the hour they said: "at night" / "the morning" / "9pm" / a tap
+        got = SD_times(f"at {h}:{mi:02d} {t}") if not payload else [f"{h + 12:02d}:{mi:02d}"] if payload == f"pm:{n}" else \
+            [f"{h:02d}:{mi:02d}"] if payload == f"am:{n}" else []
+        if not got or got[0] not in (f"{h:02d}:{mi:02d}", f"{h + 12:02d}:{mi:02d}"):
             return False
-        _set_time(pend["f"], pend["parts"], h + 12 if pm else h, mi)
+        _set_time(pend["f"], pend["parts"], int(got[0][:2]), mi)
     else:
         add = payload == f"tripadd:{n}" or (not payload and bool(re.search(r"\b(add|yes|trip|a[nñ]ade)\b", t, re.I)))
         keep = payload == f"tripkeep:{n}" or (not payload and bool(re.search(r"\b(separate|keep|no|aparte)\b", t, re.I)))
@@ -465,11 +443,8 @@ async def book_added(ctx: dict, pend: dict, body: str) -> None:
     from . import guest_whatsapp as GW, handoff as HO
     f = {k: v for k, v in pend["find"].items() if k != "trip"}
     day = (pend["find"].get("trip") or {}).get("date")
-    at = HO.plain_open_at(body, ctx["now"])
-    hm = re.search(r"\bat\s+(\d{1,2})(?::(\d{2}))?\b", body or "", re.I)
-    if day and hm and not re.search(r"\d\s*(?:am|pm)|\d:\d", body or "", re.I) and 1 <= int(hm[1]) <= 12:
-        at = HO.restaurant_time({"day": day, "hour": int(hm[1]), "minute": int(hm[2] or 0)})
-    elif day and at:
+    at = HO.plain_open_at(body, ctx["now"])   # Sasha 381h · the ONE reader; "book it at 8" alone is not read (asked, never the evening)
+    if day and at:
         at = f"{day}T{at[11:16]}"
     if at:
         f["open_at"] = at

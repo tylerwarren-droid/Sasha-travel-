@@ -334,8 +334,8 @@ def _option_named(options: List[dict], a: dict, said: str):
     if m:
         hhmm = f"{int(m.group(1)):02d}:{m.group(2)}"
         return next((o for o in options if str(o.get("departs") or "")[11:16] == hhmm), None), True
-    for m in _HHMM.finditer(said or ""):
-        hhmm = f"{int(m.group(1)):02d}:{m.group(2)}"
+    from agapi import said as SD
+    for hhmm in SD.times_matching(said or ""):   # Sasha 381h · THE ONE reader: a time they name, matched to what was offered
         hit = next((o for o in options if str(o.get("departs") or "")[11:16] == hhmm), None)
         if hit:
             return hit, True

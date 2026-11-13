@@ -62,7 +62,7 @@ class Base(unittest.TestCase):
         for p in (mock.patch.object(VS, "CALL", self.api), mock.patch.dict(VS._ACTS, {}, clear=True), mock.patch.dict(VS._USERS, {}, clear=True),
                   mock.patch.object(VS, "target", mock.AsyncMock(return_value="live")),
                   mock.patch.object(M, "put_kind", mock.AsyncMock(return_value=True)), mock.patch.object(M, "kind", mock.AsyncMock(return_value=None)),
-                  mock.patch.dict(VN._HELD, {}, clear=True), mock.patch.dict(VN._SENT, {}, clear=True)):
+                  mock.patch.dict(VN._HELD, {}, clear=True)):
             p.start()
             self.addCleanup(p.stop)
         self.tok = VS.TAP.set({"kind": "supabase", "token": TOKEN})
@@ -101,8 +101,9 @@ class TheYesSendsItself(Base):
         self.assertFalse(any(TOKEN in line for line in logs.output))
 
     def test_the_same_yes_again_is_already_sent_with_its_status(self):
-        VN._SENT[ACCT] = {"venue": "Taverna Sandbox", "at": datetime.now(timezone.utc)}
-        VS._ACTS[ACCT] = [{"act_id": "act_1", "venue": "Taverna Sandbox", "when": "2026-10-22T21:00", "party": 2, "state": "sent", "at": 1}]
+        # Sasha 381h · THE record of what was sent (venue_submit's acts) is the one memory a repeated yes reads
+        VS._ACTS[ACCT] = [{"act_id": "act_1", "venue": "Taverna Sandbox", "when": "2026-10-22T21:00", "party": 2, "state": "sent",
+                           "at": __import__("time").time()}]
 
         class Ctx:
             account, user_said, idem, claimed = ACCT, "Yes, send it.", None, None

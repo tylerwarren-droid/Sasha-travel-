@@ -48,11 +48,12 @@ _MONTHS.update({k[:3]: v for k, v in list(_MONTHS.items())})
 def parse_day_time(text: str, today: date) -> Optional[Tuple[date, str]]:
     """"12 November 10:00", "12/11/2026 at 9:30", "November 12 2026 10.15" → (the next such day, "HH:MM"), or None."""
     s = (text or "").lower()
-    tm = re.search(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b", s)
-    if not tm:
+    from agapi import said as SD
+    got = SD.times_in(s, open_between=(7, 21))   # Sasha 381h · THE ONE reader; an appointment's office hours decide a bare hour's side
+    if not got:
         return None
-    hhmm = f"{int(tm.group(1)):02d}:{tm.group(2)}"
-    s2 = s[:tm.start()] + " " + s[tm.end():]
+    hhmm = got[0]
+    s2 = re.sub(r"\b\d{1,2}[:h]\d{2}\b|\b\d{1,2}\.\d{2}\b(?![./-]\d)", " ", s)   # the time is never the date
     d = None
     m = re.search(r"\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b", s2)
     if m:

@@ -16,7 +16,6 @@ from zoneinfo import ZoneInfo
 
 from . import handoff as HO, sentences as SN
 
-_TIME = re.compile(r"\b(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?\b", re.I)
 _BETWEEN = re.compile(r"\bbetween\s+(?P<a>[0-9:.h apm]+?)\s+and\s+(?P<b>[0-9:.h apm]+?)(?=\s|$|[,.?!])", re.I)
 _TO = re.compile(r"\b(?:drive|fly|go|get)\b.*?\bto\s+(?P<x>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)(?=\s+(?:between|and|on|by|from)\b|[,.?!]|$)")
 _FROM = re.compile(r"\bfrom\s+(?P<x>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)(?=\s+(?:between|and|on|to)\b|[,.?!]|$)")
@@ -44,13 +43,10 @@ def day_of(text: str, now: datetime) -> Optional[date]:
 
 
 def _hm(s: str) -> Optional[Tuple[int, int]]:
-    m = _TIME.search(s or "")
-    if not m:
-        return None
-    h, mi = int(m[1]), int(m[2] or 0)
-    if m[3] and m[3].lower() == "pm" and h < 12:
-        h += 12
-    return (h, mi) if 0 <= h < 24 and 0 <= mi < 60 else None
+    """Sasha 381h · a time they said — THE ONE reader (agapi.said.times_in); "between 1 and 6" is not read (asked), never 01:00."""
+    from agapi import said as SD
+    got = SD.times_in(s or "")
+    return (int(got[0][:2]), int(got[0][3:])) if got else None
 
 
 def _start(r: dict) -> Optional[datetime]:

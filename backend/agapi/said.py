@@ -94,7 +94,7 @@ def days_in(words: str, today: date) -> List[date]:
             add(m.start(), date(int(m[1]), int(m[2]), int(m[3])))
         except ValueError:
             pass
-    for m in re.finditer(r"(?<![\d-])\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b(?![:.]\d)", w):
+    for m in re.finditer(r"(?<![\d-])(?<!at )(?<!las )(?<!by )\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b(?![:.]\d)(?!\s*(?:am|pm|a\.m|p\.m|h\b))", w):   # "at 10.05" / "10.05pm" is a time
         y = int(m[3]) + (2000 if m[3] and len(m[3]) == 2 else 0) if m[3] else None
         add(m.start(), _next_md(today, int(m[2]), int(m[1]), y))
     for m in re.finditer(rf"(?<!for )(?<!para )\b(\d{{1,2}}){_ORDS}\s*(?:-|–|to|until|till|al|a)\s*(\d{{1,2}}){_ORDS}\s*(?:of\s+|de\s+)?{_MON}", w):
@@ -130,23 +130,140 @@ def day(words: str, d: date, today: date) -> bool:
     return d in days_in(words, today)
 
 
+#: Sasha 381h · the side of the day a bare hour is on, as a person says it — RIGHT AFTER the time ("nine at night", "9 de la mañana")
+_AFTER_PM = r"(?:pm|p\.\s?m\.?|in the afternoon|in the evening|at night|tonight|this evening|de la tarde|de la noche|por la tarde|por la noche|esta noche)"
+_AFTER_AM = r"(?:am|a\.\s?m\.?|in the morning|this morning|de la ma[ñn]ana|por la ma[ñn]ana)"
+#: … or anywhere in their words: what the meal or the part of the day says ("dinner … at nine", "tonight at nine", "breakfast at 9")
+_CUE_PM = re.compile(r"\b(dinner|supper|cena|cenar|tonight|night|evening|afternoon|noche|tarde|pm|p\.m)\b")
+_CUE_AM = re.compile(r"\b(breakfast|desayuno|desayunar|morning|am|a\.m)\b|\b(?:de|por) la ma[ñn]ana\b")
+_CUE_LUNCH = re.compile(r"\b(lunch|comida|comer|almuerzo|almorzar)\b")
+_MIN_WORDS = {"oclock": 0, "fifteen": 15, "thirty": 30, "forty five": 45, "forty-five": 45, "en punto": 0, "y media": 30,
+              "y cuarto": 15}
+_HOUR = r"(\d{1,2}|" + "|".join(sorted(NUMBERS, key=len, reverse=True)) + r")"
+_NOT_A_TIME = r"(?!\s*(?:people|persons?|personas?|of us|guests|pax|comensales|adults|nights?|days?|noches|d[ií]as)\b)"
+
+
+def _side(w: str, end: int) -> Optional[str]:
+    """"pm" / "am" said right after the time, else None."""
+    tail = w[end:end + 22]
+    if re.match(rf"\s*{_AFTER_PM}(?![a-z])", tail):
+        return "pm"
+    if re.match(rf"\s*{_AFTER_AM}(?![a-z])", tail):
+        return "am"
+    return None
+
+
+def _clock(h: int, mi: int, side: Optional[str], w: str, plain24: bool, open_between: Optional[tuple] = None) -> tuple:
+    """→ ("HH:MM", None) when the time is certain, or (None, (h, mi)) when it is a bare hour that could be either side of the day.
+    A 24-hour time (13–23, 0, a leading zero) is certain as said; 12 is noon; 1–11 needs its side — said after it, or ONE side said
+    anywhere in their words (the meal, the part of the day). Both sides said, or none → not read: asked "9am or 9pm?", never guessed —
+    "9:30" and even "09:00" too: speech-to-text writes a spoken "nine" as "09:00" (Sasha 167's live failure: a romantic dinner at 09:00)."""
+    if not (0 <= h <= 23 and 0 <= mi <= 59):
+        return None, None
+    if side == "pm" and 1 <= h <= 11:
+        h += 12
+    elif side == "am" and h == 12:
+        h = 0
+    elif side is None and 1 <= h <= 11 and not plain24:
+        pm, am, lunch = bool(_CUE_PM.search(w)), bool(_CUE_AM.search(w)), bool(_CUE_LUNCH.search(w))
+        if lunch and not (pm or am):
+            pm, am = h <= 5, h >= 11   # "lunch at 1" is 13:00, "lunch at 11" is 11:00; "lunch at 8" is not read
+        if pm == am and open_between:   # the venue open on ONE side of that hour only: that side ("10:00" at an office open 7–21)
+            lo, hi = open_between
+            am, pm = (lo * 60 <= x * 60 + mi <= hi * 60 for x in (h, h + 12))
+        if pm == am:
+            return None, (h, mi)
+        h += 12 if pm else 0
+    return f"{h:02d}:{mi:02d}", None
+
+
+def _times(words: str, open_between: Optional[tuple] = None) -> tuple:
+    w = " " + (words or "").casefold().replace("’", "'") + " "
+    found: List[tuple] = []   # (pos, "HH:MM" | None, (h, mi) | None)
+    taken: List[range] = []
+
+    def add(m, h: int, mi: int, plain24: bool = False, side: Optional[str] = None) -> None:
+        if any(m.start() < r.stop and r.start < m.end() for r in taken):   # one time, read once
+            return
+        taken.append(range(m.start(), m.end()))
+        got, unsure = _clock(h, mi, side or _side(w, m.end()), w, plain24, open_between)
+        if got or unsure:
+            found.append((m.start(), got, unsure))
+    # spoken forms first (they hold a number word): half past nine · quarter past/to nine · half nine · las nueve y media / menos cuarto
+    for m in re.finditer(rf"\b(half|quarter)\s+(past|to)\s+{_HOUR}\b", w):
+        h, mi = _n(m[3]), 30 if m[1] == "half" else 15
+        if h is not None:
+            add(m, (h - 1) % 12 or 12 if m[2] == "to" else h, 60 - mi if m[2] == "to" else mi)
+    for m in re.finditer(rf"\bhalf\s+{_HOUR}\b{_NOT_A_TIME}", w):
+        if _n(m[1]) is not None:
+            add(m, _n(m[1]), 30)
+    for m in re.finditer(rf"\b(?:a\s+)?(?:las|la)\s+{_HOUR}(?![:.h]\d)(?:\s+(y media|y cuarto|menos cuarto|en punto))?\b{_NOT_A_TIME}", w):
+        h = _n(m[1])
+        if h is None:
+            continue
+        if m[2] == "menos cuarto":
+            add(m, (h - 1) % 12 or 12, 45)
+        else:
+            add(m, h, _MIN_WORDS.get(m[2] or "", 0))
+    # clock forms: 21:30 · 9:30pm · 9.30 p.m. · 21h30 · 21h · 9 pm · nine pm · nine thirty
+    for m in re.finditer(r"(?<![\d/.:-])(\d{1,2})([:.h])(\d{2})(?![\d/.:-]?\d)", w):
+        if m[2] == "." and not (_side(w, m.end()) or re.search(r"\b(?:at|a las|sobre las|around|by)\s+$", w[:m.start()])):
+            continue   # "20.11" is a day; "9.30 pm" / "at 21.30" is a time
+        h = int(m[1])
+        add(m, h, int(m[3]), plain24=h >= 13 or h == 0)
+    for m in re.finditer(r"\b(?:at|a las|by|from|sobre las)\s+([01]\d|2[0-3])([0-5]\d)h?\b", w):   # "at 2130", "a las 2100h"
+        add(m, int(m[1]), int(m[2]), plain24=True)
+    for m in re.finditer(r"(?<![\d/.:-])(\d{1,2})h(?![a-z\d])", w):
+        add(m, int(m[1]), 0, plain24=int(m[1]) >= 13 or int(m[1]) == 0)
+    for m in re.finditer(rf"\b{_HOUR}\s+(o'?clock|thirty|fifteen|forty[- ]five)\b", w):
+        if _n(m[1]) is not None:
+            add(m, _n(m[1]), _MIN_WORDS[m[2].replace("-", " ").replace("'", "")])
+    for m in re.finditer(rf"(?<!for )(?<!para )(?<!of )(?<!x)\b{_HOUR}(?:\s*o'?clock)?\s*(?=(?:{_AFTER_PM}|{_AFTER_AM})(?![a-z]))", w):   # 9pm · 10 in the morning · nueve de la noche
+        if _n(m[1]) is not None:
+            add(m, _n(m[1]), 0)
+    # a bare hour after "at" / "sobre las": "at nine", "at 9" — its side said, or asked
+    for m in re.finditer(rf"\b(?:at|around|by)\s+{_HOUR}\b(?![:.h]\d){_NOT_A_TIME}", w):
+        if _n(m[1]) is not None:
+            add(m, _n(m[1]), 0)
+    for m in re.finditer(r"\b(noon|midday|mediod[ií]a)\b", w):
+        add(m, 12, 0, plain24=True)
+    for m in re.finditer(r"\b(midnight|medianoche)\b", w):
+        add(m, 0, 0, plain24=True)
+    found.sort(key=lambda x: x[0])
+    sure, unsure = [], []
+    for _, t, u in found:
+        if t and t not in sure:
+            sure.append(t)
+        if u and u not in unsure:
+            unsure.append(u)
+    return sure, unsure
+
+
+def times_in(words: str, open_between: Optional[tuple] = None) -> List[str]:
+    """Sasha 381h · THE ONE READER of every way a person says a booking's time — EN and ES → every time they said, "HH:MM", in order:
+    21:30 · 9:30pm · 9.30 p.m. · 21h30 · 21h · half past nine · half nine · quarter past / to nine · nine thirty · nine o'clock · 9pm ·
+    "at nine" with its side (at night, tonight, dinner, in the morning, breakfast, lunch) · a las nueve y media · las nueve y cuarto ·
+    las nueve menos cuarto · a las nueve de la noche · noon · midnight. A bare hour whose side of the day they didn't say is NOT read
+    (unsure_hours names it: asked "9am or 9pm?") — a time they didn't say never reaches a booking. `open_between` (start, end hours):
+    the venue's own hours, when known — a bare hour it is open on ONE side of only is that side; open on both → still asked."""
+    return _times(words, open_between)[0]
+
+
+def unsure_hours(words: str, open_between: Optional[tuple] = None) -> List[tuple]:
+    """Sasha 381h · the bare hours they said without saying which side of the day: [(9, 0)] for "at nine" — asked, never guessed."""
+    return _times(words, open_between)[1]
+
+
+def times_matching(words: str) -> List[str]:
+    """Sasha 381h · a time they name to PICK one of the options on their screen ("the 7:44"): every time they said, a bare hour as
+    both its sides — matched against what was offered (never a time sent on its own)."""
+    sure, unsure = _times(words)   # "the 7:44" names the 07:44 or the 19:44 on their screen
+    return sure + [f"{h + d:02d}:{mi:02d}" for h, mi in unsure for d in (0, 12) if h + d < 24]
+
+
 def time_(words: str, hhmm: str) -> bool:
-    w = (words or "").casefold()
-    h, m = int(hhmm[:2]), int(hhmm[3:5])
-    for hh, mm in re.findall(r"\b(\d{1,2})[:.h](\d{2})\b", w):
-        if int(hh) == h and int(mm) == m:
-            return True
-    if m:
-        return False   # 21:30 is said only with its minutes
-    h12 = h - 12 if h > 12 else h
-    pm = h >= 12
-    for hh, ap in re.findall(r"\b(\d{1,2})\s*(am|pm|h)\b", w):
-        if (ap == "h" and int(hh) == h) or (ap == "pm" and pm and int(hh) == h12) or (ap == "am" and not pm and int(hh) == h):
-            return True
-    for hh in re.findall(rf"\b(?:at|a las|sobre las)\s+{_NUM}\b(?![:.]\d)(?!\s*(?:people|persons?|personas?|of us|guests|pax))", w):
-        if _n(hh) in (h, h12):   # Sasha 381 · "at 9" and "at nine" / "a las nueve" alike
-            return True
-    return False
+    """Their words say THIS time (the ONE reader, times_in)."""
+    return hhmm in times_in(words)
 
 
 def people(words: str, n: int) -> bool:
@@ -172,4 +289,4 @@ def said_all(words: str, name: str, at: str, party: int, today: date) -> bool:
     return all(which(words, name, at, party, today).values())
 
 
-__all__ = ["which", "said_all", "venue", "day", "days_in", "time_", "people", "MONTH_NAMES"]
+__all__ = ["which", "said_all", "venue", "day", "days_in", "times_in", "unsure_hours", "times_matching", "time_", "people", "MONTH_NAMES"]

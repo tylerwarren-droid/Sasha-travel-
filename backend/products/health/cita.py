@@ -449,7 +449,9 @@ def when(t: str, now: datetime) -> Optional[Tuple[date, str]]:
     """"Tuesday 10:00" (the health turn's own reading) or "14 October 9:30" (the itinerary's) → (day, "HH:MM")."""
     from .. import itinerary as IT
     from .turn import MADRID, parse_when
-    hm = re.search(r"\b([01]?\d|2[0-3])[:.h]([0-5]\d)\b", t or "")    # an explicit HH:MM wins ("8 de octubre … a las 10:30")
+    from agapi import said as SD
+    from .turn import OFFICE_HOURS
+    hm = (SD.times_in(t or "", open_between=OFFICE_HOURS) or [None])[0]   # Sasha 381h · THE ONE reader; a said time wins
     at = parse_when(t, now if now.tzinfo else now.replace(tzinfo=MADRID))
     if at:
         at = at.astimezone(MADRID)
@@ -457,7 +459,7 @@ def when(t: str, now: datetime) -> Optional[Tuple[date, str]]:
     else:
         got = IT.parse_day_time(t, now.astimezone(MADRID).date() if now.tzinfo else now.date())
     if got and hm:
-        got = (got[0], f"{int(hm.group(1)):02d}:{hm.group(2)}")
+        got = (got[0], hm)
     return got
 
 

@@ -81,6 +81,17 @@ REQUESTED = "Requested — I'll tell you when they reply."
 TERM_ASK = {"party": "For how many people?", "date": "Which day?", "time": "What time?"}   # keyed by AgAPI's own terms (CR 196)
 
 
+def hour_ask(h: int, mi: int = 0) -> str:
+    """Sasha 381h · a bare hour they said without its side of the day: asked, never guessed — "9am or 9pm?"."""
+    t = f"{h}:{mi:02d}" if mi else f"{h}"
+    return f"{t}am or {t}pm?"
+
+
+def term_ask(terms: List[str], unsure: Optional[List[int]] = None) -> str:
+    """The ask for exactly these terms; the time, when they said a bare hour, is that hour's side (hour_ask)."""
+    return " ".join(hour_ask(*unsure) if t == "time" and unsure else TERM_ASK[t] for t in terms if t in TERM_ASK)
+
+
 def booked_now(ref: Optional[str]) -> str:
     return f"Booked — reference {ref}." if ref else "Booked."
 
@@ -138,7 +149,7 @@ def yes_line(tool: str, r: dict) -> str:
     if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("status") in PENDING and res.get("line"):
         return res["line"]
     if tool == "hold_venue" and isinstance(res, dict) and res.get("status") == "need_term" and res.get("terms") \
-            and res.get("ask") == " ".join(TERM_ASK[t] for t in res["terms"] if t in TERM_ASK):
+            and res.get("ask") == term_ask(res["terms"], res.get("unsure")):
         return res["ask"]   # Sasha 381 · exactly the terms AgAPI says they didn't give, asked word for word — never a yes card
     if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("acted") and res.get("line"):
         # Sasha 381 · a venue act on the instruction: "Booking now: …" + its outcome, said by code on EVERY surface; booked in the app →
@@ -1250,7 +1261,7 @@ __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progre
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "route_line", "is_route_line", "route_told", "ROUTE_LINES", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
            "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
-           "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "TERM_ASK", "booked_now", "acted_line", "OUTSIDE", "outside_line", "outside_ask",
+           "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "TERM_ASK", "hour_ask", "term_ask", "booked_now", "acted_line", "OUTSIDE", "outside_line", "outside_ask",
            "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]
 
 

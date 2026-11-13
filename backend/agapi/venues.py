@@ -868,15 +868,24 @@ async def hold_venue(ctx, a: dict) -> dict:
     return _with_card(card, await one_decision(ctx, a, rd, res, at, now, card, dec))
 
 
-def _ask_terms(a: dict, missing: List[str]) -> dict:
-    """Sasha 381 · exactly the terms AgAPI's term_not_given names (CR 196), asked in her words — said by code (voice.yes_line)."""
+def _ask_terms(a: dict, missing: List[str], words: str = "") -> dict:
+    """Sasha 381 · exactly the terms AgAPI's term_not_given names (CR 196), asked in her words — said by code (voice.yes_line).
+    Sasha 381h · the time, when their words hold a bare hour without its side of the day: "9am or 9pm?" (agapi.said.unsure_hours)."""
+    from agapi import said as SD
     from app.agent import voice as V
     terms = [m for m in missing if m in V.TERM_ASK]
-    return {"status": "need_term", "terms": terms, "venue": a.get("name"), "booked": False, "ask": " ".join(V.TERM_ASK[t] for t in terms),
+    unsure = list((SD.unsure_hours(words) or [None])[-1] or []) or None if "time" in terms else None
+    return {"status": "need_term", "terms": terms, "venue": a.get("name"), "booked": False, "ask": V.term_ask(terms, unsure),
+            **({"unsure": unsure} if unsure else {}),
             "how": "Say `ask` word for word — nothing else. When they answer, call hold_venue again with it."}
 
 
 CHECK_IN = "15:00"   # Sasha 253 · G8 — a stay's time is the hotel's check-in (the old flow's), never a term the person gives
+
+
+def _words_of(ctx) -> str:
+    """Their own words in this conversation: what they said before + this turn."""
+    return "\n".join(x for x in (getattr(ctx, "said_before", "") or "", str(getattr(ctx, "user_said", "") or "")) if x)
 
 
 def said_terms(ctx, a: dict) -> Dict[str, Any]:
@@ -884,7 +893,7 @@ def said_terms(ctx, a: dict) -> Dict[str, Any]:
     agapi.said and matching the booking (a detail that can't be read plainly is not said). Reads only; WHICH terms are required is
     AgAPI's (term_not_given). A stay's time is its check-in, not theirs."""
     from agapi import said as SD
-    words = "\n".join(x for x in (getattr(ctx, "said_before", "") or "", str(getattr(ctx, "user_said", "") or "")) if x)
+    words = _words_of(ctx)
     out: Dict[str, Any] = {}
     try:
         d = date.fromisoformat(str(a.get("day") or ""))
@@ -925,7 +934,7 @@ async def _terms_asked(ctx, a: dict) -> Optional[dict]:
     got = await AM.for_booking(ctx, eu, str(getattr(ctx, "user_said", "") or "") or str(venue or ""), said)
     missing = [m for m in got.get("missing") or [] if m != "prepared_id"]   # the booking isn't prepared yet: that one is Sasha's to do
     if got.get("code") == "term_not_given" and missing:
-        return _ask_terms(a, missing)
+        return _ask_terms(a, missing, _words_of(ctx))
     log.error("[venues] %s: a term wasn't said but AgAPI named none to ask (%s) — nothing sent", venue, got.get("code"))
     return {"status": "not_sent", "venue": venue, "booked": False, "say": got.get("why") or "Nothing was sent — tell me again."}
 
@@ -1136,7 +1145,6 @@ async def _platform_result(ctx, held: dict, r: dict, venue: str, where) -> dict:
     in_app = {"in_app": True} if VS.TAP.get() is not None else {}
     area = ", ".join(str(v) for v in (held.get("choices") or {}).values())
     if r.get("status") == "confirmed":
-        _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}
         ref = r.get("reference")
         return {"status": "confirmed", "venue": venue, "when": held["summary"], "itinerary": where, "route": "platform",
                 **({"platform": held["platform"]} if held.get("platform") else {}), **({"area": area} if area else {}),
@@ -1682,7 +1690,7 @@ async def _instruction(ctx, held: dict) -> Optional[dict]:
         held["mandate_id"] = got["mandate_id"]
         return None
     if got.get("code") == "term_not_given" and got.get("missing"):
-        return _ask_terms({"name": _API().plain_venue(held["venue"])}, got["missing"])
+        return _ask_terms({"name": _API().plain_venue(held["venue"])}, got["missing"], _words_of(ctx))
     return {"status": "not_sent", "venue": _API().plain_venue(held["venue"]), "booked": False,
             "say": got.get("why") or "Nothing was sent — ask me again."}
 
@@ -1755,8 +1763,8 @@ async def book_venue(ctx, a: dict) -> dict:
     held = _HELD.get(ctx.account)
     from agapi import venue_submit as VS
     if not held:
-        sent = _SENT.get(ctx.account)
-        if sent and not stale(sent["at"]):   # Sasha 258 · the same yes again: already sent — said, with its status; never sent twice
+        sent = await last_sent(ctx.account)
+        if sent:   # Sasha 258 · the same yes again: already sent — said, with its status; never sent twice (Sasha 381h · read from the record)
             return await _tap_refused(ctx, {"venue": sent["venue"]}, "approval_consumed", {}, sent["venue"])
         if VS.TAP.get() is not None:   # Sasha 263 · in the app the yes sends ONLY the card on their screen: none waiting → said, nothing sent
             return {"status": "nothing_waiting", "booked": False, "in_app": True}
@@ -1982,8 +1990,6 @@ async def _agapi_send(ctx, held: dict, how: dict, venue: str, where) -> dict:
     if not r.get("ok"):
         return await _not_sent(ctx, held, r["error"], venue)
     st = r.get("status")
-    if st in ("confirmed", "sent"):
-        _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}   # Sasha 258 · a repeated yes answers "already sent"
     if held.get("platform_book"):   # Sasha 328 · CR 160 · AgAPI pressed Book on their platform page (or stopped): said as it is
         return await _platform_result(ctx, held, r, venue, where)
     if held.get("kanoe"):   # Sasha 287 · Kanoe's WhatsApp: sent → when, and who it waits for; AgAPI's gate said no at the send → their own
@@ -2023,7 +2029,6 @@ async def _kanoe_sent(ctx, held: dict, r: dict, venue: str, where) -> dict:
     from agapi import venue_submit as VS
     in_app = {"in_app": True} if VS.TAP.get() is not None else {}
     if r.get("status") == "sent":
-        _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}
         line = _acted(held, r, False)
         return {"status": "requested", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False, "act_id": r.get("act_id"),
                 **({"reference": r["reference"]} if r.get("reference") else {}), "wa_sent": True, "line": line, **in_app,
@@ -2091,7 +2096,6 @@ async def _agapi_call(ctx, held: dict, how: dict, venue: str, where) -> dict:
                 **({"open": link, "page_url": link} if link else {})}
     if st != "calling":
         raise _err("not_sent", r.get("say") or f"{venue} couldn't be called — nothing is booked")
-    _SENT[ctx.account] = {"venue": venue, "at": datetime.now(timezone.utc)}
     dialled = await VC.dial(ctx.account, r, {**held, "timezone": _tz_of(held)})
     return {"status": "calling", "venue": venue, "when": held["summary"], "booked": False, "act_id": r.get("act_id"),
             "line": _acted(held, r, False), "dial": dialled.get("status"), **({"in_app": True} if VS.TAP.get() is not None else {}),
@@ -2138,7 +2142,16 @@ def _tz_of(held: dict) -> str:
     return (V.COUNTRIES.get(str(held.get("country") or "").upper()) or (None, None, None, "Europe/Madrid"))[3]
 
 
-_SENT: Dict[str, dict] = {}   # Sasha 258 · account → the last booking sent on their in-app yes (venue, at) — a repeated yes
+async def last_sent(account: str) -> Optional[dict]:
+    """Sasha 381h · the booking they last sent, read from THE record of what was sent (venue_submit's acts, written durably as AgAPI
+    acts — the one memory; the old in-process copy is deleted) → {venue, at} while a repeated yes is still that yes, else None."""
+    from agapi import v0 as API, venue_submit as VS
+    acts = [a for a in await VS.acts_of(account) if a.get("venue") and not (a.get("cancels") or a.get("changes"))]
+    if not acts:
+        return None
+    a = max(acts, key=lambda x: float(x.get("at") or 0))
+    at = datetime.fromtimestamp(float(a.get("at") or 0), timezone.utc)
+    return None if API.stale(at) else {"venue": a["venue"], "at": at}
 
 
 async def _tap_refused(ctx, held: dict, code: str, err: dict, venue: str) -> dict:

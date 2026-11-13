@@ -74,11 +74,10 @@ def _n(t: str) -> int:
 
 
 def _time(t: str) -> Optional[str]:
-    m = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", t)
-    if m:
-        return f"{int(m[1]) % 12 + (12 if m[3] == 'pm' else 0):02d}:{int(m[2] or 0):02d}"
-    m = re.search(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", t)
-    return f"{int(m[1]):02d}:{m[2]}" if m else None
+    """Sasha 381h · the first time said — THE ONE reader (agapi.said.times_in); a bare hour without its side is None (asked)."""
+    from agapi import said as SD
+    got = SD.times_in(t or "")
+    return got[0] if got else None
 
 
 def _window(t: str, day: Optional[str]) -> Optional[dict]:
@@ -131,7 +130,7 @@ def draft(message: str, now: Optional[datetime] = None, lang: str = "en") -> Dic
         parts["what"] = {"activity": en, "activity_venue_lang": words.get(lang.split("-")[0], words["en"]), "category": category}
         parts["flow"] = "quote_first" if (flow == "quote_first" or _QUOTE.search(t)) else "book"
     day = plain_day(message, now)
-    hhmm = _time(t) or HO.context_time(message)   # Sasha 101 · "dinner … at nine" is 21:00
+    hhmm = _time(message)   # Sasha 381h · the ONE reader: "dinner … at nine" is 21:00
     win = _window(t, day)
     if _ASK_SPACE.search(t) or (parts.get("flow") == "quote_first" and not (day and hhmm)):
         parts["when"] = {"mode": "venue_proposes"}

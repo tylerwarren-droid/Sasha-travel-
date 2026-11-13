@@ -1806,24 +1806,6 @@ async def _tell_if_linked(ch: Optional[dict], frm: str, text: str) -> None:
 
 # ── Sasha 126 · the spa membership (Kanoe Demo Spa, ours) and two bookings from one sentence ───────────────────────
 
-_SPA_T = re.compile(r"\b(?:spa|massage|masaje)\b\D{0,20}?(\d{1,2}(?:[:.h]\d{2})?\s*(?:am|pm|h)?)", re.I)
-_EAT_T = re.compile(r"\b(?:dinner|lunch|restaurant|table|cena|comida|restaurante|mesa)\b\D{0,20}?(\d{1,2}(?:[:.h]\d{2})?\s*(?:am|pm|h)?)", re.I)
-
-
-def _hhmm(s: str) -> Optional[str]:
-    from .chat_request import _time
-    s = (s or "").strip().lower()
-    return _time(s) or HO.plain_time(f"at {s}") or (f"{int(s):02d}:00" if re.fullmatch(r"\d{1,2}", s) and 0 <= int(s) <= 23 else None)
-
-
-def _at_time(text: str) -> Optional[str]:
-    """"on Tuesday at 18:00", "at 6pm": the time said after "at"/"a las"."""
-    m = re.search(r"\b(?:at|a las|a la)\s+(\d{1,2}(?:[:.h]\d{2})?\s*(?:am|pm|h)?)", text or "", re.I)
-    return HO.context_time(text or "") or HO.plain_time(text or "") or (_hhmm(m[1]) if m else None)
-
-
-
-
 async def _forwarded_confirmation(ctx: dict, body: str) -> bool:
     """Sasha 118 (3) · a guest forwards (or pastes) a venue's confirmation: filed on the ONE booking it names (written.py),
     read with the field checks, and answered here. Not a confirmation → False (the turn goes on)."""
@@ -1950,8 +1932,6 @@ async def _find(ctx: dict, f: dict, draft: dict) -> None:
         if "what" not in parts and re.search(r"restaurant|bar|caf|bistro|tavern|grill|steak|sushi|pizz|brasserie|tapas|food|bodega",
                                              str(c.get("type") or ""), re.I):
             parts["what"] = {"activity": "a table", "activity_venue_lang": "una mesa", "category": "restaurant"}   # a restaurant: a table
-            if f.get("bare_time") and not f.get("open_at"):
-                f = {**f, "open_at": HO.restaurant_time(f["bare_time"])}
         await _picked_card(ctx, {"find": {**f, "where": f.get("where") or city_of(c.get("address")) or "the city"},
                                  "draft": parts},
                            {"place_id": c["place_id"], "name": c.get("name"), "country": c.get("country"), "type": c.get("type")})
@@ -2742,8 +2722,7 @@ async def _answer_need(ctx: dict, pend: dict, body: str) -> bool:
         day, hhmm = (draft.get("when") or {}).get("at", "")[:10] or None, None
         from .chat_request import plain_day, _time
         day = plain_day(body, ctx["now"]) or day or draft.get("day")   # Sasha 148 · the day given earlier, kept
-        from . import wa_brain as WB
-        hhmm = _time(body.lower()) or HO.context_time(body) or HO.plain_time(body) or WB.spoken_time(body)   # Sasha 169 · "10 in the morning"
+        hhmm = _time(body)   # Sasha 381h · THE ONE reader (agapi.said.times_in): "10 in the morning", "nine at night", "21:00"
         if (d.get("how_many") or {}).get("count") and not draft.get("how_many"):   # "… for 2" said with the time: kept
             draft["how_many"] = d["how_many"]
         if (d.get("when") or {}).get("mode") in ("at", "venue_proposes"):

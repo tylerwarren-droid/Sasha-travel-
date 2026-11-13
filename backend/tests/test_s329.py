@@ -180,7 +180,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         from agapi import s2_memory as M, s2_outcomes as OC
         from booking_signer import guest_receipt as GR, live_events as LE, mailbox as MB, wa_brain as WB
-        for d in (VN._HELD, VN._PREV, VN._CANCEL, VN._SENT, VS._ACTS, VS._RECORD):
+        for d in (VN._HELD, VN._PREV, VN._CANCEL, VS._ACTS, VS._RECORD):
             d.pop(ACCT, None)
         VS._USERS.clear()
         V0._CLAIMED.clear()

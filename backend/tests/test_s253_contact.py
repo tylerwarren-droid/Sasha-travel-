@@ -92,7 +92,7 @@ class Base(unittest.TestCase):
         self._said = [*getattr(self, "_said", []), said]
         return c
 
-    def hold(self, said=f"Handle it — book La Mi Venta for two on {DAY} at nine.", surface="s2", **extra):   # Sasha 364 · they chose it
+    def hold(self, said=f"Handle it — book La Mi Venta for two on {DAY} at nine at night.", surface="s2", **extra):   # Sasha 364 · they chose it
         VN._HELD.pop(ACCT, None)
         key = uuid.uuid4().hex   # a fresh call each time (never the process's replay of an earlier test's)
         # Sasha 254 · "Handle it" (route form): the booking rules' fill_form_zero_touch — the form's read-back, the contact in it
@@ -147,7 +147,7 @@ class AskedOnceAndKept(Base):
         self.assertEqual(self.puts(), [])                                    # nothing saved
 
     def test_a_name_given_in_the_ask_turn_needs_only_the_mobile(self):
-        self.hold(f"Book La Mi Venta for Tyler Warren, two people, {DAY} at nine.")
+        self.hold(f"Book La Mi Venta for Tyler Warren, two people, {DAY} at nine at night.")
         r = self.save("+34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
         self.assertTrue(r["ok"], r)
 
@@ -163,7 +163,7 @@ class AskedOnceAndKept(Base):
         self.assertEqual(len(self.puts()), 1)
 
     def test_under_another_name_keeps_their_own_contact(self):
-        r = self.hold(f"Book La Mi Venta for two on {DAY} at nine, under Alex Gate.", under="Alex Gate")
+        r = self.hold(f"Book La Mi Venta for two on {DAY} at nine at night, under Alex Gate.", under="Alex Gate")
         self.assertIn("under", r["error"]["message"])
         self.save("Tyler Warren, +34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
         self.assertTrue(self.hold("Under Alex Gate.", under="Alex Gate")["ok"])
@@ -233,7 +233,7 @@ class BrainPath(Base):
     def test_no_contact_saved_means_no_booking(self):
         from app.agent.fakes import Block
         seen = self.turn([[Block(type="tool_use", id="t1", name="hold_venue", input=dict(VENUE))],
-                          [Block(type="text", text="Whose name should I book under?")]], f"book La Mi Venta for two on {DAY} at 9")   # Sasha 381 · every term theirs
+                          [Block(type="text", text="Whose name should I book under?")]], f"book La Mi Venta for two on {DAY} at 9pm")   # Sasha 381 · every term theirs
         self.assertIn("save_contact", [t["name"] for t in seen[0]["tools"]])
         result = json.dumps(seen[1]["messages"], default=str)
         self.assertIn("contact_missing", result)

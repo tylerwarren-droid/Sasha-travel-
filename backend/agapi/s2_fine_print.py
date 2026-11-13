@@ -57,7 +57,6 @@ FACTS = {"type": "object", "properties": {
     "your_plate": {"type": "string", "description": "their own (rental) car's plate"},
     "your_insurer": {"type": "string"}, "injuries": {"type": "string"},
     "witnesses": {"type": "array", "items": {"type": "string"}}}}
-_HHMM = re.compile(r"\b([01]?\d|2[0-3])[:h]([0-5]\d)\b")
 
 
 def _card_name(c: dict) -> str:
@@ -85,9 +84,10 @@ def agapi_facts(given: Optional[dict], said: str = "") -> Dict[str, Any]:
     if g.get("witnesses"):
         out["witnesses"] = [str(w)[:120] for w in g["witnesses"]][:4]
     if "time" not in out:
-        m = _HHMM.search(said or "")
-        if m:
-            out["time"] = f"{int(m.group(1)):02d}:{m.group(2)}"
+        from agapi import said as SD
+        got = SD.times_in(said or "")   # Sasha 381h · THE ONE reader of a time they said
+        if got:
+            out["time"] = got[0]
     if out.get("date") and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", out["date"]):
         out.pop("date")
     if out.get("time") and not re.fullmatch(r"\d{2}:\d{2}", out["time"]):

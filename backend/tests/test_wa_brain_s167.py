@@ -120,6 +120,11 @@ class Flow(unittest.TestCase):
         c = ctx(pend)
         with Patch(GW___picked_card=picked):
             self.assertTrue(asyncio.run(GW._answer_pending(c, "book it at 8 for 2", "")))
+        self.assertEqual(got, [(None, False, "Mango Rooms")])   # Sasha 381h · "at 8" alone: its side asked on the way, never "the evening"
+        got.clear()
+        c = ctx(pend)
+        with Patch(GW___picked_card=picked):
+            self.assertTrue(asyncio.run(GW._answer_pending(c, "book it at 8pm for 2", "")))
         self.assertEqual(got, [("2026-11-14T20:00", False, "Mango Rooms")])
 
 
@@ -213,8 +218,10 @@ class LiveFailure(unittest.TestCase):
 
     def test_it_is_a_search_and_clear(self):
         from booking_signer import handoff as HO
-        f = HO.booking_handoff(self.SAID, [], NOW)["booking_find"]
-        self.assertEqual((f["what"], f["where"], f["open_at"]), ("romantic restaurant", "Hoi An", "2026-10-27T09:00"))
+        t = HO.booking_handoff(self.SAID, [], NOW)
+        f = t["booking_find"]   # Sasha 381h · "09:00" with no side (a spoken "nine", as speech-to-text writes it): the day kept, the hour asked
+        self.assertEqual((f["what"], f["where"], f.get("open_at"), t["reservation_draft"]["parts"]["day"]),
+                         ("romantic restaurant", "Hoi An", None, "2026-10-27"))
         self.assertTrue(WB.sasha_clear(self.SAID, [], NOW))
         for m in ("Please, add a dinner in Hoi An on the fifteenth at 08:00 at night. Thank you.",
                   "Make me a dinner reservation for two people on November 15 in Hoi An, Vietnam."):
@@ -286,9 +293,11 @@ class LiveFailure(unittest.TestCase):
         self.assertEqual(len(got), 1)   # still a refinement of the open search
 
     def test_at_night_is_never_asked(self):
-        self.assertEqual(WB.hour_said("a dinner at 08:00 at night"), (8, 0, "night"))
-        self.assertEqual(WB.hour_said("breakfast at 9:00"), (9, 0, "morning"))
+        # Sasha 381h · a side said (after the time, or by the meal) is read by the ONE reader — never asked; only a bare hour is
+        self.assertIsNone(WB.hour_said("a dinner at 08:00 at night"))
+        self.assertIsNone(WB.hour_said("breakfast at 9:00"))
         self.assertIsNone(WB.hour_said("dinner at 21:00"))
+        self.assertEqual(WB.hour_said("a restaurant in Hoi An at 09:00"), (9, 0))
 
     def test_add_day_keeps_order(self):
         p = {**LATEST, "plan": {**PLAN, "days": [dict(d) for d in PLAN["days"]]}}

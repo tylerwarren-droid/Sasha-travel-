@@ -88,16 +88,18 @@ _DAYS.update({"lunes": 0, "martes": 1, "miercoles": 2, "miércoles": 2, "jueves"
               "domingo": 6})
 
 
+OFFICE_HOURS = (7, 21)   # an appointment's office: a bare "10:00" is the morning (22:00 is closed); "at 9" is open both → asked
+
+
 def parse_when(t: str, now: datetime) -> Optional[datetime]:
     """"Tuesday 10:00", "tomorrow at 9", "martes 10:30" → the next such moment, Madrid time; None if unclear."""
     s = (t or "").lower()
-    m = re.search(r"\b(\d{1,2})(?::|\.|h)?(\d{2})?\s*(am|pm)?\b", re.sub(r"\b(20\d\d)\b", "", s))
-    if not m:
+    from agapi import said as SD
+    got = SD.times_in(re.sub(r"\b(20\d\d)\b", "", s), open_between=OFFICE_HOURS)   # Sasha 381h · THE ONE reader, the office's hours
+    if not got:
         return None
-    h, mi = int(m.group(1)), int(m.group(2) or 0)
-    if m.group(3) == "pm" and h < 12:
-        h += 12
-    if not (7 <= h <= 21 and mi < 60):
+    h, mi = int(got[0][:2]), int(got[0][3:])
+    if not (OFFICE_HOURS[0] <= h <= OFFICE_HOURS[1]):
         return None
     local = now.astimezone(MADRID)
     day = None

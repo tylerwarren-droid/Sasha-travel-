@@ -160,7 +160,9 @@ def fake_act(test: unittest.TestCase, answer: dict = None):
 def said(args: dict) -> str:
     """Sasha 381 · the person's instruction in their own words — every term of the booking given (a term not given is asked, never
     guessed): the venue, the day, the time (none for a quote), the people."""
-    when = (f" on {args['day']}" if args.get("day") else "") + (f" at {str(args['time'])[:5]}" if args.get("time") else "")
+    t = str(args.get("time") or "")[:5]
+    side = " in the morning" if t and 1 <= int(t[:2]) <= 11 else ""   # Sasha 381h · a morning hour is said with its side (else asked)
+    when = (f" on {args['day']}" if args.get("day") else "") + (f" at {t}{side}" if t else "")
     return f"book {args.get('name')}{when} for {args.get('party')}"
 
 

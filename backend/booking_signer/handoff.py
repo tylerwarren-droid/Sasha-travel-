@@ -25,9 +25,6 @@ except Exception:  # no tz database: fall back to UTC for "today" (Lisbon is UTC
 PSI_SLOTS = ("12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "19:30", "20:00", "20:30", "21:00", "21:30", "22:00")
 BOOKING_TAB = "/booking-helper"
 
-_MONTHS = {m: i + 1 for i, m in enumerate(
-    ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"])}
-_MONTHS.update({m[:3]: n for m, n in list(_MONTHS.items())})
 _NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
             "ten": 10, "eleven": 11, "twelve": 12}
 
@@ -101,31 +98,10 @@ def _today(now: Optional[datetime]) -> date:
 
 
 def plain_date(message: str, now: Optional[datetime] = None) -> Optional[str]:
-    """ISO date, or None. Accepts 2026-10-05 · 5 October · 5th of October · October 5 · tomorrow."""
-    t = message.lower()
-    today = _today(now)
-    m = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", t)
-    if m:
-        try:
-            return date(int(m[1]), int(m[2]), int(m[3])).isoformat()
-        except ValueError:
-            return None
-    if re.search(r"\btomorrow\b", t):
-        return (today + timedelta(days=1)).isoformat()
-    names = "|".join(sorted(_MONTHS, key=len, reverse=True))
-    m = re.search(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({names})\b", t) or \
-        re.search(rf"\b({names})\s+(\d{{1,2}})(?:st|nd|rd|th)?\b", t)
-    if not m:
-        return None
-    day, month = (int(m[1]), _MONTHS[m[2]]) if m[1].isdigit() else (int(m[2]), _MONTHS[m[1]])
-    for year in (today.year, today.year + 1):   # the next such date that is not in the past
-        try:
-            d = date(year, month, day)
-        except ValueError:
-            return None
-        if d >= today:
-            return d.isoformat()
-    return None
+    """ISO date of the first day the message names, or None — Sasha 381f: THE ONE reader (agapi.said.days_in), every form in EN and ES."""
+    from agapi import said as SD
+    got = SD.days_in(message or "", _today(now))
+    return got[0].isoformat() if got else None
 
 
 def plain_time(message: str) -> Optional[str]:
@@ -215,7 +191,6 @@ COUNTRY_NAMES = {"spain": "ES", "españa": "ES", "portugal": "PT", "france": "FR
                  "austria": "AT", "uk": "GB", "united kingdom": "GB", "england": "GB", "ireland": "IE", "vietnam": "VN",
                  "viet nam": "VN", "kenya": "KE"}
 
-_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
 def plain_open_at(message: str, now: Optional[datetime] = None) -> Optional[str]:
@@ -233,13 +208,7 @@ def plain_open_at(message: str, now: Optional[datetime] = None) -> Optional[str]
             return None
         h, mi = (int(m[1]), int(m[2])) if m else (int(ct[:2]), int(ct[3:]))
     today = _today(now)
-    day = plain_date(message, now)
-    if day is None:
-        wd = re.search(r"\b(" + "|".join(_WEEKDAYS) + r")\b", t)
-        if wd:
-            day = (today + timedelta(days=(_WEEKDAYS.index(wd[1]) - today.weekday()) % 7)).isoformat()
-        else:
-            day = today.isoformat()   # "today" too
+    day = plain_date(message, now) or today.isoformat()   # Sasha 381f · the ONE reader names weekdays too ("today" when none)
     return f"{day}T{h:02d}:{mi:02d}"
 
 

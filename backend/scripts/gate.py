@@ -93,6 +93,12 @@ async def main() -> int:
     # Sasha 249 · ONE VERDICT: the line printed and the exit code are the same expression (the safety suite was printed, never failed)
     bad = bool(a or b or c or d or v or w or e or f or s or t or h or o)
     print(f"\nDEPLOY GATE: {'PASS' if not bad else 'FAIL'}")
+    if not bad:   # Sasha 381f · only a build whose gate PASSED has its recordings replayed by later builds (model_gateway._usable)
+        from booking_signer import model_gateway as MG
+        try:
+            await MG.mark_build_passed()
+        except Exception as e:
+            print(f"gate: this build's pass not marked ({type(e).__name__}) — its recordings will be re-recorded, never trusted")
     if not bad and os.getenv("SASHA_GATE_LOOP5_PROBE", "on") != "off" and os.environ.get("SASHA_MODEL_REPLAY") != "replay":   # 353: replies
         # replayed are the same every run — the probe measures a live model's variance, so it runs only when recording   # Sasha 323 · after the verdict, never part of it: VOICE LOOP 5
         try:                                                                 # run until it fails once — its whole conversation printed

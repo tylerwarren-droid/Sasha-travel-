@@ -91,26 +91,13 @@ def _window(t: str, day: Optional[str]) -> Optional[dict]:
     return {"earliest": f"{day}T{a}", "latest": f"{day}T{b}"}
 
 
-_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 _UNDER = re.compile(r"\b(?:under(?: the name(?: of)?)?|in the name of|name(?:d)?:?)\s+([A-ZÀ-Þ][\w'’.-]{1,40}(?:\s+[A-ZÀ-Þ][\w'’.-]{1,40}){0,2})")
 
 
 def plain_day(message: str, now: Optional[datetime] = None) -> Optional[str]:
-    """Sasha 86 · the day the message states: a plain date (handoff.plain_date), else today/tonight, else a weekday —
-    the next one, today included, exactly as the cards' "open then" reads it (handoff.plain_open_at). "Saturday" said
-    on Thursday 1 Oct 2026 is Saturday 3 Oct. Nothing else is guessed."""
-    day = HO.plain_date(message, now)
-    if day:
-        return day
-    t = (message or "").lower()
-    today = HO._today(now)
-    if re.search(r"\b(today|tonight|this evening)\b", t):
-        return today.isoformat()
-    m = re.search(r"\b(" + "|".join(_WEEKDAYS) + r")\b", t)
-    if m:
-        from datetime import timedelta
-        return (today + timedelta(days=(_WEEKDAYS.index(m[1]) - today.weekday()) % 7)).isoformat()
-    return None
+    """Sasha 86 · the day the message states — Sasha 381f: THE ONE reader (handoff.plain_date → agapi.said.days_in: dates, today /
+    tonight, the next weekday — today included — "the 13th", EN and ES). Nothing else is guessed."""
+    return HO.plain_date(message, now)
 
 
 def plain_name(message: str) -> Optional[str]:

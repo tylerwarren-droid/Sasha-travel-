@@ -48,7 +48,7 @@ class Ctx:
 
 
 def booking(t):
-    return {"name": VENUE, "city": "Madrid", "day": "2026-10-22", "time": t, "party": 2}
+    return {"name": VENUE, "city": "Madrid", "day": "2026-12-24", "time": t, "party": 2}
 
 
 class World:
@@ -119,15 +119,15 @@ def play(turns, in_app=True):
     return w, out
 
 
-ITEM_7 = [("Book Sasha Test Venue Thursday 22 October at 20:15 for 2", "hold_venue", booking("20:15"))]
+ITEM_7 = [("Book Sasha Test Venue Thursday 24 December at 20:15 for 2", "hold_venue", booking("20:15"))]
 
 
 class EachInstructionBooksItsOwnSlot(unittest.TestCase):
     def test_gate_item_7_then_a_new_booking(self):
         """THE GATE (row 914), Sasha 381: no card — each instruction books the slot IT gave (21:15 is 21:15, never item 7's 20:15)."""
-        w, out = play(ITEM_7 + [("Thursday 22 October at 21:15 for 2 too", "hold_venue", booking("21:15"))])
-        self.assertEqual([(x["when"], x["mandate_id"]) for x in w.sent], [("2026-10-22T20:15", "mdt-2026-10-22T20:15"),
-                                                                          ("2026-10-22T21:15", "mdt-2026-10-22T21:15")])   # each its own instruction
+        w, out = play(ITEM_7 + [("Thursday 24 December at 21:15 for 2 too", "hold_venue", booking("21:15"))])
+        self.assertEqual([(x["when"], x["mandate_id"]) for x in w.sent], [("2026-12-24T20:15", "mdt-2026-12-24T20:15"),
+                                                                          ("2026-12-24T21:15", "mdt-2026-12-24T21:15")])   # each its own instruction
         self.assertEqual(out[1]["status"], "confirmed")
         self.assertIn("at 21:15", out[1]["line"])
 
@@ -172,10 +172,10 @@ class NoQuestionOfHerOwn(unittest.TestCase):
 
 class TheConfirmationIsTwoSentencesSaidByCode(unittest.TestCase):
     def test_booked_and_the_one_question(self):
-        w, out = play([("Book Sasha Test Venue Thursday 22 October at 21:15 for 2", "hold_venue", booking("21:15"))])
+        w, out = play([("Book Sasha Test Venue Thursday 24 December at 21:15 for 2", "hold_venue", booking("21:15"))])
         line = V.yes_line("hold_venue", {"ok": True, "result": {**out[0], "in_app": True}})
         # Sasha 381 · Tyler's ONE line, then (Sasha 279 · C) the closing line and the one question
-        self.assertTrue(line.startswith("Booking now: Sasha Test Venue, 2 people, Thu 22 Oct at 21:15. Booked — reference TV-263."), line)
+        self.assertTrue(line.startswith("Booking now: Sasha Test Venue, 2 people, Thu 24 Dec at 21:15. Booked — reference TV-263."), line)
         self.assertTrue(line.endswith(" Shall I put it in your calendar?"), line)   # (279's closing between them when it's its first time)
 
     def test_not_in_the_app_she_says_it_as_before(self):

@@ -16,7 +16,6 @@ from zoneinfo import ZoneInfo
 
 from . import handoff as HO, sentences as SN
 
-_ORD = re.compile(r"\bthe\s+(\d{1,2})(?:st|nd|rd|th)\b", re.I)
 _TIME = re.compile(r"\b(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?\b", re.I)
 _BETWEEN = re.compile(r"\bbetween\s+(?P<a>[0-9:.h apm]+?)\s+and\s+(?P<b>[0-9:.h apm]+?)(?=\s|$|[,.?!])", re.I)
 _TO = re.compile(r"\b(?:drive|fly|go|get)\b.*?\bto\s+(?P<x>[A-ZÁÉÍÓÚ][\wáéíóúñ .'-]*?)(?=\s+(?:between|and|on|by|from)\b|[,.?!]|$)")
@@ -39,21 +38,9 @@ def qualified(place: str, hint: Optional[str] = None) -> str:
 
 
 def day_of(text: str, now: datetime) -> Optional[date]:
+    """Sasha 381f · the day the text names — THE ONE reader (via handoff.plain_date → agapi.said.days_in; its ordinal rule lives there)."""
     d = HO.plain_date(text or "", now)
-    if d:
-        return date.fromisoformat(d)
-    m = _ORD.search(text or "")
-    if m:
-        today = now.astimezone(ZoneInfo("Europe/Madrid")).date()
-        day = int(m[1])
-        y, mo = today.year, today.month
-        if day < today.day:   # "the 5th" said on the 20th is next month's
-            y, mo = (y + 1, 1) if mo == 12 else (y, mo + 1)
-        try:
-            return date(y, mo, day)
-        except ValueError:
-            return None
-    return None
+    return date.fromisoformat(d) if d else None
 
 
 def _hm(s: str) -> Optional[Tuple[int, int]]:

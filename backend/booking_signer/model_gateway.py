@@ -323,6 +323,16 @@ class _PgReplays:
             "on conflict (id) do update set data = excluded.data, at = excluded.at", f"replay:{key}", json.dumps(data),
             os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
 
+    async def passed(self, build: str) -> bool:
+        """Sasha 381f · did this deploy's gate PASS (scripts/gate.py marked it)?"""
+        return bool(await _db(lambda c: c.fetchval("select 1 from sasha_measures where id = $1", f"gate_pass:{build}")))
+
+    async def mark_passed(self, build: str) -> None:
+        await _db(lambda c: c.execute(
+            "insert into sasha_measures (id, kind, at, day, data, mv, sasha, agapi, expires_at) values ($1, 'gate_pass', now(), "
+            "(now() at time zone 'Europe/Madrid')::date, $2::jsonb, 0, $3, null, now() + interval '365 days') on conflict (id) do nothing",
+            f"gate_pass:{build}", json.dumps({"build": build}), os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:12]))
+
 
 REPLAYS: Any = None   # tests replace it: async get(key) / put(key, data)
 
@@ -331,10 +341,33 @@ def _replays():
     return REPLAYS if REPLAYS is not None else _PgReplays()
 
 
+def build() -> str:
+    """Sasha 381f · the deploy this process is (Railway's deployment id) — every recording carries it."""
+    return os.getenv("RAILWAY_DEPLOYMENT_ID", "").strip()
+
+
+async def _usable(got: Any) -> bool:
+    """Sasha 381f · A RECORDING FROM A BUILD WHOSE GATE FAILED IS NEVER REPLAYED (found by 381d/381e: a failed recording run's refusals were
+    replayed by every later run — record mode fills only what's missing). Usable: this build's own (the run that's recording now), a build
+    whose gate PASSED (marked by scripts/gate.py), or one from before builds were marked (all of those were deploys that passed)."""
+    b = got.get("build") if isinstance(got, dict) else None
+    if not b or b == build():
+        return True
+    store = _replays()
+    return bool(await store.passed(b)) if hasattr(store, "passed") else True
+
+
+async def mark_build_passed() -> None:
+    """Sasha 381f · scripts/gate.py, on PASS only: this build's recordings may be replayed from now on."""
+    b, store = build(), _replays()
+    if b and hasattr(store, "mark_passed"):
+        await store.mark_passed(b)
+
+
 async def _record(key: str, msg: Any, kw: Optional[dict] = None) -> None:
     data = msg.model_dump(mode="json") if hasattr(msg, "model_dump") else msg
     try:   # the reply, and what was asked (masked) — a later miss can be told apart from its nearest recording
-        await _replays().put(key, {"reply": data, "asked": _asked(kw) if kw else None})
+        await _replays().put(key, {"reply": data, "asked": _asked(kw) if kw else None, "build": build()})   # Sasha 381f · whose it is
     except Exception as e:
         log.error("[model_gateway] RECORD: %s not kept (%s)", key, type(e).__name__)
 
@@ -342,6 +375,9 @@ async def _record(key: str, msg: Any, kw: Optional[dict] = None) -> None:
 async def _replayed(kw: dict):
     key = replay_key(kw)
     got = await _replays().get(key)
+    if got is not None and not await _usable(got):   # Sasha 381f · recorded by a build whose gate failed: as good as none
+        log.error("[model_gateway] REPLAY: the recording for %s came from a build whose gate failed — not replayed", key)
+        got = None
     if got is None:
         msg = f"no recorded reply for this request ({key}) — record once with SASHA_MODEL_REPLAY=record; nothing was sent"
         log.error("[model_gateway] REPLAY: %s", msg)
@@ -360,7 +396,7 @@ async def _recording(kw: dict, live):
     from anthropic.types import Message
     key = replay_key(kw)
     got = await _replays().get(key)
-    if got is not None:
+    if got is not None and await _usable(got):   # Sasha 381f · a failed build's recording is re-recorded, never followed
         return Message.model_validate(got.get("reply", got) if isinstance(got, dict) and "reply" in got else got), False
     fut = _INFLIGHT.get(key)
     if fut is not None and fut.get_loop() is asyncio.get_running_loop():

@@ -42,9 +42,10 @@ class PlainValuesOnly(unittest.TestCase):
 def _next(day):
     """The next such weekday from NOW (today included), as the hand-off reads it."""
     from datetime import timedelta
-    from booking_signer.handoff import _today, _WEEKDAYS
+    from booking_signer.handoff import _today
+    week = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]   # the test's own (handoff reads days_in)
     t = _today(NOW)
-    return (t + timedelta(days=(_WEEKDAYS.index(day) - t.weekday()) % 7)).isoformat()
+    return (t + timedelta(days=(week.index(day) - t.weekday()) % 7)).isoformat()
 
 
 class TheTurn(unittest.TestCase):

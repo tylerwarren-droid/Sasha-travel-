@@ -332,6 +332,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "recorded) on EVERY door that books — S2, /next, voice / REST, /group (the verified session → in_app, this turn's id), WhatsApp "
             "(the signed message → its id); neither → no proof; never ctx.via (Sasha 381e)",
             ["tests.test_s381e_every_door"]),
+    "T94": ("every way a person names the booking's day is read by ONE reader (agapi.said.days_in — EN and ES, against the venue's "
+            "today): \"the 13th\", \"el 13\", \"13 Nov\", tomorrow, Saturday… reach scope.booking; \"Which day?\" only when no day is said; "
+            "and a recording from a build whose gate FAILED is never replayed (Sasha 381f)",
+            ["tests.test_s381f_one_day_reader"]),
 }
 
 _RUNNER = """

@@ -58,7 +58,6 @@ _INVITE = re.compile(rf"\binvit(?:e|ar|a)\s+{_NAME}\s+(?:to|for|a)\s+(?:a\s+)?{_
 _ME_AND = re.compile(rf"\b{_ACT}\b[^.?!]*?\bfor\s+me\s+and\s+{_NAME}", re.I)
 _ACT_EN = {"cena": "dinner", "comida": "lunch", "almuerzo": "lunch", "desayuno": "breakfast", "a table": "dinner"}
 _NOT_NAMES = {"Me", "Us", "My", "Friends", "Friend", "The", "Him", "Her", "Them"}
-_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
 def window(message: str, now: datetime, tz: str = TZ) -> Optional[Tuple[date, date]]:
@@ -73,13 +72,9 @@ def window(message: str, now: datetime, tz: str = TZ) -> Optional[Tuple[date, da
     if re.search(r"\bnext week\b|\bla semana que viene\b|\bla próxima semana\b", t):
         start = today + timedelta(days=7 - today.weekday())
         return (start, start + timedelta(days=6))
-    if re.search(r"\btomorrow\b|\bmañana\b", t):
-        return (today + timedelta(days=1),) * 2
-    m = re.search(r"\b(" + "|".join(_WEEKDAYS) + r")\b", t)
-    if m:
-        d = today + timedelta(days=(_WEEKDAYS.index(m[1]) - today.weekday()) % 7)
-        return (d, d)
-    return None
+    from agapi import said as SD   # Sasha 381f · a single day: THE ONE reader (tomorrow, a weekday, "the 13th", a date — EN and ES)
+    got = SD.days_in(message or "", today)
+    return (got[0], got[0]) if got else None
 
 
 def invite_request(message: str, now: Optional[datetime] = None) -> Optional[dict]:

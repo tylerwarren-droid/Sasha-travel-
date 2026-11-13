@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 WEEKDAYS = (("monday", "lunes"), ("tuesday", "martes"), ("wednesday", "miércoles", "miercoles"), ("thursday", "jueves"),
             ("friday", "viernes"), ("saturday", "sábado", "sabado"), ("sunday", "domingo"))
@@ -41,24 +41,93 @@ def _base(name: str) -> str:
     return re.sub(r"\s*\(.*?\)\s*", " ", str(name or "")).casefold().strip()
 
 
-def day(words: str, d: date, today: date) -> bool:
+#: Sasha 381f · every month as a person names it, EN + ES (full, short) — the ONE reader's table
+MONTH_NAMES = {1: ("january", "jan", "enero", "ene"), 2: ("february", "feb", "febrero"), 3: ("march", "mar", "marzo"),
+               4: ("april", "apr", "abril", "abr"), 5: ("may", "mayo"), 6: ("june", "jun", "junio"), 7: ("july", "jul", "julio"),
+               8: ("august", "aug", "agosto", "ago"), 9: ("september", "sept", "sep", "septiembre", "setiembre", "set"),
+               10: ("october", "oct", "octubre"), 11: ("november", "nov", "noviembre"), 12: ("december", "dec", "diciembre", "dic")}
+_MONTH_OF = {name: n for n, names in MONTH_NAMES.items() for name in names}
+_MON = "(" + "|".join(sorted(_MONTH_OF, key=len, reverse=True)) + r")\.?"
+_ORDS = r"(?:st|nd|rd|th|º|°|o)?"
+_NOT_PEOPLE = r"(?!\s*(?:people|persons?|personas?|of us|guests|pax|comensales|adults|h\b|:|\.\d|am\b|pm\b|o'?clock))"
+
+
+def _next_md(today: date, month: int, day_: int, year: Optional[int] = None) -> Optional[date]:
+    """A day and month as a person says them: that year when named, else the next one that isn't past."""
+    for y in ((year,) if year else (today.year, today.year + 1)):
+        try:
+            d = date(y, month, day_)
+        except ValueError:
+            return None
+        if year or d >= today:
+            return d
+    return None
+
+
+def _next_d(today: date, day_: int) -> Optional[date]:
+    """A day of the month alone ("the 13th", "el 13"): this month's, or next month's when it's already past."""
+    y, m = today.year, today.month
+    for _ in range(2):
+        try:
+            d = date(y, m, day_)
+            if d >= today:
+                return d
+        except ValueError:
+            pass
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return None
+
+
+def days_in(words: str, today: date) -> List[date]:
+    """Sasha 381f · THE ONE READER of every way a person names a day — EN and ES, resolved against `today` (the venue's local date):
+    2026-11-13 · 13/11 · 13 Nov · 13th of November · November 13 · 13 de noviembre · the 13th · on the 13th · el 13 · el día 13 · today ·
+    tonight · hoy · esta noche · tomorrow · mañana · the day after tomorrow · pasado mañana · Saturday · el sábado (the next one, today
+    counting) · a range's days ("from 20 to 22 October", "del 20 al 22 de octubre"). → every date named, in the order said."""
     w = (words or "").casefold()
-    gap = (d - today).days
-    if gap == 0 and re.search(r"\b(today|tonight|hoy|esta noche)\b", w):
-        return True
-    if gap == 1 and re.search(r"\b(tomorrow|ma[ñn]ana)\b", w) and not re.search(r"\bpasado ma[ñn]ana\b", w):
-        return True
-    if 0 <= gap <= 6 and any(re.search(rf"\b{n}\b", w) for n in WEEKDAYS[d.weekday()]):
-        return True
-    if d.isoformat() in w:
-        return True
-    mon = "|".join(MONTHS[d.month - 1])
-    if re.search(rf"\b0?{d.day}(st|nd|rd|th)?\s*(de\s+)?({mon})\w*\b", w) or re.search(rf"\b({mon})\w*\s+0?{d.day}(st|nd|rd|th)?\b", w):
-        return True
-    # Sasha 381 · a stay's range names its first day: "from 20 to 22 October", "20-22 Oct", "del 20 al 22 de octubre"
-    if re.search(rf"\b0?{d.day}(st|nd|rd|th)?\s*(?:-|–|to|until|till|al|a)\s*\d{{1,2}}(st|nd|rd|th)?\s*(de\s+)?({mon})\w*\b", w):
-        return True
-    return bool(re.search(rf"\b0?{d.day}[/.-]0?{d.month}\b", w))
+    found: List[tuple] = []
+
+    def add(pos: int, d: Optional[date]) -> None:
+        if d and all(d != x for _, x in found):
+            found.append((pos, d))
+    for m in re.finditer(r"\b(\d{4})-(\d{2})-(\d{2})\b", w):
+        try:
+            add(m.start(), date(int(m[1]), int(m[2]), int(m[3])))
+        except ValueError:
+            pass
+    for m in re.finditer(r"(?<![\d-])\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b(?![:.]\d)", w):
+        y = int(m[3]) + (2000 if m[3] and len(m[3]) == 2 else 0) if m[3] else None
+        add(m.start(), _next_md(today, int(m[2]), int(m[1]), y))
+    for m in re.finditer(rf"(?<!for )(?<!para )\b(\d{{1,2}}){_ORDS}\s*(?:-|–|to|until|till|al|a)\s*(\d{{1,2}}){_ORDS}\s*(?:of\s+|de\s+)?{_MON}", w):
+        add(m.start(), _next_md(today, _MONTH_OF[m[3]], int(m[1])))
+        add(m.start(2), _next_md(today, _MONTH_OF[m[3]], int(m[2])))
+    for m in re.finditer(rf"(?<!for )(?<!para )\b(\d{{1,2}}){_ORDS}\s+(?:of\s+|de\s+)?{_MON}(?![a-z])", w):   # "for 2" is people
+        add(m.start(), _next_md(today, _MONTH_OF[m[2]], int(m[1])))
+    for m in re.finditer(rf"\b{_MON}\s+(\d{{1,2}}){_ORDS}\b", w):
+        add(m.start(), _next_md(today, _MONTH_OF[m[1]], int(m[2])))
+    month_after = rf"(?!{_ORDS}\s*(?:-|–|to|al)?\s*\d*{_ORDS}\s*(?:of\s+|de\s+)?{_MON})"
+    for m in re.finditer(rf"\b(?:the|el(?:\s+d[ií]a)?|d[ií]a)\s+(\d{{1,2}}){_ORDS}\b{month_after}{_NOT_PEOPLE}", w):
+        add(m.start(), _next_d(today, int(m[1])))
+    for m in re.finditer(rf"\b(\d{{1,2}})(?:st|nd|rd|th)\b{month_after}", w):
+        add(m.start(), _next_d(today, int(m[1])))
+    for m in re.finditer(r"\b(today|tonight|this evening|hoy|esta noche|esta tarde)\b", w):
+        add(m.start(), today)
+    for m in re.finditer(r"\b(the day after tomorrow|pasado ma[ñn]ana)\b", w):
+        add(m.start(), date.fromordinal(today.toordinal() + 2))
+    for m in re.finditer(r"\b(tomorrow|ma[ñn]ana)\b", w):
+        before = w[max(0, m.start() - 12):m.start()]
+        if re.search(r"(?:after|pasado|la|por la|de la)\s+$", before):   # "the day after tomorrow", "por la mañana" (the morning)
+            continue
+        add(m.start(), date.fromordinal(today.toordinal() + 1))
+    for i_, names in enumerate(WEEKDAYS):
+        for n in names:
+            for m in re.finditer(rf"(?<!next )\b{n}\b", w):   # "next Friday" is this one or the week after's: never guessed (asked)
+                add(m.start(), date.fromordinal(today.toordinal() + (i_ - today.weekday()) % 7))
+    return [d for _, d in sorted(found, key=lambda x: x[0])]
+
+
+def day(words: str, d: date, today: date) -> bool:
+    """Their words name THIS day (the ONE reader, days_in)."""
+    return d in days_in(words, today)
 
 
 def time_(words: str, hhmm: str) -> bool:
@@ -103,4 +172,4 @@ def said_all(words: str, name: str, at: str, party: int, today: date) -> bool:
     return all(which(words, name, at, party, today).values())
 
 
-__all__ = ["which", "said_all", "venue", "day", "time_", "people"]
+__all__ = ["which", "said_all", "venue", "day", "days_in", "time_", "people", "MONTH_NAMES"]

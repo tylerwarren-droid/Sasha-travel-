@@ -356,7 +356,7 @@ class G8OnWhatsApp(ScriptedBrain):
             if path == "/api/booking/links":
                 self.links.append(body)
                 return 200, {"link_id": "l-h", "platform": "SynXis", "slot_filled": False,
-                             "url": "https://be.synxis.com/?hotel=1&arrive=2026-10-20&depart=2026-10-22&adult=2&rooms=1",
+                             "url": "https://be.synxis.com/?hotel=1&arrive=2026-12-20&depart=2026-12-22&adult=2&rooms=1",
                              "read_back": {"lines": ["Hotel Test books rooms through its own booking engine (SynXis)."], "sha256": "h" * 64}}
             return await inner(account, method, path, body, timeout)
         fake.calls = inner.calls
@@ -365,13 +365,13 @@ class G8OnWhatsApp(ScriptedBrain):
         self.addCleanup(VN._READS.pop, TG.ACCOUNT, None)
 
     def test_a_stay_on_whatsapp_goes_to_the_hotels_own_engine_read_back_first(self):
-        hold = {"name": "Hotel Test", "city": "Madrid", "country": "ES", "what": "hotel", "party": 2, "day": "2026-10-20", "nights": 2,
+        hold = {"name": "Hotel Test", "city": "Madrid", "country": "ES", "what": "hotel", "party": 2, "day": "2026-12-20", "nights": 2,
                 "idempotency_key": "h1"}
         self.brain([[Block(type="tool_use", id="t1", name="hold_venue", input=hold)],
                     [Block(type="text", text="I'll send Hotel Test Madrid's own booking page to your phone, with your stay. Shall I?")]])
-        self.say("Book the Hotel Test in Madrid from 20 to 22 October for 2, with the hotel itself")
+        self.say("Book the Hotel Test in Madrid from 20 to 22 December for 2, with the hotel itself")
         self.assertEqual(self.links[0]["nights"], 2)                                         # the stay in the engine's link
-        self.assertEqual((self.links[0]["date"], self.links[0]["time"]), ("2026-10-20", "15:00"))
+        self.assertEqual((self.links[0]["date"], self.links[0]["time"]), ("2026-12-20", "15:00"))
         got = json.loads(json.dumps(VN._HELD[TG.ACCOUNT]["out"], default=str))
         self.assertEqual((got["status"], got["route"]), ("awaiting_yes", "page"))           # read back; nothing sent yet
         self.assertIn("One tap: Hotel Test Madrid's own booking engine (SynXis).", VN._HELD[TG.ACCOUNT]["hotel_text"])

@@ -1,10 +1,10 @@
 {
  "package": "kanoe-contract (python)",
- "version": "1.94.0",
- "agapi_commit": "a23e2b7",
+ "version": "1.94.1",
+ "agapi_commit": "dc230a2",
  "source": "agapi packages/kanoe-contract/python/kanoe_contract/",
  "files": {
-  "__init__.py": "9beb306d8ff9d31ccd0952124961c19e5e7574284dc14ef1f28317b8efc53e97",
+  "__init__.py": "637b37d07ae380c33f287ccc6939c9a33edd368c2423ad84efd0de11cc8ae614",
   "ratchet.py": "a47643c01eaacc72f392979a63ebdd9df9e1a944003632e6572ab74ae64595ca"
  },
  "vectors": {

@@ -63,7 +63,7 @@ class NoTableAgAPI(AgAPI):
             aid = f"act_{self.n:03d}"
             self.acts[aid] = {"state": "failed"}
             out = {"prepared_id": pid, "status": "failed", "submitted": True, "how": "platform_form", "venue": VENUE, "act_id": aid,
-                   "say": SAY if self.alts else f"{VENUE} has no table at 22:00 that day — here's their page: {STANDIN}",
+                   "say": (getattr(self, "say_override", None) or SAY) if self.alts else f"{VENUE} has no table at 22:00 that day — here's their page: {STANDIN}",
                    "hand_over": {"link": STANDIN, "copy": [], "why": "time_unavailable"}}
             if self.alts:
                 out["alternatives"] = [json.loads(json.dumps(x)) for x in self.alts]
@@ -149,6 +149,33 @@ class TheOptionsAreTaps(Base384):
     def test_a_stale_or_other_card_books_nothing(self):
         self.options()
         self.assertEqual(run(VN.answer_card(Ctx("x"), "alt_not_this_card", "alt:1"))["status"], "nothing_waiting")
+
+
+SAY_1848 = f"No tables at dinner on Fri 20 Nov at {VENUE}. Would you like a restaurant nearby at 22:00, or lunch there instead?"
+ALTS_1848 = [
+    {"rank": 1, "kind": "other_service_time", "venue": VENUE, "date": "2026-11-20", "time": "13:30", "reason": "lunch at 13:30 — no dinner",
+     "book": {"place_id": "ChIJ329", "date": "2026-11-20", "time": "13:30", "party": 2}},
+    {"rank": 2, "kind": "nearby_venue", "venue": "Casa Vecina", "date": "2026-11-20", "time": "22:00", "reason": "300 m away",
+     "book": {"place_id": "ChIJvecina", "date": "2026-11-20", "time": "22:00", "party": 2}},
+]
+
+
+class NoDinnerAtAll(Base384):
+    """Sasha 386 · CR 204 · KANOE 13 Nov 18:48 — no table in the asked service at all: AgAPI's own sentence and its options (lunch there,
+    a restaurant nearby) — said word for word, tapped, nothing of Sasha's added."""
+    ALTS = ALTS_1848
+
+    def setUp(self):
+        super().setUp()
+        self.ag.say_override = SAY_1848
+
+    def test_the_1848_sentence_and_its_taps(self):
+        q = self.options()
+        self.assertEqual(q["ask"], SAY_1848)
+        self.assertEqual([c["title"] for c in q["choices"]], ["13:30 · Fri 20 Nov", "Casa Vecina · 22:00"])
+        done = run(VN.answer_card(Ctx("13:30 · Fri 20 Nov"), q["read_back_id"], "alt:1"))
+        self.assertEqual(done["status"], "confirmed", done)
+        self.assertEqual(self.ag.bodies("venue.prepare_booking")[-1]["time"], "13:30")
 
 
 class WhatsApp(Base384):

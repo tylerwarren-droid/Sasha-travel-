@@ -1,10 +1,10 @@
 """GENERATED from AgAPI's spec/ by tools/contract/generate.py (CR 186) — DO NOT EDIT. Change spec/, regenerate, bump the release.
-kanoe_contract 1.94.0 · AgAPI 1.94.0 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
+kanoe_contract 1.94.1 · AgAPI 1.94.1 · AD door kanoe-ad-door.1. Use OP.X / ERR.X / DOOR.X — never the string."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, TypedDict, Union  # noqa: F401
 
-CONTRACT_VERSION = "1.94.0"
+CONTRACT_VERSION = "1.94.1"
 
 
 class OP:
@@ -747,7 +747,7 @@ SandboxMessagesIn = TypedDict('SandboxMessagesIn', {"end_user_id": str, "since":
 SandboxMessagesOut = TypedDict('SandboxMessagesOut', {"messages": List[Dict[str, Any]]}, total=False)
 
 # sandbox.platform_prepare — input
-SandboxPlatformPrepareIn = TypedDict('SandboxPlatformPrepareIn', {"end_user": str, "date": str, "time": str, "party": int, "person": Dict[str, Any], "variant": Literal['basic', 'lists', 'no_table'], "choices": Dict[str, Any]}, total=False)
+SandboxPlatformPrepareIn = TypedDict('SandboxPlatformPrepareIn', {"end_user": str, "date": str, "time": str, "party": int, "person": Dict[str, Any], "variant": Literal['basic', 'lists', 'no_table', 'no_dinner'], "choices": Dict[str, Any]}, total=False)
 
 # sandbox.platform_prepare — output
 SandboxPlatformPrepareOut = TypedDict('SandboxPlatformPrepareOut', {"prepared_id": str, "page": str, "decision": str, "say": str}, total=False)

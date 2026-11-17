@@ -35,11 +35,11 @@ ASK = {"choice": "zona", "label": "Zona", "options": ["Terraza", "Salón", "Barr
 ZONA = "Their page asks which Zona you'd like. Here's their page with your details ready: " + CM_PAGE
 RD = {"venue": "La Taberna", "rungs": {}, "place_id": "ChIJ328", "read_id": "r328", "country": "ES"}
 RES = {"who": {"name": "Tyler Warren", "contact": {"mobile_e164": "+34608445715"}}, "how_many": {"count": 2},
-       "when": {"at": "2026-11-13T21:00"}, "what": {"category": "restaurant"}}
+       "when": {"at": "2027-11-12T21:00"}, "what": {"category": "restaurant"}}
 CARD = {"name": "La Taberna", "website": "https://lataberna.example", "place_id": "ChIJ328", "phone": "+34910000328"}
 DEC = {"route": "platform", "channel": "CoverManager booking", "how_far": "hand_over",
        "say_text": "La Taberna books on CoverManager.", "button": {"label": "Book on CoverManager", "link": CM_PAGE, "sends": False}}
-LINES = ["Sasha fills in your booking on CoverManager for La Taberna and presses Book: date: 2026-11-13; time: 21:00; party: 2.",
+LINES = ["Sasha fills in your booking on CoverManager for La Taberna and presses Book: date: 2027-11-12; time: 21:00; party: 2.",
          "If their page asks for a card, a deposit or a sign-in, or shows a security check, it stops and hands the booking back to you."]
 # CoverManager's confirmation, as it lands in Spanish (text part; the HTML part carries the same links)
 CM_MAIL = ("Reserva confirmada - La Taberna", "CoverManager <noreply@covermanager.com>",
@@ -95,7 +95,7 @@ class AgAPI:
         if op == "venue.submit_booking" and body.get("mandate_id"):   # CR 196 · approved BY the instruction: the walk's outcome, at once
             self.choices.update(body.get("choices") or {})
             return {"ok": True, "result": {**self.outcomes.pop(0), "instructed": {
-                "mandate_id": body["mandate_id"], "say": "Booking now: La Taberna, 2 people, Fri 13 Nov at 21:00."}}}
+                "mandate_id": body["mandate_id"], "say": "Booking now: La Taberna, 2 people, Fri 12 Nov at 21:00."}}}
         if op == "venue.submit_booking" and not approval:   # CR 161 · choices kept on the prepared booking and read back
             self.choices.update(body.get("choices") or {})
             picked = "; ".join(f"{k}: {v}" for k, v in self.choices.items())
@@ -123,7 +123,7 @@ STOPPED = {"status": "failed", "act_id": "act_zona", "how": "platform_form", "ru
            "venue_words": {"untrusted_text": ZONA[:ZONA.index(" Here's")]}, "hand_over": {"link": CM_PAGE, "copy": [], "why": "choice"},
            "ask": ASK}
 BOOKED = {"status": "confirmed", "act_id": "act_booked", "how": "platform_form", "rung": "zero_touch", "venue": "La Taberna",
-          "reference": "CM48213", "say": "Booked: La Taberna, 2026-11-13 21:00, 2 people, ref CM48213."}
+          "reference": "CM48213", "say": "Booked: La Taberna, 2027-11-12 21:00, 2 people, ref CM48213."}
 
 
 class Base(unittest.TestCase):
@@ -169,7 +169,7 @@ class Base(unittest.TestCase):
 
     def hold(self):
         return run(VN.follow(Ctx("book La Taberna friday 21:00 for 2"), {"name": "La Taberna", "city": "Madrid"}, RD, RES,
-                             "2026-11-13T21:00", datetime.now(timezone.utc), CARD, DEC))
+                             "2027-11-12T21:00", datetime.now(timezone.utc), CARD, DEC))
 
     def yes(self):
         return run(VN.book_venue(Ctx("Yes, book it"), {"approval": {"said": "Yes, book it"}}))
@@ -199,7 +199,7 @@ class TheZonaQuestion(Base):
         # answer — each its own turn's proof (CR 196); no tap, no third ask
         print("── said ──\n" + done["line"])
         self.assertEqual(done["status"], "confirmed")
-        self.assertEqual(done["line"], "Booking now: La Taberna, 2 people, Fri 13 Nov at 21:00. Booked — reference CM48213.")   # Sasha 381
+        self.assertEqual(done["line"], "Booking now: La Taberna, 2 people, Fri 12 Nov at 21:00. Booked — reference CM48213.")   # Sasha 381
         self.assertEqual(done["area"], "Terraza")                                                   # their choice, on the booking
         self.assertNotIn("CoverManager", done["line"])   # 249: the platform is never said
 
@@ -239,7 +239,7 @@ class NoVerifiedPersonNothingIsPressed(Base):
         ctx = Ctx("book La Taberna friday 21:00 for 2", surface="voice")
         tok = VS.TAP.set(None)   # Sasha 381e · no door recorded: no verified session, no signed WhatsApp message — nothing can be proved
         self.addCleanup(VS.TAP.reset, tok)
-        got = run(VN.follow(ctx, {"name": "La Taberna", "city": "Madrid"}, RD, RES, "2026-11-13T21:00", datetime.now(timezone.utc), CARD, DEC))
+        got = run(VN.follow(ctx, {"name": "La Taberna", "city": "Madrid"}, RD, RES, "2027-11-12T21:00", datetime.now(timezone.utc), CARD, DEC))
         self.assertEqual(got["status"], "not_sent")
         self.assertNotIn("approvals.mandate", self.ag.ops())
         self.assertNotIn("venue.submit_booking", [o for o, b in self.ag.calls if b.get("mandate_id")])

@@ -353,10 +353,33 @@ def build() -> str:
     return os.getenv("RAILWAY_DEPLOYMENT_ID", "").strip()
 
 
+_ISO_DAY = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+
+
+def recorded_on() -> str:
+    """Sasha 386 · the day a recording is made (Europe/Madrid, the gate's day)."""
+    from zoneinfo import ZoneInfo
+    return __import__("datetime").datetime.now(ZoneInfo("Europe/Madrid")).date().isoformat()
+
+
+def dated(got: Any) -> bool:
+    """Sasha 386 · the recorded reply ACTS with a date (a tool call carrying a day: "Saturday" → 2026-11-14) — true only on that day."""
+    reply = (got or {}).get("reply") if isinstance(got, dict) else None
+    for c in (reply or {}).get("content") or [] if isinstance(reply, dict) else []:
+        if isinstance(c, dict) and c.get("type") == "tool_use" and _ISO_DAY.search(json.dumps(c.get("input") or {})):
+            return True
+    return False
+
+
 async def _usable(got: Any) -> bool:
     """Sasha 381f · A RECORDING FROM A BUILD WHOSE GATE FAILED IS NEVER REPLAYED (found by 381d/381e: a failed recording run's refusals were
     replayed by every later run — record mode fills only what's missing). Usable: this build's own (the run that's recording now), a build
-    whose gate PASSED (marked by scripts/gate.py), or one from before builds were marked (all of those were deploys that passed)."""
+    whose gate PASSED (marked by scripts/gate.py), or one from before builds were marked (all of those were deploys that passed).
+    Sasha 386 · AND A REPLY THAT ACTS WITH A DATE IS NEVER REPLAYED ON ANOTHER DAY (found by 386's recording run: the replay key leaves
+    the day's date out on purpose, so "Saturday at half past nine" recorded on Fri 13 Nov replayed hold_venue day 2026-11-14 on Tue 17
+    Nov — a past Saturday; Sasha rightly asked "Which day?"). Such a reply is usable only on the day it was recorded; else re-recorded."""
+    if dated(got) and (got.get("day") if isinstance(got, dict) else None) != recorded_on():
+        return False
     b = got.get("build") if isinstance(got, dict) else None
     if not b or b == build():
         return True
@@ -374,7 +397,8 @@ async def mark_build_passed() -> None:
 async def _record(key: str, msg: Any, kw: Optional[dict] = None) -> None:
     data = msg.model_dump(mode="json") if hasattr(msg, "model_dump") else msg
     try:   # the reply, and what was asked (masked) — a later miss can be told apart from its nearest recording
-        await _replays().put(key, {"reply": data, "asked": _asked(kw) if kw else None, "build": build()})   # Sasha 381f · whose it is
+        await _replays().put(key, {"reply": data, "asked": _asked(kw) if kw else None, "build": build(),   # Sasha 381f · whose it is
+                                   "day": recorded_on()})   # Sasha 386 · and the day: a reply acting with a date holds only that day
     except Exception as e:
         log.error("[model_gateway] RECORD: %s not kept (%s)", key, type(e).__name__)
 

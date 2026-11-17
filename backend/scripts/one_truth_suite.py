@@ -363,6 +363,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
              "record: every traveller counted once (a missing one said), the half-booked offered the fix, \"emailed\" only from the send "
              "record, each itinerary once (Sasha 385)",
              ["tests.test_s385_one_group_finish"]),
+    "T102": ("a recorded model reply that acts with a date is replayed only on the day it was recorded — never a past Saturday on a "
+             "later day (Sasha 386)",
+             ["tests.test_s386_dated_replies"]),
 }
 
 _RUNNER = """

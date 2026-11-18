@@ -13,6 +13,7 @@ refused both where it would be held and where it would be sent.
 | A person's test email | `email(slug)` gives `<slug>@example.invalid`, reserved by RFC 2606/6761 and never delivered. `form_email(slug)` gives `<slug>@example.com` for web forms, which refuse `.invalid`. |
 | A person's test number | `number(n)` gives `+1 <area> 555 01nn`. NANPA reserves this for fiction, and libphonenumber accepts it, so a supplier takes it too. |
 | Other test numbers | `sandbox_guest(n)` is AgAPI sandbox's range that is also NANP fiction. `uk_drama(n)` is Ofcom's drama range. `au_drama(n)` is ACMA's fictional range. |
+| An address a proof can watch arrive | `sink(slug)` gives `delivered+<slug>@resend.dev`: Resend's test sink (Tyler, 18 Nov). It reaches no person, and Resend records each message as delivered. |
 | The fictional guest every rehearsal form is filled with | `fictional_person()`, "Prueba Sasha" |
 | Kanoe's own (reaches only Kanoe) | `KANOE_NUMBERS`: the Twilio sandbox sender, Sasha's own number, and Tyler's mobile (KANOE_DECISIONS 12 Nov: "Tyler's org and phone"). `KANOE_DOMAINS`: kanoe.ai and applieddiligence.com. |
 | The rule | `recipient_ok(to)` decides whether a recipient comes from the source. `may_reach(account, to)` says: a live account may reach anyone; a TEST account (person_access not live) may reach only the source. |
@@ -71,4 +72,21 @@ update group_people p set phone = v.phone, updated_at = now()
                ('0944c2d7-3e49-45d5-ab90-6fccb63e8899'::uuid, '+12025550155'), ('ee52af71-110b-4ef5-8819-4f527e947b3a'::uuid, '+12025550156')) v(id, phone)
   where p.id = v.id and p.group_id in (select id from groups where owner_id = 'da29447c-046a-42a4-a2e2-13b16d12856e');
 -- expect: 1 row, then 6 rows
+```
+
+**Applied on sasha-prod (18 Nov, chat): 1 email row and 6 phone rows.**
+
+## SQL FOR CHAT (2): the executives' emails to Resend's sink, for 385's real-path proof
+
+```sql
+update group_people p set email = v.email, updated_at = now()
+  from (values ('60f5a275-afbc-4efc-b333-8eed35baeae2'::uuid, 'delivered+ana-garcia@resend.dev'),
+               ('e8d3ad3a-225b-48af-acf8-a1983076cee0'::uuid, 'delivered+carmen-castro@resend.dev'),
+               ('48b86d52-9a7d-49c7-983f-cc986ba3ffc8'::uuid, 'delivered+elena-ortega@resend.dev'),
+               ('4bd849c7-624e-4595-ab60-8372f359adf3'::uuid, 'delivered+jain@resend.dev'),
+               ('d7d8f778-abdd-4733-846b-e60d33472903'::uuid, 'delivered+javier-moreno@resend.dev'),
+               ('0944c2d7-3e49-45d5-ab90-6fccb63e8899'::uuid, 'delivered+luis-perez@resend.dev'),
+               ('ee52af71-110b-4ef5-8819-4f527e947b3a'::uuid, 'delivered+marta-ruiz@resend.dev')) v(id, email)
+  where p.id = v.id and p.group_id in (select id from groups where owner_id = 'da29447c-046a-42a4-a2e2-13b16d12856e');
+-- expect 7 rows
 ```

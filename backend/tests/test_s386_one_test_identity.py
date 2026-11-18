@@ -232,6 +232,14 @@ class TheSource(unittest.TestCase):
         self.assertFalse(TI.recipient_ok(TI.stand_in("venue")))            # Kanoe's, but NOT a test address
         self.assertTrue(TI.is_kanoe(TI.stand_in("venue")))
 
+    def test_resends_delivered_sink_is_a_test_address_and_nothing_else_there_is(self):
+        """Tyler, 18 Nov: a proof shows emails ARRIVING at Resend's sink — delivered(+tag)@resend.dev, which reaches no person."""
+        self.assertEqual(TI.sink("Ana García"), "delivered+ana-garc-a@resend.dev")
+        for ok in (TI.sink("x"), "delivered@resend.dev", "Ana <delivered+ana@resend.dev>"):
+            self.assertTrue(TI.recipient_ok(ok), ok)
+        for no in ("bounced@resend.dev", "complained+x@resend.dev", "someone@resend.dev", "delivered@resend.dev.evil.com"):
+            self.assertFalse(TI.recipient_ok(no), no)
+
     def test_the_fictional_person_is_wholly_fictional(self):
         f = TI.fictional_person()
         self.assertTrue(TI.recipient_ok(f["email"]) and TI.recipient_ok(f["mobile"]))

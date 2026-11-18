@@ -13,6 +13,8 @@ been a PATCH; this is the root: ONE source, and a recipient outside it is refuse
   au_drama(n)        ACMA's fictional mobiles, +61 491 570 156…159 (valid, fictional).
   sandbox_guest(n)   AgAPI sandbox's own guest range that is also NANP fiction: +1 500 555 01nn.
   form_email(slug)   "<slug>@example.com": reserved, and accepted by web forms (which refuse .invalid).
+  sink(slug)         "delivered+<slug>@resend.dev": Resend's own test sink (Tyler, 18 Nov) — it reaches no person, and Resend records
+                     each message as "delivered", so a proof can SHOW an email arriving. Only "delivered" (+tag) counts.
   fictional_person() THE fictional guest ("Prueba Sasha") every rehearsal / demo form is filled with.
   is_test_email / is_test_number / recipient_ok      the one rule: is this address or number from this source? (Recognised: every
                      reserved domain — RFC 2606/6761 —, and 555-0100…0199 in ANY area code, as NANPA reserves it.)
@@ -63,6 +65,16 @@ def form_email(slug: Any) -> str:
     return f"{_slug(slug)}@example.com"
 
 
+#: Resend's documented test sink: accepted and recorded as delivered, delivered to nobody (no person's mailbox behind it)
+SINK_DOMAIN = "resend.dev"
+_SINK = re.compile(r"delivered(\+[a-z0-9._-]+)?@resend\.dev")
+
+
+def sink(slug: Any) -> str:
+    """A test address a proof can watch ARRIVE: "delivered+<slug>@resend.dev" — Resend's sink, never a person."""
+    return f"delivered+{_slug(slug)}@{SINK_DOMAIN}"
+
+
 def fictional_person() -> dict:
     """THE fictional person every rehearsal and demo form is filled with ("Prueba Sasha") — from this source, never invented elsewhere.
     Wholly fictional (CR 23: nothing real through the cloud browser before a DPA): a reserved address and NANP fiction, +1 202 555 0123."""
@@ -96,12 +108,15 @@ RESERVED_DOMAINS = ("example.com", "example.net", "example.org")
 
 
 def is_test_email(addr: Any) -> bool:
-    """A reserved-domain address (.invalid — what email() makes —, .test, .example, .localhost, example.com/.net/.org)."""
+    """A reserved-domain address (.invalid — what email() makes —, .test, .example, .localhost, example.com/.net/.org), or Resend's
+    delivered sink (sink())."""
     a = str(addr or "").strip().lower()
     m = re.search(r"<([^>]+)>\s*$", a)   # "Name <x@y>"
     a = m.group(1) if m else a
     if a.count("@") != 1 or not a.partition("@")[0]:
         return False
+    if _SINK.fullmatch(a):
+        return True
     dom = a.rpartition("@")[2]
     return dom.rpartition(".")[2] in RESERVED_TLDS or any(dom == d or dom.endswith("." + d) for d in RESERVED_DOMAINS)
 

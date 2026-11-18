@@ -122,8 +122,7 @@ def live_refusal_check(mode: str, spec: Mapping[str, Any], standing: Optional[Ma
 _LOCAL = re.compile(r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*$")
 _LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 _TLD = re.compile(r"^[a-z]{2,63}$")
-_NON_DELIVERING_TLDS = ("test", "invalid", "example", "localhost", "local")
-_NON_DELIVERING_DOMAINS = ("example.com", "example.net", "example.org")
+from .test_identity import RESERVED_TLDS as _NON_DELIVERING_TLDS, RESERVED_DOMAINS as _NON_DELIVERING_DOMAINS  # Sasha 386 · ONE source
 
 
 def email_can_receive_confirmation(value: Any) -> tuple:

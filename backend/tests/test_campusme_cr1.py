@@ -321,7 +321,7 @@ class Pages(Fixtures):
         s, x = SC.SCHOOLS["yale"], run(SL.sessions(SC.SCHOOLS["yale"], "2026-10-14"))[0].as_dict()
         cid = run(ST.STORE.put("campus", TG.ACCOUNT, "k", {"school": "yale", "session": x, "form_url": x["form_url"],
                                                           "rows": [{"label": "Student Email Address", "action": "fill",
-                                                                    "answer": "a@b.co", "source": "your vault"}],
+                                                                    "answer": "a@b.example", "source": "your vault"}],
                                                           "status": "handed_over"}))
         app = FastAPI(); app.include_router(PR.router)
         c = TestClient(app)

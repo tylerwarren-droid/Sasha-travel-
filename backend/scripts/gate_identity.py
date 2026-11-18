@@ -6,6 +6,7 @@ ONE rule for every gate suite that links a shared identity: it comes from THIS r
 process) — never a fixed one. And a number already linked to anyone is never used (the link would remove their channel): the next.
 
 The identities the gate suites use, and why only the voice loop's needed this (as of 381k):
+  · Sasha 386: every number here is from booking_signer.test_identity (the ONE test-identity source).
   · voice_loop_suite — a WhatsApp CHANNEL per check (GW.STORE.link: one channel per number, across accounts) → run_mobile() here.
   · agent_suite, basket_suite, flight_suite, venue_suite, say_show_suite — a mobile on the scratch guest's OWN booking contact (a row per
     account, nothing shared, nothing unique by number) — no collision; left as they are.
@@ -22,9 +23,12 @@ RUN = os.getenv("RAILWAY_DEPLOYMENT_ID", "").strip() or uuid.uuid4().hex   # THI
 
 
 def mobile_for(run: str, n: int, attempt: int = 0) -> str:
-    """A Spanish mobile a supplier accepts (+346 + 8 digits), derived from the run, the check and the attempt."""
-    h = int(hashlib.sha256(f"{run}|{attempt}".encode()).hexdigest()[:10], 16) % 100000
-    return f"+346{h:05d}{n % 1000:03d}"
+    """A mobile a supplier accepts, derived from the run, the check and the attempt — Sasha 386: from the ONE test-identity source
+    (booking_signer.test_identity.number: +1 <area> 555 01nn, fictional by rule), never a real person's (it was +346…: real Spanish
+    mobiles)."""
+    from booking_signer import test_identity as TI
+    h = int(hashlib.sha256(f"{run}|{attempt}".encode()).hexdigest()[:10], 16)
+    return TI.number(h + n)
 
 
 async def run_mobile(n: int, taken) -> str:

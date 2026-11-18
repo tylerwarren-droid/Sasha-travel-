@@ -27,7 +27,7 @@ DB_PATH = os.getenv("CHAT_DB_PATH", os.path.join(_BACKEND_ROOT, "sasha_chats.db"
 # Sasha 249 · the demo account is app.services.accounts.DEMO_ACCOUNT_ID — the ONE demo id (until 249 this was 11111111,
 # "Jon Peters", a second demo beside chat_account.PUBLIC_DEMO_ID). The demo is nobody: no person's name.
 from app.services.accounts import DEMO_ACCOUNT_ID as DEMO_USER_ID  # noqa: E402
-DEMO_USER_EMAIL = "guest@example.com"
+DEMO_USER_EMAIL = __import__("booking_signer.test_identity", fromlist=["x"]).form_email("guest")   # Sasha 386 · the ONE test source
 DEMO_USER_NAME = "Demo"
 
 _inited = False

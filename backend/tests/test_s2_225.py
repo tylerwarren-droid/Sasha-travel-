@@ -67,11 +67,11 @@ class NotYet(unittest.TestCase):
         with mock.patch.object(HOME, "RUN", None), mock.patch("booking_signer.plan_store._run", lambda: None):
             tried = API.Ctx(account=ACCOUNT, surface="s2", calls=[{"tool": "search_venues", "ok": False}])   # 268: only after a try
             out = run(HOME.note_not_yet(tried,
-                                        {"asked": "cancel my Netflix, card 4111 1111 1111 1111, email me at ana@x.com or +34 600 123 456"}))
+                                        {"asked": "cancel my Netflix, card 4111 1111 1111 1111, email me at ana@x.example or +34 600 123 456"}))
         self.assertTrue(out["noted"])
         row = HOME._MEM[-1]
         self.assertNotIn("4111", row["asked"])
-        self.assertNotIn("ana@x.com", row["asked"])
+        self.assertNotIn("ana@x.example", row["asked"])
         self.assertNotIn("600", row["asked"])
         self.assertIn("cancel my Netflix", row["asked"])
         self.assertNotIn(ACCOUNT, row["who"])

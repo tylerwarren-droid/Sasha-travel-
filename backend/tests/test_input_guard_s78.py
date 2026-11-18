@@ -29,7 +29,7 @@ class WhatTripsIt(unittest.TestCase):
         for s in ("Book a luxury dinner for two in Chamberí on Saturday at nine.", "cancel Botavara",
                   "my number is +44 7915 914215", "call me on 0044 7915 914215", "yes", "I forgot my password for Booking.com",
                   "reference K-7Q2M, booking 4567", "https://www.hanakura.es/reservas?date=2026-10-03&time=21:00",
-                  "tyler.someone.long.address@example-domain.com", "4111 1111 1111 1112",
+                  "tyler.someone.long.address@example-domain.example", "4111 1111 1111 1112",
                   "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"):
             self.assertIsNone(G.looks_like_secret(s), s)
 

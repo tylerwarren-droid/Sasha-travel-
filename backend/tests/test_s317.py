@@ -55,7 +55,7 @@ class Base(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         if self.channel == "wa":   # his verified WhatsApp: the approval channel (Sasha 314)
-            tok = VS.WA.set({"wa_id": "+34600000317", "message_id": "SM317"})
+            tok = VS.WA.set({"wa_id": "+14155550106", "message_id": "SM317"})
             self.addCleanup(VS.WA.reset, tok)
 
     def cancel(self, said, rows, result=None):

@@ -22,7 +22,7 @@ from booking_signer.call_store import MemoryCallStore
 
 TOKEN = "0123456789abcdef0123456789abcdef"
 BASE = "https://sasha.test"
-SITE_NUMBER, LISTING_NUMBER = "+34915001122", "+34911223344"
+SITE_NUMBER, LISTING_NUMBER = "+14155550117", "+34911223344"
 O = {"schema": "reservation/1", "flow": "book", "who": {"name": "Anna Johnson"},
      "what": {"activity": "a table", "activity_venue_lang": "una mesa", "category": "restaurant"},
      "where": {}, "when": {"mode": "at", "at": "2026-10-08T20:00"}, "how_many": {"count": 4, "unit": "people"}}
@@ -90,8 +90,8 @@ class InboundPhone(unittest.TestCase):
         self.assertEqual(self.calls.trip_items["t-list"]["status"], "proposed")
 
     def test_an_unknown_sender_is_kept_but_moves_nothing_and_a_redelivery_is_kept_once(self):
-        self.sms("SM12", "+34600000000", "Hola, ¿quién es?")
-        self.sms("SM12", "+34600000000", "Hola, ¿quién es?")
+        self.sms("SM12", "+14155550102", "Hola, ¿quién es?")
+        self.sms("SM12", "+14155550102", "Hola, ¿quién es?")
         self.assertEqual((len(IP.STORE.rows), IP.STORE.rows["SM12"]["trip_item_id"]), (1, None))
         self.assertEqual({t["status"] for t in self.calls.trip_items.values()}, {"unclear"})
 
@@ -197,16 +197,16 @@ class OnPostgres(unittest.TestCase):
         TBL.LadderRoutes.tearDown(self)
 
     def test_an_sms_lands_on_the_reservation_in_postgres(self):
-        form = {"MessageSid": "SMpg1", "From": "+34915001122", "To": "+447700900000",
+        form = {"MessageSid": "SMpg1", "From": "+14155550117", "To": "+447700900000",
                 "Body": "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson."}
         r = self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
         self.assertEqual(r.status_code, 200, r.text)
         row = self._q("select * from booking_inbound where provider_id = 'SMpg1'")[0]
-        self.assertEqual((str(row["trip_item_id"]), row["from_key"]), (self.item, PT.number_key("+34915001122")))
+        self.assertEqual((str(row["trip_item_id"]), row["from_key"]), (self.item, PT.number_key("+14155550117")))
         self.assertEqual(self._q("select status from trip_items where id = $1::uuid", self.item)[0]["status"], "confirmed")
 
     def test_a_whatsapp_message_lands_as_a_whatsapp_attempt_in_postgres(self):
-        form = {"MessageSid": "SMpgwa", "From": "whatsapp:+34915001122", "To": "whatsapp:+447700900000",
+        form = {"MessageSid": "SMpgwa", "From": "whatsapp:+14155550117", "To": "whatsapp:+447700900000",
                 "Body": "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson."}
         r = self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
         self.assertEqual(r.status_code, 200, r.text)
@@ -216,7 +216,7 @@ class OnPostgres(unittest.TestCase):
 
     def test_an_sms_shows_on_the_receipt_from_postgres(self):
         # Sasha 88 · what the venue WROTE is on the booking's receipt, verbatim
-        form = {"MessageSid": "SMpgrc", "From": "+34915001122", "To": "+447700900000", "Body": "Confirmada mesa jueves 20h Johnson"}
+        form = {"MessageSid": "SMpgrc", "From": "+14155550117", "To": "+447700900000", "Body": "Confirmada mesa jueves 20h Johnson"}
         self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
         r = self.c.get(f"/api/booking/reservations/{self.item}/receipt")
         self.assertEqual(r.status_code, 200, r.text)

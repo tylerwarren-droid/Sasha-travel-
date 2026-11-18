@@ -163,13 +163,13 @@ class TheCallersAreAgAPIsOrTylers(unittest.TestCase):
         from datetime import datetime
         with mock.patch.object(VS, "prepare", mock.AsyncMock(return_value={"ok": False, "error": {"code": "not_configured", "message": "x"}})), \
                 mock.patch.object(GR, "address_of", mock.AsyncMock(return_value=None)):
-            got = asyncio.run(AC.prepare("acct", "Kanoe Test Clinic", "+34600000000", datetime(2026, 11, 10, 10, 0),
-                                         {"name": "Test Guest 319", "mobile_e164": "+15005550319"}, "a GP appointment"))
+            got = asyncio.run(AC.prepare("acct", "Kanoe Test Clinic", "+14155550102", datetime(2026, 11, 10, 10, 0),
+                                         {"name": "Test Guest 319", "mobile_e164": "+14155550100"}, "a GP appointment"))
         self.assertEqual(got, {"ok": False, "say": VN.TO_TYLER})
         with mock.patch.object(VS, "prepare", mock.AsyncMock(return_value={"ok": False, "error": {"code": "invalid_input", "message": "x"}})), \
                 mock.patch.object(GR, "address_of", mock.AsyncMock(return_value=None)):   # a phone alone isn't a venue AgAPI can record (yet)
             got = asyncio.run(AC.prepare("acct", "Centro de Salud X", "+34913690491", datetime(2026, 11, 10, 10, 0),
-                                         {"name": "Test Guest 319", "mobile_e164": "+15005550319"}, "a GP appointment"))
+                                         {"name": "Test Guest 319", "mobile_e164": "+14155550100"}, "a GP appointment"))
         self.assertEqual(got, {"ok": False, "say": VN.TO_TYLER})
 
 

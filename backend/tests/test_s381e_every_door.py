@@ -74,10 +74,10 @@ class EveryDoor(unittest.TestCase):
         """inbound_phone.sms records THIS message once Twilio's signature passed: its message id — on any surface the brain speaks as."""
         from booking_signer import inbound_phone as IP
         self.assertIn('VS.WA.set({"wa_id": sender, "message_id": sid})', inspect.getsource(IP))
-        tok = VS.WA.set({"wa_id": "+34611381381", "message_id": "SM" + "e" * 32})
+        tok = VS.WA.set({"wa_id": "+14155550112", "message_id": "SM" + "e" * 32})
         try:
             for via in ("wa", "page"):
-                self.assertEqual(self.proof_inside(via=via), {"kind": "whatsapp", "wa_id": "34611381381", "message_id": "SM" + "e" * 32}, via)
+                self.assertEqual(self.proof_inside(via=via), {"kind": "whatsapp", "wa_id": "14155550112", "message_id": "SM" + "e" * 32}, via)
         finally:
             VS.WA.reset(tok)
 

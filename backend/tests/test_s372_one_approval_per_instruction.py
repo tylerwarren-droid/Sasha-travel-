@@ -55,9 +55,9 @@ class TheInstructionIsTheId(unittest.TestCase):
         self.assertEqual((pa["instruction_id"], pb["instruction_id"]), (a.turn, b.turn))
         wa = mock.Mock(via="wa")
         from agapi import venue_submit as VS
-        tok = VS.WA.set({"wa_id": "34611000000", "message_id": "SM9"})
+        tok = VS.WA.set({"wa_id": "14155550109", "message_id": "SM9"})
         try:
-            self.assertEqual(AM.proof_from(wa), {"kind": "whatsapp", "wa_id": "34611000000", "message_id": "SM9"})   # WhatsApp: the message
+            self.assertEqual(AM.proof_from(wa), {"kind": "whatsapp", "wa_id": "14155550109", "message_id": "SM9"})   # WhatsApp: the message
         finally:
             VS.WA.reset(tok)
 

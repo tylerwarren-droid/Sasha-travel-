@@ -31,7 +31,8 @@ async def run(real_call, real_engine=None) -> None:
     a = g["account_id"]
     try:
         assert await VS.target(a) == "sandbox", "a scratch guest must book on the sandbox"
-        guest = "+15005550" + f"{secrets.randbelow(800) + 200:03d}"   # the sandbox's own guest numbers; never a STOP
+        from booking_signer import test_identity as TI   # Sasha 386 · the ONE test source: the sandbox's own range AND NANP fiction
+        guest = TI.sandbox_guest(secrets.randbelow(100))   # never a STOP
         made, seen = await _book_by_voice(a, ("Book a table for two at Taverna Correo in Madrid on Saturday at 9pm, please.",),
                                           VT, BR, contact=f"Proof Guest {guest}")
         tyler = any("hand this to Tyler" in x for x in seen)

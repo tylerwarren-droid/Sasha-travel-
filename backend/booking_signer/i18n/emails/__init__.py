@@ -8,8 +8,8 @@ answer IN WRITING by replying (the reply-to header is Sasha's act-{id}@ address 
 ⚠ AI-WRITTEN, NOT NATIVE-REVIEWED. Each language file carries STATUS = "ai_unreviewed", an English back-translation of
 every text, and a generated review sheet (docs/sasha/i18n/emails/{lang}-review.md: accept / fix per sentence).
 
-⛔ THE GATE — `usable(lang, to)`: an unreviewed language is used ONLY for our own test addresses (SASHA_I18N_TEST_TO,
-comma-separated, and the test venue's host). For a real venue nothing changes until a reviewer signs off: the email is
+⛔ THE GATE — `usable(lang, to)`: an unreviewed language is used ONLY for our own test addresses (Sasha 386: the ONE
+test-identity source, booking_signer.test_identity.ours — the reserved names, the test venue's host among them, and Kanoe's review inboxes). For a real venue nothing changes until a reviewer signs off: the email is
 written in English, as today (Sasha 130: "said before the yes"). Sign-off is ONE LINE: in REVIEWED below, the
 language's False becomes ("Reviewer Name", "YYYY-MM-DD").
 """
@@ -41,12 +41,15 @@ def reviewed(lang: str) -> bool:
 
 
 def test_addresses() -> set:
-    return {a.strip().lower() for a in os.getenv("SASHA_I18N_TEST_TO", "").split(",") if a.strip()}
+    from booking_signer import test_identity as TI   # Sasha 386 · the ONE test-identity source
+    return TI.kanoe_inboxes()
 
 
 def is_test_address(to: str) -> bool:
-    t = (to or "").strip().lower()
-    return bool(t) and (t in test_addresses() or t.endswith("@" + TEST_VENUE_HOST) or t.endswith("." + TEST_VENUE_HOST))
+    """Sasha 386 · OUR test address = the ONE test-identity source's (booking_signer.test_identity.ours): a reserved name (the test
+    venue's sasha.test among them) or one of Kanoe's own review inboxes."""
+    from booking_signer import test_identity as TI
+    return bool((to or "").strip()) and TI.ours(to)
 
 
 def usable(lang: str, to: str) -> bool:

@@ -34,7 +34,7 @@ class World(W.World):
             self.mails.append(json.dumps(msg))
             return {"sent": True}
         for p in (mock.patch.object(KEEP, "STORE", self.keep), mock.patch("booking_signer.vault.kms.kek", lambda: kms),
-                  mock.patch.object(REC, "RUN", None), mock.patch.object(TV, "SEND", send),
+                  mock.patch.object(REC, "RUN", None), mock.patch("booking_signer.live_events.SEND", send),
                   mock.patch.dict(os.environ, {"SASHA_BOOKING_KEY": "test-booking-key-333"})):
             p.start()
             self.p.append(p)

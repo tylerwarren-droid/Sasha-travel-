@@ -189,8 +189,6 @@ async def erase(token: str, item_id: Optional[str] = None) -> Dict[str, Any]:
 
 # ── the organiser's invite ────────────────────────────────────────────────────────────────────────────────────────────────
 
-SEND = None   # tests replace it: (msg) → {"sent": bool}
-
 
 async def person_link(owner: str, person_id: str) -> Optional[str]:
     """Sasha 351 · a roster person's own vault page (People → their documents) — their link, with no trip needed."""
@@ -223,11 +221,8 @@ async def invite(owner: str, who: Optional[List[str]] = None, movement_id: Optio
                            f"{url}\n\nYour numbers are encrypted and never shown to anyone — the organiser only sees that they're there. "
                            f"You can delete them from the same page at any time.\n\n— Sasha"}
             try:
-                if SEND is not None:
-                    r = await SEND(msg)
-                else:
-                    from . import live_events as LE
-                    r = await LE.send_email(msg)
+                from . import live_events as LE
+                r = await LE.send_to_person(owner, msg)   # Sasha 386 · the one sender to another person (a TEST trip: test addresses only)
             except Exception as e:
                 r = {"sent": False, "why": type(e).__name__}
             (emailed if r.get("sent") else forward).append({"name": m["name"], **({} if r.get("sent") else {"link": url})})

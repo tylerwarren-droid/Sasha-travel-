@@ -275,7 +275,7 @@ class TheConfirmationEmailAndCancel(Base):
             if url.endswith("/messages"):
                 return 200, {"messages": [{"id": k} for k in mails]}
             if url.endswith("/profile"):
-                return 200, {"emailAddress": "Tyler.Reads@gmail.com"}
+                return 200, {"emailAddress": "Tyler.Reads@example.invalid"}
             s, frm, body = mails[url.rsplit("/", 1)[1]]
             return 200, {"payload": {"headers": [{"name": "Subject", "value": s}, {"name": "From", "value": frm}], "mimeType": "text/plain",
                                      "body": {"data": base64.urlsafe_b64encode(body.encode()).decode()}}}
@@ -328,38 +328,38 @@ class TheConfirmationEmailAndCancel(Base):
 
 class TheBookingEmail(Base):
     def test_use_this_email_is_stored_on_the_one_contact_record_and_given_to_agapi(self):
-        got = run(VN.save_contact(Ctx("use tylerwarren@gmail.com for my bookings"), {"email": "tylerwarren@gmail.com"}))
-        self.assertEqual(got["booking_email"], "tylerwarren@gmail.com")
-        self.assertEqual(self.contacts.rows[ACCT]["booking_email"], "tylerwarren@gmail.com")    # THE record (no second store)
+        got = run(VN.save_contact(Ctx("use tyler.booking@example.invalid for my bookings"), {"email": "tyler.booking@example.invalid"}))
+        self.assertEqual(got["booking_email"], "tyler.booking@example.invalid")
+        self.assertEqual(self.contacts.rows[ACCT]["booking_email"], "tyler.booking@example.invalid")    # THE record (no second store)
         self.assertEqual(self.contacts.rows[ACCT]["mobile_e164"], "+34608445715")              # name and mobile untouched
         self.hold()
         person = self.ag.bodies("venue.prepare_booking")[0]["person"]
         print("\n── prepare_booking's person ──\n" + json.dumps(person))
-        self.assertEqual(person, {"name": "Tyler Warren", "phone": "+34608445715", "email": "tylerwarren@gmail.com"})
+        self.assertEqual(person, {"name": "Tyler Warren", "phone": "+34608445715", "email": "tyler.booking@example.invalid"})
         run(self.contacts.put({**self.contacts.rows[ACCT], "name": "Tyler W"}))                # a name change keeps it
-        self.assertEqual(self.contacts.rows[ACCT]["booking_email"], "tylerwarren@gmail.com")
+        self.assertEqual(self.contacts.rows[ACCT]["booking_email"], "tyler.booking@example.invalid")
 
     def test_never_an_address_they_didnt_write(self):
         with self.assertRaises(V0.ToolError) as e:
-            run(VN.save_contact(Ctx("use my gmail for bookings"), {"email": "tylerwarren@gmail.com"}))
+            run(VN.save_contact(Ctx("use my gmail for bookings"), {"email": "tyler.booking@example.invalid"}))
         self.assertEqual(e.exception.code, "not_their_words")
         self.assertNotIn("booking_email", self.contacts.rows[ACCT])
         del self.contacts.rows[ACCT]
         with self.assertRaises(V0.ToolError) as e:   # no contact yet: kept with their name and mobile, asked once
-            run(VN.save_contact(Ctx("use tylerwarren@gmail.com"), {"email": "tylerwarren@gmail.com"}))
+            run(VN.save_contact(Ctx("use tyler.booking@example.invalid"), {"email": "tyler.booking@example.invalid"}))
         self.assertEqual(e.exception.code, "contact_first")
 
     def test_the_default_is_the_linked_mailbox_then_the_sign_in(self):
         self.assertEqual(run(CT.booking_email(ACCT)), "tyler@kanoe.ai")              # no mailbox: their sign-in address
         self.mb.links[ACCT] = {"account_id": ACCT, "vault_item_id": "v328"}
-        run(MB.STORE.set_link(ACCT, address="tyler.reads@gmail.com"))
-        self.assertEqual(run(CT.booking_email(ACCT)), "tyler.reads@gmail.com")       # where Sasha reads
+        run(MB.STORE.set_link(ACCT, address="tyler.reads@example.invalid"))
+        self.assertEqual(run(CT.booking_email(ACCT)), "tyler.reads@example.invalid")       # where Sasha reads
         self.hold()
-        self.assertEqual(self.ag.bodies("venue.prepare_booking")[0]["person"]["email"], "tyler.reads@gmail.com")
+        self.assertEqual(self.ag.bodies("venue.prepare_booking")[0]["person"]["email"], "tyler.reads@example.invalid")
 
     def test_the_mailbox_learns_its_own_address_once(self):
         TheConfirmationEmailAndCancel._sync(self, {})
-        self.assertEqual(self.mb.links[ACCT]["address"], "tyler.reads@gmail.com")
+        self.assertEqual(self.mb.links[ACCT]["address"], "tyler.reads@example.invalid")
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]

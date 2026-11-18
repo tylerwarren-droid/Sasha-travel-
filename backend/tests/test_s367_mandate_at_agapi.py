@@ -157,8 +157,8 @@ class TheMissingFactAndTheProof(unittest.TestCase):
 
     def test_the_proof_is_signed_as_agapi_checks_it(self):
         with mock.patch.dict(os.environ, {"SASHA_AGAPI_TAP_SECRET": SECRET}):
-            p = AM.sign({"kind": "whatsapp", "wa_id": "34611000000", "message_id": "SM1"}, OWNER, "ab" * 32, t=1700000000, nonce="n" * 16)
-        want = hmac.new(SECRET.encode(), f"1700000000.{'n' * 16}.mandate.whatsapp.SM1.34611000000.{'ab' * 32}".encode(), hashlib.sha256).hexdigest()
+            p = AM.sign({"kind": "whatsapp", "wa_id": "14155550109", "message_id": "SM1"}, OWNER, "ab" * 32, t=1700000000, nonce="n" * 16)
+        want = hmac.new(SECRET.encode(), f"1700000000.{'n' * 16}.mandate.whatsapp.SM1.14155550109.{'ab' * 32}".encode(), hashlib.sha256).hexdigest()
         self.assertEqual(p["signature"], want)
         self.assertEqual(set(p), {"kind", "t", "nonce", "wa_id", "message_id", "signature"})
 
@@ -182,7 +182,7 @@ class OneSource(unittest.TestCase):
         self.assertNotIn("GB.confirm(", src)                                                  # no per-item yes inside the mandate
         book = (ROOT / "backend" / "booking_signer" / "group_book.py").read_text()
         self.assertIn('"worker": {**w, **contact_of(m)}', book)
-        self.assertNotIn("+34600000000", book)
+        self.assertNotIn("+14155550102", book)
 
 
 if __name__ == "__main__":

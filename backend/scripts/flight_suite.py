@@ -54,7 +54,7 @@ async def _a_real_mobile(account: str, n: int = 1) -> None:
     from booking_signer import guest_whatsapp as _GW
     _s, cj = await _GW.api(account, "GET", "/api/booking/contact")
     c = (cj or {}).get("consent") or {}
-    await _GW.api(account, "PUT", "/api/booking/contact", {"name": "Gate Traveller", "mobile": f"+346120000{n:02d}",
+    await _GW.api(account, "PUT", "/api/booking/contact", {"name": "Gate Traveller", "mobile": __import__("booking_signer.test_identity", fromlist=["number"]).number(n),   # Sasha 386 · the ONE test source
                                                            "consent_version": c.get("version"), "consent_sha256": c.get("sha256")})
 
 async def _pay_and_settle(a: str, prepare, pay, body: dict, label: str) -> bool:

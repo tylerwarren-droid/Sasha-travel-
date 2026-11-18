@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from booking_signer import guest_whatsapp as GW, proactive as PR
 
 ACCOUNT = "55555555-5555-4555-8555-555555555555"
-GUEST = "+34600000001"
+GUEST = "+14155550103"
 MAD = ZoneInfo("Europe/Madrid")
 
 

@@ -181,7 +181,7 @@ class G7NoSlot(Base):
     def test_custom_work_with_no_slot_is_tylers_never_sashas_own_email(self):
         """Sasha 319 · a request with no slot was Sasha's own email asking for a date and a quote (G7). AgAPI is the one sender to venues
         and books a day and a time, so it's handed to Tyler — nothing sent, never Sasha's email."""
-        out = self.hold({"email": {"value": "ink@studio.es"}, "phone": {"fact_index": 0}}, venue="Tinta Studio",
+        out = self.hold({"email": {"value": "ink@studio.example"}, "phone": {"fact_index": 0}}, venue="Tinta Studio",
                         what="a forearm tattoo, black and grey", open_slot="quote", day=LATER)
         self.assertEqual((out["status"], out["sent"]), ("to_tyler", False))
         self.assertEqual(self.api.bodies("/api/booking/emails"), [])
@@ -239,7 +239,7 @@ class G7NoSlot(Base):
 # ── G8 · a real request to a hotel, on the same ladder ─────────────────────────────────────────────────────────────────────
 
 class G8HotelOnTheLadder(Base):
-    HOTEL = {"link": {"fact_index": 1, "value": "SynXis"}, "email": {"fact_index": 2, "value": "res@hoteltest.es"}}
+    HOTEL = {"link": {"fact_index": 1, "value": "SynXis"}, "email": {"fact_index": 2, "value": "res@hoteltest.example"}}
 
     def test_book_with_hotel_sends_its_own_engine_with_the_stay(self):
         """hotel_ladder_s138 OnWhatsApp.test_book_with_hotel_sends_its_own_engine_with_the_stay, on the brain's path."""
@@ -299,7 +299,7 @@ class G8HotelOnTheLadder(Base):
         check-in, party the guests; its read-back is the engine's (Sasha's own room email and its 24-hour plan line are not used)."""
         from tests.test_s254_handle_it_live import use_fake_agapi
         fake = use_fake_agapi(self)
-        out = self.hold({"email": {"fact_index": 1, "value": "res@artiem.es"}}, venue="ARTIEM Madrid", what="hotel", day=LATER, nights=2)
+        out = self.hold({"email": {"fact_index": 1, "value": "res@artiem.example"}}, venue="ARTIEM Madrid", what="hotel", day=LATER, nights=2)
         body = fake.body("venue.prepare_booking")
         self.assertEqual((body["stay"], body["date"], body["party"]), ({"nights": 2}, LATER, 2))
         self.assertEqual((out["route"], out["rules"]["action"]), ("agapi", "request_email"))
@@ -320,7 +320,7 @@ class G8HotelOnTheLadder(Base):
         b = {"date": LATER, "time": "15:00", "party": 2, "name": "Alex Gate", "email": "alex@example.test", "nights": 2}
         p = E.EmailParticulars(on=date.fromisoformat(b["date"]), at=time.fromisoformat(b["time"]), party=b["party"], name=b["name"],
                                guest_email=b["email"], nights=b["nights"])
-        m = E.compose("vi", "Anantara", "res@x.com", p, "id1")
+        m = E.compose("vi", "Anantara", "res@x.example", p, "id1")
         self.assertEqual(m["subject"], f"Room request — 2, {LATER} for 2 nights")
         self.assertIn(f"(check-in {LATER}, check-out {OUT_DAY})", m["text"])
 

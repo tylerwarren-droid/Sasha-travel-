@@ -73,7 +73,7 @@ async def itinerary(a: str, conduct) -> None:
 TO_TYLER_WORDS = "hand this to Tyler"
 
 
-async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +34 600 000 000") -> tuple:
+async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +1 202 555 0177") -> tuple:
     """Sasha 321 · a venue booking on the voice avatar / REST chat, answered as a guest would until AgAPI has an act (or 6 more turns):
     → (the acts AgAPI made in it, every line she said). The one brain decides how many questions; the gate checks the act."""
     from agapi import person_access as PA, venue_submit as VSB, venues as VNS

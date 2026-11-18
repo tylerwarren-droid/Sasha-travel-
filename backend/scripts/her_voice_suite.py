@@ -90,7 +90,7 @@ async def main() -> bool:
                                  "session": "her-voice-" + uuid.uuid4().hex, "turn": "turn_" + uuid.uuid4().hex})()
             await VT.profile(dict(venue))   # AgAPI's venue.profile (saved): its decision, cached
             rd = {"venue": venue["name"], "place_id": venue["place_id"], "rungs": {}, "country": "ES"}
-            res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
+            res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+14155550102"}}, "how_many": {"count": 2},
                    "when": {"at": (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%dT21:00")}, "what": {"category": "restaurant"}}
             q = await VN.one_decision(ctx, {}, rd, res, res["when"]["at"], datetime.now(timezone.utc), dict(venue), VT.decision(dict(venue)))
             said += [q.get("ask") or "", q.get("say") or "", q.get("line") or ""] + [o.get("title", "") for o in q.get("options") or []] \

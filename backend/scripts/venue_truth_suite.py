@@ -79,7 +79,7 @@ async def main() -> bool:
                              "idem": None, "act_name": None, "claimed": None, "session": "venue-truth-" + uuid.uuid4().hex,
                              "turn": "turn_" + uuid.uuid4().hex, "said_before": ""})()
         rd = {"venue": HAMMAM["name"], "place_id": HAMMAM["place_id"], "rungs": {}, "country": "ES"}
-        res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+34600000000"}}, "how_many": {"count": 2},
+        res = {"who": {"name": "Alex Gate", "contact": {"mobile_e164": "+14155550102"}}, "how_many": {"count": 2},
                "when": {"at": (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT17:00")}, "what": {"category": "spa"}}
         before = len(venue_engine_fake.CALLS)
         out = await VN.one_decision(ctx, {}, rd, res, res["when"]["at"], datetime.now(timezone.utc), dict(HAMMAM), VT.decision(dict(HAMMAM)))

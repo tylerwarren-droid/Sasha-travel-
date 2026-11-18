@@ -186,7 +186,7 @@ async def main() -> int:
     from booking_signer import guest_whatsapp as GW   # Sasha 363 · a traveller with a mobile an airline accepts (asked before any hold)
     _s, cj = await GW.api(a, "GET", "/api/booking/contact")
     c = (cj or {}).get("consent") or {}
-    await GW.api(a, "PUT", "/api/booking/contact", {"name": "Alex Agent", "mobile": "+34612000001",
+    await GW.api(a, "PUT", "/api/booking/contact", {"name": "Alex Agent", "mobile": "+14155550113",
                                                      "consent_version": c.get("version"), "consent_sha256": c.get("sha256")})
     try:
         await cases(a)

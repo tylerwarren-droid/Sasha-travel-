@@ -122,7 +122,7 @@ class ThroughTheRealHooks(unittest.TestCase):
     """The five marked hooks in the Sasha tab's files: an unreviewed language reaches OUR test address only; a real venue
     gets exactly today's email; a signed-off language reaches everyone; the read-back says which."""
 
-    O = {"schema": "reservation/1", "flow": "book", "who": {"name": NAME, "account_id": "acct-cr7", "contact": {"email": "guest@example.com", "mobile_e164": "+34600000000"}},
+    O = {"schema": "reservation/1", "flow": "book", "who": {"name": NAME, "account_id": "acct-cr7", "contact": {"email": "guest@example.com", "mobile_e164": "+14155550102"}},
          "what": {"category": "restaurant", "activity": "a table", "activity_venue_lang": "a table"}, "where": {"venue_name": "Quán Ví Dụ", "timezone": "Asia/Ho_Chi_Minh"},
          "when": {"mode": "at", "at": f"{D}T{T_}"}, "how_many": {"count": 4, "unit": "people"}}
 

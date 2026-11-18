@@ -22,7 +22,7 @@ from tests.test_venue_pick_230 import FormApi, reader
 
 ACCT = "00000000-0000-4000-8000-000000000251"
 LATER = (date.today() + timedelta(days=6)).isoformat()
-HAMMAM = {"link": {"value": "https://hammamalandalus.com/es/madrid/reservas"}, "email": {"value": "madrid@hammamalandalus.com"},
+HAMMAM = {"link": {"value": "https://hammamalandalus.example/es/madrid/reservas"}, "email": {"value": "madrid@hammamalandalus.example"},
           "phone": {"fact_index": 0}}
 
 
@@ -86,7 +86,7 @@ class UnderAnotherName(Base):
             seen.append(person)
             return {"ok": False, "error": {"code": "not_configured", "message": "no venues key"}}
         with mock.patch.object(VS, "prepare", prepare):
-            out = self.hold("s2", {"email": {"value": "madrid@hammamalandalus.com"}}, **kw)
+            out = self.hold("s2", {"email": {"value": "madrid@hammamalandalus.example"}}, **kw)
         return out, seen
 
     def test_the_name_goes_to_the_person(self):

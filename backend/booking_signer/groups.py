@@ -15,6 +15,7 @@ stored. The group's rules (price limits) live in ONE place: group_movements.rule
 """
 from __future__ import annotations
 from kanoe_contract import OP  # Sasha 374 · THE ONE generated contract (CR 186)
+from . import test_identity as TI  # Sasha 386 · THE ONE test-identity source
 
 import asyncio
 import csv
@@ -1325,7 +1326,7 @@ async def upload(account: str, rows: List[Dict[str, str]], movement_id: Optional
         return {"why": "tell me the company's name first, and I'll keep its people there"}
     grades = list(((mv or {}).get("rules") or {}).get("limits", {}).get("by_grade") or {}) if mv else []
     good, unclear = members_from(rows, mv or {}, grades, dates_needed=on_trip)
-    found, new, unclear2 = await _on_roster(st, grp["id"], good)
+    found, new, unclear2 = await _on_roster(st, grp["id"], good, await TI.is_test_account(account))
     n = 0
     for row, pid in found if (on_trip and mv) else []:
         n += 1 if (await set_on_trip(account, pid, mv["id"], True, out_date=row.get("out_date"), back_date=row.get("back_date"))).get("link") else 0
@@ -1334,12 +1335,30 @@ async def upload(account: str, rows: List[Dict[str, str]], movement_id: Optional
             "movement_id": (mv or {}).get("id")}
 
 
-async def _on_roster(st, group_id: str, rows: List[dict]) -> Tuple[List[tuple], int, List[dict]]:
+def _held(fields: Dict[str, Any], test: bool) -> List[str]:
+    """Sasha 386 · THE ONE ROSTER GUARD, before every write of a roster person (the list, the People page, the chat, an edit): a TEST
+    account's roster can't hold a real person — an email or phone outside the ONE test-identity source (booking_signer.test_identity)
+    is refused and said, never stored. A test trip's itinerary, invite or passport link then has no real person to go to."""
+    bad = []
+    for k in ("email", "phone"):
+        if test and fields.get(k) and not TI.recipient_ok(fields[k]):
+            fields.pop(k)
+            bad.append(f"the {k} (a TEST account's people are test people: " + (f"an address …@{TI.DOMAIN})" if k == "email" else
+                                                                                   "a number from Kanoe's test ranges)"))
+    return bad
+
+
+async def _on_roster(st, group_id: str, rows: List[dict], test: bool = True) -> Tuple[List[tuple], int, List[dict]]:
     """Sasha 351 · each row → the roster's person the organiser NAMES (their own name for them on their own list), its details updated
-    with what this row gives; or a new person. Two people with that name → asked, never guessed. → ([(row, person_id)], new, unclear)."""
+    with what this row gives; or a new person. Two people with that name → asked, never guessed. → ([(row, person_id)], new, unclear).
+    Sasha 386 · `test`: the account is a TEST one — each row through _held first (a refused email/phone: that row is asked, not kept)."""
     roster = await st.people(group_id)
     found, unclear, new = [], [], 0
     for r in rows:
+        why = _held(r, test)
+        if why:
+            unclear.append({"line": r.get("_line"), "row": {"name": r.get("name")}, "why": why})
+            continue
         same = [p for p in roster if p["name"].strip().lower() == r["name"].strip().lower()]
         fields = {k: r[k] for k in PERSON if r.get(k)}
         if len(same) > 1:
@@ -1415,7 +1434,7 @@ async def add_people(account: str, rows: List[Dict[str, Any]], company: Optional
         if bad:
             unclear.append({"line": str(i), "row": {"name": r.get("name")}, "why": bad}); continue
         good.append(f)
-    found, new, more = await _on_roster(st, grp["id"], good)
+    found, new, more = await _on_roster(st, grp["id"], good, await TI.is_test_account(account))
     unclear += more
     return {"company": grp["name"], "added": new, "updated": len(found) - new, "people": [pid for _, pid in found],
             "names": [r["name"] for r, _ in found], "unclear": unclear,
@@ -1428,6 +1447,7 @@ async def edit_person(account: str, person_id: str, fields: Dict[str, Any]) -> D
     if not grp:
         return {"why": "no company yet"}
     f, bad = _person_fields(fields)
+    bad += _held(f, await TI.is_test_account(account))
     if bad:
         return {"why": "these couldn't be read: " + ", ".join(bad), "missing": bad}
     p = await st.update_person(grp["id"], person_id, f)

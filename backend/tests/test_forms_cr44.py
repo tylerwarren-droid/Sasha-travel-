@@ -156,8 +156,8 @@ class Package(TG.unittest.TestCase):
 
 class Keep(TG.unittest.TestCase):
     def test_a_fictional_applicant_is_never_kept(self):
-        f = {"applicant": {"surname_1": F.fact("Ejemplo", RT.FICTIONAL, ""), "email": F.fact("a@b.co", "said on WhatsApp", "")}}
-        self.assertEqual(KP.keepable(f), {"email": "a@b.co"})
+        f = {"applicant": {"surname_1": F.fact("Ejemplo", RT.FICTIONAL, ""), "email": F.fact("a@b.example", "said on WhatsApp", "")}}
+        self.assertEqual(KP.keepable(f), {"email": "a@b.example"})
 
 
 class OnWhatsApp(Base):

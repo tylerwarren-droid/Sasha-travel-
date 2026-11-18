@@ -116,7 +116,7 @@ class FakePage:
 
 def values(names_roles):
     v = {"date": "2026-12-15", "time": "21:00", "party_size": "2", "person_name": "Prueba Sasha", "email": "prueba@example.com",
-         "phone": "+34600000000", "free_text": "Prueba"}
+         "phone": "+14155550102", "free_text": "Prueba"}
     return [{"name": n, "value": v[r]} for n, (r, _) in names_roles.items()]
 
 
@@ -359,7 +359,7 @@ class Phone(Base):
             return "not sent: already sent"
 
         async def went(*a):
-            return "sent to +34600000000"
+            return "sent to +14155550102"
         with mock.patch.object(GW, "tap_to_finish", already, create=True):
             self.assertEqual(await HO.tap_phone("a", rec), {"sent": False, "detail": "not sent: already sent"})
         with mock.patch.object(GW, "tap_to_finish", went, create=True):
@@ -391,7 +391,7 @@ class Pressed(Base):
         async def told(rec):
             got.append(rec)
         HO.ON_BOOKED.append(told)
-        rec = await self.open(return_to="https://wa.me/34600000000")
+        rec = await self.open(return_to="https://wa.me/14155550102")
         r = await HO.view(rec["id"], rec["token"])                                     # the guest opens the link
         self.assertIn(rec["live_url"].replace("&", "&amp;"), r.body.decode())
         on_tap, on_press, ro, on_nav = self.pages[0].watching
@@ -406,7 +406,7 @@ class Pressed(Base):
         self.assertEqual(self.bb.released, ["s1"])
         self.assertEqual(got[0]["state"], "booked")
         s = await HO.view_status(rec["id"], rec["token"])
-        self.assertEqual((s["state"], s["return_to"]), ("booked", "https://wa.me/34600000000"))
+        self.assertEqual((s["state"], s["return_to"]), ("booked", "https://wa.me/14155550102"))
         self.assertEqual(HO.measured([rec])[0]["taps"], 1)
 
     async def test_read_only_stops_at_the_press_and_sends_nothing(self):
@@ -446,7 +446,7 @@ class GuestPage(Base):
     """CR 25 · the page the guest opens: what they're booking on top, the live view sized to their phone, the screens after."""
 
     async def test_live_page_says_what_is_filled_and_where_to_press(self):
-        rec = await self.open(return_to="https://wa.me/34600000000")
+        rec = await self.open(return_to="https://wa.me/14155550102")
         body = (await HO.view(rec["id"], rec["token"])).body.decode()
         self.assertIn('id="live"', body)
         self.assertIn('let state = "live"', body)
@@ -464,14 +464,14 @@ class GuestPage(Base):
         self.assertEqual((await HO.view_fit(rec["id"], "nope")).status_code, 404)
 
     async def test_booked_page_has_the_ref_and_the_way_back(self):
-        rec = await self.open(return_to="https://wa.me/34600000000")
+        rec = await self.open(return_to="https://wa.me/14155550102")
         _, on_press, _, on_nav = self.pages[0].watching
         on_press("Reservar"), on_nav()
         await asyncio.wait_for(rec["_watch"], 2)
         body = (await HO.view(rec["id"], rec["token"])).body.decode()
         self.assertIn('let state = "booked"', body)
         self.assertIn("Ref TV-ABC123-4F", body)
-        self.assertIn('href="https://wa.me/34600000000"', body)
+        self.assertIn('href="https://wa.me/14155550102"', body)
 
     async def test_expired_is_calm_and_says_nothing_was_sent(self):
         with mock.patch.object(HO, "SESSION_SECONDS", 30.05):

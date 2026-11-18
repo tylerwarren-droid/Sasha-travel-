@@ -22,7 +22,7 @@ from booking_signer import (calendar_sync as CAL, call_routes as CRT, call_store
                             ladder_routes as LR, ladder_store as LS, proactive as PR)
 
 A = "55555555-5555-4555-8555-555555555555"
-GUEST = "+34600000001"
+GUEST = "+14155550103"
 MAD = ZoneInfo("Europe/Madrid")
 PAID = ("places.googleapis.com", "routes.googleapis.com", "api.bland.ai", "api.anthropic.com", "api.openai.com", "api.twilio.com",
         "api.resend.com")

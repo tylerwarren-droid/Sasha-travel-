@@ -254,9 +254,9 @@ class OnlyFromTheAct(unittest.TestCase):
 class TheWhatsAppYes(unittest.TestCase):
     def test_gate_the_tap_is_signed_as_agapi_checks_it(self):
         with mock.patch.dict(os.environ, {"SASHA_AGAPI_TAP_SECRET": "s3cret"}):
-            sess = VS.whatsapp_session("rbk_1", "ab" * 32, {"wa_id": "+34 600 000 001", "message_id": "SM123"}, t=1760000000, nonce="n" * 16)
-        want = hmac.new(b"s3cret", f"1760000000.{'n' * 16}.whatsapp.34600000001.SM123.rbk_1.{'ab' * 32}".encode(), hashlib.sha256).hexdigest()
-        self.assertEqual(sess, {"kind": "whatsapp", "t": 1760000000, "nonce": "n" * 16, "wa_id": "34600000001", "message_id": "SM123",
+            sess = VS.whatsapp_session("rbk_1", "ab" * 32, {"wa_id": "+1 415 555 0103", "message_id": "SM123"}, t=1760000000, nonce="n" * 16)
+        want = hmac.new(b"s3cret", f"1760000000.{'n' * 16}.whatsapp.14155550103.SM123.rbk_1.{'ab' * 32}".encode(), hashlib.sha256).hexdigest()
+        self.assertEqual(sess, {"kind": "whatsapp", "t": 1760000000, "nonce": "n" * 16, "wa_id": "14155550103", "message_id": "SM123",
                                 "signature": want})
 
     def test_gate_a_signed_reply_is_in_app_tap_kind_whatsapp(self):

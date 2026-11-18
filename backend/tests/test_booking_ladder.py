@@ -35,14 +35,14 @@ SQL_DIR = HERE.parent / "booking_signer" / "sql"
 PG_URL = os.getenv("BOOKING_TEST_DATABASE_URL", "")
 NOW = datetime(2026, 10, 5, 11, 0, tzinfo=timezone.utc)   # a Monday
 SECRET = "whsec_" + base64.b64encode(b"test-webhook-secret-not-real").decode()
-ENV = {"SASHA_BOOKING_KEY": "test-booking-key", "SASHA_SUPABASE_URL": "https://testref.supabase.co", "SASHA_CALL_SWEEP": "0", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "bland-test", "SASHA_TEST_CALL_NUMBER": "+351912000000",
+ENV = {"SASHA_BOOKING_KEY": "test-booking-key", "SASHA_SUPABASE_URL": "https://testref.supabase.co", "SASHA_CALL_SWEEP": "0", "SASHA_CALLS_ENABLED": "1", "BLAND_API_KEY": "bland-test", "SASHA_TEST_CALL_NUMBER": "+14155550118",
        "SASHA_EMAILS_ENABLED": "1", "SASHA_RESEND_API_KEY": "re_test", "RESEND_API_KEY": "", "SASHA_EMAIL_FROM": "Sasha <sasha@mail.kanoe.test>",
        "SASHA_INBOUND_DOMAIN": "in.kanoe.test", "RESEND_WEBHOOK_SECRET": SECRET, "GOOGLE_PLACES_API_KEY": "",
        "SASHA_PHONE_NUMBER": "", "SASHA_EMAILS_PER_DAY": "5"}
 
-LA_CONTRA_SITE = """<html><head><script type="application/ld+json">{"@type":"Restaurant","telephone":"+34 915 00 11 22","email":"reservas@lacontra.test"}</script></head>
+LA_CONTRA_SITE = """<html><head><script type="application/ld+json">{"@type":"Restaurant","telephone":"+34 915 001 122","email":"reservas@lacontra.test"}</script></head>
 <body><a href="tel:915001122">Llámanos</a> <a href="mailto:hola@lacontra.test?subject=Hi">Escríbenos</a>
-<a href="https://wa.me/34600111222">WhatsApp</a> <a href="/contacto">Contacto</a>
+<a href="https://wa.me/14155550107">WhatsApp</a> <a href="/contacto">Contacto</a>
 <p>Escríbenos a info@lacontra.test o ven a vernos.</p> <img src="logo@2x.png"></body></html>"""
 PSI_LIKE = """<html><body><form action="/reservas/"><input type="date" name="rtb-date"><select name="rtb-time"></select>
 <input name="rtb-party"><input name="rtb-name"><input type="email" name="rtb-email"></form></body></html>"""
@@ -112,7 +112,7 @@ class Reading(unittest.TestCase):
         facts = V.facts_from_html(LA_CONTRA_SITE, "https://www.lacontra.test/", "ES", NOW.isoformat())
         got = sorted((f.kind, f.value) for f in facts)
         self.assertEqual(got, [("email", "hola@lacontra.test"), ("email", "info@lacontra.test"), ("email", "reservas@lacontra.test"),
-                               ("phone", "+34915001122"), ("whatsapp", "+34600111222")])
+                               ("phone", "+34915001122"), ("whatsapp", "+14155550107")])
         for f in facts:
             self.assertEqual((f.source_kind, f.source_url, f.source_label), ("site", "https://www.lacontra.test/", "their website, lacontra.test"))
             self.assertEqual(len(f.sha256), 64)
@@ -165,7 +165,7 @@ class Reading(unittest.TestCase):
 
     def test_la_contra_with_no_website_is_read_from_its_google_listing(self):
         places = {"places": [{"id": "ChIJ-la-contra", "displayName": {"text": "La Contra"}, "formattedAddress": "Calle de la Contra 1, Madrid",
-                              "internationalPhoneNumber": "+34 915 00 11 22",
+                              "internationalPhoneNumber": "+34 915 001 122",
                               "regularOpeningHours": {"weekdayDescriptions": ["Monday: Closed", "Tuesday: 1:00 – 4:00 PM, 8:00 – 11:30 PM"],
                                                       "periods": [{"open": {"day": 2, "hour": 13, "minute": 0}}]},
                               "addressComponents": [{"shortText": "ES", "types": ["country", "political"]}]}]}
@@ -193,7 +193,7 @@ class Reading(unittest.TestCase):
 # ── 2 · the chooser ─────────────────────────────────────────────────────────────────────────
 
 def a_read(*kinds, country="ES", name="La Contra"):
-    vals = {"phone": "+34915001122", "email": "reservas@lacontra.test", "whatsapp": "+34600111222", "platform": "OpenTable",
+    vals = {"phone": "+34915001122", "email": "reservas@lacontra.test", "whatsapp": "+14155550107", "platform": "OpenTable",
             "booking_form": "https://lacontra.test/reserva"}
     return {"name": name, "country": country, "facts": [{"kind": k, "value": vals[k], "source_label": "their website, lacontra.test",
                                                            "source_url": "https://lacontra.test/"} for k in kinds]}
@@ -435,7 +435,7 @@ class LadderRoutes:
     def venue_id(self, v):
         return O.venue_id_of(self.c.portal.call(self.ladder.get_read, FOUNDER_ACCOUNT, v["read_id"])["read"])
 
-    def optin(self, vid, status, channel="whatsapp", scope="+34600111222", at=None):
+    def optin(self, vid, status, channel="whatsapp", scope="+14155550107", at=None):
         at = at or self.now
         run(self.optins.add({"venue_id": vid, "channel": channel, "scope": scope, "status": status, "recorded_at": at,
                              "withdrawn_at": at if status == "withdrawn" else None,

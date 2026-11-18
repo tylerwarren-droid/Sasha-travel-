@@ -47,7 +47,7 @@ def _on_whatsapp(said=T365.SAID):
         from booking_signer import channel as CH
         await CH.used(OWNER, CH.WA)                                                        # their last turn: WhatsApp
         from agapi import venue_submit as VS
-        VS.WA.set({"wa_id": "34611000099", "message_id": "SM" + "a" * 32})   # the signed inbound, as the webhook sets it (367: the proof)
+        VS.WA.set({"wa_id": "14155550110", "message_id": "SM" + "a" * 32})   # the signed inbound, as the webhook sets it (367: the proof)
         ctx = API.Ctx(account=OWNER, user_said=said, surface="s2", via="wa", session="s366-session")
         r = await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15", "ends_on": "2026-12-17",
                                                  "roles": ["executives"]})
@@ -78,7 +78,7 @@ class NoClientAttached(unittest.TestCase):
                 from booking_signer import channel as CH
                 await CH.used(OWNER, CH.WA)
                 from agapi import venue_submit as VS
-                VS.WA.set({"wa_id": "34611000099", "message_id": "SM" + "b" * 32})
+                VS.WA.set({"wa_id": "14155550110", "message_id": "SM" + "b" * 32})
                 ctx = API.Ctx(account=OWNER, user_said=T365.SAID, surface="s2", via="wa", session="s366-session")
                 with mock.patch.object(M, "_start", lambda *a, **k: None):           # the process that took it dies before running it
                     await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15",
@@ -112,7 +112,7 @@ class OneRunnerPerMandate(unittest.TestCase):
                 from booking_signer import channel as CH
                 from agapi import venue_submit as VS
                 await CH.used(OWNER, CH.WA)
-                VS.WA.set({"wa_id": "34611000099", "message_id": "SM" + "c" * 32})
+                VS.WA.set({"wa_id": "14155550110", "message_id": "SM" + "c" * 32})
                 ctx = API.Ctx(account=OWNER, user_said=T365.SAID, surface="s2", via="wa", session="s366-lease")
                 with mock.patch.object(M, "_start", lambda *a, **k: None):
                     await API.call(ctx, "group_select", {"change": "new", "destination": "London", "starts_on": "2026-12-15",

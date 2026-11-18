@@ -127,7 +127,7 @@ async def create_booking(
     """
     Create a booking.
     leader: {"first_name": "Jon", "last_name": "Smith", 
-             "email": "jon@example.com", "phone": "+447700123456"}
+             "email": "jon@example.com", "phone": "+447700900123"}
     guests: [{"first_name": "Jon", "last_name": "Smith", "is_child": False}]
     """
     payload = {

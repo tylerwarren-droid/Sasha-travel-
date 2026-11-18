@@ -79,7 +79,7 @@ class NoSlot(unittest.TestCase):
 
 class Wording(unittest.TestCase):
     def test_the_guest_sees_what_is_sent_not_the_machinery(self):
-        lines = ["I'll email X at a@b.c — the address on their website — from Sasha <s@k.ai>.", "You're copied privately (BCC) at …",
+        lines = ["I'll email X at a@b.c — the address on their website — from Sasha <s@k.example>.", "You're copied privately (BCC) at …",
                  "Their reply comes to me at act-…", "Subject: Solicitud", "Hola, soy Sasha…", "Shall I send it?"]
         self.assertEqual(GW.guest_lines("email", lines), ["Hola, soy Sasha…"])
         self.assertEqual(GW.DONE_ASKED, "Done — I've asked them and I'll confirm here as soon as they reply.")

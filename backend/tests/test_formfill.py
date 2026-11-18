@@ -12,7 +12,7 @@ from booking_signer import formfill as FF, reservation as RS, venues as VN
 ACCT = "00000000-0000-4000-8000-000000000001"
 BODIES = [
     {"date": "2026-10-02", "time": "20:00", "party": 2, "name": "Tyler Warren", "email": "tyler@example.test", "phone": "+34608445715"},
-    {"date": "2026-10-12", "time": "13:30", "party": 1, "name": "Anna Johnson", "email": "anna@example.test", "phone": "+351912000000"},
+    {"date": "2026-10-12", "time": "13:30", "party": 1, "name": "Anna Johnson", "email": "anna@example.test", "phone": "+14155550118"},
 ]
 
 

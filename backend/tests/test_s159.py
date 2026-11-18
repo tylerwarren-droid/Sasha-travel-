@@ -100,7 +100,7 @@ class Sasha162(unittest.TestCase):
         class St:
             def __init__(self, last): self.last = last
             async def get_state(self, k): return {"last_inbound_at": self.last, "last_to": "+447915914215"}
-        ch = {"wa_id_sha256": "k", "number_e164": "+34600000000"}
+        ch = {"wa_id_sha256": "k", "number_e164": "+34608445715"}
         with mock.patch.dict(os.environ, {"SASHA_GUEST_WHATSAPP_TO": "+447915914215,+14155238886"}), \
                 mock.patch.object(GW, "SENDER", S()), mock.patch.object(GW, "STORE", St(GW.NOW() - timedelta(hours=30))):
             out = asyncio.run(GW._tell(ch, "hi", ("tap_to_finish", {1: "X", 2: "Tue", 3: "https://u"})))

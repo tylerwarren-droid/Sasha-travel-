@@ -104,6 +104,17 @@ async def send_email(msg: dict) -> dict:
     return {"sent": bool(got.sent), "why": getattr(got, "why", None)}
 
 
+async def send_to_person(account: str, msg: dict) -> dict:
+    """Sasha 386 · THE ONE SENDER of a trip's message to ANOTHER person (a traveller's itinerary, their passport link): a TEST account
+    reaches only the ONE test-identity source's addresses (booking_signer.test_identity.may_reach) — a real address on old data is
+    refused here, never sent, and said as not sent."""
+    from . import test_identity as TI
+    if not await TI.may_reach(account, msg.get("to")):
+        log.warning("[live_events] not sent: a TEST account's message to an address outside the test source")
+        return {"sent": False, "why": "test_recipient", "say": TI.refused_why()}
+    return await send_email(msg)
+
+
 async def status_now(account: str) -> Optional[dict]:
     """Sasha 249 · ONE STATUS: the account's status as get_status decides it (agapi.s2_status) — the /s2 "Booked" card and the
     WhatsApp line show its line. None when the records don't answer (the card is then not drawn; never a guessed "Booked")."""

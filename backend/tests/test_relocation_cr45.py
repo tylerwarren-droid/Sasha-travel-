@@ -25,7 +25,7 @@ class Captions(TG.unittest.TestCase):
     def test_true_source(self):
         self.assertEqual(KP.where_from(demo()), "this file's answers")         # DEMO is never kept
         f = demo()
-        f["applicant"]["email"] = F.fact("a@b.co", KP.SOURCE, "")
+        f["applicant"]["email"] = F.fact("a@b.example", KP.SOURCE, "")
         self.assertEqual(KP.where_from(f), "your Keep")
 
 

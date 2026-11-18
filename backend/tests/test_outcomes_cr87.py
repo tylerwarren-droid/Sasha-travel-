@@ -63,10 +63,10 @@ class Ledger(unittest.TestCase):
         self.assertEqual(sorted(OC._OPEN[ACC]), ["t-call", "t-draft", "t-email", "t-handover", "t-ig", "t-page"])   # open: updated later
 
     def test_never_the_persons_details(self):
-        run(OC.booked(ACC, held("email", who={"name": "Alex", "contact": {"mobile_e164": "+34600000000"}}), "Casa Lucio", "Madrid",
+        run(OC.booked(ACC, held("email", who={"name": "Alex", "contact": {"mobile_e164": "+14155550102"}}), "Casa Lucio", "Madrid",
                       result={"status": "requested"}))
         sent = json.dumps(self.agapi.calls[-1][1])
-        for x in ("Alex", "+34600000000", ACC):
+        for x in ("Alex", "+14155550102", ACC):
             self.assertNotIn(x, sent)
 
     def test_the_reply_lands_once(self):

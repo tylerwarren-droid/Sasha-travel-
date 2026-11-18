@@ -42,7 +42,7 @@ class ACancelNamingOneBookingIsTheYes(unittest.TestCase):
 
     def go(self, said, rows, submit):
         from booking_signer import basket as BK
-        wa = VS.WA.set({"wa_id": "+34600000314", "message_id": "SM314"})   # his verified WhatsApp: the approval channel
+        wa = VS.WA.set({"wa_id": "+14155550105", "message_id": "SM314"})   # his verified WhatsApp: the approval channel
         self.addCleanup(VS.WA.reset, wa)
         with mock.patch.object(VS, "bookings", mock.AsyncMock(return_value=rows)), \
                 mock.patch.object(VS, "cancel_read_back", mock.AsyncMock(return_value=dict(RB))), \
@@ -71,7 +71,7 @@ class ACancelNamingOneBookingIsTheYes(unittest.TestCase):
 
 class TheCancelYesOnWhatsApp(unittest.TestCase):   # found live: cancel_submit had no WhatsApp branch → the link fallback → nothing
     def test_a_whatsapp_yes_is_the_approval(self):
-        wa = VS.WA.set({"wa_id": "+34600000314", "message_id": "SM314"})
+        wa = VS.WA.set({"wa_id": "+14155550105", "message_id": "SM314"})
         try:
             with mock.patch.object(VS, "whatsapp_tap", mock.AsyncMock(return_value={"ok": True, "result": {"status": "sent", "cancel_act_id": "act_CX"}})) as tap, \
                     mock.patch.object(VS, "acts_of", mock.AsyncMock(return_value=[])), mock.patch.object(VS, "_remember", mock.AsyncMock()):

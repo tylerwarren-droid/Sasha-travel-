@@ -116,7 +116,7 @@ class Envelope(Base):
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
         g = VK.GoogleKms("projects/p/locations/europe-west1/keyRings/sasha/cryptoKeys/vault",
-                         json.dumps({"client_email": "vault@p.iam.gserviceaccount.com", "private_key": pem}))
+                         json.dumps({"client_email": "vault@p.iam.example", "private_key": pem}))
         head, body, sig = g._assertion().split(".")
         pad = lambda s: s + "=" * (-len(s) % 4)
         key.public_key().verify(base64.urlsafe_b64decode(pad(sig)), f"{head}.{body}".encode(), padding.PKCS1v15(), hashes.SHA256())

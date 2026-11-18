@@ -119,36 +119,36 @@ class AskedOnceAndKept(Base):
 
     def test_their_words_are_saved_with_the_consent_then_the_hold_goes_on(self):
         self.hold()
-        r = self.save("Tyler Warren, +34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
+        r = self.save("Tyler Warren, +34 608 445 715", name="Tyler Warren", mobile="+34 608 445 715")
         self.assertTrue(r["ok"], r)
         c = CT.consent()
-        self.assertEqual(self.puts(), [{"name": "Tyler Warren", "mobile": "+34600111222", "consent_version": c["version"],
+        self.assertEqual(self.puts(), [{"name": "Tyler Warren", "mobile": "+34608445715", "consent_version": c["version"],
                                         "consent_sha256": c["sha256"]}])
-        out = self.hold("Tyler Warren, +34 600 111 222")
+        out = self.hold("Tyler Warren, +34 608 445 715")
         self.assertTrue(out["ok"], out)
         self.assertEqual(out["result"]["status"], "requested")                  # Sasha 381 · sent on the instruction, no card
         who = self.booked_for()
         self.assertEqual(who["name"], "Tyler Warren")                           # the read-back's booking, under that name
-        self.assertEqual(who["phone"], "+34600111222")
+        self.assertEqual(who["phone"], "+34608445715")
 
     def test_a_number_without_its_code_takes_the_venues_country(self):
         self.hold()
-        self.assertTrue(self.save("Tyler Warren 600 111 222", name="Tyler Warren", mobile="600 111 222")["ok"])
-        self.assertEqual(self.puts()[0]["mobile"], "+34600111222")
+        self.assertTrue(self.save("Tyler Warren 608 445 715", name="Tyler Warren", mobile="608 445 715")["ok"])
+        self.assertEqual(self.puts()[0]["mobile"], "+34608445715")
 
     def test_never_a_name_or_number_they_didnt_give(self):
         self.hold()
-        r = self.save("yes please", name="Tyler Warren", mobile="+34 600 111 222")
+        r = self.save("yes please", name="Tyler Warren", mobile="+34 608 445 715")
         self.assertEqual(r["error"]["code"], "not_their_words")
-        r = self.save("Tyler Warren", name="Tyler Warren", mobile="+34 699 999 999")
+        r = self.save("Tyler Warren", name="Tyler Warren", mobile="+1 415 555 0115")
         self.assertEqual(r["error"]["code"], "not_their_words")
-        r = self.save("+34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
+        r = self.save("+34 608 445 715", name="Tyler Warren", mobile="+34 608 445 715")
         self.assertEqual(r["error"]["code"], "not_their_words")
         self.assertEqual(self.puts(), [])                                    # nothing saved
 
     def test_a_name_given_in_the_ask_turn_needs_only_the_mobile(self):
         self.hold(f"Book La Mi Venta for Tyler Warren, two people, {DAY} at nine at night.")
-        r = self.save("+34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
+        r = self.save("+34 608 445 715", name="Tyler Warren", mobile="+34 608 445 715")
         self.assertTrue(r["ok"], r)
 
     def test_asked_once(self):
@@ -157,7 +157,7 @@ class AskedOnceAndKept(Base):
         self.assertEqual(again["error"]["code"], "contact_missing")
         self.assertIn("never ask again", again["error"]["message"])
         self.assertNotIn(CT.consent()["text"], again["error"]["message"])   # not the question a second time
-        self.save("Tyler Warren, +34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
+        self.save("Tyler Warren, +34 608 445 715", name="Tyler Warren", mobile="+34 608 445 715")
         for said in ("Book La Mi Venta for two.", "And the same again."):     # kept: never asked again
             self.assertTrue(self.hold(said)["ok"])
         self.assertEqual(len(self.puts()), 1)
@@ -165,7 +165,7 @@ class AskedOnceAndKept(Base):
     def test_under_another_name_keeps_their_own_contact(self):
         r = self.hold(f"Book La Mi Venta for two on {DAY} at nine at night, under Alex Gate.", under="Alex Gate")
         self.assertIn("under", r["error"]["message"])
-        self.save("Tyler Warren, +34 600 111 222", name="Tyler Warren", mobile="+34 600 111 222")
+        self.save("Tyler Warren, +34 608 445 715", name="Tyler Warren", mobile="+34 608 445 715")
         self.assertTrue(self.hold("Under Alex Gate.", under="Alex Gate")["ok"])
         self.assertEqual(self.booked_for()["name"], "Alex Gate")
         self.assertEqual(self.api.contact["name"], "Tyler Warren")

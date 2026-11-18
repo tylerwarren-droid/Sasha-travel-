@@ -82,7 +82,7 @@ def engine_from(rungs, facts=None, url=None):
 
 
 # Sasha 265 · item 4: the phone is the venue's OWN published number (a call act may carry it; a Google listing's never is — Sasha 64)
-ALL4 = {"form": {}, "whatsapp": {"value": "+34600000001"}, "email": {"value": "reservas@casagate.es"}, "phone": {"fact_index": 0, "value": "+34910000000"}}
+ALL4 = {"form": {}, "whatsapp": {"value": "+14155550103"}, "email": {"value": "reservas@casagate.example"}, "phone": {"fact_index": 0, "value": "+34910000000"}}
 
 
 def signed_in(test: unittest.TestCase) -> None:
@@ -523,7 +523,7 @@ class R11R12(Base):
 
 class StepsOnlyTheyMayDo(Base):
     def test_a_captcha_is_agapis_hand_over_never_a_send(self):
-        out = self.hold({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}], website="https://casagate.es")
+        out = self.hold({"form": {}}, facts=[{"kind": "challenge", "value": "captcha"}], website="https://casagate.example")
         self.assertNotEqual(out.get("route"), "agapi")
         self.assertFalse(any(p.endswith("/send") for p in self.api.paths()))
 

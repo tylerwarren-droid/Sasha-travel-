@@ -594,7 +594,9 @@ async def route_handover(request: Request):
                    f"“I accept the Terms”, then press “{rec['book_label']}”. {HO.view_url(rec)}"}
 
 
-FICTIONAL = {"first_name": "Prueba", "last_name": "Sasha", "email": "prueba@example.com", "phone_cc": "+34", "phone": "600000000",
+from . import test_identity as _TI   # Sasha 386 · the ONE test-identity source (was 600000000: a real Spanish mobile range)
+FICTIONAL = {"first_name": _TI.fictional_person()["first"], "last_name": _TI.fictional_person()["last"],
+             "email": _TI.fictional_person()["email"], "phone_cc": _TI.fictional_person()["mobile"][:2], "phone": _TI.fictional_person()["mobile"][2:],
              "country": "Spain", "address": "Calle de Ejemplo 12", "city": "Madrid", "zip": "28013", "motive": "Leisure",
              "arrival_time": "15:00", "notes": "Prueba de Kanoe (ficticia)."}
 

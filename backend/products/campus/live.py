@@ -37,7 +37,9 @@ NEEDS = ("first", "last", "email", "birthdate", "grad_year")
 _CHALLENGE = re.compile(r"recaptcha|hcaptcha|turnstile|cf-chl", re.I)
 _DONE = re.compile(r"thank you|registration (is )?(complete|confirmed|received)|you('| a)re registered|has been (received|submitted)|"
                    r"confirmation", re.I)
-FICTIONAL = {"first": "Prueba", "last": "Sasha", "email": "prueba@example.com", "birthdate": "2009-03-14",
+from booking_signer import test_identity as _TI   # Sasha 386 · the ONE test-identity source
+FICTIONAL = {"first": _TI.fictional_person()["first"], "last": _TI.fictional_person()["last"], "email": _TI.fictional_person()["email"],
+             "birthdate": "2009-03-14",
              "high_school": "Kanoe Test High School", "grad_year": "2027"}
 
 
@@ -545,7 +547,8 @@ async def open_tour_handover(*, school: str, session: Session, fam: Dict[str, st
     return rec
 
 
-FICTIONAL_FAMILY = {"parent_name": "Padre Ejemplo", "student_first": "Prueba", "student_last": "Sasha", "email": "prueba@example.com",
-                    "parent_email": "padre@example.com", "mobile": "2025550123", "high_school": "Kanoe Test High School",
+FICTIONAL_FAMILY = {"parent_name": "Padre Ejemplo", "student_first": _TI.fictional_person()["first"],
+                    "student_last": _TI.fictional_person()["last"], "email": _TI.fictional_person()["email"],
+                    "parent_email": _TI.form_email("padre"), "mobile": _TI.fictional_person()["mobile"][2:], "high_school": "Kanoe Test High School",
                     "grad_year": "2027", "major": "Engineering", "birthdate": "2009-03-14",
                     "address": "100 Example Street, Princeton, NJ 08540", "party": "3"}

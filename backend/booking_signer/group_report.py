@@ -190,7 +190,7 @@ def _mask(email: str) -> str:
 
 async def send_itineraries(account: str, mv: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, List[str]]:
     """Each FULLY booked traveller's own itinerary, once (never twice: the record says who already has it), to their registered email,
-    through the one sender (live_events.send_email), TEST-tagged — recorded when it went. → {sent, already, no_email, not_sent} (names)."""
+    through the one sender to a person (live_events.send_to_person), TEST-tagged — recorded when it went. → {sent, already, no_email, not_sent} (names)."""
     from . import groups as G, live_events as LE
     done = await sent_record(account, mv["id"])
     people = {p["name"]: p for p in (await G.roster(account)).get("people") or []}
@@ -211,7 +211,7 @@ async def send_itineraries(account: str, mv: Dict[str, Any], rows: List[Dict[str
                                   "References: " + (", ".join(r.get("references") or []) or "on the trip's master list"), "",
                                   "TEST: a demo booking — no airline or hotel charge.", "", "— Sasha (AI concierge, Kanoe Technologies SL)"])}
         try:
-            got = await LE.send_email(msg)
+            got = await LE.send_to_person(account, msg)   # Sasha 386 · the one sender to another person
         except Exception as e:
             got = {"sent": False, "why": type(e).__name__}
         if got.get("sent"):

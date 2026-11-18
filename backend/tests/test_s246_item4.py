@@ -30,7 +30,7 @@ HAMMAM_SITE = """<html><body>
 <a href="https://madrid.hammamalandalus.com/reservas/">Reservar</a>
 <a href="https://madrid.hammamalandalus.com/tarjeta-regalo/">Tarjeta regalo</a>
 <a href="https://www.instagram.com/hammamalandalus/">Instagram</a>
-<a href="mailto:madrid@hammamalandalus.com">Escríbenos</a> <a href="tel:+34914299020">Llámanos</a>
+<a href="mailto:madrid@hammamalandalus.example">Escríbenos</a> <a href="tel:+34914299020">Llámanos</a>
 <script src="https://www.google.com/recaptcha/api.js"></script></body></html>"""
 MI_VENTA_SITE = """<html><body><form action="/reservas/enviar"><input type="date" name="fecha"><input name="hora">
 <input name="personas"><input name="nombre"><input type="email" name="email"></form>

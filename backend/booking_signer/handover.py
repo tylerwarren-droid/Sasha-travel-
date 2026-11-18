@@ -941,7 +941,9 @@ def _test_name(url: str) -> str:
 
 
 #: a fictional guest — never a real person's details through the cloud browser before a DPA
-FICTIONAL = {"person_name": "Prueba Sasha", "email": "prueba@example.com", "phone": "+34600000000", "party_size": "2",
+from . import test_identity as _TI   # Sasha 386 · the ONE test-identity source (was +34600000000: a real Spanish mobile range)
+FICTIONAL = {"person_name": _TI.fictional_person()["name"], "email": _TI.fictional_person()["email"],
+             "phone": _TI.fictional_person()["mobile"], "party_size": "2",
              "free_text": "Prueba de Kanoe (ficticia)."}
 
 

@@ -28,7 +28,7 @@ run = asyncio.run
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 VECTOR = json.loads((BACKEND / "kanoe_contract" / "vectors" / "whatsapp_card.json").read_text())["vectors"][0]
 ACCT = "00000000-0000-4000-8000-000000000190"
-WA = {"wa_id": "15005550375", "message_id": "SM190card"}   # the fictional +1 500 555 0375
+WA = {"wa_id": "14155550101", "message_id": "SM190card"}   # the fictional +1 415 555 0101
 
 
 class TheVector(unittest.TestCase):

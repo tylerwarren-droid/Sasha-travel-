@@ -44,7 +44,7 @@
       "input": {
         "from": "Sasha <sasha@send.kanoe.ai>",
         "to": {
-          "address": "jurgen@example.de"
+          "address": "jurgen@example.invalid"
         },
         "subject": "Reserva — viernes 21:00",
         "body": "Hola,\nmesa para 2 en Casa Lucio. ¡Gracias!"
@@ -53,20 +53,20 @@
         "message": {
           "from": "Sasha <sasha@send.kanoe.ai>",
           "to": {
-            "address": "jurgen@example.de"
+            "address": "jurgen@example.invalid"
           },
           "subject": "Reserva — viernes 21:00",
           "body": "Hola,\nmesa para 2 en Casa Lucio. ¡Gracias!"
         },
         "read_back": [
           "Send this email from Sasha <sasha@send.kanoe.ai> (Sasha's own address — not your mailbox).",
-          "To: jurgen@example.de",
+          "To: jurgen@example.invalid",
           "Subject: Reserva — viernes 21:00",
           "Hola,",
           "mesa para 2 en Casa Lucio. ¡Gracias!",
           "Once sent it can't be unsent. Their reply comes to Sasha, and you'll see it word for word."
         ],
-        "payload_sha256": "sha256:fa0738728da2671939f59a7c9ee6d026338fb1738649de0bc16bb149d50b2038",
+        "payload_sha256": "sha256:0dfa15855e71fe9197564f79805432b052c35d3dce1dead4c00501f771d26dcd",
         "body_sha256": "sha256:a6e8c4d6614362b8d534757a1ba392670bf51ca7f9bdfa3d31e610a0cdccb1a1"
       }
     },
@@ -314,7 +314,7 @@
       "input": {
         "from": "+15005550100",
         "to": {
-          "number": "+34 600 000 001"
+          "number": "+1 202 555 0101"
         },
         "template": "kanoe_on_behalf_v1",
         "on_behalf_of": "Ana García"
@@ -323,7 +323,7 @@
         "message": {
           "from": "+15005550100",
           "to": {
-            "number": "+34600000001"
+            "number": "+12025550101"
           },
           "kind": "template",
           "template": {
@@ -338,13 +338,13 @@
         },
         "read_back": [
           "Send this WhatsApp from +15005550100 (Sasha's number — not your phone).",
-          "To: +34600000001",
+          "To: +12025550101",
           "WhatsApp's approved first message (they haven't written to Sasha in the last 24 hours):",
           "Hi there, this is Sasha, an assistant writing for Ana García. Ana García asked me to send you a message here. Reply YES to receive it, or STOP and I won't write again.",
           "Your own note isn't sent now: only after they reply, and after you say yes to it again.",
           "Once sent it can't be unsent. Their reply comes to Sasha, and you'll see it word for word."
         ],
-        "payload_sha256": "sha256:f278cfac095b8b6a21b8e6795487e698629109cf80e6295d782e2b293b919c84",
+        "payload_sha256": "sha256:28a1cbb6cfa6443b49fde4f69b44c625805e2bbd09f7cfb057fafd96c3a077c7",
         "body_sha256": "sha256:c039720fc72df4498b47bf5e276fabd9dfd9b083c4e4f2ff31156d39cb290878"
       }
     },

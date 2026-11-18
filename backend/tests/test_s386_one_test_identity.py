@@ -137,8 +137,8 @@ def json_findings(path: pathlib.Path):
     return out
 
 
-#: AgAPI's own spec vectors (vendored, ~/Developer/agapi spec/ext/vectors/powers.json): their recipient is AgAPI's to fix — reported
-#: to AgAPI (mailbox, Sasha 386). This file's check is an EXPECTED failure until AgAPI ships the fix; then it passes and says so.
+#: AgAPI's own spec vectors (vendored from ~/Developer/agapi spec/ext/vectors/powers.json): fixed at AgAPI's source by CR 205
+#: (5dd9f06: jurgen@example.invalid, +1 202 555 0101) and re-vendored — held by the same class test as every other fixture.
 AGAPI_VECTORS = "tests/fixtures/agapi_powers_vectors.json"
 #: bytes signed by the booking helper's own JavaScript (cross-implementation vectors: changing a byte breaks them) — held to a stricter
 #: rule instead: their person's number is one NO-ONE can hold (not a valid number anywhere) and every address is reserved or Kanoe's.
@@ -161,13 +161,15 @@ class NoTestBuildsARealPerson(unittest.TestCase):
 
     def test_every_json_fixture(self):
         bad = [f"{p.relative_to(BACKEND)} {at} {v}" for p in _files(".json")
-               if str(p.relative_to(BACKEND)) not in SIGNED + (AGAPI_VECTORS,) for at, v in json_findings(p)]
+               if str(p.relative_to(BACKEND)) not in SIGNED for at, v in json_findings(p)]
         self.assertEqual(bad, [], "\n".join(bad))
 
-    @unittest.expectedFailure
     def test_agapis_vendored_vectors(self):
-        """jurgen@example.de (a registered domain) and +34 600 000 001 — AgAPI's spec, reported to AgAPI (Sasha 386)."""
+        """Was jurgen@example.de (a registered domain) and +34 600 000 001; AgAPI fixed its spec (CR 205) and Sasha re-vendored it."""
         self.assertEqual(json_findings(BACKEND / AGAPI_VECTORS), [])
+        text = (BACKEND / AGAPI_VECTORS).read_text()
+        self.assertIn("jurgen@example.invalid", text)
+        self.assertIn("+1 202 555 0101", text)
 
     def test_the_signed_vectors_hold_no_one(self):
         for f in SIGNED:

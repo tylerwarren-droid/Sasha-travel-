@@ -126,9 +126,6 @@ def _venues(ev: dict, out) -> None:
         return
     lines = [f"{i}. {c.get('name')}" + (f" · ★{c['rating']}" if c.get("rating") else "") + (f" · {c.get('area')}" if c.get("area") else "")
              for i, c in enumerate(cards, 1)]
-    for c in cards[:3]:
-        if c.get("photo"):
-            out.media(_cut(c.get("name"), 60), c["photo"])
     out.pick("\n".join(lines), "See the places",
              [(_cut(c.get("name"), TITLE), _cut(" · ".join(x for x in (f"★{c['rating']}" if c.get("rating") else "", c.get("area") or c.get("type") or "") if x), DESC),
                f"pick:{c.get('place_id')}") for c in cards if c.get("place_id")])

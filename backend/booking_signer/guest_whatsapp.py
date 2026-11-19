@@ -478,26 +478,58 @@ class Out:
     def said(self) -> str:
         return "\n".join(i[1] for i in self.items)
 
+    def compose(self) -> "Out":
+        """Sasha 388 · THE ONE COMPOSER of an answer: every item of the turn → ONE message.
+          · her words, joined in order (a sentence already in the card is said once: as the card's);
+          · with the turn's card (its buttons or its list, the LAST one) → that ONE interactive message, her words as its body;
+          · else with a voice note → that ONE media message, her words as its caption;
+          · else ONE text. An image is never its own message (a venue's photo: the list is the answer).
+        WhatsApp's size limits are fit() at sending (split, never cut) — the only way one answer is ever two messages."""
+        if len(self.items) <= 1:
+            return self
+        texts = [str(i[1]) for i in self.items if i[0] == "text" and str(i[1]).strip()]
+        card = next((i for i in reversed(self.items) if i[0] in ("ask", "list")), None)
+        note = next((i for i in self.items if i[0] == "media" and str(i[1]).startswith("🔊")), None)
+        if card is not None:
+            body = str(card[1]).strip()
+            words = [t for t in texts if t.strip() and t.strip() not in body]
+            self.items = [(card[0], "\n\n".join(words + [body]).strip()) + tuple(card[2:])]
+        elif note is not None:
+            self.items = [("media", "\n\n".join(texts) or note[1], note[2])]
+        else:
+            self.items = [("text", "\n\n".join(texts))] if texts else self.items[-1:]
+        return self
 
-async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime], progress: bool = False) -> List[str]:
-    """Sends a turn's messages — or nothing, with the reason logged: opted out, or outside the 24-hour window (the sandbox
-    has no templates; the email receipt still goes). Sasha 350 (close) · `progress`: an acknowledgement / progress line while the work
-    goes on — not the reply: the "working" dots come back right after it; any other delivery IS the reply (its result, or its failure)."""
+
+async def deliver(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime]) -> List[str]:
+    """Sends a turn's ONE answer — or nothing, with the reason logged: opted out, or outside the 24-hour window (the sandbox
+    has no templates; the email receipt still goes).
+    Sasha 388 · ONE INBOUND, ONE ANSWER: the turn's items are composed into ONE message (Out.compose), and an inbound message is answered
+    ONCE — a second delivery for the same inbound (VS.WA's message_id) is refused and logged, never sent."""
     from . import wa_working as _WK
-    if progress:
-        try:
-            return await _send(ch, frm, out, last_inbound_at)
-        finally:
-            _WK.again(ch.get("wa_id_sha256") or "")
+    from agapi import venue_submit as _VSd
+    mid = str((_VSd.WA.get() or {}).get("message_id") or "")
+    if mid and mid in _ANSWERED:
+        log.error("[guest_whatsapp] a second answer to one inbound (…%s) — refused, not sent", mid[-8:])
+        return ["not sent: this message was already answered"]
     from . import switching as _SWd
     _SWd.compose(out)   # Sasha 356 · its header first (idempotent): a header that IS the message is words
     if not out.items and not getattr(out, "answered_by", None):   # Sasha 357 · nothing to say is NOT a reply: the turn's ONE outcome tells
         log.info("[guest_whatsapp] a delivery with no words and no other answer — not the reply")   # its failure (_turn), never silence
         return []
+    out.compose()   # Sasha 388 · the ONE composer: her words + the turn's card = one message
+    if mid:
+        _ANSWERED[mid] = None
+        while len(_ANSWERED) > 2000:
+            _ANSWERED.pop(next(iter(_ANSWERED)))
     _WK.stop_for(ch.get("wa_id_sha256") or "")   # the reply leaves (or can't): this message's dots end here
     from . import inbound_outcome as _OC
     _OC.replied(ch.get("wa_id_sha256") or "")     # Sasha 357 · the turn's ONE outcome knows its reply left (not the dots: they may be none)
     return await _send(ch, frm, out, last_inbound_at)
+
+
+#: Sasha 388 · the inbound messages already answered (MessageSid → None, oldest first): one inbound, one answer
+_ANSWERED: Dict[str, None] = {}
 
 
 async def _send(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime]) -> List[str]:
@@ -1288,33 +1320,10 @@ async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: 
     """The one brain answers this message. Sasha 252 · it never writes st["pending"]: Sasha's open question stays open."""
     import asyncio
     from . import wa_agent as WA
-    from app.agent import voice as V
-    steps = V.Steps()   # Sasha 264 · item 1: the step her turn is on (wa_agent.agent_turn reports its tools into it)
-    tok = V.STEPS.set(steps)
-    try:
-        task = asyncio.ensure_future(WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
-                                                   voice_in=bool(heard)))   # Sasha 238 · a voice note in → a voice note back
-    finally:
-        V.STEPS.reset(tok)
-    # Sasha 257 · THE HOLDING LINE (row 863): her answer not ready within voice.HOLD_AFTER_S → ONE short line goes first (never a
-    # claim, never for a fast reply); the answer follows when it's ready. Awaited — never fire-and-forget. Sasha 264 · then, while
-    # it still works, a line every voice.PROGRESS_S from the step actually running — never silence longer than that.
-    # Sasha 265 · item 5 (row 935): a request for work hears voice.first_line AT ONCE (the same words as /s2 and /next), then a
-    # progress line every voice.PROGRESS_S; anything else keeps the holding line after voice.HOLD_AFTER_S, only if it's slow
-    # Sasha 279 · A: said ONCE — a second line only on a long wait (voice.progress_due), never a third; then quiet until her answer
-    at_once = V.first_line(body) if body else None
-    done, _ = await asyncio.wait({task}, timeout=0 if at_once else V.HOLD_AFTER_S)
-    said = 0
-    while not done and body and V.progress_due(said, V.LONG_WAIT_S):
-        hold = Out()
-        hold.text((at_once or V.holding_line(ch.get("account_id") or "")) if not said else V.progress_line(steps.now, ch.get("account_id") or ""))
-        said += 1
-        try:
-            await deliver(ch, frm, hold, now, progress=True)   # Sasha 350 (close) · not the reply: the dots go on until it
-        except Exception as e:
-            log.warning("[guest_whatsapp] holding line not sent: %s", type(e).__name__)
-        if V.progress_due(said, V.LONG_WAIT_S):
-            done, _ = await asyncio.wait({task}, timeout=V.LONG_WAIT_S)
+    task = asyncio.ensure_future(WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
+                                               voice_in=bool(heard)))   # Sasha 238 · a voice note in → a voice note back
+    # Sasha 388 · ONE INBOUND, ONE ANSWER: no holding, first or progress line is ever sent. A slow turn shows WhatsApp's typing dots
+    # (wa_working: AgAPI's messages.typing, held from the message's arrival until its reply leaves) — never a message.
     await task
     await _brain_tail(ch, out)
     await _save_keeping_their_question(key, st, loaded)

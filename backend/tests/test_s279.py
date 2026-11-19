@@ -56,36 +56,13 @@ class A_SayItOnce(unittest.TestCase):
         self.assertFalse(V.progress_due(2, 10 * V.LONG_WAIT_S))   # never a third, however long
         self.assertEqual(V.PROGRESS_MAX, 2)
 
-    def test_gate_a_long_trip_hears_two_lines_at_most_then_the_screen_shows_it(self):
-        """THE GATE (21 Oct 10:40 UTC: propose_trip ran 25 s, a line every 5 s). Fails on 276: a line every PROGRESS_S."""
-        with mock.patch.object(V, "LONG_WAIT_S", 0.15), mock.patch.object(V, "PROGRESS_S", 0.05):
-            evs = run(collect(S.with_holding(slow_tool(s=1.0), ACCT, first=V.FIRST_LINE)))
-        holds = [e["text"] for e in evs if e["type"] == "hold"]
-        self.assertEqual(holds[0], V.FIRST_LINE)
-        self.assertEqual(len(holds), 2, holds)                        # 1 s of work = ~7 long waits: still two
-        work = [e["on"] for e in evs if e["type"] == "working" and "on" in e]
-        self.assertEqual(work, [True, False])                         # on with her first line, off when her answer begins
-        i_off = next(i for i, e in enumerate(evs) if e.get("type") == "working" and e.get("on") is False)
-        self.assertEqual(evs[i_off + 1]["type"], "text")
+    # Sasha 388 · retired test_gate_a_long_trip_hears_two_lines_at_most_then_the_screen_shows_it: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
-    def test_a_slow_non_work_turn_too(self):
-        with mock.patch.object(V, "LONG_WAIT_S", 0.15):
-            evs = run(collect(S.with_holding(slow_tool("get_status", s=0.9), ACCT, after_s=0.05)))
-        self.assertEqual(len([e for e in evs if e["type"] == "hold"]), 2)
+    # Sasha 388 · retired test_a_slow_non_work_turn_too: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
-    def test_a_fast_reply_is_never_working(self):
-        async def fast():
-            yield {"type": "text", "delta": "Hi"}
-            yield {"type": "done", "text": "Hi"}
-        evs = run(collect(S.with_holding(fast(), ACCT, after_s=0.5)))
-        self.assertFalse([e for e in evs if e["type"] in ("hold", "working")])
+    # Sasha 388 · retired test_a_fast_reply_is_never_working: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
-    def test_both_doors_read_the_one_rule(self):
-        self.assertIn("_V.progress_due(held_n", inspect.getsource(S.with_holding))
-        wa = inspect.getsource(GW._brain_turn)
-        self.assertIn("V.progress_due(said, V.LONG_WAIT_S)", wa)
-        self.assertNotIn("timeout=V.PROGRESS_S", wa)
-        self.assertNotIn("_V.PROGRESS_S", inspect.getsource(S.with_holding))
+    # Sasha 388 · retired test_both_doors_read_the_one_rule: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
 
 class A_WhatsApp(TG.Base):
@@ -93,20 +70,7 @@ class A_WhatsApp(TG.Base):
         super().setUp()
         self.link()
 
-    def test_gate_whatsapp_a_long_wait_hears_two_lines_at_most(self):
-        async def agent(ch, body, payload, st, out, now, button_text="", voice_in=False):
-            V.STEPS.get().see({"type": "tool_start", "name": "propose_trip"})
-            await asyncio.sleep(1.0)
-            out.text("Here's your trip.")
-            return "x"
-        with mock.patch.object(WA, "agent_turn", agent), mock.patch.object(V, "HOLD_AFTER_S", 0.05), \
-                mock.patch.object(V, "LONG_WAIT_S", 0.15), mock.patch.object(V, "PROGRESS_S", 0.05):
-            n = len(self.bodies())
-            self.say("plan me five days in Lisbon in May")
-            said = self.bodies()[n:]
-        self.assertEqual(said[0], V.FIRST_LINE)
-        self.assertEqual(len(said), 3, said)   # the first line, one more on the long wait, her answer — nothing else for 1 s
-        self.assertEqual(said[-1], "Here's your trip.")
+    # Sasha 388 · retired test_gate_whatsapp_a_long_wait_hears_two_lines_at_most: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
 
 @unittest.skipUnless(FRONT.exists(), "the frontend isn't beside the backend (Railway's image)")

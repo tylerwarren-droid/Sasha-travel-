@@ -1244,8 +1244,6 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 _currencies(r["result"], other)
                 if honest and isinstance(r["result"], dict):   # Sasha 264 · item 5: what this card says, she never says again
                     tstate["seen"] += [str(l) for l in (r["result"].get("read_back") or []) if isinstance(l, str)]
-                if honest and _V.route_told(r["result"]):   # Sasha 331 · how she'll book and why: said once, in front, by code
-                    told.insert(0, _V.route_told(r["result"]))
                 if honest and _V.told_line(r["result"]):   # Sasha 254 · off on /next with parity off (byte-identical)
                     told.append(_V.told_line(r["result"]))
             line = outage(r)
@@ -1566,26 +1564,12 @@ async def turn_with_quiver(account: str, message: str, history: List[dict], sess
             except asyncio.TimeoutError:
                 if time.perf_counter() - t0 >= TURN_DEADLINE_S:
                     continue
-                if decided:   # a long piece of work after she spoke: ONE plain "nearly there", never more
+                if decided:   # Sasha 388 · a long piece of work: no words before the answer (the ring shows it)
                     still = True
-                    line = await make_filler(message, "still", session)
-                    if line:
-                        last_sound = time.perf_counter()
-                        yield {"type": "filler", "text": line, "why": "still working"}
                     continue
                 decided = True
                 if voice.get("text_started"):   # she's already writing: her own words go out as soon as a sentence is whole
                     voice["flush_now"] = True
-                    continue
-                line = await make_filler(message, voice.get("tool") or "", session)   # nothing written yet: what she's doing, said plainly
-                if line and not voice.get("spoke"):
-                    voice["filler"] = line
-                    o = opener_of(line)
-                    if o:
-                        _OPENERS.setdefault(sess, set()).add(o)
-                    first_sound = first_sound or int((time.perf_counter() - t0) * 1000)
-                    last_sound = time.perf_counter()
-                    yield {"type": "filler", "text": line, "why": "silence"}
                 continue
             if ev is None:
                 break
@@ -1659,18 +1643,10 @@ _SPOKEN = ("text", "replace", "done", "error", "say")
 
 
 async def with_holding(events, account: str, after_s: Optional[float] = None, first: Optional[str] = None, venue: Optional[str] = None):
-    """Sasha 257 · THE HOLDING LINE (row 863): her turn's events as they come; if none of her words has come within
-    voice.HOLD_AFTER_S, ONE short line first ({"type": "hold", "text", "say"} — shown and, with her voice on, spoken), then the real
-    answer. Never for a fast reply, never a claim, never twice in a turn. Sasha 264 · item 1: then, while a tool runs (or before her
-    words), a progress line from that step every voice.PROGRESS_S — never silence longer than that. Sasha 265 · item 5: `first`
-    (voice.first_line — a request for work) is said AT ONCE, before anything else of the turn; then the progress lines carry the
-    silence, and the quiver's own "filler" lines are not said on top of them.
-    Sasha 279 · A: those lines are said ONCE — a second only on a long wait, never a third (voice.progress_due) — then quiet; the
-    stream says the one state the screen shows instead: {"type": "working", "on": true} while her answer hasn't begun, "on": false
-    when it has (or the turn ends). /s2's ring pulses on it.
-    Sasha 299 · TRUE PROGRESS (voice.progress_next, the ONE rule): while a step runs, its own line — once when it is new and STEP_GAP_S
-    have passed since her last words, its still line once on STEP_STILL_S — with `venue` (the tapped card's name) when known; the first
-    line, when a step is already running, is that step's own line rather than a generic one."""
+    """Sasha 388 · ONE INBOUND, ONE ANSWER: her turn's events as they come — and NO words before the answer (the holding line, the first
+    line, the progress lines and the quiver's fillers are deleted). A slow turn is shown, never said: {"type": "working", "on": true} at
+    once, "on": false the moment her answer begins (or the turn ends) — /s2's presence ring shows it; a long job keeps the stream alive
+    with {"type": "working"} (never a lost connection). `after_s`, `first` and `venue` are no longer read (kept for callers)."""
     import asyncio
     q: asyncio.Queue = asyncio.Queue()
     end = object()
@@ -1685,93 +1661,27 @@ async def with_holding(events, account: str, after_s: Optional[float] = None, fi
             await q.put(end)
     task = asyncio.create_task(pump())
     loop = asyncio.get_running_loop()
-    t0, started, words = loop.time(), False, False
-    wait = _V.HOLD_AFTER_S if after_s is None else after_s
-    steps = _V.Steps()   # Sasha 264 · item 1: the step running now (tool_start in, its tool result out)
-    said_at = last_at = t0   # the last thing she said (her words, the holding line, a progress line) / the last event of any kind
-    held_n, held_at = 0, t0   # Sasha 279 · A: "working on it" lines said this turn, and when the first was
-    working = False
-    trued: Dict[str, float] = {}   # Sasha 299 · the steps' own lines said this turn (voice.progress_next's keys) and when
-    said_lines: set = set()        # every holding / progress line said this turn (never one twice)
-    stepped = False                # a tool has come back this turn (then, nothing running and no words yet: she is composing)
-    if first:   # Sasha 265 · item 5: the first line, now — the stream's first event
-        started = True
-        said_at = last_at = held_at = t0
-        held_n, working = 1, True
-        yield {"type": "hold", "text": first, "say": first, "first": True}
-        yield {"type": "working", "on": True}
+    last_at = loop.time()
+    working = True
+    yield {"type": "working", "on": True}
     try:
         while True:
-            now = loop.time()
-            if not started:
-                timeout = max(0.0, wait - (now - t0))
-            else:   # Sasha 279 · the second line is due LONG_WAIT_S after the first (while a step runs, or before her words) — then none
-                due = (held_at + _V.LONG_WAIT_S if (steps.now or not words) and _V.progress_due(held_n, LONG_WAIT_FAR) else float("inf"))
-                due = min(due, now + _V.progress_wait(now, said_at, steps.now, trued, stepped and not words))   # Sasha 299 · a running step's own line
-                timeout = max(0.0, min(due, last_at + KEEPALIVE_S) - now)
             try:
-                # Sasha 299 · an event already here comes first — never a line about a moment that is already over
-                item = q.get_nowait() if not q.empty() else await asyncio.wait_for(q.get(), timeout)
+                item = q.get_nowait() if not q.empty() else await asyncio.wait_for(q.get(), max(0.0, last_at + KEEPALIVE_S - loop.time()))
             except asyncio.TimeoutError:
-                now = loop.time()
-                if not started:
-                    started = True
-                    true1 = _V.step_words(steps.now, venue) if steps.now else None   # Sasha 299 · a step already running: ITS line
-                    line = true1 or _V.holding_line(account)
-                    if true1:
-                        trued[_V._STEP_OF.get(steps.now or "", "")] = now
-                    said_at = last_at = held_at = now
-                    held_n, working = 1, True
-                    said_lines.add(line)
-                    yield {"type": "hold", "text": line, "say": line}
-                    yield {"type": "working", "on": True}
-                    continue
-                pn = _V.progress_next(now, said_at, steps.now, trued, venue, stepped and not words)   # Sasha 299 · the step running now: its own, true line
-                if pn:
-                    trued[pn[1]] = said_at = last_at = now
-                    said_lines.add(pn[0])
-                    yield {"type": "hold", "text": pn[0], "say": pn[0]}
-                    continue
-                # Sasha 279 · A: a tool still running, or her words not begun, on a LONG wait → ONE more line (voice.progress_due)
-                if (steps.now or not words) and _V.progress_due(held_n, now - held_at):
-                    if _V._STEP_OF.get(steps.now or "") in _V._TRUE:
-                        held_n += 1   # Sasha 299 · a step with its OWN lines (progress_next: its line, its still line) — never a generic one too
-                        continue
-                    line = _V.progress_line(steps.now, account)
-                    for _ in range(4):   # Sasha 299 · never a line already said this turn (a step's own line included)
-                        if line not in said_lines:
-                            break
-                        line = _V.progress_line(steps.now, account)
-                    if line in said_lines:   # nothing new to say: quiet (the ring shows she works)
-                        held_n += 1
-                        continue
-                    said_lines.add(line)
-                    said_at = last_at = now
-                    if held_n == 0:
-                        held_at = now
-                    held_n += 1
-                    yield {"type": "hold", "text": line, "say": line}
-                    continue
-                if now - last_at >= KEEPALIVE_S - 0.01:   # Sasha 259 · a long job (a Gmail scan, a plan): the stream says it's still
-                    last_at = now                          # working, so the page never calls a working turn a lost connection
-                    yield {"type": "working"}              # (found on Tyler's /s2, 13 Oct ~12:12 UTC)
+                last_at = loop.time()   # Sasha 259 · a long job: the stream says it's still working (never "a lost connection")
+                yield {"type": "working"}
                 continue
             if item is end:
                 break
             if isinstance(item, Exception):
                 raise item
             last_at = loop.time()
-            steps.see(item)
-            if isinstance(item, dict) and item.get("type") == "tool":
-                stepped = True   # Sasha 299
-            if first and isinstance(item, dict) and item.get("type") == "filler":
-                continue   # Sasha 265 · item 5: her first line and the progress lines hold the silence — no second acknowledgement
-            if isinstance(item, dict) and item.get("type") in _SPOKEN:
-                started = words = True
-                said_at = last_at
-                if working:   # Sasha 279 · her answer has begun: the screen stops showing "working" — the same moment the lines stop
-                    working = False
-                    yield {"type": "working", "on": False}
+            if isinstance(item, dict) and item.get("type") == "filler":
+                continue   # Sasha 388 · never words before the answer
+            if working and isinstance(item, dict) and item.get("type") in _SPOKEN:
+                working = False
+                yield {"type": "working", "on": False}
             yield item
         if working:
             yield {"type": "working", "on": False}
@@ -2288,10 +2198,8 @@ async def agent_turn(request: Request):
             return
         try:
             turn_events = turn_with_quiver(account, message, body.get("history") or [], session_id, surface)
-            # Sasha 265 · item 5: a request for work hears voice.first_line at once (the stream's first event, before the timing)
-            # Sasha 273 · item 8: the first line ONCE per request, then the quiver (voice.first_ack) — the page's own (said_first) kept as said
-            held = with_holding(turn_events, account, first=_V.first_ack(account, message, said=body.get("said_first")),
-                                venue=tapped_venue(account, body)) if remembers else turn_events   # Sasha 299 · + the venue his tap named
+            # Sasha 388 · ONE INBOUND, ONE ANSWER: no first line, no acknowledgement — the "working" state while she works, then her answer
+            held = with_holding(turn_events, account) if remembers else turn_events
             quiet = await _V.silent(account)   # Sasha 349 · Silent mode: text only — no spoken line leaves this turn
             async for ev in held:   # Sasha 257 · the holding line
                 if quiet and ev.get("type") == "say":

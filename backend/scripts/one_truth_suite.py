@@ -128,8 +128,10 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             ["tests.test_s256_space_pending"]),
     # Sasha 257 · Tyler (row 863): "a WhatsApp question took 10–15 s before any reply". Her reply not ready within 3 s → ONE short
     # rotating holding line first (never a claim, never for a fast reply) on WhatsApp, /s2 and /next — one phrasebook (voice.py)
-    "T37": ("the holding line: one short line when her reply is slow, never a claim, never for a fast reply",
-            ["tests.test_s257_holding"]),
+    # Sasha 388 (19 Nov) · the holding line is RETIRED: ONE INBOUND, ONE ANSWER — no words before her answer, the working state shows it
+    "T37": ("one inbound, one answer: ONE composed message per WhatsApp message (a second refused), no words before her answer on /s2 "
+            "and voice (the working state only), no channel or platform name and no second yes in any line of hers (Sasha 388)",
+            ["tests.test_s388_one_answer"]),
     # Sasha 257 · 13 Oct ~10:40 UTC: the Anthropic credit ran out — empty replies for everyone, the gate failing 40 unrelated-looking
     # checks, nobody told. Every turn now says it plainly and the founder is emailed (once an hour); the gate's first check names it
     "T38": ("an exhausted model credit is named: a plain line to the person, the founder told, the gate stopped by name",

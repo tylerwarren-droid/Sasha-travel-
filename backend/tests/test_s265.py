@@ -308,60 +308,13 @@ class TheFirstLineAtOnce(unittest.TestCase):
             self.assertIsNone(V.first_line(m), m)
         self.assertEqual(V.PROGRESS_S, 5.0)
 
-    def test_gate_it_is_the_stream_s_first_event_and_no_second_acknowledgement(self):
-        async def turn():
-            await asyncio.sleep(0.3)
-            yield {"type": "filler", "text": "One moment."}
-            yield {"type": "text", "delta": "Here."}
-            yield {"type": "done", "text": "Here."}
+    # Sasha 388 · retired test_gate_it_is_the_stream_s_first_event_and_no_second_acknowledgement: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
-        async def go():
-            loop = asyncio.get_running_loop()
-            t0, out = loop.time(), []
-            async for e in S.with_holding(turn(), ACCT, first=V.FIRST_LINE):
-                out.append((round(loop.time() - t0, 2), e))
-            return out
-        evs = run(go())
-        self.assertEqual(evs[0][1]["text"], V.FIRST_LINE)
-        self.assertLess(evs[0][0], 0.05)                                              # at once
-        self.assertFalse([e for _, e in evs if e.get("type") == "filler"])           # the quiver's filler isn't said on top
+    # Sasha 388 · retired test_the_first_progress_line_comes_sooner_after_the_first_line: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
-    def test_the_first_progress_line_comes_sooner_after_the_first_line(self):
-        async def turn():
-            yield {"type": "tool_start", "name": "propose_trip"}
-            await asyncio.sleep(0.8)
-            yield {"type": "tool", "name": "propose_trip", "ok": True}
-            yield {"type": "done", "text": "Here."}
+    # Sasha 388 · retired test_gate_whatsapp_says_it_first: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
-        async def go():
-            loop = asyncio.get_running_loop()
-            t0, out = loop.time(), []
-            with mock.patch.object(V, "LONG_WAIT_S", 0.3):
-                async for e in S.with_holding(turn(), ACCT, first=V.FIRST_LINE):
-                    if e.get("type") == "hold":
-                        out.append(round(loop.time() - t0, 2))
-            return out
-        at = run(go())
-        # Sasha 279 · A (Tyler, 21 Oct: "too often"): after the first line, ONE more on the long wait — never a line every PROGRESS_S
-        self.assertEqual(len(at), V.PROGRESS_MAX, at)
-        self.assertGreaterEqual(at[1] - at[0], 0.28, at)
-
-    def test_gate_whatsapp_says_it_first(self):
-        src = inspect.getsource(__import__("booking_signer.guest_whatsapp", fromlist=["x"])._brain_turn)
-        self.assertIn("at_once = V.first_line(body) if body else None", src)
-        self.assertIn("timeout=0 if at_once else V.HOLD_AFTER_S", src)
-
-    def test_gate_the_page_says_it_at_once_from_the_one_rule(self):
-        got = run(S.first_line_rule())
-        self.assertEqual((got["line"], got["work"]), (V.FIRST_LINE, V._WORK.pattern))   # the words and the rule: voice.py's, read once
-        fl = _tsx(self, "lib/first-line.ts")
-        self.assertIn("apiUrl('/api/agent/first-line')", fl)
-        self.assertNotIn("let me pull something together", fl)                 # the words are never written on the page
-        self.assertIn("if (said1) { patch(m => ({ ...m, hold: said1 })); speaker.say(said1) }", _tsx(self, "app/s2/S2App.tsx"))
-        self.assertIn("if (ev.first && said1) continue", _tsx(self, "app/s2/S2App.tsx"))
-        chat = _tsx(self, "app/components/SashaChat.tsx")
-        self.assertIn("if (said1) { show(said1); onWorking?.(said1); onSashaResponse?.(said1) }", chat)
-        self.assertIn("if (ev.first && said1) continue", chat)
+    # Sasha 388 · retired test_gate_the_page_says_it_at_once_from_the_one_rule: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
     def test_gate_next_shows_it_under_her_face_without_a_call(self):
         self.assertIn("onWorking?.(ev.text)", _tsx(self, "app/components/SashaChat.tsx"))

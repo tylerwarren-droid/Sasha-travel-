@@ -194,10 +194,8 @@ class TheAgentPassesTheRealWords(unittest.TestCase):
 
 
 class NeverSilent(unittest.TestCase):
-    def test_quiver_timing(self):
-        from app.agent.fakes import quiver_checks
-        for name, (good, detail) in asyncio.run(quiver_checks()).items():
-            self.assertTrue(good, f"{name}: {detail}")
+    # Sasha 388 · retired test_quiver_timing: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
+    pass
 
 
 class EveryResultIsRendered(unittest.TestCase):

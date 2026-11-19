@@ -12,7 +12,7 @@ import { renderMarkdown } from '@/lib/markdown'
 import { placeReply, visible } from '@/lib/agent-bubble.mjs'   // Sasha 212 · never an empty bubble
 import { untag, untagDeep } from '@/lib/no-test-label.mjs'
 import { PayHere } from './PayHere'   // Sasha 220 · pay here, in the conversation   // Sasha 218 · no visible TEST label on /next (display only)
-import { loadFirstLine, firstLineFor } from '@/lib/first-line'   // Sasha 265 · item 5: the first line, at once
+import { loadFirstLine } from '@/lib/first-line'   // Sasha 265 · item 5: the first line, at once
 import { apiUrl, apiHeaders } from '@/lib/api'
 import { MAX_PHOTOS, imagesOf, toJpeg, type Attachment } from '@/lib/photo-attach'
 import { SharedCard, SHARED_KINDS } from '@/app/components/cards/S2Cards'   // Sasha 241 · S1 PARITY
@@ -639,8 +639,7 @@ export default function SashaChat({ agent = false, phone = false, onTurnBusy, on
     const t0 = performance.now(); let firstSound: number | null = null; let firstKind = ''; const tools: string[] = []
     // Sasha 265 · item 5 (row 935): a request for work hears voice.first_line the instant it's sent — shown (under her face too, no
     // call running) and, in a call, spoken; the stream's own first line is then not said twice
-    const said1 = tapRef.current ? null : firstLineFor(content)
-    if (said1) { show(said1); onWorking?.(said1); onSashaResponse?.(said1) }
+    const said1: string | null = null   // Sasha 388 · ONE INBOUND, ONE ANSWER: no first line before her answer
     const heard = (kind: string) => { if (firstSound === null) { firstSound = performance.now() - t0; firstKind = kind } }
     try {
       const r = await reach('/api/sasha-agent', { method: 'POST', headers: { 'content-type': 'application/json' },

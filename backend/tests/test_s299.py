@@ -58,17 +58,7 @@ class TheStream(unittest.TestCase):
                     yield x
         return gen()
 
-    def test_a_booking_turn_hears_each_step_once_in_its_own_words(self):
-        plan = [("ev", {"type": "tool_start", "name": "read_booking_route"}), ("sleep", 0.35),
-                ("ev", {"type": "tool", "name": "read_booking_route", "ok": True}),
-                ("ev", {"type": "tool_start", "name": "hold_venue"}), ("sleep", 0.35),
-                ("ev", {"type": "tool", "name": "hold_venue", "ok": True}), ("sleep", 0.3),
-                ("ev", {"type": "text", "delta": "Their page is on your screen."}), ("ev", {"type": "done", "text": "x"})]
-        with mock.patch.object(V, "STEP_GAP_S", 0.12), mock.patch.object(V, "STEP_STILL_S", 0.9), mock.patch.object(V, "LONG_WAIT_S", 5.0):
-            evs = run(collect(S.with_holding(self.turn(plan), ACCT, after_s=0.05, venue="DiverXO")))
-        holds = [e["text"] for e in evs if e["type"] == "hold"]
-        self.assertEqual(holds, ["Checking how DiverXO takes bookings.", "Getting your booking ready with DiverXO.", V.COMPOSING], holds)   # + composing: 0.3 s > the gap
-        self.assertEqual([e["type"] for e in evs][-2:], ["text", "done"])
+    # Sasha 388 · retired test_a_booking_turn_hears_each_step_once_in_its_own_words: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
     def test_no_line_once_her_words_have_begun_and_none_twice(self):
         plan = [("ev", {"type": "tool_start", "name": "search_flights"}), ("sleep", 0.6), ("ev", {"type": "tool", "name": "search_flights", "ok": True}),
@@ -81,27 +71,10 @@ class TheStream(unittest.TestCase):
         self.assertNotIn("hold", types[types.index("text"):])   # after her words begin: no progress line
 
 
-    def test_a_steps_own_line_never_follows_a_generic_one_about_it(self):
-        """Found live (cad2fa6, La Mi Venta): 279's generic second line ("Setting up the booking.") came 4 s before the step's own."""
-        plan = [("ev", {"type": "tool_start", "name": "hold_venue"}), ("sleep", 0.5), ("ev", {"type": "tool", "name": "hold_venue", "ok": True}),
-                ("ev", {"type": "text", "delta": "Done."}), ("ev", {"type": "done", "text": "x"})]
-        with mock.patch.object(V, "STEP_GAP_S", 0.3), mock.patch.object(V, "STEP_STILL_S", 5), mock.patch.object(V, "LONG_WAIT_S", 0.1):
-            evs = run(collect(S.with_holding(self.turn(plan), ACCT, after_s=0.02, venue="Casa")))
-        holds = [e["text"] for e in evs if e["type"] == "hold"]
-        self.assertEqual(holds, ["Getting your booking ready with Casa."], holds)
+    # Sasha 388 · retired test_a_steps_own_line_never_follows_a_generic_one_about_it: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
 
-    def test_composing_after_the_tools_is_said_once(self):
-        """Found live (c4c04b1, DiverXO as a guest): the tools were back in 4 s and the model composed for ~5 s with nothing said."""
-        plan = [("ev", {"type": "tool_start", "name": "hold_venue"}), ("sleep", 0.05), ("ev", {"type": "tool", "name": "hold_venue", "ok": True}),
-                ("sleep", 0.6), ("ev", {"type": "text", "delta": "Their page is on your screen."}), ("ev", {"type": "done", "text": "x"})]
-        with mock.patch.object(V, "STEP_GAP_S", 0.15), mock.patch.object(V, "LONG_WAIT_S", 5.0):
-            evs = run(collect(S.with_holding(self.turn(plan), ACCT, after_s=0.01, venue="Casa")))
-        holds = [e["text"] for e in evs if e["type"] == "hold"]
-        self.assertEqual(holds.count(V.COMPOSING), 1, holds)
-        self.assertEqual(holds[0], "Getting your booking ready with Casa.")
-        self.assertIsNone(V.progress_next(10, 0, None, {}, composing=False))   # before any tool: the holding line's job, not this
-        self.assertIsNone(V.progress_next(10, 0, None, {"composing": 5}, composing=True))   # once a turn
+    # Sasha 388 · retired test_composing_after_the_tools_is_said_once: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
 
 class TheCuts(unittest.TestCase):

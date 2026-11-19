@@ -376,10 +376,10 @@ class G16RemindersOffer(BrainStandIn, TG.Base):
 
     def test_offered_once_after_the_brains_answer(self):
         self.say("find me sushi in Chamberí")
-        self.assertEqual(self.bodies()[-2:], ["agent: find me sushi in Chamberí", GW.REMINDERS_OFFER])
+        self.assertEqual(self.bodies()[-1], "agent: find me sushi in Chamberí\n\n" + GW.REMINDERS_OFFER)   # Sasha 388 · ONE answer
         self.say("and for Saturday?")
         self.assertEqual(self.bodies()[-1], "agent: and for Saturday?")       # never again
-        self.assertEqual(self.bodies().count(GW.REMINDERS_OFFER), 1)
+        self.assertEqual(sum(GW.REMINDERS_OFFER in b for b in self.bodies()), 1)   # Sasha 388 · inside its one answer, once
 
 
 # ── G15 · the founder's words on the ops console ────────────────────────────────────────────────────────────────────────────

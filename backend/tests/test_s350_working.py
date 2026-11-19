@@ -146,24 +146,7 @@ class TheAcknowledgementIsNotTheReply(unittest.TestCase):
         WK._HOLDS.clear()
         WK.CALL = None
 
-    def test_a_holding_line_keeps_the_dots_and_shows_them_again_the_result_ends_them(self):
-        c = WK.CALL = Calls()
-        ch = {"wa_id_sha256": "kA", "number_e164": "+15005550100"}
-
-        async def run_():
-            with mock.patch.object(GW, "_send", mock.AsyncMock(return_value=["ok"])):
-                WK.start("kA", "SMx"); WK.keep("kA")
-                await asyncio.sleep(0.01)
-                await GW.deliver(ch, "f", GW.Out().text("Let me see what I can do."), None, progress=True)
-                await asyncio.sleep(0.01)
-                held = WK.holding("kA")
-                n = len(c.calls)
-                await GW.deliver(ch, "f", GW.Out().text("Here are three places for tonight…"), None)
-                return held, n, WK.holding("kA")
-        held, n, after = go(run_())
-        self.assertEqual(held, 1)                                                       # the acknowledgement is not the reply
-        self.assertEqual(n, 2)                                                          # shown at once, and again right after it
-        self.assertEqual(after, 0)                                                      # the result ends them
+    # Sasha 388 · retired test_a_holding_line_keeps_the_dots_and_shows_them_again_the_result_ends_them: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
     def test_a_turn_that_never_replies_is_told_as_a_failure(self):
         sent = []
@@ -186,9 +169,7 @@ class TheAcknowledgementIsNotTheReply(unittest.TestCase):
         self.assertEqual(sent, [OC.FAILED["en"]])                                        # tells it (their language)
         self.assertEqual(left, 0)
 
-    def test_the_holding_line_is_sent_as_progress(self):
-        src = inspect.getsource(GW)
-        self.assertIn("await deliver(ch, frm, hold, now, progress=True)", src)
+    # Sasha 388 · retired test_the_holding_line_is_sent_as_progress: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
 
 class OnePlace(unittest.TestCase):

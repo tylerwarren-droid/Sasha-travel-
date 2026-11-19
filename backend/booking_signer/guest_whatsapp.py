@@ -479,14 +479,29 @@ class Out:
         return "\n".join(i[1] for i in self.items)
 
     def compose(self) -> "Out":
-        """Sasha 388 · THE ONE COMPOSER of an answer: every item of the turn → ONE message.
-          · her words, joined in order (a sentence already in the card is said once: as the card's);
-          · with the turn's card (its buttons or its list, the LAST one) → that ONE interactive message, her words as its body;
-          · else with a voice note → that ONE media message, her words as its caption;
-          · else ONE text. An image is never its own message (a venue's photo: the list is the answer).
-        WhatsApp's size limits are fit() at sending (split, never cut) — the only way one answer is ever two messages."""
-        if len(self.items) <= 1:
+        """Sasha 388 · THE ONE COMPOSER of Sasha's answer (a brain turn: out.one): all her words → ONE message —
+          · with the turn's card (its buttons or its list, the LAST one) → that ONE interactive message, her words as its body (a sentence
+            already in the card is said once: as the card's);
+          · else with her voice note → that ONE media message, her words as its caption;
+          · else ONE text.
+        A document the turn produced stays an attachment of its own (WhatsApp can't put one on buttons). WhatsApp's size limits are fit()
+        at sending (split, never cut). Another tool's answer (a product's PDF, its steps) is that tool's own: not composed here."""
+        if not getattr(self, "one", False) or len(self.items) <= 1:
             return self
+        texts = [str(i[1]) for i in self.items if i[0] == "text" and str(i[1]).strip()]
+        card = next((i for i in reversed(self.items) if i[0] in ("ask", "list")), None)
+        note = next((i for i in self.items if i[0] == "media" and str(i[1]).startswith("🔊")), None)
+        docs = [i for i in self.items if i[0] == "media" and i is not note]
+        if card is not None:
+            body = str(card[1]).strip()
+            words = [t for t in texts if t.strip() and t.strip() not in body]
+            one = [(card[0], "\n\n".join(words + [body]).strip()) + tuple(card[2:])]
+        elif note is not None:
+            one = [("media", "\n\n".join(texts) or note[1], note[2])]
+        else:
+            one = [("text", "\n\n".join(texts))] if texts else []
+        self.items = docs + one
+        return self
         texts = [str(i[1]) for i in self.items if i[0] == "text" and str(i[1]).strip()]
         card = next((i for i in reversed(self.items) if i[0] in ("ask", "list")), None)
         note = next((i for i in self.items if i[0] == "media" and str(i[1]).startswith("🔊")), None)
@@ -1323,10 +1338,11 @@ async def _brain_turn(ch: dict, key: str, frm: str, body: str, payload: str, p: 
     task = asyncio.ensure_future(WA.agent_turn(ch, body, payload, st, out, now, button_text=(p.get("ButtonText") or "").strip(),
                                                voice_in=bool(heard)))   # Sasha 238 · a voice note in → a voice note back
     # Sasha 388 · ONE INBOUND, ONE ANSWER: no holding, first or progress line is ever sent. A slow turn shows WhatsApp's typing dots
-    # (wa_working: AgAPI's messages.typing, held from the message's arrival until its reply leaves) — never a message.
+    # (wa_working, AgAPI's typing op: held from the message's arrival until its reply leaves) — never a message.
     await task
     await _brain_tail(ch, out)
     await _save_keeping_their_question(key, st, loaded)
+    out.one = True   # Sasha 388 · Sasha's answer: ONE composed message
     await deliver(ch, frm, out, now)
 
 
@@ -2836,11 +2852,8 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
                    extra: Optional[dict] = None) -> None:
     out = ctx["out"]
     sha = read_back["sha256"]
-    if ctx.get("route_line") and kind == "confirm":   # Sasha 161 · one plain line + what's booked; no script in the chat
-        sentence = f"{ctx['route_line']}\n{(extra or {}).get('summary') or ''}".strip()
-    else:
-        out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +
-                 "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
+    out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +   # Sasha 388 · no route line: AgAPI's route is data
+             "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
     if kind == "confirm" and "(TEST stand-in)" not in (venue or "") and _founder_demo(ctx.get("account")) \
             and "Sasha Test Venue" not in (venue or ""):   # Sasha 186 · said plainly which it is: a REAL booking
         sentence = f"✅ Real booking: {venue} itself gets this — it's not a test.\n{sentence}"

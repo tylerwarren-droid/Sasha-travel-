@@ -808,37 +808,6 @@ SAVE_CONTACT_DESC = ("When a booking needs their name and mobile (hold_venue sai
                      "name and mobile) — venues get that address from then on.")
 
 
-def _says_route(fn):
-    """Sasha 331 · the booking question, with AgAPI's route said ONCE in front of it (voice.route_line: how she'll book and why, from
-    AgAPI's decision — never a guess) — on every answer hold_venue gives."""
-    import functools
-
-    @functools.wraps(fn)
-    async def wrapped(ctx, a: dict) -> dict:
-        ctx.route_dec = None
-        return with_route_line(ctx, await fn(ctx, a))
-    return wrapped
-
-
-def with_route_line(ctx, out: dict) -> dict:
-    """Sasha 331 · AgAPI's route line on the ONE booking question (awaiting_yes / choose_route), once per booking: `route_line` on the
-    result, said by code in front of her reply (sasha.turn's told lines) on S2, WhatsApp and voice."""
-    from app.agent import voice as V
-    dec = getattr(ctx, "route_dec", None)
-    if not isinstance(out, dict) or out.get("status") not in ("awaiting_yes", "choose_route") or not isinstance(dec, dict):
-        return out
-    if out.get("route") == "platform_book":   # CR 160 · CR 188 · AgAPI books it for them: its own line
-        dec = {**dec, "route": "platform_book"}
-    line = V.route_line(dec)
-    held = _HELD.get(ctx.account) if out.get("status") == "awaiting_yes" else None
-    if not line or (held and held.get("route_said") == line):
-        return out
-    if held is not None:
-        held["route_said"] = line
-    return {**out, "route_line": line}
-
-
-@_says_route
 async def hold_venue(ctx, a: dict) -> dict:
     """Prepare the booking → what AgAPI decided (venue.profile's decision, then venue.prepare_booking — Sasha 378 · CR 188): the
     read-back the yes binds to, the hand-over for a step only they may do, or AgAPI's words with the take-over. Nothing is sent."""
@@ -892,7 +861,7 @@ async def hold_venue(ctx, a: dict) -> dict:
     if place:   # Sasha 378 · AgAPI's venue.profile, read once and cached — its `decision` is the ONE route (never Sasha's own read)
         await engine_channel(place, listing=True)
     dec = VT.decision(place)   # Sasha 377 · CR 188: AgAPI's ONE decision (venue.profile → handoff.decide), every surface
-    ctx.route_dec = dec   # Sasha 331 · the decision the route line is said from
+
     if kanoe_route(dec) and at and not _open_slot(ctx, a):   # Sasha 287 · a WhatsApp venue: AgAPI's gate decides who sends it
         return _with_card(card, await kanoe_whatsapp(ctx, a, rd, res, at, now, card, dec))
     return _with_card(card, await one_decision(ctx, a, rd, res, at, now, card, dec))

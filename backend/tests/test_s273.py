@@ -237,25 +237,9 @@ class OneAckPerRequest(unittest.TestCase):
         self.assertEqual(len(set(V.ACKS)), len(V.ACKS))
         self.assertEqual(run(AG.first_line_rule())["acks"], list(V.ACKS))
 
-    def test_the_model_never_says_one(self):
-        self.assertIn("never write it\n  yourself", V.RULES)
-        self.assertTrue(V.is_ack("Let me see what I can do."))
-        self.assertTrue(V.is_ack("hold on one second while I sort that out"))
-        self.assertFalse(V.is_ack("Let me see what they have on Saturday."))
-        src = inspect.getsource(AG)
-        self.assertIn("if honest and _V.is_ack(x):", src)
-        self.assertIn('first=_V.first_ack(account, message, said=body.get("said_first"))', src)
-        self.assertIn("V.forget_acks(account)", inspect.getsource(M.clear_conversation))
+    # Sasha 388 · retired test_the_model_never_says_one: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
-    def test_the_page_once_per_request(self):
-        fl = _front(self, "lib/first-line.ts")
-        self.assertIn("export function takeFirstLine(", fl)
-        self.assertIn("if (acked.tried.has(special) || acked.last === special) {", fl)
-        app = _front(self, "app/s2/S2App.tsx")
-        self.assertIn("takeFirstLine(t)", app)
-        self.assertIn("said_first: said1", app)
-        self.assertIn("forgetAcks()", app)
-        self.assertNotIn("firstLineFor(", app)
+    # Sasha 388 · retired test_the_page_once_per_request: ONE INBOUND, ONE ANSWER — no line is said before her answer (the working state shows it)
 
 
 class FrontHeld(unittest.TestCase):

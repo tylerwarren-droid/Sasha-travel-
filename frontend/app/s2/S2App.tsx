@@ -31,7 +31,7 @@ import { again, announce, failed, needs, noted, observe, stillGoing, toConsole }
 import { apiHeaders, apiUrl } from '@/lib/api'
 import SleepButton from '@/app/components/SleepButton'   // Sasha 246 item 2 · pause / sleep
 import { sleepStep, HERE, ASLEEP, AWAKE, ASLEEP_LINE } from '@/lib/sleep-rule.mjs'
-import { loadFirstLine, isWork, takeFirstLine, forgetAcks } from '@/lib/first-line'
+import { loadFirstLine, isWork, forgetAcks } from '@/lib/first-line'
 import { BLOCKED } from '@/lib/mic-state'
 import { holdPlayAndRecord } from '@/lib/audio-session'   // Sasha 267 · the page's one audio session   // Sasha 266 · the mic's stuck state, said with its steps   // Sasha 265 · item 5: the first line, at once
 import { CHIPS } from '@/lib/capabilities.generated.mjs'   // Sasha 249 · one capability list
@@ -962,7 +962,7 @@ export default function S2App() {
     const leaving = isRequest && !!helloCtl.current?.big()
     // Sasha 281 · the camera line only when her LIVE face says it; her still alone → no camera words, the corner, the usual first line
     const onCamera = leaving && !!helloCtl.current?.live()
-    const said1 = onCamera ? (helloCtl.current?.settleLine() || null) : pick || tap ? null : takeFirstLine(t)   // Sasha 273 · item 8: once per request, then the quiver · 296: the camera words once a session, then 'Still here.'
+    const said1 = onCamera ? (helloCtl.current?.settleLine() || null) : null   // Sasha 388 · ONE INBOUND, ONE ANSWER: no first line before her answer (the ring shows she works) · 296: her camera words, once a session
     if (onCamera) {
       if (said1) patch(m => ({ ...m, hold: said1 }))
       byeUntil.current = Date.now() + 9000   // her line first: the stream's lines are shown, not spoken over it

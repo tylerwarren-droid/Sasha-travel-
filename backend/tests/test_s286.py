@@ -47,16 +47,23 @@ class TheOneFloor(unittest.TestCase):
         f = VN.floor({"name": "X", "link": "http://www.x.example/"}, {"venue": "X"})
         self.assertEqual(f["button"]["link"], "http://www.x.example/")
 
-    def test_no_website_their_listing_never_empty(self):
+    def test_no_own_page_is_said_never_a_map(self):
+        """Sasha 389 · KANOE_DECISIONS 12 Nov 20:21: the venue's OWN page — no website of theirs → said plainly, nothing to tap; a map or a
+        search is never a booking fallback (was: their Google listing, a maps search link — Tyler's Peñalver tap, 19 Nov)."""
         f = VN.floor({"name": "Made Ink Tattoo", "place_id": "ChIJmi"}, {"venue": "Made Ink Tattoo", "rungs": {}})
-        self.assertEqual(f["say"], V.floor_line("listing"))
-        self.assertTrue(f["button"]["link"].startswith("https://www.google.com/maps/search/?api=1&query=Made%20Ink%20Tattoo"))
-        self.assertIn("query_place_id=ChIJmi", f["button"]["link"])
-        self.assertTrue(VN.floor(None, {"venue": "Y"})["button"]["link"].startswith("https://"))   # not even a card: still a button
+        self.assertEqual(f["say"], V.NO_OWN_PAGE.format(venue="Made Ink Tattoo"))
+        self.assertNotIn("button", f)
+        self.assertNotIn("button", VN.floor(None, {"venue": "Y"}))
 
     def test_agapis_own_floor_when_it_gives_one(self):
+        own = {**NONE, "button": {**NONE["button"], "link": "https://opulencethaispa.co.uk/book"}}   # AgAPI's floor: THEIR page
+        f = VN.floor(OPULENCE, RD, own)
+        self.assertEqual((f["say"], f["button"]["link"], f["from"]), (own["say_text"], own["button"]["link"], "agapi"))
+
+    def test_agapis_floor_on_a_map_is_never_handed_over(self):
+        """Sasha 389 · AgAPI's route-none button pointing at a MAP (its listing) is not their page: their website instead."""
         f = VN.floor(OPULENCE, RD, NONE)
-        self.assertEqual((f["say"], f["button"]["link"], f["from"]), (NONE["say_text"], NONE["button"]["link"], "agapi"))
+        self.assertEqual((f["say"], f["button"]["link"], f["from"]), (V.FLOOR, OPULENCE["website"], "sasha"))
 
     def test_agapis_words_that_ask_for_a_link_are_never_said(self):
         asking = {**NONE, "say_text": "I couldn't find a way to book them — if you have their booking link, send it to me."}
@@ -113,8 +120,11 @@ class EveryLastResortEndsInTheFloor(unittest.TestCase):
         self.assertEqual(self.mem.kinds[VN.PREPARED_KIND][-1]["url"], OPULENCE["website"])   # the row "Did it go through?" reads
 
     def test_agapis_none_is_said_in_agapis_words(self):
-        got = self._read(dec=NONE)
-        self.assertEqual((got["how"], got["page_url"]), (NONE["say_text"], NONE["button"]["link"]))
+        own = {**NONE, "button": {**NONE["button"], "link": "https://opulencethaispa.co.uk/book"}}
+        got = self._read(dec=own)
+        self.assertEqual((got["how"], got["page_url"]), (own["say_text"], own["button"]["link"]))
+        got = self._read(dec=NONE)   # Sasha 389 · its button a map: never handed over — their website
+        self.assertEqual(got["page_url"], OPULENCE["website"])
 
     def test_the_hold_with_no_decision_hands_over_the_floor(self):
         # Sasha 378 · CR 188: no decision of AgAPI's → one_decision follows "none" → THE FLOOR (their website as the button)

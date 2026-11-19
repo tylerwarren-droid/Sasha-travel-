@@ -277,7 +277,7 @@ class NeverNoOnlineForm(unittest.TestCase):
         got = self._route(AD.decision("call", "Casa Gate"))
         self.assertEqual(got["how"], V.CALL_IT)                                            # a way of hers: she does it
         self.assertNotIn("no online booking form", got["how"].lower())
-        self.assertTrue(self._route(None)["how"].startswith("Here's their "))               # Sasha 286 · nothing: THE FLOOR
+        self.assertTrue(self._route(None)["how"].startswith(("Here's their ", "I couldn't book ")))               # Sasha 286 · nothing: THE FLOOR
         self.assertFalse(V.asks_for_link(self._route(None)["how"]))
         self.assertEqual(self._route(AD.decision("email", "Casa Gate"))["how"], AD.decision("email", "Casa Gate")["say_text"])
 

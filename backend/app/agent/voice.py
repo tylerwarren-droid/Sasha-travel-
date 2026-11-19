@@ -222,6 +222,8 @@ def floor_line(what: str = "website") -> str:
 
 
 FLOOR = floor_line()
+#: Sasha 389 · nothing booked and no page of THEIR own to hand over (a map or a search never stands in for one)
+NO_OWN_PAGE = "I couldn't book {venue} from here, and they have no booking page of their own I can hand you — nothing was booked."
 
 # Sasha 287 · KANOE'S WHATSAPP (beta) · THE CONSENT RULE (Tyler, 25 Oct: "cut down on the user involvement"). Their own words giving the
 # venue, day, time and people ARE the yes: sent, ONE line said. S2 filled in any of the four: ONE line asks, never the message's text. A

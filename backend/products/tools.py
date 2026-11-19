@@ -97,13 +97,22 @@ def tap_fields(p: Dict[str, Any]) -> Tuple[str, str]:
 
 
 OWN = "kanoe:"   # Sasha's own ids (the back row, a tool's row, a sentence row); any other id is its tool's (AD's "ad_…")
+#: Sasha 389 · THE ONE LIST OF SASHA'S OWN TAP IDS — her switch rows (kanoe:) AND her brain's taps: a card's option or yes (card:), a
+#: place (pick:), a sentence (say:), yes/no (yn:), a photo's purpose (photo:), a Keep answer (keep:). A button or a LIST ROW with one of
+#: these is hers, whichever way WhatsApp drew it (more than three options go as a list). Found: AgAPI's four options for Peñalver went as
+#: a list, its row ids card:alt_…:alt:<n> were read as "another tool's row" and dropped, and the tap reached the model as words.
+OWN_IDS = (OWN, "card:", "pick:", "say:", "yn:", "photo:", "keep:")
+
+
+def is_own(tap_id: str) -> bool:
+    return str(tap_id or "").startswith(OWN_IDS)
 
 
 def own_id(p: Dict[str, Any]) -> str:
-    """The tap's id when it is SASHA's (kanoe:…) — her switch and her rows; another tool's row reaches it as its exact title (and its id
-    stays in Twilio's own field, ListId, for that tool)."""
+    """The tap's id when it is SASHA's (OWN_IDS) — a button or a list row alike; another tool's row reaches it as its exact title (and its
+    id stays in Twilio's own field, ListId, for that tool)."""
     pid = tap_fields(p)[1]
-    return pid if pid.startswith(OWN) or not (p.get("ListId") or p.get("ListTitle")) else ""
+    return pid if is_own(pid) or not (p.get("ListId") or p.get("ListTitle")) else ""
 
 
 def normalized(p: Dict[str, Any]) -> Dict[str, Any]:

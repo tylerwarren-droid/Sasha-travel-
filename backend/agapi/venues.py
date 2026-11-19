@@ -404,7 +404,7 @@ async def read_booking_route(ctx, a: dict) -> dict:
                 "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
     f = await floor_out(ctx, a, rd, None, card, dec)
     return {**({"card": card} if card else {}), "venue": rd["venue"], "routes": [], "how": f["floor"]["say"], "floor": f["floor"],
-            **_link_out(f["floor"]["button"]["link"]), "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
+            **_link_out((f["floor"].get("button") or {}).get("link")), "open_now": rd.get("open_now"), "opens_at": rd.get("opens_at")}
 
 
 from app.agent.voice import READ_BACK_ASK   # noqa: E402 · Sasha 262 · the one read-back line lives in her voice (app/agent/voice.py)
@@ -1227,29 +1227,23 @@ async def alternative_answer(ctx, read_back_id: Optional[str], rank: Optional[st
     if held.get("failed_act"):   # the stop that offered them is not a booking (My bookings skips it); the booking is the act that follows
         await VS._amend(ctx.account, held["failed_act"], question="alternatives", answered=f"{alt['book']['date']} {alt['book']['time']}")
     b = alt["book"]
-    same = _base(alt.get("venue") or "") == _base(held.get("venue") or "")
     party = int(b.get("party") or held.get("party") or 2)
-    place0 = dict(held.get("place") or {})
-    place = {**(place0 if same else {"city": place0.get("city"), "category": place0.get("category")}),
-             "name": alt.get("venue") or held.get("venue"),
-             **({"place_id": b["place_id"]} if b.get("place_id") else {}),
-             **({"website": b["url"]} if str(b.get("url") or "").startswith("https://") else {})}
+    place = option_place(held, alt)
     # the tap's own words: exactly the option they tapped — THEIR instruction (CR 196), every term in it; its proof is this tap's door
     ctx.user_said = f"Book {place['name']} on {b['date']} at {b['time']} for {party}"
     ctx.said_before = ""
-    person = held.get("person")
-    if not person:   # an older hold with no person kept: the whole path (it reads the person again)
-        return await hold_venue(ctx, {**dict(held.get("booking") or {}), "name": place["name"], "day": b["date"], "time": b["time"],
-                                      "party": party, **({"place_id": place["place_id"]} if place.get("place_id") else {})})
-    # CR 203's SEAM: venue.prepare_booking with the option's `book` terms and the SAME person → the ONE act (the instruction → submit)
+    person = held.get("person")   # the SAME person the options were prepared for (kept on the hold) — never read again by a re-resolve
+    if not person:
+        return {"status": "not_sent", "venue": place["name"], "booked": False,
+                "say": f"I lost the booking details for {place['name']}, so nothing was booked — tell me again and I'll book it."}
+    # CR 203's SEAM: venue.prepare_booking with the option's `book` terms (AgAPI's identity of the venue) and the SAME person → the ONE act
     pr = await VS.prepare(ctx.account, place, person, b["date"], b["time"], party)
     if not pr.get("ok"):
         return {"status": "not_sent", "venue": place["name"], "booked": False,
                 "say": f"I couldn't prepare {place['name']} at {b['time']} from here just now, so nothing was booked — tap it again in a minute."}
     pdec = pr.get("decision") if isinstance(pr.get("decision"), dict) else {}
-    if pdec.get("route") != "platform_book":   # AgAPI decides this option another way: the whole path, as for any instruction
-        return await hold_venue(ctx, {**dict(held.get("booking") or {}), "name": place["name"], "day": b["date"], "time": b["time"],
-                                      "party": party, **({"place_id": place["place_id"]} if place.get("place_id") else {})})
+    if pdec.get("route") != "platform_book":   # Sasha 389 · AgAPI decides this option another way: ITS answer for it, never a re-resolve
+        return option_not_booked(place, b, party, pr)
     rd = {"venue": place["name"], "place_id": place.get("place_id"), "country": held.get("country")}
     res = {"who": {"name": person.get("name"), "contact": {"mobile_e164": person.get("phone")}}, "how_many": {"count": party},
            "when": {"at": f"{b['date']}T{b['time']}"}, "what": {"category": held.get("category") or "restaurant"}}
@@ -1260,6 +1254,45 @@ async def alternative_answer(ctx, read_back_id: Optional[str], rank: Optional[st
                              **({"link": page} if page else {}), "booking": {**dict(held.get("booking") or {}), "name": place["name"],
                                                                              "day": b["date"], "time": b["time"], "party": party},
                              "category": held.get("category"), "place": place, "person": person})
+
+
+#: Sasha 389 · AgAPI's option kinds that are THE SAME venue the alternatives came from (CR 203/204); any other kind (nearby) is its own
+SAME_VENUE_KINDS = ("same_venue_time", "same_time_other_day", "other_service_time")
+
+
+def option_place(held: dict, alt: dict) -> dict:
+    """Sasha 389 · THE PLACE A TAPPED OPTION IS PREPARED FOR — AgAPI's own identity of it, never a re-resolve: its `book` terms' place_id /
+    url (AgAPI's), on the held venue's place when AgAPI marked the option as the SAME venue (its kind), alone when it is another venue
+    (nearby). Never a name comparison, never a Places name standing in for AgAPI's venue."""
+    b = alt.get("book") or {}
+    held_place = dict(held.get("place") or {})
+    same = str(alt.get("kind") or "") in SAME_VENUE_KINDS
+    base = held_place if same else {k: held_place.get(k) for k in ("city", "category") if held_place.get(k)}
+    return {**base, "name": alt.get("venue") or held.get("venue"),
+            **({"place_id": b["place_id"]} if b.get("place_id") else {}),
+            **({"website": b["url"]} if str(b.get("url") or "").startswith("https://") else {})}
+
+
+def option_not_booked(place: dict, b: dict, party: int, pr: dict) -> dict:
+    """Sasha 389 · AgAPI decided a tapped option another way than its own booking: said in AgAPI's words, with the venue's OWN page from
+    AgAPI's answer when it gives one (KANOE_DECISIONS 12 Nov 20:21) — never a search or a map, never a second resolve by name."""
+    dec = pr.get("decision") if isinstance(pr.get("decision"), dict) else {}
+    ho = pr.get("hand_over") if isinstance(pr.get("hand_over"), dict) else {}
+    page = next((u for u in (ho.get("link"), (dec.get("button") or {}).get("link"), pr.get("link")) if own_page(u)), None)
+    say = str(dec.get("say_text") or f"I couldn't book {place['name']} at {b['time']} for {party} — nothing was booked.")
+    return {"status": "not_booked", "venue": place["name"], "booked": False, "say": say,
+            **({"button": {"label": V_OPEN_THEIR_PAGE, "link": page}} if page else {})}
+
+
+V_OPEN_THEIR_PAGE = "Open their page"
+#: Sasha 389 · a link that is never "the venue's own page": a map, a search — refused as a booking fallback everywhere
+_NOT_OWN = re.compile(r"(?i)^https?://(?:[a-z0-9-]+\.)*(?:google\.[a-z.]+/(?:maps|search)|maps\.google\.[a-z.]+|goo\.gl/maps|maps\.app\.goo\.gl|"
+                      r"bing\.com/(?:maps|search)|duckduckgo\.com|maps\.apple\.com)")
+
+
+def own_page(u) -> bool:
+    """Sasha 389 · THE ONE RULE for a hand-over link: a web page that isn't a map or a search (KANOE_DECISIONS 12 Nov 20:21)."""
+    return str(u or "").startswith(("https://", "http://")) and not _NOT_OWN.match(str(u))
 
 
 def kanoe_route(dec: Optional[dict]) -> bool:
@@ -1331,11 +1364,10 @@ async def own_whatsapp(ctx, a: dict, rd: dict, res: Optional[dict], at: Optional
 
 
 def floor(card: Optional[dict], rd: dict, dec: Optional[dict] = None) -> dict:
-    """Sasha 286 · THE FLOOR — S2's ONE last resort (Tyler, 24 Oct 08:06: she never asks for a link; the worst case is ALWAYS a
-    hand-over). AgAPI's own floor when its decision gives one (route none: its say_text and its button — CR 118c), unless it asks for a
-    link; else THEIR WEBSITE as the button (the place card S2 holds: venue.discover's link / Places' website), else their listing; the
-    listing's WhatsApp and number beside it. Never empty: a listing link is built from the name and place_id."""
-    from urllib.parse import quote as _q
+    """Sasha 286 · THE FLOOR — S2's ONE last resort when Sasha can't book (she never asks for a link). Sasha 389 · THE ONE FALLBACK RULE
+    (KANOE_DECISIONS 12 Nov 20:21): the venue's OWN page — AgAPI's own floor button when its decision gives one (route none: its say_text
+    and its button, CR 118c) and it is their page, else THEIR WEBSITE (the place card S2 holds); a map or a search is NEVER a booking
+    fallback (own_page). No own page → said plainly, nothing to tap. Their WhatsApp and number go beside it when the listing has them."""
     from app.agent import voice as V
     c, rungs = card or {}, rd.get("rungs") or {}
     phone = str(c.get("phone") or (rungs.get("phone") or {}).get("value") or "").strip()
@@ -1343,17 +1375,13 @@ def floor(card: Optional[dict], rd: dict, dec: Optional[dict] = None) -> dict:
     alts = ([{"label": "WhatsApp", "link": f"https://wa.me/{wa}"}] if wa else []) + \
         ([{"label": "Their number", "link": "tel:" + re.sub(r"[^\d+]", "", phone)}] if re.sub(r"\D", "", phone) else [])
     b = (dec or {}).get("button") or {}
-    if dec and dec.get("route") == "none" and dec.get("say_text") and not V.asks_for_link(dec["say_text"]) \
-            and str(b.get("link") or "").startswith("http"):
-        return {"say": dec["say_text"], "button": {"label": b.get("label") or V.OPEN_LISTING, "link": b["link"]}, "alternatives": alts,
+    if dec and dec.get("route") == "none" and dec.get("say_text") and not V.asks_for_link(dec["say_text"]) and own_page(b.get("link")):
+        return {"say": dec["say_text"], "button": {"label": b.get("label") or V.OPEN_WEBSITE, "link": b["link"]}, "alternatives": alts,
                 "from": "agapi"}
-    site = next((u for u in (c.get("website"), c.get("link")) if str(u or "").startswith("http")), None)
+    site = next((u for u in (c.get("website"), c.get("link")) if own_page(u)), None)
     if site:
         return {"say": V.floor_line("website"), "button": {"label": V.OPEN_WEBSITE, "link": site}, "alternatives": alts, "from": "sasha"}
-    name, pid = c.get("name") or rd.get("venue") or "", c.get("place_id") or rd.get("place_id")
-    listing = c.get("listing_url") if str(c.get("listing_url") or "").startswith("http") else \
-        f"https://www.google.com/maps/search/?api=1&query={_q(str(name))}" + (f"&query_place_id={_q(str(pid))}" if pid else "")
-    return {"say": V.floor_line("listing"), "button": {"label": V.OPEN_LISTING, "link": listing}, "alternatives": alts, "from": "sasha"}
+    return {"say": V.NO_OWN_PAGE.format(venue=c.get("name") or rd.get("venue") or "they"), "alternatives": alts, "from": "sasha"}
 
 
 async def floor_out(ctx, a: dict, rd: dict, res: Optional[dict], card: Optional[dict], dec: Optional[dict] = None,
@@ -1362,9 +1390,13 @@ async def floor_out(ctx, a: dict, rd: dict, res: Optional[dict], card: Optional[
     f = floor(card, rd, dec)
     venue = _API().plain_venue(rd["venue"])
     party = ((res or {}).get("how_many") or {}).get("count") or a.get("party") or 0
-    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, f["button"]["link"], route="their_page",
+    link = (f.get("button") or {}).get("link")
+    if not link:   # Sasha 389 · no page of THEIR own: said plainly — nothing to tap, nothing noted as prepared
+        return {"status": "not_booked", "venue": venue, "booked": False, "floor": f, **_link_out(None),
+                "say": f["say"] + " Say exactly that — never that it's booked."}
+    await note_prepared(ctx.account, venue, at or str(a.get("day") or "")[:10], party, link, route="their_page",
                         place_id=rd.get("place_id"))
-    return {"status": "page_link", "venue": venue, "booked": False, "floor": f, **_link_out(f["button"]["link"]),
+    return {"status": "page_link", "venue": venue, "booked": False, "floor": f, **_link_out(link),
             "button": f["button"], "say": f["say"] + " Say exactly that — never that it's booked."}
 
 
@@ -1591,8 +1623,9 @@ def refused_words(venue: str, agapi_say: Optional[str]) -> str:
 
 def _link_out(link: Optional[str]) -> dict:
     """The take-over link, drawn on their screen (the hand-over card) — or, when there is none, said plainly: never a page that
-    isn't there (the rules' phrase offers "their page")."""
-    if link:
+    isn't there (the rules' phrase offers "their page"). Sasha 389 · THE ONE constructor of a hand-over link: only the venue's own page
+    (own_page) — a map or a search is no page of theirs, so it is "no page", never handed over."""
+    if link and own_page(link):
         return {"open": link, "page_url": link}
     return {"no_page": "there is no page of theirs to give — say you can't contact them from here and that they can take it over; "
                        "never say a page is on their screen"}

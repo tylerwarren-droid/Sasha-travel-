@@ -33,8 +33,10 @@ GREETING = re.compile(r"(?i)^\s*(?:(?:hi|hello|hey|hiya|hola|buenas|ola|good\s+(
 
 
 def ours(payload: str) -> bool:
-    """A button from THIS brain (not an in-flight one from the old flows, which finish there)."""
-    return payload.startswith(("pick:", "say:", "yn:", "photo:", "keep:", "card:"))
+    """A button from THIS brain (not an in-flight one from the old flows, which finish there) — Sasha 389: products.tools.OWN_IDS, the ONE
+    list (her switch rows are answered before the brain ever sees them)."""
+    from products import tools as TL
+    return TL.is_own(payload) and not payload.startswith(TL.OWN)
 
 
 # ── Sasha 238 · the agent's own WhatsApp state ──

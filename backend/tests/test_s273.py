@@ -78,7 +78,7 @@ class ChannelNeverLimited(unittest.TestCase):
             self.assertNotIn("By a message", how)
             self.assertFalse(V.limits_channel(how), (kind, how))
         self.assertEqual(self._route(AD.decision("call", "Periplo"))["how"], V.CALL_IT)   # a call: her own offer
-        self.assertTrue(self._route(None)["how"].startswith("Here's their "))           # Sasha 286 · no decision: THE FLOOR
+        self.assertTrue(self._route(None)["how"].startswith(("Here's their ", "I couldn't book ")))           # Sasha 286 · no decision: THE FLOOR
 
     def test_old_s1_says_the_same(self):   # Sasha 378 · old S1 follows AgAPI's decision too: never "By phone."
         from scripts import agapi_decides as AD

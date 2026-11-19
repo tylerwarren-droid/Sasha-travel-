@@ -89,16 +89,14 @@ async def quiver_checks() -> dict:
                      [Block(type="text", text="Lovely — the whole trip comes to about €1,468.")]], [0.2, 0], "What's the total?", seen=seen)
     q = [(t, e) for t, e in evs if e["type"] == "filler"]
     tool = next(((t, e) for t, e in evs if e["type"] == "tool"), None)
-    out["nothing ready after ~1.5 s → ONE acknowledgement, before the slow tool's result (never a fact)"] = (
-        len(q) == 1 and tool and q[0][0] < tool[0] and 1.3 <= q[0][0] <= 2.1 and AG.filler_ok(q[0][1]["text"], []),
-        f"filler {q[:1]} · tool at {tool and tool[0]}")
-    out["the answer CONTINUES the acknowledgement: no second opener, and the model is told what she said"] = (
-        says(evs) == ["The whole trip comes to about one thousand five hundred euros."] and len(seen) == 2 and q
-        and q[0][1]["text"] in json.dumps(seen[1]["system"], ensure_ascii=False), f"{says(evs)}")
+    # Sasha 388 · ONE INBOUND, ONE ANSWER: a slow tool gets NO words before her answer (the working state shows it) — and the answer comes
+    out["a slow tool: no words before her answer (Sasha 388) — the working state shows it, then her answer"] = (
+        not q and bool(tool), f"filler {q[:1]} · tool at {tool and tool[0]}")
+    out["her answer arrives whole after the slow tool, with nothing said in front of it (Sasha 388)"] = (
+        len(says(evs)) == 1 and "whole trip" in says(evs)[0] and len(seen) == 2, f"{says(evs)}")
     evs = await run([[Block(type="text", text="Lovely to meet you. Where would you like to go?")]], [1.9], "Hi Sasha, I'm Tyler")
     q = [(t, e) for t, e in evs if e["type"] == "filler"]
-    out["a slow first answer gets an acknowledgement at ~1.5 s (never a fact, never opening like an answer)"] = (
-        bool(q) and 1.3 <= q[0][0] <= 2.1 and AG.filler_ok(q[0][1]["text"], []), str(q[:1]))
+    out["a slow first answer: no acknowledgement before it (Sasha 388)"] = (not q and bool(says(evs)), str(q[:1]))
     evs = await run([[Block(type="text", text="Lovely to meet you, Tyler. "), Block(type="text", text="Where would you like to go? "),
                       Block(type="text", text="Somewhere warm, or somewhere with mountains?")]], [0.1], "Hi Sasha")
     out["a quick answer gets no acknowledgement, and the whole step is ONE utterance (no gaps between her phrases)"] = (
@@ -120,8 +118,7 @@ async def quiver_checks() -> dict:
     finally:
         AG.STILL_AFTER_S = real_still
     st = [(t, e) for t, e in evs if e["type"] == "filler"]
-    out["long work after she spoke → ONE plain “nearly there”, never more"] = (
-        len(st) == 1 and st[0][1]["why"] == "still working" and st[0][1]["text"] in AG.FILLERS["still"], str(st))
+    out["long work after she spoke: nothing more is said until her answer (Sasha 388)"] = (not st, str(st))
     sess = "gate-fillers"
     lines = [await AG.make_filler("Hoi An!", "think", sess) for _ in range(8)]
     AG._USED.pop(sess, None)

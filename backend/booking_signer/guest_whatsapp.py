@@ -2046,28 +2046,18 @@ def photo_wait() -> float:
 
 
 async def _photo_of(c: dict) -> Tuple[str, Optional[str]]:
-    """The venue's OWN picture first; Sasha 156: else its Google listing's photo (never cached — Google's URL is short-lived)."""
+    """Sasha 391 · EACH CARD'S PHOTO COMES FROM ITS OWN PLACE: its Google listing's photo (that place id's own — never cached, Google's URL is
+    short-lived); the venue's site picture only when the listing has none. Found 19 Nov: three Peñalver places, one shared website, the
+    SAME site picture on all three (Sasha 156 put the site's picture first)."""
     from . import ladder_routes as LR, venue_read as V
     gname = (c.get("gphoto") or {}).get("name")
+    if gname:
+        g = await V.google_photo_uri(LR.HTTP, gname)
+        if g:
+            return c["place_id"], g
     if not c.get("website"):
-        return c["place_id"], (await V.google_photo_uri(LR.HTTP, gname) if gname else None)
-    if not gname:
-        return await _own_photo_of(c)
-    own = asyncio.ensure_future(_own_photo_of(c))
-    goog = asyncio.ensure_future(V.google_photo_uri(LR.HTTP, gname))
-    try:   # their own picture wins when it comes in time (a warm cache: at once); else Google's, never a wait for both
-        _pid, img = await asyncio.wait_for(asyncio.shield(own), own_photo_wait())
-        if img:
-            goog.cancel()
-            return c["place_id"], img
-    except asyncio.TimeoutError:
-        pass
-    except Exception:
-        pass
-    g = await goog
-    if g:
-        return c["place_id"], g
-    _pid, img = await own
+        return c["place_id"], None
+    _pid, img = await _own_photo_of(c)
     return c["place_id"], img
 
 

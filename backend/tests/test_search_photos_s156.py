@@ -56,6 +56,8 @@ class GooglePhoto(unittest.TestCase):
         self.assertNotIn("key=", seen["url"])
 
     def test_their_own_picture_first_google_only_when_missing(self):
+        """Sasha 391 · REVERSED: each card's photo comes from ITS OWN PLACE (its listing's photo) — the site's picture (shared by a group's
+        branches) only when the listing has none."""
         c = {"place_id": "p1", "website": "https://their.site", "gphoto": {"name": NAME, "by": []}}
 
         async def own(c):
@@ -67,9 +69,12 @@ class GooglePhoto(unittest.TestCase):
         async def goog(http, name, width=480):
             return "https://lh3.googleusercontent.com/g"
         with mock.patch.object(GW, "_own_photo_of", own), mock.patch.object(V, "google_photo_uri", goog):
-            self.assertEqual(asyncio.run(GW._photo_of(c)), ("p1", "https://their.site/og.jpg"))
-        with mock.patch.object(GW, "_own_photo_of", none), mock.patch.object(V, "google_photo_uri", goog):
-            self.assertEqual(asyncio.run(GW._photo_of(c)), ("p1", "https://lh3.googleusercontent.com/g"))
+            self.assertEqual(asyncio.run(GW._photo_of(c)), ("p1", "https://lh3.googleusercontent.com/g"))   # its own place's photo
+
+        async def gone(http, name, width=480):
+            return None
+        with mock.patch.object(GW, "_own_photo_of", own), mock.patch.object(V, "google_photo_uri", gone):
+            self.assertEqual(asyncio.run(GW._photo_of(c)), ("p1", "https://their.site/og.jpg"))   # no listing photo: the site's
         with mock.patch.object(V, "google_photo_uri", goog):
             self.assertEqual(asyncio.run(GW._photo_of({"place_id": "p2", "gphoto": {"name": NAME}})), ("p2", "https://lh3.googleusercontent.com/g"))
 

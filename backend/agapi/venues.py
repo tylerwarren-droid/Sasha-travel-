@@ -1173,6 +1173,8 @@ async def _platform_result(ctx, held: dict, r: dict, venue: str, where) -> dict:
     asked = {str(k).casefold() for k in (held.get("choices") or {})}
     if q and q["choice"].casefold() not in asked:
         return _platform_question(ctx, held, q, venue, r)
+    if pressed_unconfirmed(r):   # Sasha 391 · Book WAS pressed: sent, awaiting the venue's confirmation — never a page (a double booking)
+        return _sent_awaiting(held, venue, in_app)
     link = (r.get("hand_over") or {}).get("link") if isinstance(r.get("hand_over"), dict) else None
     link = link if str(link or "").startswith("https://") else held.get("link")
     if q:   # asked once: the same question after their answer is never asked twice (never a loop) — said, with their page
@@ -1182,6 +1184,23 @@ async def _platform_result(ctx, held: dict, r: dict, venue: str, where) -> dict:
         say = str(r.get("say") or f"{venue}'s page stopped me before Book — nothing is booked.")
     return {"status": "not_booked", "venue": venue, "when": held["summary"], "booked": False, "route": "platform", "say": say,
             **_link_out(link), **in_app, "how": "Say `say` word for word — nothing is booked."}
+
+
+def pressed_unconfirmed(r: dict) -> bool:
+    """Sasha 391 · AgAPI pressed Book on their page and the page showed no confirmation: the booking was SENT and waits for the venue's
+    own confirmation (19 Nov, Peñalver: CoverManager emailed "confirmada" minutes later). Read from AgAPI's own data — its state "sent"
+    on a platform press, or its stop reason "no_confirmation" (CR: AgAPI's record to say "sent" itself) — never from its words."""
+    ho = r.get("hand_over") if isinstance(r.get("hand_over"), dict) else {}
+    return r.get("status") == "sent" or ho.get("why") == "no_confirmation" or "no_confirmation" in (r.get("why") or [])
+
+
+def _sent_awaiting(held: dict, venue: str, in_app: dict) -> dict:
+    """Sasha 391 · ONE answer for a pressed booking the page didn't confirm: what was sent, and where its confirmation comes — no page,
+    no "tap to finish" (it would invite a second booking of the same table)."""
+    what = str(held.get("summary") or "")   # the booking's own words, as every line of hers says it ("Thursday 19 November at 21:45, 2 people")
+    line = (f"Sent to {venue}: {what}. Their confirmation comes by email — don't book it again while it's on its way.")
+    return {"status": "sent_unconfirmed", "venue": venue, "when": held.get("summary"), "booked": False, "route": "platform", "line": line,
+            "say": line, **in_app, "how": "Say `line` word for word — nothing else; never offer their page (it was already sent)."}
 
 
 def alternatives_of(r: dict) -> List[dict]:

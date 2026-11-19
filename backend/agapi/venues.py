@@ -274,6 +274,10 @@ async def _read(ctx, a: dict) -> dict:
             status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
     else:
         status, rd = await GW.api(ctx.account, "POST", "/api/booking/venues/read", {k2: v for k2, v in body.items() if v})
+    if status != 200 and (rd or {}).get("rule") == "several_places":   # Sasha 390 · never a silent pick: their list, their choice
+        raise _err("choose_venue", f"{GW.refusal_words(rd or {}, status)} — call search_venues for “{a.get('name')}” in {a.get('city')} so "
+                                   "they see the list with its photos and pick one (then hold_venue with that card's place_id). Never "
+                                   "pick for them, and never from what you remember of another day.")
     if status != 200:
         raise _err((rd or {}).get("rule") or "read_failed", GW.refusal_words(rd or {}, status))
     venue = (rd.get("listing") or {}).get("name") or a.get("name") or rd.get("venue")
@@ -319,12 +323,32 @@ def card_for_model(c: dict) -> dict:
             **({"opening_hours_then": c["open_at"], "table_availability": "unknown until the venue answers"} if c.get("open_at") else {})}
 
 
-def remember_cards(account: str, cards: List[dict]) -> None:
+#: Sasha 390 · a card is THIS request's choice only while its request lasts (a request is over after 30 quiet minutes — the same window
+#: as the acknowledgements' rule); a card restored from the conversation's memory (another day) is history, never a choice
+REQUEST_S = 30 * 60
+_SHOWN_AT: Dict[str, Dict[str, float]] = {}   # account → card key → when it was shown (0: restored from memory, never "on screen now")
+
+
+def remember_cards(account: str, cards: List[dict], at: Optional[float] = None) -> None:
+    """The cards on their screen. `at`: when they were shown — now, unless restored from memory (Sasha 390: at=0, history only)."""
     m = _SHOWN.setdefault(account, {})
+    t = _SHOWN_AT.setdefault(account, {})
+    when = _clock.time() if at is None else at
     for c in cards:
-        m[c.get("place_id") or c["ref"]] = c   # Sasha 276 · an independent (venue.discover) by its ref: no listing
+        k = c.get("place_id") or c["ref"]   # Sasha 276 · an independent (venue.discover) by its ref: no listing
+        m[k] = c
+        t[k] = when if at is not None or k not in t else max(when, t[k])
     while len(m) > 60:
-        m.pop(next(iter(m)))
+        k = next(iter(m))
+        m.pop(k)
+        t.pop(k, None)
+
+
+def _fresh(account: str) -> List[dict]:
+    """Sasha 390 · the cards shown in THIS request (inside REQUEST_S), newest last — the only cards a name can pick."""
+    t = _SHOWN_AT.get(account) or {}
+    now = _clock.time()
+    return [c for k, c in (_SHOWN.get(account) or {}).items() if now - t.get(k, 0) <= REQUEST_S]
 
 
 def _base(name: str) -> str:
@@ -338,19 +362,25 @@ def named_on_screen(account: str, words: Optional[str]) -> Optional[dict]:
     w = _base(words or "")
     if len(w) < 4:
         return None
-    for c in reversed(list((_SHOWN.get(account) or {}).values())):
+    hits = []
+    for c in _fresh(account):   # Sasha 390 · only THIS request's cards; restored history never picks
         b = _base(c.get("name") or "")
         if len(b) >= 4 and (b == w or (len(w) >= 6 and (b in w or w in b))):
-            return c
-    return None
+            hits.append(c)
+    exact = [c for c in hits if _base(c.get("name") or "") == w]
+    one = exact if len(exact) == 1 else hits
+    return one[0] if len(one) == 1 else None   # several cards answer to these words: none is picked — the list decides
 
 
 def card_of(account: str, place_id: Optional[str], name: Optional[str] = None) -> Optional[dict]:
+    """A card by its place id (what it shows); by NAME only a card shown in THIS request, and only when exactly one has that name
+    (Sasha 390: several places share a name — never a silent pick)."""
     m = _SHOWN.get(account) or {}
     if place_id and place_id in m:
         return m[place_id]
     n = (name or "").strip().lower()
-    return next((c for c in reversed(list(m.values())) if n and (c.get("name") or "").strip().lower() == n), None)
+    hits = [c for c in _fresh(account) if n and (c.get("name") or "").strip().lower() == n]
+    return hits[0] if len(hits) == 1 else None
 
 
 def ribbon_line(a: dict, shown: List[dict], r: dict) -> str:
@@ -1068,8 +1098,20 @@ async def _platform_book(ctx, a: dict, rd: dict, res: dict, at: str, card: Optio
                              "place": place, "person": person})   # Sasha 384 · an option's tap is prepared for the SAME person
 
 
+def _option_tapped(held: dict, n: Optional[str]) -> Optional[str]:
+    """Sasha 390 · a TAP on one of the question's options: its identity (pick:<n>, its place in AgAPI's list) → that option exactly as
+    AgAPI wrote it. An older card's label route (pick:<label>) is read as its words, once."""
+    opts = list(held.get("options") or [])
+    k = str(n or "").strip()
+    if k.isdigit() and 1 <= int(k) <= len(opts):
+        return opts[int(k) - 1]
+    return _option_named(held, k)
+
+
 def _option_named(held: dict, words: Optional[str]) -> Optional[str]:
-    """Their words (or a tap's) name exactly ONE of AgAPI's options — the option as AgAPI wrote it; else None (never a guess)."""
+    """Their words name exactly ONE of AgAPI's options — matched ONLY against that list: the option said in full ("Salón Interior Mesa
+    Alta"), or words that are in exactly one option ("Mesa Alta" — Sasha 390, Tyler 19 Nov 09:16: was asked again). The option as AgAPI
+    wrote it; else None (never a guess)."""
     from agapi.venue_submit import _fold
     b = lambda x: _fold(_base(str(x or ""))).strip()   # noqa: E731 · "salon interior" names "Salón Interior"
     w = b(words)
@@ -1079,8 +1121,11 @@ def _option_named(held: dict, words: Optional[str]) -> Optional[str]:
     exact = [o for o in opts if b(o) == w]
     if len(exact) == 1:
         return exact[0]
-    named = [o for o in opts if b(o) and f" {b(o)} " in f" {w} "]
-    return named[0] if len(named) == 1 else None
+    named = [o for o in opts if b(o) and f" {b(o)} " in f" {w} "]   # an option said in full inside their words
+    if len(named) == 1:
+        return named[0]
+    inside = [o for o in opts if f" {w} " in f" {b(o)} "]           # their words inside exactly one option
+    return inside[0] if len(inside) == 1 else None
 
 
 def _platform_question(ctx, held: dict, q: dict, venue: str, r: dict) -> dict:
@@ -1089,7 +1134,8 @@ def _platform_question(ctx, held: dict, q: dict, venue: str, r: dict) -> dict:
     import hashlib as _h
     from app.agent import voice as V
     qid = "q_" + _h.sha256(f"{held.get('prepared_id')}|{q['choice']}|{'|'.join(q['options'])}".encode()).hexdigest()[:24]
-    choices = [{"title": o, "route": "pick:" + o} for o in q["options"]]
+    # Sasha 390 · each option's tap carries ITS identity (its place in AgAPI's list: pick:<n>), never its label (cut at 20 on WhatsApp)
+    choices = [{"title": o, "route": f"pick:{i}"} for i, o in enumerate(q["options"], 1)]
     ask = V.platform_choice_ask(venue, q["label"], q["options"])
     out = {"status": "awaiting_yes", "venue": venue, "when": held.get("summary"), "booked": False, "route": "platform_book",
            "question": q["label"], "ask": ask, "say": ask, "choices": choices, "read_back_id": qid, "read_back": [],
@@ -1112,7 +1158,7 @@ async def platform_answer(ctx, words: Optional[str], tapped: bool = False) -> Op
     held = _HELD.get(ctx.account)
     if not held or held.get("rung") != "platform_choice":
         return None
-    opt = _option_named(held, words)
+    opt = _option_tapped(held, words) if tapped else _option_named(held, words)
     if opt is None:
         return None
     if stale(held.get("asked_at")):
@@ -1367,13 +1413,10 @@ def floor(card: Optional[dict], rd: dict, dec: Optional[dict] = None) -> dict:
     """Sasha 286 · THE FLOOR — S2's ONE last resort when Sasha can't book (she never asks for a link). Sasha 389 · THE ONE FALLBACK RULE
     (KANOE_DECISIONS 12 Nov 20:21): the venue's OWN page — AgAPI's own floor button when its decision gives one (route none: its say_text
     and its button, CR 118c) and it is their page, else THEIR WEBSITE (the place card S2 holds); a map or a search is NEVER a booking
-    fallback (own_page). No own page → said plainly, nothing to tap. Their WhatsApp and number go beside it when the listing has them."""
+    fallback (own_page). No own page → said plainly, nothing to tap. Sasha 390 · never a phone number or a WhatsApp beside it."""
     from app.agent import voice as V
-    c, rungs = card or {}, rd.get("rungs") or {}
-    phone = str(c.get("phone") or (rungs.get("phone") or {}).get("value") or "").strip()
-    wa = re.sub(r"\D", "", str((rungs.get("whatsapp") or {}).get("value") or ""))
-    alts = ([{"label": "WhatsApp", "link": f"https://wa.me/{wa}"}] if wa else []) + \
-        ([{"label": "Their number", "link": "tel:" + re.sub(r"[^\d+]", "", phone)}] if re.sub(r"\D", "", phone) else [])
+    c = card or {}
+    alts: List[dict] = []   # Sasha 390 · never a phone number or a WhatsApp beside it: the venue's own page, or nothing
     b = (dec or {}).get("button") or {}
     if dec and dec.get("route") == "none" and dec.get("say_text") and not V.asks_for_link(dec["say_text"]) and own_page(b.get("link")):
         return {"say": dec["say_text"], "button": {"label": b.get("label") or V.OPEN_WEBSITE, "link": b["link"]}, "alternatives": alts,

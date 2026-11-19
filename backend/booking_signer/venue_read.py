@@ -540,7 +540,7 @@ def _place_facts(pl: dict, sha: str, now: datetime) -> Tuple[List[Fact], dict, O
 
 async def read_places(http: Http, key: str, name: str, city: str, now: datetime) -> Tuple[List[Fact], List[dict], Optional[dict], Optional[str], Optional[str]]:
     """The venue's Google business listing: its phone and website. Returns (facts, sources, listing, country, website)."""
-    body = {"textQuery": f"{name}, {city}", "maxResultCount": 1}
+    body = {"textQuery": f"{name}, {city}", "maxResultCount": NAMED_MAX}   # Sasha 390 · enough to SEE when a name is several places
     try:
         _places_read()   # Sasha 275 · S1 measure: a Places read, counted (observation only)
         r = await http("POST", PLACES_URL, headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": PLACES_FIELDS,
@@ -555,8 +555,29 @@ async def read_places(http: Http, key: str, name: str, city: str, now: datetime)
     if not places:
         src["result"] += " — no listing" if r.status_code == 200 else f" — {str(data)[:200]}"
         return [], [src], None, None, None
+    same = named_alike(name, places)
+    if len(same) > 1:   # Sasha 390 · several places answer to the name they gave: never a silent pick — THEY choose from the list
+        raise ReadRefused("several_places", f"{len(same)} places in {city} are called “{name}”: "
+                          + "; ".join(str((p.get("displayName") or {}).get("text") or "") for p in same[:NAMED_MAX]))
     facts, listing, country, website = _place_facts(places[0], sha, now)
     return facts, [src], listing, country, website
+
+
+NAMED_MAX = 5
+
+
+def _alike(x: str) -> str:
+    import unicodedata
+    x = unicodedata.normalize("NFKD", str(x or "")).encode("ascii", "ignore").decode().lower()
+    x = re.sub(r"[^a-z0-9 ]+", " ", x)
+    return re.sub(r"\s+", " ", re.sub(r"^\s*(?:the|el|la|los|las)\s+", "", x)).strip()
+
+
+def named_alike(name: str, places: List[dict]) -> List[dict]:
+    """Sasha 390 · the listings that answer to the name the person gave (their words inside the listing's name, or the listing's inside
+    theirs) — the same restaurant group's branches ("La Taberna de Peñalver" · "… Callao" · "… Cava Baja") are several places."""
+    w = _alike(name)
+    return [p for p in places if w and (lambda n: n and (w in n or n in w))(_alike((p.get("displayName") or {}).get("text") or ""))]
 
 
 async def read_place_id(http: Http, key: str, place_id: str, now: datetime) -> Tuple[List[Fact], List[dict], Optional[dict], Optional[str], Optional[str]]:

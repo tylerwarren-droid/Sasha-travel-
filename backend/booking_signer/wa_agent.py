@@ -158,12 +158,13 @@ def _read_back(ev: dict, out) -> None:
         else:
             out.pick(str(ev["ask"]), "See the options", [(_cut(c["title"], TITLE), "", f"card:{rid}:{c['route']}") for c in alts[:LIST_ROWS]])
         return
-    picks = [str(c.get("title") or "") for c in ev.get("choices") or [] if isinstance(c, dict) and str(c.get("route") or "").startswith("pick:")]
-    if ev.get("ask") and picks:   # Sasha 328 · the platform's ONE question (their "Zona"): its options as taps, exactly AgAPI's — a tap
-        if len(picks) <= 3:       # says the option (say:…), which answers it; never Yes / No
-            out.ask(str(ev["ask"]), [(_cut(t, 20), "say:" + t[:190]) for t in picks])
+    picks = [c for c in ev.get("choices") or [] if isinstance(c, dict) and str(c.get("route") or "").startswith("pick:")]
+    if ev.get("ask") and picks and ev.get("read_back_id"):   # Sasha 328 · the platform's ONE question (their "Zona"): its options as taps,
+        rid = str(ev["read_back_id"])[:80]                   # exactly AgAPI's — Sasha 390 · each tap carries the option's IDENTITY
+        if len(picks) <= 3:                                  # (card:<qid>:pick:<n> → card_tap → that option), never its cut label as words
+            out.ask(str(ev["ask"]), [(_cut(c["title"], 20), f"card:{rid}:{c['route']}") for c in picks])
         else:
-            out.pick(str(ev["ask"]), "Choose", [(_cut(t, TITLE), "", "say:" + t[:190]) for t in picks[:LIST_ROWS]])
+            out.pick(str(ev["ask"]), "Choose", [(_cut(c["title"], TITLE), "", f"card:{rid}:{c['route']}") for c in picks[:LIST_ROWS]])
         return
     if not lines and ev.get("ask") and ev.get("choices"):   # Sasha 314 · the SHORT read-back: its one line IS the card, with Yes / No
         out.ask(str(ev["ask"]), _buttons(ev))   # Sasha 376 · whole: delivery fits it to WhatsApp (guest_whatsapp.fit)

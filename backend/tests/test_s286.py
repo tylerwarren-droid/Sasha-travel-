@@ -41,7 +41,7 @@ class TheOneFloor(unittest.TestCase):
         f = VN.floor(OPULENCE, RD)
         self.assertEqual(f["say"], V.FLOOR)
         self.assertEqual(f["button"], {"label": V.OPEN_WEBSITE, "link": OPULENCE["website"]})
-        self.assertEqual([a["link"] for a in f["alternatives"]], ["https://wa.me/447700900286", "tel:+442071234567"])
+        self.assertEqual(f["alternatives"], [])   # Sasha 390 · the venue's own page only: never a phone number or a WhatsApp beside it
 
     def test_discovers_own_link_counts_as_their_website(self):
         f = VN.floor({"name": "X", "link": "http://www.x.example/"}, {"venue": "X"})
@@ -116,7 +116,7 @@ class EveryLastResortEndsInTheFloor(unittest.TestCase):
         from app.agent import sasha as SA
         ev = SA.render("read_booking_route", got, {})
         self.assertEqual((ev["kind"], ev["url"], ev["label"]), ("handover", OPULENCE["website"], V.OPEN_WEBSITE))
-        self.assertEqual(len(ev["alternatives"]), 2)
+        self.assertEqual(ev.get("alternatives") or [], [])   # Sasha 390 · never a phone number beside it
         self.assertEqual(self.mem.kinds[VN.PREPARED_KIND][-1]["url"], OPULENCE["website"])   # the row "Did it go through?" reads
 
     def test_agapis_none_is_said_in_agapis_words(self):

@@ -516,7 +516,7 @@ async def recall(account: str, session: Optional[str], surface: Optional[str] = 
         from app.agent import sasha as AG
         from agapi import venues as VN
         AG._SCREEN[session] = {"cards": scr["cards"], "ribbon": scr.get("ribbon"), "names": [c.get("name") for c in scr["cards"] if c.get("name")]}
-        VN.remember_cards(account, scr["cards"])
+        VN.remember_cards(account, scr["cards"], at=0)   # Sasha 390 · restored: history on their screen, never this request's pick
     p = m.get("pending") or {}
     note = handover(m)
     if session:   # Sasha 239 · the model's first turn back hears exactly what was (and wasn't) decided

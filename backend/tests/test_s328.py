@@ -184,7 +184,7 @@ class TheZonaQuestion(Base):
         print("\n── the walk stopped; Sasha asks ONCE ──\n" + json.dumps({k: q[k] for k in ("ask", "choices", "read_back_id")}, ensure_ascii=False))
         self.assertEqual(q["ask"], "La Taberna's booking asks for your Zona: Terraza, Salón, Barra. Which one?")   # AgAPI's ask, said
         self.assertEqual([c["title"] for c in q["choices"]], ["Terraza", "Salón", "Barra"])        # exactly AgAPI's options
-        self.assertTrue(all(c["route"] == "pick:" + c["title"] for c in q["choices"]))
+        self.assertEqual([c["route"] for c in q["choices"]], [f"pick:{i}" for i in range(1, len(q["choices"]) + 1)])   # Sasha 390 · identity
         from app.agent import sasha as S
         card = S.render("hold_venue", q, {})
         self.assertEqual((card["kind"], card["read_back_id"]), ("read_back", q["read_back_id"]))     # S2's one-tap card
@@ -230,7 +230,8 @@ class TheZonaQuestion(Base):
         WA._read_back({"kind": "read_back", **q}, out)
         kind, text, buttons = out.items[0]
         self.assertEqual(kind, "ask")
-        self.assertEqual(buttons, [("Terraza", "say:Terraza"), ("Salón", "say:Salón"), ("Barra", "say:Barra")])
+        self.assertEqual([t for t, _ in buttons], ["Terraza", "Salón", "Barra"])   # Sasha 390 · each tap carries the option's identity:
+        self.assertTrue(all(re.fullmatch(r"card:q_[0-9a-f]{24}:pick:%d" % n, i) for n, (_, i) in enumerate(buttons, 1)), buttons)   # card_tap
         self.assertEqual(WA.message_of(ACCT, "", "say:Terraza"), "Terraza")
 
 

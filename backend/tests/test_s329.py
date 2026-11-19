@@ -231,7 +231,7 @@ class TheAskBecomesTapsAndGoesBackAsChoices(Base):
         self.assertEqual(q["route"], "platform_book")
         print("\n── AgAPI's ask, asked ONCE ──\n" + json.dumps({k: q[k] for k in ("ask", "choices")}, ensure_ascii=False))
         self.assertEqual([c["title"] for c in q["choices"]], ASK["options"])                       # exactly AgAPI's options
-        self.assertEqual([c["route"] for c in q["choices"]], ["pick:Salón Interior", "pick:Terraza 1"])
+        self.assertEqual([c["route"] for c in q["choices"]], ["pick:1", "pick:2"])   # Sasha 390 · the option's identity, never its label
         self.assertIn("Zona", q["ask"])
         self.assertNotIn("CoverManager", q["ask"])                                                  # 249: never the platform
         done = run(VN.answer_card(Ctx("Salón Interior"), q["read_back_id"], "pick:Salón Interior"))

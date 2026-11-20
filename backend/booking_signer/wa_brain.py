@@ -204,7 +204,8 @@ async def answer(ctx: dict, pend: dict, body: str, payload: str) -> bool:
         if payload == f"yes:{pend['nonce']}" or re.fullmatch(r"\s*(yes|yes please|s[ií]|ok|reset)\s*[.!]?\s*", body or "", re.I):
             st["pending"] = None
             n = await reset_demo(ctx["account"], dry=False)
-            st["history"] = []   # Sasha 179 · the conversation starts fresh too
+            from agapi import s2_memory as MEM   # Sasha 179 · the conversation starts fresh too — cleared in its ONE place (Sasha 392)
+            await MEM.clear_conversation(ctx["account"])
             out.text(f"Done — the demo is reset: {n['bookings']} TEST booking{'s' if n['bookings'] != 1 else ''}, "
                      f"{n['added']} added place{'s' if n['added'] != 1 else ''}, {n.get('saved', 0)} saved "
                      f"search{'es' if n.get('saved') != 1 else ''} and {n.get('plans', 0)} "
@@ -491,7 +492,8 @@ async def web_turn(ctx: dict, body: str) -> bool:
     conduct = CONDUCT
     if conduct is None:
         from app.services.conductor import conduct
-    hist = [h for h in (ctx["st"].get("history") or []) if h.get("role") in ("user", "assistant")][-20:]   # Sasha 202 · all that's kept
+    from agapi import s2_memory as MEM   # Sasha 392 · the ONE reader — never a door's own copy
+    hist = await MEM.conversation(ctx.get("account"), said=body)
     try:
         r = await conduct(body, hist, user_id=ctx["account"], signed_in=True,
                           session_id=f"wa-{(ctx.get('ch') or {}).get('wa_id_sha256', '')[:16]}")

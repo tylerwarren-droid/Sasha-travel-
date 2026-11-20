@@ -91,19 +91,15 @@ def _agent_open(st: dict, now) -> bool:
 async def _agent(account: str, key: str, transcript: str, st: dict, now, tap: Optional[dict]):
     """The one brain's turn (surface "wa": S2's tools and the one-yes rule) on the voice page's own row, its messages as GW.Out
     items. tap: this request's own signed-in session — the person's yes is then AgAPI's in_app_tap."""
-    from agapi import s2_memory as MEM, venue_submit as VS
+    from agapi import venue_submit as VS
     from . import guest_whatsapp as GW, wa_agent as WA
     out = GW.Out()
-    # Sasha 392 · this door's messages are recorded in the ONE conversation record where they arrive and leave (as WhatsApp's are):
-    # the brain reads ONLY that record (s2_memory.recent_of), never a door's own history copy
-    await MEM.record(account, MEM.message("in", "voice", transcript))
     tok = VS.TAP.set(tap) if tap else None
     try:
         await WA.agent_turn({"account_id": account, "wa_id_sha256": key}, transcript, "", st, out, now)
     finally:
         if tok is not None:
             VS.TAP.reset(tok)
-    await MEM.record(account, MEM.message("out", "voice", out.said(), GW._tool_of(out), booking=bool(getattr(out, "booking", False))))
     WA.set_agent_state(st, voice_venue=now.isoformat())
     return out
 
@@ -128,7 +124,7 @@ async def turn(account: Optional[str], transcript: str, history: list, tap: Opti
     if not venue and not st.get("pending") and not WB.sasha_clear(transcript, [], now):
         return None
     st["last_inbound_at"] = now
-    if venue:   # Sasha 321 · a venue: the one brain → AgAPI's send (its history is kept by agent_turn itself)
+    if venue:   # Sasha 321 · a venue: the one brain → AgAPI's send (its messages are in the ONE record: s2_memory)
         st["pending"] = None
         try:
             out = await _agent(account, key, transcript, st, now, tap)
@@ -146,14 +142,18 @@ async def turn(account: Optional[str], transcript: str, history: list, tap: Opti
         except Exception as e:
             log.error("[voice_turn] the booking turn failed: %s: %s", type(e).__name__, e)
             return None
-        st["history"] = ((st.get("history") or []) + [{"role": "user", "content": transcript}, {"role": "assistant", "content": out.said()}])[-GW.HISTORY_KEEP:]
         from . import wa_agent as WA
         WA.set_agent_state(st, voice_venue=None)   # not a venue turn: the next words are not the agent's by default
     await GW.STORE.put_state(key, st)
     words, photos = _spoken(out.items)
     if not words:
         return None
-    return {"response": words, "photos": photos, "intents": ["booking"],
+    # Sasha 392 · this door's turn, in the ONE conversation record — once, when it answered (None: the conductor answers, and its door
+    # records that turn: s2_memory.door_said). No door keeps a history of its own; the brain reads only the record.
+    from agapi import s2_memory as MEM
+    await MEM.record(account, MEM.message("in", "voice", transcript),
+                     MEM.message("out", "voice", out.said(), GW._tool_of(out), booking=bool(getattr(out, "booking", False))))
+    return {"response": words, "photos": photos, "intents": ["booking"], "recorded": True,
             "messages": list(history or []) + [{"role": "user", "content": transcript}, {"role": "assistant", "content": words}]}
 
 

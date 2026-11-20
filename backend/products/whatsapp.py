@@ -291,6 +291,12 @@ async def context(wa_key: str) -> Optional[dict]:
     return {k: v for k, v in c.items() if k != "line"}
 
 
+async def _conversation(ch: dict, body: str) -> list:
+    """Sasha 392 · the conversation, from the ONE reader (s2_memory.conversation) — never a door's own copy."""
+    from agapi import s2_memory as MEM
+    return await MEM.conversation((ch or {}).get("account_id"), said=body or None)
+
+
 async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now, early=None, media=None) -> bool:
     """True: a product answered (the caller stores the state and delivers `out`). False: Sasha's own flow answers."""
     body = (p.get("Body") or "").strip()
@@ -419,7 +425,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         # returns to it. Not "book my flights" (CR 13's trip) and not "near my hotel" (CR 20's in-context hand-off).
         from booking_signer import wa_brain as _WB
         from . import trip as _TP
-        if (_WB.RESET.match(body) or (not STRICT and _WB.sasha_clear(body, st.get("history") or [], now))) and not _REL.search(body) \
+        if (_WB.RESET.match(body) or (not STRICT and _WB.sasha_clear(body, (await _conversation(ch, body)), now))) and not _REL.search(body) \
                 and not _TP.wants_plan(body):   # Sasha 194 · strict: only "reset the demo" leaves a space this way   # Sasha 170 · "reset the demo" too (live: RelocateMe answered it)
             if asked_last:
                 await _set_aside(st, ch)
@@ -478,7 +484,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
         # 2 · the product asked last: its answer, Sasha's request, or a plain re-ask
         if _module(asked_last).claims(pend, body, payload, media):
             target = asked_last
-        elif for_sasha(body, st.get("history") or [], now):
+        elif for_sasha(body, (await _conversation(ch, body)), now):
             handed = await _in_context(ch, asked_last, pend, body, now)       # CR 20 (5): "near my hotel on arrival"
             if STRICT and not handed:
                 target = asked_last   # Sasha 194 · strict: the space keeps it (its re-ask) — only ITS OWN hand-off goes to Sasha
@@ -495,7 +501,7 @@ async def product_turn(ch: dict, frm: str, p: Dict[str, str], st: dict, out, now
             other = None if STRICT else next((prod for prod, saved in await _waiting(ch, now)
                                               if prod != asked_last and _module(prod).claims(saved, body, payload, media)), None)
             target = other or asked_last
-    if not STRICT and not target and not asked_last and not payload and _REL.search(body) and for_sasha(body, st.get("history") or [], now):
+    if not STRICT and not target and not asked_last and not payload and _REL.search(body) and for_sasha(body, (await _conversation(ch, body)), now):
         # CR 20 (5) · a product set aside (e.g. after a trip hand-off) still lends its context to "near my hotel on arrival"
         for prod, saved in await _waiting(ch, now):
             handed = await _in_context(ch, prod, saved, body, now)

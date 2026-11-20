@@ -99,12 +99,13 @@ def strip_label(text: str) -> str:
     return _LABEL.sub("", text or "", count=1)
 
 
-def before(st: dict, now) -> Optional[dict]:
-    """The mode this turn starts in: an open product (unless idle 30 min), else the label on Sasha's last reply."""
+def before(st: dict, now, history: Optional[list] = None) -> Optional[dict]:
+    """The mode this turn starts in: an open product (unless idle 30 min), else the label on Sasha's last reply. history: the ONE
+    record's conversation (s2_memory.conversation) — Sasha 392: no door keeps its own."""
     pend = st.get("pending") or {}
     if pend.get("kind") == "product" and pend.get("product"):
         return {"k": "p", "p": pend["product"], "label": PRODUCT_LABEL[pend["product"]]}
-    for h in reversed(st.get("history") or []):
+    for h in reversed(history or []):
         if h.get("role") == "assistant":
             lb = label_of(str(h.get("content") or ""))
             return {"k": "j", "label": lb} if lb else None

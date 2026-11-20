@@ -78,11 +78,36 @@ class HistoryIsAPointer(unittest.TestCase):
         chat = MEM.fold({}, "hi", "Hello! Where to?", {"calls": []})
         self.assertEqual(MEM.recent_of(chat)[-1]["content"], "Hello! Where to?")                       # chat stays chat
 
-    def test_whatsapp_reads_the_one_record(self):
-        src = inspect.getsource(WA.agent_turn)
-        self.assertIn("MEM.recent_of(await MEM._load(account))", src)
-        self.assertNotIn('st.get("history")', src)
+    def test_ratchet_no_module_but_s2_memory_reads_or_writes_conversation_history(self):
+        """Tyler (392): no door keeps a history of its own — WhatsApp's st["history"], the voice door's, the page's body history, the
+        CTO doors' conversation_history: every one is gone or handed to s2_memory's door reader, the ONE place."""
+        import pathlib
+        import re
+        root = pathlib.Path(__file__).resolve().parents[1]
+        copy = re.compile(r"""\[\s*["']history["']\s*\]|\.get\(\s*["']history["']|_remember_history|verified_history|\b(?:recent_of|messages_of)\(""")
+        page = re.compile(r"\b(?:body|request)\.conversation_history\b")
+        hits = []
+        for d in ("agapi", "app", "booking_signer", "products"):
+            for f in sorted((root / d).rglob("*.py")):
+                rel = f.relative_to(root).as_posix()
+                if rel == "agapi/s2_memory.py":
+                    continue
+                if rel == "app/api/golf.py":   # the CTO's golf router: never mounted — the moment it is, it reads the ONE record too
+                    self.assertNotIn("golf", (root / "app/main.py").read_text())
+                    continue
+                for n, line in enumerate(f.read_text().splitlines(), 1):
+                    code = line.split("#", 1)[0]
+                    if copy.search(code) or (page.search(code) and "_MEM392.door_history(" not in code):
+                        hits.append(f"{rel}:{n}: {line.strip()[:90]}")
+        self.assertEqual(hits, [])
+
+    def test_whatsapp_and_every_door_read_the_one_reader(self):
+        self.assertIn("MEM.conversation(account", inspect.getsource(WA.agent_turn))
         self.assertIn("booking=bool(getattr(out", inspect.getsource(GW._send))
+        for rel in ("app/api/conductor.py", "app/api/voice_conductor.py"):   # the CTO's doors: Stage B (scripts/stage_b_one_record_392.py)
+            src = (__import__("pathlib").Path(__file__).resolve().parents[1] / rel).read_text()
+            self.assertIn("_MEM392.door_history(", src, rel)
+            self.assertIn("_MEM392.door_said(", src, rel)
 
 
 class EveryDoorWritesTheOneRecord(unittest.TestCase):
@@ -103,17 +128,22 @@ class EveryDoorWritesTheOneRecord(unittest.TestCase):
             return None
         st = {}
         with mock.patch("app.agent.sasha.turn_with_quiver", quiver), mock.patch("app.agent.sasha.over_budget", nothing), \
-                mock.patch("agapi.s2_memory.remember", nothing), mock.patch("agapi.s2_memory.closing", nothing):
-            for said in ("Book Casa Lucio on Saturday at 21:00", "4 people"):
-                asyncio.run(VTN._agent(ACCT, "v" * 64, said, st, datetime.now(timezone.utc), None))
+                mock.patch("agapi.s2_memory.remember", nothing), mock.patch("agapi.s2_memory.closing", nothing), \
+                mock.patch("agapi.person_access.warm", mock.AsyncMock()), mock.patch.object(GW, "STORE", GW.MemoryGuestStore()):
+            for said in ("Book a restaurant in Madrid on Saturday at 21:00", "4 people"):
+                asyncio.run(VTN.turn(ACCT, said, [], tap=None, venues_only=True))
         self.assertEqual(seen[0], [])
-        self.assertEqual(seen[1], ["Book Casa Lucio on Saturday at 21:00", "For how many people?"])   # from the ONE record
+        self.assertEqual(seen[1], ["Book a restaurant in Madrid on Saturday at 21:00", "For how many people?"])   # from the ONE record
 
-    def test_every_caller_of_the_brain_is_a_recording_door(self):
-        import pathlib
-        src = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer/voice_turn.py").read_text()
-        self.assertIn('MEM.message("in", "voice", transcript)', src)
-        self.assertIn('MEM.message("out", "voice", out.said()', src)
+    def test_the_public_demo_has_no_record_and_a_signed_in_page_is_never_read(self):
+        MEM._MEM.clear()
+        page = [{"role": "user", "content": "Book for 4"}, {"role": "assistant", "content": "Booked — 4 people."}]
+        self.assertEqual(asyncio.run(MEM.door_history(ACCT, True, "hi", page)), [])          # signed in: the record (empty), never the page
+        self.assertEqual(asyncio.run(MEM.door_history(None, False, "hi", page)), page)       # the demo: no person, books nothing
+        asyncio.run(MEM.door_said(ACCT, True, "rest", "Book for 4", {"response": "Booked.", "booking_ref": "R1"}))
+        self.assertEqual(asyncio.run(MEM.conversation(ACCT)), [{"role": "user", "content": "Book for 4"}, {"role": "assistant", "content": MEM.POINTER}])
+        asyncio.run(MEM.door_said(ACCT, True, "rest", "again", {"response": "x", "recorded": True}))   # voice_turn recorded it: once
+        self.assertEqual(len(asyncio.run(MEM.conversation(ACCT))), 2)
 
 
 class EachPlacesPhotoOnWhatsApp(unittest.TestCase):

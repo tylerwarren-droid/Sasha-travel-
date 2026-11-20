@@ -67,8 +67,10 @@ class TheCode(unittest.TestCase):
 
     def test_the_exchange_is_in_her_conversation_and_the_request_is_marked(self):   # found live: said OUTSIDE her history
         said, _ = self.confirm("119218")
-        h = run(self.store.get_state(self.ch["wa_id_sha256"]))["history"]
-        self.assertEqual(h[-2:], [{"role": "user", "content": "119218"}, {"role": "assistant", "content": said}])
+        from agapi import s2_memory as MEM   # Sasha 392 · in the ONE conversation record, never the door's own copy
+        h = run(MEM.conversation(self.ch["account_id"]))
+        self.assertEqual(h[-1], {"role": "assistant", "content": said})
+        self.assertEqual(h[-2]["role"], "user")
         self.assertIn("number_confirmed_at", VN._HELD[ACCT])
 
     def test_another_accounts_code_is_never_consumed(self):

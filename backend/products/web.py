@@ -39,8 +39,8 @@ async def _state(key: str) -> dict:
     """The web line's equivalent of Sasha's WhatsApp state: which product asked last (its `pending`)."""
     for r in await ST.STORE.conversations(key):
         if r["product"] == "webstate":
-            return {"history": [], "pending": (r["state"].get("pending") or {}).get("pending")}
-    return {"history": [], "pending": None}
+            return {"pending": (r["state"].get("pending") or {}).get("pending")}
+    return {"pending": None}
 
 
 async def current_space(user_id: Optional[str]) -> Optional[str]:

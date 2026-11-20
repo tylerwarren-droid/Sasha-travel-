@@ -2101,7 +2101,6 @@ async def agent_turn(request: Request):
             yield f"data: {json.dumps({'type': 'say', 'text': line})}\n\n"
             yield f"data: {json.dumps({'type': 'done', 'text': line, 'guard': ['input guard: ' + kind], 'tools': []})}\n\n"
         return StreamingResponse(refused(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-    body["history"] = G.clean_history(body.get("history") or [])
     # Sasha 221 · S2 is chosen ONLY by /s2's proxy (its header); without it — /next, every other caller — S1, as before
     surface = "s2" if request.headers.get("x-sasha-surface", "").strip().lower() == "s2" else "s1"
     from agapi.keep_gate import keep_on
@@ -2113,7 +2112,6 @@ async def agent_turn(request: Request):
                 yield f"data: {json.dumps({'type': 'say', 'text': _held})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'text': _held, 'guard': ['input_guard']})}\n\n"
             return StreamingResponse(withheld(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-        body["history"] = _KEEP.clean_history(body.get("history") or [])
     # Sasha 241 · /next's 📎 photos (and a yes/no to a scanned Keep item) — the same handlers as /s2 and WhatsApp
     lap("guards")
     said_now, message = await _photo_turn(account, body.get("photos") or [], message)
@@ -2134,14 +2132,20 @@ async def agent_turn(request: Request):
     lap("budget")
     session_id = str(body.get("session_id") or "")[:64] or None
     remembers = surface == "s2" or s1_parity()   # Sasha 241 · memory, closing and card taps on /next too
+    from agapi import s2_memory as MEM
+    try:   # Sasha 392 · the ONE record is the conversation (THIS session's lines) — never the page's copy (body["history"] is not read)
+        history = await MEM.conversation(account, session_id or "", said=message)
+    except Exception as e:
+        log.warning("[memory] conversation not read: %s", type(e).__name__)
+        history = []
+    history = G.clean_history(history)
+    if keep_on(account, surface):
+        from agapi import s2_keep as _KEEP
+        history = _KEEP.clean_history(history)
+    lap("history")
     if remembers:
-        from agapi import s2_closing as CL, s2_memory as MEM
-        try:   # Sasha 249 · SERVER-BUILT HISTORY: the client's history only when it is the conversation the server kept
-            body["history"] = await MEM.verified_history(account, session_id, body.get("history") or [])
-        except Exception as e:
-            log.warning("[memory] history not verified: %s", type(e).__name__)
-        lap("history")
-        lang = CL.closing(message) if body.get("history") else None   # Sasha 231 · "thanks / bye" after a conversation → dormant
+        from agapi import s2_closing as CL
+        lang = CL.closing(message) if history else None   # Sasha 231 · "thanks / bye" after a conversation → dormant
         if lang:
             bye = CL.line(lang)
 
@@ -2199,7 +2203,7 @@ async def agent_turn(request: Request):
                     log.warning("[memory] tap not kept: %s: %s", type(e).__name__, e)
             return
         try:
-            turn_events = turn_with_quiver(account, message, body.get("history") or [], session_id, surface)
+            turn_events = turn_with_quiver(account, message, history, session_id, surface)
             # Sasha 388 · ONE INBOUND, ONE ANSWER: no first line, no acknowledgement — the "working" state while she works, then her answer
             held = with_holding(turn_events, account) if remembers else turn_events
             quiet = await _V.silent(account)   # Sasha 349 · Silent mode: text only — no spoken line leaves this turn
@@ -2223,13 +2227,13 @@ async def agent_turn(request: Request):
                                            for o in ev.get("options") or [] if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")])
                     elif ev.get("type") == "render" and ev.get("kind") in ("focus", "venues") and ev.get("focus"):   # Sasha 239 · the place they chose
                         seen["focus"] = ev["focus"]
-                    elif ev.get("type") == "done":
-                        reply, seen["calls"] = str(ev.get("text") or ""), ev.get("tools") or []
+                if ev.get("type") == "done":   # Sasha 392 · every surface's answer is recorded (old S1 too: the record is its conversation)
+                    reply, seen["calls"] = str(ev.get("text") or ""), ev.get("tools") or []
                 yield f"data: {json.dumps(ev, default=str)}\n\n"
         except Exception as e:
             log.error("[agent] turn failed: %s: %s", type(e).__name__, e)
             yield f"data: {json.dumps({'type': 'error', 'message': 'Sorry — could you say that once more?'})}\n\n"
-        if remembers and reply:
+        if reply:
             try:   # awaited here, in the stream: kept before the response ends (never fire-and-forget)
                 from agapi import s2_memory as MEM
                 await MEM.remember(account, session_id, str(body.get("message") or "").strip()[:4000], reply, seen)

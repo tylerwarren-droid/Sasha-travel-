@@ -35,8 +35,9 @@ class Switching(unittest.TestCase):
         self.assertEqual(cur["label"], "📍 Paris")
 
     def test_the_mode_is_read_back_from_the_last_reply(self):
-        st = {"pending": None, "history": [{"role": "assistant", "content": "_Now: 📍 Paris_\nHere are…"}]}
-        self.assertEqual(SW.before(st, datetime.now(timezone.utc))["label"], "📍 Paris")
+        st = {"pending": None}   # Sasha 392 · the conversation is the ONE record's (s2_memory.conversation), handed in
+        self.assertEqual(SW.before(st, datetime.now(timezone.utc), [{"role": "assistant", "content": "_Now: 📍 Paris_\nHere are…"}])["label"],
+                         "📍 Paris")
 
     def test_book_my_flights_with_a_relocation_open_and_a_trip_asks_once(self):
         plans = [{"trip_id": "t1", "title": "Vietnam, Nov", "start": "2026-11-12", "cities": ["Hanoi"]}]

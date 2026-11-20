@@ -235,7 +235,9 @@ Stage A — tag + sync (write to script to avoid paste mangling):
     bash /tmp/sync.sh
 If deletions > 0, investigate each deleted file before proceeding (check it's not a repo-only file or a still-imported agent). Confirm the new conductor does not IMPORT any deleted agent (grep for 'from app.services.X import'); keyword-only references are safe.
 
-Stage B — re-apply CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the chat booking (above), the booking mount (below), the reservations insertion (below), the onboarding honesty (`python3 frontend/scripts/stage_b_onboarding_honesty.py`, S-62: Go Live never shows success for a refused save; refuses loudly if an anchor moved; the prebuild fails without it) and the onboarding sign-in gate (see Repo-only files), then import test.
+Stage B — re-apply the one conversation record (`python3 backend/scripts/stage_b_one_record_392.py`, Sasha 392: the REST chat and the
+voice page read and write the ONE record, never the page's history; refuses loudly if an anchor moved; tests/test_s392_this_request_only
+fails without it), CORS (command above), the booking hand-off (above), THEN the booking drafts (above, after the hand-off), the chat booking (above), the booking mount (below), the reservations insertion (below), the onboarding honesty (`python3 frontend/scripts/stage_b_onboarding_honesty.py`, S-62: Go Live never shows success for a refused save; refuses loudly if an anchor moved; the prebuild fails without it) and the onboarding sign-in gate (see Repo-only files), then import test.
 
 Stage B LAST STEP — the ONE request client (Sasha 348). Every request a page makes goes through frontend/lib/request.ts; the prebuild
 REFUSES any direct fetch( / EventSource / WebSocket / sendBeacon / XMLHttpRequest / axios anywhere in the frontend, and any catch that

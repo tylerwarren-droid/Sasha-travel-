@@ -10,6 +10,7 @@ from app.services.llm import client, FAST_MODEL
 from app.services.prompts import get_prompt_async
 from app.services import chat_store
 from app.services.chat_account import acting, own_session, signed_in
+from agapi import s2_memory as _MEM392  # Sasha 392 one record (Stage B): the conversation is the ONE record's, never the page's copy
 
 router = APIRouter(dependencies=[Depends(require_account)])
 
@@ -65,7 +66,9 @@ async def classify(body: ClassifyRequest, request: Request):
     sid = await own_session(body.session_id, await acting(request)) if body.session_id else None
     stored = await chat_store.latest_itinerary_for_session(sid) if sid else None
     has_itinerary = bool(stored) if body.session_id else None
-    result = await classify_intents(body.message, body.conversation_history, has_itinerary)
+    _who = await acting(request)
+    _hist = await _MEM392.door_history(_who, signed_in(_who), body.message, body.conversation_history)  # Sasha 392 one record (Stage B)
+    result = await classify_intents(body.message, _hist, has_itinerary)
     return {"intents": result.get("intents", []), "primary": result.get("primary")}
 
 
@@ -131,11 +134,12 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
         from booking_signer import switching as SW   # Sasha 179 · automatic switching, as on WhatsApp
         sw = SW.on(account)
         message, payload, product_mode = body.message, body.payload, body.product_mode
+        history = await _MEM392.door_history(account, signed_in(account), body.message, body.conversation_history)  # Sasha 392 one record (Stage B)
         bk = SW.back_to(payload or "") if sw else None
         if bk and bk[0] == "j":   # "Back to Vietnam, Nov"
             say = f"↩ Back to {SW._short(bk[1])} — what next?"
             return ConductorResponse(response=say, intents=["mode"], photos=[], tools_used=[], session_id=session_id, mode=bk[1],
-                                     conversation_history=list(body.conversation_history or []) + [
+                                     conversation_history=list(history) + [  # Sasha 392 one record (Stage B)
                                          {"role": "user", "content": body.message}, {"role": "assistant", "content": say}])
         if bk:                     # "Back to RelocateMe": its own word resumes it
             from products.whatsapp import START_WORD
@@ -147,12 +151,12 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             from booking_signer import voice_turn as _vt
             from agapi import venue_submit as _VS
             _VS.SPOKEN.set(False)   # Sasha 381i · the REST chat: typed words
-            _r = await _vt.turn(account, message, body.conversation_history, tap=_VS.session_of(request), venues_only=True)
+            _r = await _vt.turn(account, message, history, tap=_VS.session_of(request), venues_only=True)  # Sasha 392 one record (Stage B)
             if _r is not None:
                 result = {"tools_used": [], **_r}
         result = result or await conduct(
             user_message=message,
-            conversation_history=body.conversation_history,
+            conversation_history=history,  # Sasha 392 one record (Stage B)
             client_config=client_config,
             language=body.language,
             user_name=body.user_name,
@@ -164,6 +168,7 @@ async def conductor_endpoint(body: ConductorRequest, request: Request):
             signed_in=signed_in(account),     # Sasha 142 · the products act only for a real account
             media=body.media,                 # Sasha 159 (1)
         )
+        await _MEM392.door_said(account, signed_in(account), "rest", body.message, result)  # Sasha 392 one record (Stage B)
         quick = list(result.get("quick_replies") or [])
         # Sasha 194 · the SPACE, always shown (no automatic switching: a space changes only by its word or button)
         try:

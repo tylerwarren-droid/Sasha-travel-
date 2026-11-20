@@ -173,7 +173,7 @@ class TheAgentTurn(unittest.TestCase):
         self.assertEqual(calls[0][3][-1]["content"], "Hello!")
         self.assertEqual(out.items[0], ("text", "Two places near you."))
         self.assertEqual(out.items[1][0], "ask")
-        self.assertEqual(st["history"][-1], {"role": "assistant", "content": "Two places near you."})
+        self.assertNotIn("history", st)   # Sasha 392 · no door keeps a history of its own: the answer is recorded where it leaves
         self.assertEqual(kept, [("wa:" + "k" * 64, "a table for 2 tomorrow at 9", "Two places near you.")])
 
 

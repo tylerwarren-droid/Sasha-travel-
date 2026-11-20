@@ -218,7 +218,7 @@ class MemoryGuestStore:
 
     async def get_state(self, key: str) -> dict:
         from .wa_agent import unpack_state   # Sasha 252 · the brain's own state out of the pending column, into st["agent"]
-        return unpack_state(dict(self.state.get(key) or {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []}))
+        return unpack_state(dict(self.state.get(key) or {"pending": None, "last_inbound_at": None, "link_tries": []}))
 
     async def put_state(self, key: str, st: dict) -> None:
         # only what guest_wa_state's columns hold: anything else is lost in production, so it is lost here too
@@ -310,11 +310,10 @@ class PostgresGuestStore:
     async def get_state(self, key):
         r = await self._run(lambda c: c.fetchrow("select * from guest_wa_state where wa_id_sha256 = $1", key))
         if not r:
-            return {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []}
+            return {"pending": None, "last_inbound_at": None, "link_tries": []}
         d = dict(r)
         from .wa_agent import unpack_state   # Sasha 252 · the brain's own state out of the pending column, into st["agent"]
-        return unpack_state({"history": json.loads(d["history"]) if isinstance(d["history"], str) else d["history"],
-                             "pending": json.loads(d["pending"]) if isinstance(d["pending"], str) else d["pending"],
+        return unpack_state({"pending": json.loads(d["pending"]) if isinstance(d["pending"], str) else d["pending"],
                              "last_inbound_at": d["last_inbound_at"], "last_to": d.get("last_to"),   # Sasha 206/207 · 034
                              "link_tries": json.loads(d["link_tries"]) if isinstance(d["link_tries"], str) else d["link_tries"]})
 
@@ -327,7 +326,8 @@ class PostgresGuestStore:
             "last_to = coalesce(excluded.last_to, guest_wa_state.last_to), updated_at = now()",
             # the pool's jsonb codec encodes: pass the values themselves (Sasha 104 · a json.dumps here stored a JSON string)
             # Sasha 252 · the pending column: Sasha's own question + the brain's state under "_agent" (wa_agent.pack_pending)
-            key, st.get("history") or [], _pack(st), st.get("last_inbound_at"), st.get("link_tries") or [], st.get("last_to")))
+            key, [], _pack(st),   # Sasha 392 · history: never a copy of the conversation (the ONE record, s2_memory)
+            st.get("last_inbound_at"), st.get("link_tries") or [], st.get("last_to")))
 
     async def delete_account(self, account):
         async def go(c):
@@ -903,7 +903,7 @@ async def dispatch(p: Dict[str, str], venue_call_for) -> Optional[str]:
         await STORE.link({"account_id": code["account_id"], "wa_id_sha256": key, "number_e164": sender, "linked_at": now,
                           "consent_at": code["consent_at"], "consent_wording_version": code["consent_wording_version"],
                           "consent_text_sha256": code["consent_text_sha256"]})
-        await STORE.put_state(key, {"history": [], "pending": None, "last_inbound_at": now, "link_tries": []})
+        await STORE.put_state(key, {"pending": None, "last_inbound_at": now, "link_tries": []})
         log.info("[guest_whatsapp] a WhatsApp number was linked to an account")
         return _twiml_message(linked_words(code["account_id"]))   # Sasha 249 · the one brain's words from the one capability list
     from agapi import s2_whatsapp as S2WA   # CR 62 / Sasha 217 · a reply from someone Sasha wrote to FOR a person: kept, never answered by the model
@@ -978,8 +978,9 @@ async def confirmed_by_code(ch: dict, sender: str, p: Dict[str, str]) -> Optiona
         said = V.number_confirmed_line(plain_venue(held.get("venue")) if held.get("venue") else "them")
     else:
         said = V.NUMBER_CONFIRMED if verified else V.NUMBER_NOT_CONFIRMED
-    st = await STORE.get_state(ch["wa_id_sha256"])   # in her conversation: the next turn knows it was confirmed
-    st["history"] = (list(st.get("history") or []) + [{"role": "user", "content": body}, {"role": "assistant", "content": said}])[-40:]
+    st = await STORE.get_state(ch["wa_id_sha256"])
+    from agapi import s2_memory as MEM   # Sasha 392 · in her conversation (the ONE record): the next turn knows it was confirmed
+    await MEM.record(ch.get("account_id"), MEM.message("in", "wa", body), MEM.message("out", "wa", said, "sasha"))
     st["last_inbound_at"] = now
     await STORE.put_state(ch["wa_id_sha256"], st)
     return said
@@ -1201,7 +1202,8 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
             pass
     if pend0.get("kind") == "amb" and not payload.startswith("amb:"):
         st["pending"] = None
-    mode0 = SW.before(st, now) if sw else None
+    from agapi import s2_memory as MEM
+    mode0 = SW.before(st, now, await MEM.conversation(account, said=body)) if sw else None   # Sasha 392 · the ONE reader
     skip_products = False
     bk = SW.back_to(payload) if sw else None
     if bk and bk[0] == "p":   # "Back to RelocateMe": its own word resumes it, where it was
@@ -1212,8 +1214,6 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
             await PW._set_aside(st, ch)
         out.text(f"↩ Back to {SW._short(bk[1])} — what next?")
         SW.label_first(out, {"k": "j", "label": bk[1]})
-        st["history"] = ((st.get("history") or []) + [{"role": "user", "content": body or "back"},
-                                                     {"role": "assistant", "content": out.said()}])[-HISTORY_KEEP:]
         await STORE.put_state(key, st)
         await deliver(ch, frm, out, now)
         return out
@@ -1321,9 +1321,6 @@ async def turn(ch: dict, frm: str, p: Dict[str, str]) -> Out:
         await _brain_turn(ch, key, frm, body, payload, p, st, out, now, heard, loaded)
         return out
     await _brain_tail(ch, out)
-    st["history"] = (st.get("history") or []) + [{"role": "user", "content": body}] + \
-                    ([{"role": "assistant", "content": out.said()}] if out.items else [])
-    st["history"] = st["history"][-HISTORY_KEEP:]
     await STORE.put_state(key, st)
     await deliver(ch, frm, out, now)
     return out
@@ -1531,7 +1528,8 @@ async def _new_request(ctx: dict, body: str) -> None:
     Sasha 253 · item 5 — RETIRED as a WhatsApp entry point: no WhatsApp message reaches it (turn() routes everything to the one
     brain, the kept front routes call their own handlers). Kept, unchanged, for the web voice avatar (voice_turn.py)."""
     out, st = ctx["out"], ctx["st"]
-    history = st.get("history") or []
+    from agapi import s2_memory as MEM   # Sasha 392 · the ONE reader
+    history = await MEM.conversation(ctx.get("account"), said=body)
     if _HELP.match(body):
         # Sasha 253 · reached only by the web voice avatar now (voice_turn) — its own fixed line, as before the one brain
         out.text(HELP)
@@ -2473,7 +2471,8 @@ async def _answer_pending(ctx: dict, body: str, payload: str) -> bool:
             st["pending"] = None
             await (_approve(ctx, pend, how) if kind == "confirm" else _cancel_approve(ctx, pend, how))
             return True
-        if HO.booking_handoff(body, st.get("history") or []) is not None:
+        from agapi import s2_memory as MEM   # Sasha 392 · the ONE reader
+        if HO.booking_handoff(body, await MEM.conversation(ctx.get("account"), said=body)) is not None:
             st["pending"] = None
             return False
         out.text("Tap Yes or No — or say \"yes\". Nothing happens until you do.")
@@ -3481,7 +3480,7 @@ async def whatsapp_unlink(request: Request):
     if ch and _number():
         st = await STORE.get_state(ch["wa_id_sha256"])
         await deliver(ch, _number(), Out().text("Unlinked. I won't message you here again."), st.get("last_inbound_at"))
-        await STORE.put_state(ch["wa_id_sha256"], {"history": [], "pending": None, "last_inbound_at": None, "link_tries": []})
+        await STORE.put_state(ch["wa_id_sha256"], {"pending": None, "last_inbound_at": None, "link_tries": []})
     return {"unlinked": bool(ch)}
 
 

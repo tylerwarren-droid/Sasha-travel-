@@ -399,13 +399,8 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
     message = message_of(account, body, payload, button_text)
     if payload.startswith("pick:"):   # Sasha 248 · ONE PLACE CARD on WhatsApp: the tapped place's detail — as text + its link — first
         await place_detail(account, payload[5:], out)
-    # Sasha 392 · the ONE conversation record's reader (s2_memory.recent_of: a booking line is a pointer to the record) — never WhatsApp's
-    # own st["history"] copy
-    def before_this(h: list) -> list:   # this message is already in the record (recorded where it arrived): the turn's own, not history
-        if h and h[-1].get("role") == "user" and h[-1].get("content") in ((body or ""), MEM.masked(body or "")):
-            return h[:-1]
-        return h
-    history = before_this([m for m in MEM.recent_of(await MEM._load(account)) if m.get("role") in ("user", "assistant")])
+    # Sasha 392 · the ONE reader (s2_memory.conversation: a booking line is a pointer to the record) — no door keeps a history of its own
+    history = await MEM.conversation(account, said=body or None)
     a = agent_state(st)
     last = a.get("last_seen")
     away = (not history) or (last and _hours(now, last) > AWAY_HOURS)
@@ -420,10 +415,9 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
             # Sasha 246 · HOW SHE STARTS: a greeting back gets only "Hey <first name>, what can I help you with?"; a request is
             # simply answered. What she remembers comes back as history (used when THEY refer to it) — never recited, and the
             # old cards are not sent again.
-            history = before_this([m for m in (rec.get("recent") or []) if m.get("role") in ("user", "assistant")][-12:]) or history
+            history = MEM.before_this([m for m in (rec.get("recent") or []) if m.get("role") in ("user", "assistant")][-12:], body or None) or history
             if GREETING.match(message or ""):
                 out.text(rec["line"])
-                _remember_history(st, body or message, rec["line"])
                 return rec["line"]
     # a password, card or passport number never reaches the model — checked on THEIR words (a tap's composed message carries a
     # place_id, which is no secret: Sasha 249, found live — every card tap on WhatsApp was answered with the password warning)
@@ -441,7 +435,6 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
             await MEM.closing(account, message, bye)
         except Exception as e:
             log.warning("[wa_agent] closing not kept: %s", type(e).__name__)
-        _remember_history(st, body or message, bye)
         return bye
     over = await AG.over_budget(account)
     if over:
@@ -499,7 +492,6 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         # Sasha 252 · she asked her OWN question (a read-back's Yes/No, a list to pick from) after Sasha's open one: a bare typed
         # "yes" or "the first one" is hers now (guest_whatsapp.answers_sashas_question); a tap still answers its own question
         set_agent_state(st, asked=now.isoformat())
-    _remember_history(st, body or message, text)
     try:   # awaited, in the turn — never fire-and-forget
         await MEM.remember(account, "wa:" + key, message[:4000], text, seen)
     except Exception as e:
@@ -526,7 +518,6 @@ async def card_tap(ch: dict, payload: str, st: dict, out, now, button_text: str 
         out.text(part)
     for ev in renders:
         render(ev, out, st, now)
-    _remember_history(st, said, text)
     try:   # awaited, in the turn — never fire-and-forget
         await MEM.remember(account, "wa:" + key, said, text, {"calls": calls})
     except Exception as e:
@@ -549,12 +540,6 @@ async def place_detail(account: str, place_id: str, out, budget_s: float = 20.0)
     t = VT.text(p)
     out.text(t)
     return t
-
-
-def _remember_history(st: dict, user: str, reply: str) -> None:
-    from .guest_whatsapp import HISTORY_KEEP
-    st["history"] = ((st.get("history") or []) + [{"role": "user", "content": user}]
-                     + ([{"role": "assistant", "content": reply}] if reply else []))[-HISTORY_KEEP:]
 
 
 AWAY_HOURS = 6

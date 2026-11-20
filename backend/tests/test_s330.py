@@ -189,7 +189,7 @@ class TheWhatsAppCard(Cancel):
         self.assertEqual(out.items, [("text", "Kept — nothing changed.")])
         self.assertEqual(self.cancels(), [])
         self.assertNotIn(ACCT, VN._CANCEL)
-        self.assertEqual(st["history"][-1], {"role": "assistant", "content": "Kept — nothing changed."})
+        self.assertNotIn("history", st)   # Sasha 392 · no door keeps a history of its own: the answer is recorded where it leaves
 
     def test_tap_yes_cancels_once_then_a_second_tap_does_nothing(self):
         out, _ = self.wa_tap(f"card:{self.ev['read_back_id']}:cancel", "SM2")

@@ -163,6 +163,8 @@ async def voice_conductor(
 
         # Sasha 143 · WHO, as the chat: a verified guest, the founder through the site's pass-through, else the PUBLIC demo
         account = await acting(request)
+        from agapi import s2_memory as _MEM392  # Sasha 392 one record (Stage B): the conversation is the ONE record's, never the page's copy
+        history = await _MEM392.door_history(account, signed_in(account), transcript, history)  # Sasha 392 one record (Stage B)
         result = None
         if signed_in(account):   # Sasha 169 (6) · a booking on the voice page: the cards, picked by voice, read back, one yes
             from booking_signer import voice_turn as _vt
@@ -171,6 +173,7 @@ async def voice_conductor(
             result = await _vt.turn(account, transcript, history, tap=_VS.session_of(request))
         if result is None:
             result = await conduct(transcript, history, user_id=account, signed_in=signed_in(account))
+        await _MEM392.door_said(account, signed_in(account), "voice", transcript, result)  # Sasha 392 one record (Stage B)
         response_text = result["response"]
         intents = result.get("intents", [])
         photos = result.get("photos", [])

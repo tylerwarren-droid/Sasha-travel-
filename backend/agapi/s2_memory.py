@@ -333,34 +333,48 @@ async def put_kind(account: Optional[str], name: str, value: Any) -> bool:
     return await put_kinds(account, {name: value})
 
 
-async def verified_history(account: str, session: Optional[str], history: List[dict]) -> List[dict]:
-    """Sasha 249 · SERVER-BUILT HISTORY (one-truth-spec 1.14): the conversation the model hears is the one the SERVER kept, not
-    whatever the browser sends back. The stored turns (this memory's `recent`, masked, the last KEEP messages) are the truth:
-      · nothing stored for this conversation (a first turn, another session's memory, no table yet) → the client's history, as today
-        (it keeps working when the server has nothing);
-      · stored, and the client's last lines are those same lines (masked the same way) → the client's history (verified: it is the
-        same conversation, and keeps the lines older than the stored window);
-      · stored, and they differ → the stored turns: a history the server never said is never handed to the model (nor its amounts
-        to the price guard)."""
+def before_this(lines: List[dict], said: Optional[str]) -> List[dict]:
+    """This turn's own message is already in the record (recorded where it arrived): it is the turn, not its history."""
+    if said and lines and lines[-1].get("role") == "user" and lines[-1].get("content") in (said, masked(said)):
+        return lines[:-1]
+    return lines
+
+
+async def conversation(account: Optional[str], session: Optional[str] = None, said: Optional[str] = None, n: int = KEEP) -> List[dict]:
+    """Sasha 392 · THE ONE READER of conversation history, for every door (S2, /next, WhatsApp, the voice / REST door): the ONE record's
+    lines (role / content; a line that reported a booking is a POINTER to the booking record — recent_of). No door keeps a history of
+    its own and none is taken from a client (Sasha 249's verified_history is retired: the page's copy is never a source).
+    session: S2 / /next — only THIS session's lines (none for another session). said: this turn's own message, never its history."""
+    if not account:
+        return []
     m = await _load(account) or {}
-    n = int(m.get("session_lines") or 0)
-    if not session or m.get("session") != session or n <= 0:
-        return history
-    stored = [x for x in recent_of(m) if x.get("role") in ("user", "assistant")][-n:]   # THIS conversation's lines only
-    if not stored:
-        return history
-    client = [x for x in (history or []) if x.get("role") in ("user", "assistant") and str(x.get("content") or "").strip()]
-    k = min(len(client), len(stored))
-    mine = [(x["role"], masked(str(x.get("content") or ""))) for x in client[len(client) - k:]]
-    if k and mine == [(x["role"], str(x.get("content") or "")) for x in stored[len(stored) - k:]]:
-        return history
-    if k and [r for r, _ in mine] == [x["role"] for x in stored[len(stored) - k:]] and \
-            all(sc == POINTER or c == sc for (_, c), sc in zip(mine, (str(x.get("content") or "") for x in stored[len(stored) - k:]))):
-        # Sasha 392 · the same conversation — but a line of hers that reported a booking is the record's pointer, never the page's copy
-        return [{"role": x["role"], "content": str(x.get("content") or "")} for x in client[:len(client) - k]] + \
-               [{"role": x["role"], "content": str(x.get("content") or "")} for x in stored[len(stored) - k:]]
-    log.info("[memory] the client's history isn't the stored conversation — the stored turns are used")
-    return [{"role": x["role"], "content": str(x.get("content") or "")} for x in stored]
+    lines = [{"role": x["role"], "content": str(x.get("content") or "")} for x in recent_of(m, n) if x.get("role") in ("user", "assistant")]
+    if session is not None:
+        k = int(m.get("session_lines") or 0)
+        if not session or m.get("session") != session or k <= 0:
+            return []
+        lines = lines[-k:]
+    return before_this(lines, said)
+
+
+async def door_history(account: Optional[str], signed: bool, said: Optional[str], page_lines) -> List[dict]:
+    """Sasha 392 · the conversation at a door the page sends its lines to (the REST chat, the voice page — the CTO's conductor): a signed-in
+    person's is the ONE record (the page's copy is never read); the public demo has no person — no record, and it books nothing — so its
+    page's lines are its only conversation. The ONE place a page's lines are accepted."""
+    if signed and account:
+        return await conversation(account, said=said)
+    return [{"role": x["role"], "content": str(x.get("content") or "")} for x in (page_lines or [])
+            if isinstance(x, dict) and x.get("role") in ("user", "assistant")][-KEEP:]
+
+
+async def door_said(account: Optional[str], signed: bool, ch: str, said: str, result: Optional[dict]) -> None:
+    """Sasha 392 · the conductor's turn at that door, in the ONE record (a signed-in person's; the turns voice_turn answered are recorded
+    there: result["recorded"]). A reply that reported a booking is marked — the model hears a pointer to the record."""
+    r = result or {}
+    if not (signed and account and str(r.get("response") or "").strip()) or r.get("recorded"):
+        return
+    booked = bool(r.get("booking_ref") or r.get("bookings") or r.get("booking_cancel") or r.get("trip_book"))
+    await record(account, message("in", ch, said), message("out", ch, str(r["response"]), "conductor", booking=booked))
 
 
 async def accounts_with(name: str) -> List[tuple]:
@@ -580,11 +594,12 @@ async def clear_conversation(account: str) -> dict:
         for key in [k for k in store if k[0] == account]:
             store.pop(key, None)
     VN._SHOWN.pop(account, None)
+    VN.request_closed(account)   # Sasha 392 · a new chat is a new request: none of its words carry over
     from app.agent import voice as V
     V.forget_acks(account)   # Sasha 273 · item 8: a new chat is a new request
     return {"cleared": gone, "kept": sorted(kept)}
 
 
 __all__ = ["remember", "closing", "recall", "fold", "line_for", "masked", "opening", "first_name", "set_name", "OPEN", "ASK_NAME",
-           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "verified_history", "clear_conversation",
+           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "conversation", "before_this", "door_history", "door_said", "clear_conversation",
            "message", "messages_of", "recent_of", "record", "last_tool", "last_out_tool", "MESSAGES_MAX"]

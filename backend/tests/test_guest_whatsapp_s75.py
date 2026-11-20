@@ -105,6 +105,18 @@ class FakeApi:
 class Base(unittest.TestCase):
     def setUp(self):
         GW._SEEN_SIDS.clear(); GW._SEEN_STEPS.clear()   # Sasha 355 · a message's steps: their own record   # Sasha 206 · each test's MessageSids are its own
+        # Sasha 394 · CR 206 · AgAPI stands in, answering as live does for a person in Sasha: decided, not AgAPI's ({"matched": False}).
+        # (An error is UNDECIDED — delivered again, never answered: tests/test_s394_deliver_again.)
+        from agapi import venue_submit as _VS394
+        _real394 = _VS394.CALL
+
+        async def _call394(op, body, approval=None, account=None):
+            if op == "messages.whatsapp_inbound":
+                return {"ok": True, "result": {"matched": False}}
+            return await _real394(op, body, approval, account)
+        _p394 = mock.patch.object(_VS394, "CALL", _call394)
+        _p394.start()
+        self.addCleanup(_p394.stop)
         from agapi import s2_memory as _MEMS   # Sasha 392 · each test's conversation is its own (the ONE record is what her turn reads now)
         _MEMS._MEM.clear()
         from products import space as _SPC   # Sasha 256 · each test starts with no space set (the one record's process copy)

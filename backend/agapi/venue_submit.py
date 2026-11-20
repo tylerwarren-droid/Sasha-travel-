@@ -147,7 +147,7 @@ async def whatsapp_inbound(sender: str, text: str, message_id: str, guest: bool 
     conversation_role.ad_intent): AD's → matched (AD answers; nothing of Sasha's does); a venue's answer on ITS booking record →
     matched; anyone else's → {"matched": False}: Sasha's own paths. Everything AD may need goes on this one call (its files, the message
     it answers, a linked guest's own Kanoe email for AD's "Is this you?") — never a second call, never a `space` (retired).
-    AgAPI unreachable → {"matched": False, "why"} (never lost: Sasha's own path still files it)."""
+    Sasha 394 · CR 206: an error → {"undecided": True, "why"} — whose message it is isn't known: inbound_owner says UNDECIDED (delivered again)."""
     r = await _call(None, OP.MESSAGES_WHATSAPP_INBOUND, {"from": str(sender)[:24], "text": str(text or "")[:4000],
                                                         "message_id": str(message_id)[:80],   # Sasha 374 · CR 186 (b): ALWAYS — the provider's id
                                                         **({"guest": True} if guest else {}),   # a guest: only AD's door may take it (CR 127b)
@@ -159,15 +159,28 @@ async def whatsapp_inbound(sender: str, text: str, message_id: str, guest: bool 
                                                         **({"replied_to": str(replied_to)[:80]} if replied_to else {}),
                                                         # Sasha 318 · CR 147 · a tapped button ("Allow" on a call request): as Twilio gave it
                                                         **({"button": b} if (b := button_of(twilio)) else {})})
-    if not r.get("ok"):
-        log.warning("[venue_submit] whatsapp_inbound not handed over: %s", (r.get("error") or {}).get("code"))
-        return {"matched": False, "why": (r.get("error") or {}).get("code") or "unavailable"}
+    if not r.get("ok"):   # Sasha 394 · CR 206: whose message it is was NOT decided — never "unmatched", never Sasha's to answer
+        log.warning("[venue_submit] whatsapp_inbound undecided: %s — delivered again later", (r.get("error") or {}).get("code"))
+        return {"undecided": True, "why": (r.get("error") or {}).get("code") or "unavailable"}
     res = r.get("result") or {}
     # Sasha 287 · a STOP is AgAPI's to honour (opted_out, at once: its gate refuses every later send) — kept here so it is said
     # Sasha 361 · AD's conversation_role, passed through as AgAPI gives it (AD decides it; AgAPI and Sasha decide nothing from it here):
     # Sasha's ONE product router (products/tools.route) reads the number's roles from it
     return {"matched": bool(res.get("matched")),
             **({k: res[k] for k in ("kept", "why", "opted_out", "booking", "ad", "replied", "conversation_role") if k in res})}
+
+
+#: Sasha 394 · CR 206 · an inbound WhatsApp message's owner, from AgAPI's ONE answer (messages.whatsapp_inbound) — THE one place it's decided
+AGAPI, SASHA, UNDECIDED = "agapi", "sasha", "undecided"
+
+
+def inbound_owner(got: Dict[str, Any]) -> str:
+    """matched → AgAPI's (its owner answered: AD, a venue's reply filed); answered and not matched → Sasha's own paths; an error (any: AD
+    unreachable for a message that needs AD — upstream_unreachable —, AgAPI not answering, a refusal) → UNDECIDED: CR 206's "deliver again",
+    never "no role" — nothing of Sasha's answers it (booking_signer/redeliver delivers it again)."""
+    if not isinstance(got, dict) or got.get("undecided") or "matched" not in got:
+        return UNDECIDED
+    return AGAPI if got.get("matched") else SASHA
 
 
 async def whatsapp_switch(sender: str, product: str, message_id: str) -> Dict[str, Any]:

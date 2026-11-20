@@ -820,6 +820,21 @@ async def first_step(sid: str, step: str) -> bool:
     return True
 
 
+async def release_step(sid: str, step: str) -> None:
+    """Sasha 394 · CR 206 · AgAPI didn't decide this message: its step is released, so delivering it again asks AgAPI afresh (AgAPI
+    released its own claim too). A record that can't be written fails CLOSED like first_step: raised, told (inbound_outcome)."""
+    if step not in STEPS:
+        raise ValueError(f"unknown step {step!r}")
+    _SEEN_STEPS.pop((sid, step), None)
+    run = getattr(STORE, "_run", None)
+    if run is not None:
+        try:
+            await run(lambda c: c.execute("delete from guest_message_steps where message_sid = $1 and step = $2", sid, step))
+        except Exception as e:
+            from .inbound_outcome import Failed
+            raise Failed(f"step {step} of message …{str(sid)[-8:]} not released in guest_message_steps ({type(e).__name__})") from e
+
+
 async def step_done(sid: str, step: str) -> bool:
     """Read only: did this message reach this step before? A record that can't be read is NAMED and answers False — the message then
     goes Sasha's own way, never to AgAPI again (first_step already refused that)."""

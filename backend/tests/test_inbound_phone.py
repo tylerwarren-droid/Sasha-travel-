@@ -37,6 +37,18 @@ class InboundPhone(unittest.TestCase):
     def setUp(self):
         self.env = mock.patch.dict(os.environ, {"TWILIO_AUTH_TOKEN": TOKEN, "TWILIO_WEBHOOK_BASE": BASE, "SASHA_BOOKING_KEY": "k"})
         self.env.start()
+        # Sasha 394 · CR 206 · AgAPI stands in, answering as live does for a person in Sasha: decided, not AgAPI's ({"matched": False}).
+        # (An error is UNDECIDED — delivered again, never answered: tests/test_s394_deliver_again.)
+        from agapi import venue_submit as _VS394
+        _real394 = _VS394.CALL
+
+        async def _call394(op, body, approval=None, account=None):
+            if op == "messages.whatsapp_inbound":
+                return {"ok": True, "result": {"matched": False}}
+            return await _real394(op, body, approval, account)
+        _p394 = mock.patch.object(_VS394, "CALL", _call394)
+        _p394.start()
+        self.addCleanup(_p394.stop)
         self.calls = MemoryCallStore()
         now = datetime.now(timezone.utc)
         for cid, item, dialled in (("c-site", "t-site", SITE_NUMBER), ("c-list", "t-list", PT.number_key(LISTING_NUMBER))):

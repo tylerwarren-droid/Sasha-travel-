@@ -631,6 +631,8 @@ async def _start_retention() -> None:
     mailbox.start()   # S-82 · the 6-hourly read-only sync (SASHA_MAILBOX_LOOP; only once Google is configured)
     from . import paid_watch as _pw
     _pw.start()
+    from . import redeliver as _rd
+    _rd.start()   # Sasha 394 · CR 206 · the ONE redeliverer: a message AgAPI couldn't decide, delivered again (survives restarts: sql/061)
     from . import mandate as _mandate
     _mandate.start()   # Sasha 366 · THE ONE WORKER: every open group instruction carried through from the trip record (survives restarts)   # Sasha 183 · a paid booking always lands: any payment still waiting is settled every 15 s (and survives restarts)
     from . import guest_whatsapp as _gw206

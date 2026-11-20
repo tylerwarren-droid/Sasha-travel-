@@ -402,7 +402,14 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
             # reaches it as AD's own word (AD then asks its own question, and its answer is AD's). Everything AD may need goes on THIS call.
             got = await VS.whatsapp_inbound(sender, tap[1]["word"] if ad_tap else body, message_id=sid, guest=await GW.linked(sender),
                                             twilio=p, **(await for_ad(sender, p)))
-            if got.get("matched"):
+            owner = VS.inbound_owner(got)   # Sasha 394 · CR 206 · THE one decision of whose message this is
+            from . import redeliver as RD
+            if owner == VS.UNDECIDED:   # "deliver again": nothing of Sasha's answers it — its step released, delivered again later
+                await GW.release_step(sid, "agapi_in")
+                await RD.hold(sid, p, got.get("why"))
+                return None
+            await RD.done(sid)   # decided (a redelivery that's now decided ends here)
+            if owner == VS.AGAPI:
                 await GW.first_step(sid, "agapi_took")
                 return _twiml(await _after_ad(sender, got))
             if isinstance(got.get("conversation_role"), dict):   # AgAPI's answer, passed on as it came: the router reads it (TL.route)

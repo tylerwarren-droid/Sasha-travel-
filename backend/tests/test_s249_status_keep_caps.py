@@ -302,10 +302,9 @@ class OneCapabilityList(unittest.TestCase):
         self.assertEqual(_read(path), CO.render(), "regenerate: cd backend && python -m scripts.capabilities_out")
         s2 = _read(FRONT, "app", "s2", "S2App.tsx")
         nxt = _read(FRONT, "app", "next", "page.tsx")
-        for src in (s2, nxt):
-            self.assertIn("import { CHIPS } from '@/lib/capabilities.generated.mjs'", src)
+        self.assertIn("import { CHIPS } from '@/lib/capabilities.generated.mjs'", s2)
         self.assertNotIn("const CHIPS = [", s2)
-        self.assertIn("const PRESET_PROMPTS = CHIPS", nxt)
+        self.assertIn('<S2App layout="desktop" />', nxt)   # Sasha 396 · /next IS S2 (its chips are S2's)
 
     def test_whatsapp_words_under_the_one_brain_come_from_the_list(self):
         from agapi import s2_home as H

@@ -120,7 +120,7 @@ class OnePause(unittest.TestCase):
         self.assertIn("data-sasha-paused", _src(self, "app/s2/S2App.tsx"))
         self.assertIn("if (busy || asleep || !queued.current.length) return", _src(self, "app/s2/S2App.tsx"))   # a queued message never undoes it
         nxt = _src(self, "app/next/page.tsx")
-        self.assertIn("if (r.effects.releaseFace) handleEndSession()", nxt)
+        self.assertIn('<S2App layout="desktop" />', nxt)   # Sasha 396 · /next IS S2: ONE pause
 
 
 if __name__ == "__main__":

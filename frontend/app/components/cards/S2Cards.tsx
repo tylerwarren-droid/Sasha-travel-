@@ -405,7 +405,7 @@ export function GroupTripNow() {
   const [c, setC] = useState<Ev | null>(null)
   useEffect(() => {
     let off = false
-    observe(bookingReq('/api/booking/group/list').then(r => {
+    const pull = () => observe(bookingReq('/api/booking/group/list').then(r => {
       const j = (r.json || {}) as Ev
       if (off || !r.ok || !j.movement || !Array.isArray(j.rows) || !j.rows.length) return
       const mv = j.movement as Ev
@@ -415,7 +415,9 @@ export function GroupTripNow() {
              counts: Object.entries((j.counts || {}) as Record<string, number>).map(([s2, n]) => `${n} ${s2}`).join(', '),
              rows: j.rows.map((x: Ev) => ({ name: x.name, role: x.role, ...(byGrade ? { grade: x.grade } : {}), status: x.status, price_eur: x.price_eur })) })
     }), 'Reading your group trip', toConsole)
-    return () => { off = true }
+    pull()
+    window.addEventListener('sasha-plan-refresh', pull)   // Sasha 396 · the desktop's permanent pane: the trip changed → shown now
+    return () => { off = true; window.removeEventListener('sasha-plan-refresh', pull) }
   }, [])
   return c ? <div data-trip-group style={{ margin: '0 0 12px' }}><GroupListCard c={c} /></div> : null
 }

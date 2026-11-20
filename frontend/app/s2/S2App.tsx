@@ -691,7 +691,14 @@ function Activity() {
   )
 }
 
-export default function S2App() {
+const DESK_PANE = 'min(520px, 42vw)'   // Sasha 396 · the desktop trip pane's width
+
+/** Sasha 396 · ONE ENGINE, THREE DOORS (KANOE): /s2 (phone) and /next (desktop) are this one page — the same turn route, memory, cards and
+ *  taps. `layout="desktop"` adds layout only: the conversation beside a permanent trip pane (GroupTripNow + TripPanel, refreshed by
+ *  sasha-plan-refresh), and sign-in returns to the page they were on. */
+export default function S2App({ layout = 'phone' }: { layout?: 'phone' | 'desktop' } = {}) {
+  const desktop = layout === 'desktop'
+  const home = desktop ? '/next' : '/s2'   // Sasha 396 · the sign-in returns HERE (never a hard-coded /s2)
   const signedIn = useSignedIn()
   const [tab, setTab] = useState<'sasha' | 'activity' | 'keep' | 'trip' | 'group'>('sasha')   // Sasha 359 · 'group': the ONE group view   // Sasha 235 · 'keep': My Keep · 236 · 'trip': the trip board
   const [handover, setHandover] = useState<string | null>(null)   // Sasha 236 · Tap to finish, in a sheet over her
@@ -983,7 +990,7 @@ export default function S2App() {
       arm()
       const r = await reach('/api/s2-agent', { method: 'POST', headers: { 'content-type': 'application/json' }, signal: abort.signal,
         body: JSON.stringify({ message: t, history: histRef.current.slice(-30), session_id: session.current, channel: m.channel, lang: pageLang(), ...(pick ? { pick } : {}), ...(tap ? { tap } : {}), ...(said1 && !leaving ? { said_first: said1 } : {}) }) })   // Sasha 265 · the card's tap
-      if (r.status === 401) { window.location.href = '/sign-in?next=/s2'; return }
+      if (r.status === 401) { window.location.href = `/sign-in?next=${home}`; return }
       const rd = r.body?.getReader()
       const dec = new TextDecoder()
       let buf = '', finished = false
@@ -1226,14 +1233,22 @@ export default function S2App() {
       <div style={{ textAlign: 'center', maxWidth: 340 }}>
         <div style={{ fontSize: 34, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif" }}>Sasha</div>
         <p style={{ color: C.dim, marginTop: 8 }}>Your personal concierge. Sign in with your email — a 6-digit code, right here.</p>
-        <a href="/sign-in?next=/s2" style={{ display: 'inline-block', marginTop: 18, padding: '12px 22px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>Sign in</a>
+        <a href={`/sign-in?next=${home}`} style={{ display: 'inline-block', marginTop: 18, padding: '12px 22px', borderRadius: 999, background: C.gold, color: '#111', fontWeight: 700, textDecoration: 'none' }}>Sign in</a>
       </div>
     </main>{hello}</>)
 
   return (<>
     {/* Sasha 273 · item 5 (Tyler's iPhone, Safari 26: the bottom address pill sat on "Voice on" and "New chat"): the shell IS the dynamic
         viewport (height 100dvh) — the conversation scrolls inside it, the controls never leave it, and the bottom keeps the safe area */}
-    <main data-s2-shell style={{ height: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%', margin: '0 auto', overflow: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
+    {desktop ? (   /* Sasha 396 · desktop: the trip, permanently beside the conversation — the SAME panels as the Trip tab (one record) */
+      <aside data-s2-trip-pane className="s2-trip" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: DESK_PANE, overflowY: 'auto', background: C.bg, color: '#fff', borderLeft: `1px solid ${C.line}`, padding: '18px 14px 24px', fontFamily: 'system-ui', zIndex: 2 }}>
+        <style>{TRIP_BOARD_CSS}</style>
+        <GroupTripNow />
+        <TripPanel richItinerary={null} openDays={openDays} travellerCount={0}
+          toggleDay={(d: number) => setOpenDays(s => { const n = new Set(s); if (n.has(d)) n.delete(d); else n.add(d); return n })} />
+      </aside>) : null}
+    <main data-s2-shell style={{ height: '100dvh', background: C.bg, color: '#fff', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui', maxWidth: 560, width: '100%',
+      margin: desktop ? `0 0 0 max(0px, calc((100vw - ${DESK_PANE} - 560px) / 2))` : '0 auto', overflow: 'hidden', opacity: dormant ? 0.22 : 1, filter: dormant ? 'saturate(.4)' : 'none', transition: 'opacity 1.2s ease, filter 1.2s ease' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 16px', paddingTop: 'max(18px, calc(env(safe-area-inset-top) + 10px))' }}>
         {/* Sasha 257 · Tyler (row 860): who is signed in, said quietly here (whoami) — the floating pill over the chat is gone */}
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display',Georgia,serif", flex: '0 0 auto' }}>Sasha</div>

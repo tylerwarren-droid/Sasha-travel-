@@ -119,7 +119,8 @@ class OnePayload(unittest.TestCase):
 
     def test_a_card_a_surface_cant_draw_is_never_shown_and_she_is_told(self):
         from app.agent import sasha as AG
-        self.assertTrue(AG.draws("s2", "flights") and not AG.draws("s2", "focus") and AG.draws("next", "focus"))
+        self.assertTrue(AG.draws("s2", "flights") and not AG.draws("s2", "focus"))
+        self.assertFalse(AG.draws("next", "focus") or AG.draws("s1", "flights"))   # Sasha 396 · a door with no renderer draws nothing
         src = (ROOT / "backend/app/agent/sasha.py").read_text()
         self.assertIn('mr["on_screen"] = "nothing from this result was shown on their screen', src)
         self.assertNotIn("_V.promises_card", src)                                  # 345's phrase guard retired
@@ -138,7 +139,7 @@ class NoTripUntilChosen(unittest.TestCase):
         self.assertIn("{!phone && <button type=\"button\" className=\"lw-handoff\"", tp)   # never "Continue on my phone" ON the phone
         self.assertIn("<span className=\"amt\">{tt ? eur(tt.total_eur) : '—'}</span>", tp)   # the record's figure, in €
         self.assertNotIn("`$${(richItinerary.estimated_total_usd", tp)
-        self.assertIn("usePhone()", (FE / "app/next/page.tsx").read_text())          # ONE phone rule (lib/device)
+        self.assertIn('<S2App layout="desktop" />', (FE / "app/next/page.tsx").read_text())   # Sasha 396 · /next IS S2
 
     def test_a_search_makes_no_trip(self):
         v0 = (ROOT / "backend/agapi/v0.py").read_text()

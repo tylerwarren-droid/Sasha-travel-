@@ -267,8 +267,14 @@ S2_DRAWS = frozenset({"venues", "read_back", "calendar", "pay_here", "pay", "kee
 
 
 def draws(surface: Optional[str], kind: Optional[str], wa: bool = False) -> bool:
-    """Sasha 349 · does this surface draw a card of this kind? (/s2: S2_DRAWS; WhatsApp and /next: their own renderers, as before)"""
-    return wa or surface != "s2" or str(kind or "") in S2_DRAWS   # what the /next UI renders (SashaChat agentTurn)
+    """Sasha 349 · does this door draw a card of this kind? Sasha 396 · from EACH door's OWN renderer — S2 (/s2 and /next): S2_DRAWS;
+    WhatsApp: wa_agent.KIND_MAP; a door with no renderer: nothing. Before: every kind on WhatsApp and on "s1" counted as drawn (EU 288
+    §5.2), so "it's on your screen" could be said of a card nobody drew."""
+    k = str(kind or "")
+    if wa:
+        from booking_signer import wa_agent as _WA
+        return k in _WA.KIND_MAP
+    return surface == "s2" and k in S2_DRAWS
 KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport): on the read-back's event
 
 

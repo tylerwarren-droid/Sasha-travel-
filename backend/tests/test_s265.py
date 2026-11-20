@@ -120,9 +120,9 @@ class NewChatClearsTheConversationOnly(unittest.TestCase):
     def test_gate_one_route_both_surfaces(self):
         self.assertIn(("/memory", "DELETE"), {(r.path.replace("/api/agent", ""), m) for r in S.router.routes for m in getattr(r, "methods", [])})
         self.assertIn("method: 'DELETE'", _tsx(self, "app/s2/S2App.tsx"))
-        self.assertIn("reach('/api/sasha-agent/memory', { method: 'DELETE'", _tsx(self, "app/next/page.tsx"))
-        for rel in ("app/api/s2-memory/route.ts", "app/api/sasha-agent/memory/route.ts"):
-            self.assertIn("/api/agent/memory`, { method: 'DELETE'", _tsx(self, rel))
+        self.assertIn('<S2App layout="desktop" />', _tsx(self, "app/next/page.tsx"))   # Sasha 396 · /next IS S2: ONE "New chat"
+        self.assertIn("/api/agent/memory`, { method: 'DELETE'", _tsx(self, "app/api/s2-memory/route.ts"))
+        self.assertFalse((pathlib.Path(__file__).resolve().parents[2] / "frontend/app/api/sasha-agent/memory").exists())   # /next's copy: gone
 
 
 # ── 4 · CR 99 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ class TheFirstLineAtOnce(unittest.TestCase):
 
     def test_gate_next_shows_it_under_her_face_without_a_call(self):
         self.assertIn("onWorking?.(ev.text)", _tsx(self, "app/components/SashaChat.tsx"))
-        self.assertIn("data-sasha-working-face", _tsx(self, "app/next/page.tsx"))
+        self.assertIn('<S2App layout="desktop" />', _tsx(self, "app/next/page.tsx"))   # Sasha 396 · /next IS S2: her face is S2's
 
 
 if __name__ == "__main__":

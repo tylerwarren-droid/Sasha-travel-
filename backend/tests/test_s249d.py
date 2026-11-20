@@ -353,14 +353,15 @@ class ServerHistory(WithTable):
         self.assertEqual(run(MEM.conversation(ACCOUNT, "s1")), [])
         self.assertFalse(hasattr(MEM, "verified_history"))
 
-    def test_this_sessions_lines_from_the_record(self):
-        self.remember("s0", "an older visit", "its reply")            # another conversation: never handed to this one
-        self.remember("s1", "Dinner near Sol?", "Here are three places.")
-        self.assertEqual(run(MEM.conversation(ACCOUNT, "s1")),
-                         [{"role": "user", "content": "Dinner near Sol?"}, {"role": "assistant", "content": "Here are three places."}])
+    def test_one_conversation_per_account_whatever_the_page_session(self):   # Sasha 396 · desktop and phone: ONE conversation
+        self.remember("s0", "Dinner near Sol?", "Here are three places.")   # the phone's page
+        whole = [{"role": "user", "content": "Dinner near Sol?"}, {"role": "assistant", "content": "Here are three places."}]
+        self.assertEqual(run(MEM.conversation(ACCOUNT, "s1")), whole)   # the desktop's page hears the same conversation
+        self.assertEqual(run(MEM.conversation(ACCOUNT)), whole)          # and WhatsApp
 
-    def test_a_new_session_starts_with_nothing(self):
+    def test_new_chat_is_the_one_boundary(self):
         self.remember("s0", "an older visit", "its reply")
+        run(MEM.clear_conversation(ACCOUNT))
         self.assertEqual(run(MEM.conversation(ACCOUNT, "s2")), [])
 
     def test_kinds_live_beside_the_memory_and_survive_its_turns(self):

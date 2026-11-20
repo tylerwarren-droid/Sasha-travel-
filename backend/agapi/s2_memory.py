@@ -348,11 +348,9 @@ async def conversation(account: Optional[str], session: Optional[str] = None, sa
         return []
     m = await _load(account) or {}
     lines = [{"role": x["role"], "content": str(x.get("content") or "")} for x in recent_of(m, n) if x.get("role") in ("user", "assistant")]
-    if session is not None:
-        k = int(m.get("session_lines") or 0)
-        if not session or m.get("session") != session or k <= 0:
-            return []
-        lines = lines[-k:]
+    # Sasha 396 · ONE conversation per account for EVERY door: a page's session is not a boundary ("New chat" — clear_conversation — is the
+    # one). Before: S2 heard only its own page session's lines, so desktop and phone each started empty and moved the record's session
+    # between them (EU 288 §5.2). `session` is kept in the signature for the callers; it no longer filters.
     return before_this(lines, said)
 
 

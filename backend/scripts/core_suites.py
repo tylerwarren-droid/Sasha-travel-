@@ -83,7 +83,7 @@ async def _book_by_voice(a: str, turns, VT, BR, contact: str = "Suite Guest +1 2
     # goes to the sandbox (the gate's stand-in, or the real sandbox in voice_proof); without it the guest reads CLOSED (no venue sends)
     PA.install({a: {**PA.FOUNDER_PERSON, "mode": "test"}})
     from booking_signer import guest_whatsapp as GWS
-    await GWS.STORE.put_state(VT.voice_key(a), {"history": [], "pending": None, "last_inbound_at": None})   # each booking its own talk
+    await GWS.STORE.put_state(VT.voice_key(a), {"pending": None, "last_inbound_at": None})   # each booking its own talk
     before = time.time()   # an act made in THIS booking (the stand-in reuses one act id: the remembered act is re-stamped)
     try:
         return await _voice_turns(a, turns, VT, BR, contact, before, AGS)
@@ -153,8 +153,12 @@ async def restaurant(a: str) -> None:
         ok("REST voice phrasing → the test venue booked through AgAPI: an act, never handed to Tyler (321)",
            bool(made) and not any(TO_TYLER_WORDS in x for x in seen), f"acts {[m.get('act_id') for m in made]} · " + " | ".join(seen)[-160:])
         made, seen = await _book_by_voice(a, (spoken,), VT, BR)
-        ok("REST the same instruction spoken again → “already sent”, nothing acted (381: sent once)",
-           not made and "already" in seen[0].lower() and not any(TO_TYLER_WORDS in x for x in seen),
+        # Sasha 392 · the ONE record answers: the claim's "already sent" (the model held it again) or the booking's state (her old line is
+        # the record's pointer, so she may read get_status) — either way nothing is acted, no new "Booking now:", and it is said as sent
+        ok("REST the same instruction spoken again → nothing acted, said as already sent (381: sent once; 392: the record answers)",
+           not made and not any(x.startswith("Booking now:") for x in seen)
+           and bool(re.search(r"(?i)\balready\b|\bhas (?:been sent|gone to)\b|\bis (?:already )?with\b", seen[0]))
+           and not any(TO_TYLER_WORDS in x for x in seen),
            f"acts {[m.get('act_id') for m in made]} · " + " | ".join(seen)[:160])
     finally:
         GW.rehearsal = real

@@ -1016,7 +1016,11 @@ export default function S2App() {
              patch(m => ({ ...m, text: untag(reply) })); finished = true; rd.cancel().catch(noted('Closing the reply stream')) }
           else if (ev.type === 'booked') { const line = bookedLine(ev); if (line) patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== 'booked'), { k: 'booked', line, actions: Array.isArray(ev.actions) ? ev.actions : undefined }] })) }
           else if (ev.type === 'render') {
-            const add0 = (c: Card) => patch(m => ({ ...m, cards: [...m.cards.filter(x => x.k !== c.k || (c.k === 'options' && x.k === 'options' && x.title !== c.title)), c] }))
+            // Sasha 395 · ONE answer, each card once: replaced by the SERVER's card key (sasha.card_key — the one rule); a card with none
+            // (an older record's) by the same rule's kind
+            const keyOf = (x: Card) => String((x as Card & { card?: string }).card || (x.k === 'options' ? `options:${(x as { title?: string }).title || ''}` : x.k))
+            const add0 = (c0: Card) => { const c = (typeof ev.card === 'string' && c0.k !== 'sign_in' ? { ...c0, card: ev.card } : c0) as Card
+              patch(m => ({ ...m, cards: [...m.cards.filter(x => keyOf(x) !== keyOf(c)), c] })) }
             // Sasha 274 · rows 1063/1064: a booking tried as a GUEST offers sign-in, in the conversation, under its card
             const add = (c: Card) => { add0(c); if (ACTING === 'guest' && ['read_back', 'prepared', 'wa_open', 'handover', 'pay'].includes(c.k)) add0({ k: 'sign_in' }) }
             // Sasha 349 · THE ONE MAPPING (cardsOf) — the same cards come back from the record on return

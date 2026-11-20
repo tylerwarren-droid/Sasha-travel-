@@ -360,14 +360,11 @@ def render(ev: dict, out, st: dict, now) -> None:
         f(ev, out)
 
 
-CARD_KINDS = {"accident", "claim_status", "notice", "group_list", "counter_card", "my_cards", "activities", "plans", "capabilities", "calendar", "subscriptions"}
-
-
 def last_of_each_card(renders: List[dict]) -> List[dict]:
-    """Sasha 238 · a card shown twice in one turn (the tool called again) is drawn once, as it stands at the end (found live:
-    the accident card twice, the first one stale)."""
-    last = {ev.get("kind"): i for i, ev in enumerate(renders) if ev.get("kind") in CARD_KINDS}
-    return [ev for i, ev in enumerate(renders) if ev.get("kind") not in CARD_KINDS or last[ev.get("kind")] == i]
+    """Sasha 238 · a card shown twice in one turn is drawn once, as it stands at the end. Sasha 395 · the ONE rule (sasha.one_per_card) —
+    no list of kinds of its own."""
+    from app.agent import sasha as AG
+    return AG.one_per_card(renders)
 
 
 def split(text: str, n: int = MAX_MSG) -> List[str]:

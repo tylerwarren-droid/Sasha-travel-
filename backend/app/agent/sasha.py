@@ -94,6 +94,21 @@ def system_prompt(now: datetime) -> str:
             "Prices and totals are in euros.")
 
 
+def card_key(ev: Dict[str, Any]) -> str:
+    """Sasha 395 · 388's class on S2 · WHAT ONE CARD IS — the ONE rule (the turn's stream, the conversation record, WhatsApp, and the page,
+    which replaces by this key): a card's kind; option lists apart by their title. Found in 394's proof: get_trip then group_list drew the
+    trip's card twice in one answer (the page hid it by its own copy of this rule; the record and WhatsApp didn't)."""
+    k = str(ev.get("kind") or "")
+    return f"options:{ev.get('title') or ''}" if k == "options" else k
+
+
+def one_per_card(evs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """ONE answer's cards: each card once, as it stands at the end of the turn — the last of its key, where it was last drawn (as the
+    page shows it: a newer card replaces the older and takes its place at the end)."""
+    last = {card_key(e): i for i, e in enumerate(evs)}
+    return [e for i, e in enumerate(evs) if last[card_key(e)] == i]
+
+
 def tools_for_model() -> List[dict]:
     return [API.schema_for_model(t) for t in API.TOOLS]
 
@@ -568,11 +583,19 @@ _INTERNAL = re.compile(
     # Sasha 212 · her notes to herself between tools ("Retrying with preparation first.", "Trip exists now; retry the hold.")
     r"\bretr(?:y|ies|ying|ied)\b|\b[a-z]+_[a-z]+(?:_[a-z]+)*\b|\btrip exists\b|\btake back\b|\bcorrect what i said\b|"
     r"(?:\bnot|n['’]t)\s+(?:actually\s+|really\s+)?(?:a\s+)?real\b|\btests?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b|\bpretend\b|\bno real\b|"
-    r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b|"
-    # Sasha 393 · the state names the code gives HER (the screen she's told about, the record, the request) — never said to the person
-    # ("Callao is on screen for Sunday lunch.", 20 Nov 07:57: search_venues' "… is on their screen — that's their pick")
-    r"\bon(?: the| their| your)? screen\b|\bscreen now\b|\b(?:booking|conversation) record\b|\bon (?:the|my) record\b|\bthis request\b|"
+    r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b")
+#: Sasha 393 → 395 · the state names the code gives HER (the screen, the record, the request …) reaching her words: an ALARM, never an edit.
+#: 393's roots (search_venues' refusal in the person's terms, the status tools only on their ask, the context's "shown to them") mean it
+#: should never fire — when it does, the turn logs it LOUDLY (a warning, and the turn's guard list) and her words go out as she said them.
+STATE_WORDS = re.compile(
+    r"(?i)\bon(?: the| their| your)? screen\b|\bscreen now\b|\b(?:booking|conversation) record\b|\bon (?:the|my) record\b|\bthis request\b|"
     r"\bmandate\b|\bpointer\b|\bpending items?\b|\bopen items?\b")
+
+
+def state_word_alarm(sentence: str) -> Optional[str]:
+    """Sasha 395 · → the state word her sentence carries (logged as an alarm by the turn), else None. Never edits the sentence."""
+    m = STATE_WORDS.search(sentence or "")
+    return m.group(0) if m else None
 
 
 def opener_of(text: str) -> Optional[str]:
@@ -981,6 +1004,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     held = False          # a sentence failed the claim/price guard: nothing more is spoken this turn (the rewrite replaces it)
     booked_now = None
     internal_log: List[str] = []
+    state_alarms: List[str] = []   # Sasha 395 · 393's state words heard in her words (an alarm, never an edit)
     # Sasha 213 · ONE TURN, ONE STATE: what's on screen this turn (cards, ribbon) and the names she may say — from THIS
     # turn's tool results only
     screen = _SCREEN.get(session or "-") or {}
@@ -1023,7 +1047,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
             extra += "\n\n" + remembered
         if surface == "s2" and screen.get("searched"):   # Sasha 276 · her search's line was said by code, so her history has no search
             s_ = screen["searched"]                       # in it: what's on their screen is told as the fact it is (never a rule)
-            extra += (f"\n\nOn their screen now: the cards from your search_venues for “{s_.get('what')}” in {s_.get('where')} (already "
+            extra += (f"\n\nShown to them now: the places from your search_venues for “{s_.get('what')}” in {s_.get('where')} (already "
                       f"run — its line was said for you): {', '.join(screen.get('names') or []) or 'no cards'}.")
         if space_line:   # Sasha 249 · ONE SPACE (nothing is added while they're in Sasha)
             extra += space_line
@@ -1049,6 +1073,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 break
             if _norm(x) and _norm(x) in said_norms:   # Sasha 215 · never a sentence twice in a turn ("It's quoted." after each flight)
                 continue
+            alarm = state_word_alarm(names_masked(x, tstate["allowed"]))
+            if alarm and not _V.is_told(x, told):   # Sasha 395 · 393's state words: an ALARM (logged, counted) — her words are NOT edited
+                log.warning("[alarm] a state word reached her words (%r): %s", alarm, x[:120])
+                state_alarms.append(x[:80])
             if _INTERNAL.search(names_masked(x, tstate["allowed"])) and not _V.is_told(x, told):   # Sasha 217 · a place's own name
                 # is never "internal" · Sasha 254 · nor the booking rules' own sentence ("This account is in test mode, …": found live,
                 # dropped as a test disclaimer, so the person never heard why nothing would reach the venue)
@@ -1116,6 +1144,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     last_tools: set = set()
     agapi_out = False   # Sasha 261 · an AgAPI outage's line was said this turn
     read_back_said = False   # Sasha 262 · the read-back's one line was said this turn (item 10)
+    drawn_cards: Dict[str, Dict[str, Any]] = {}   # Sasha 395 · card_key → the card as last drawn this turn
     acted_now = False   # Sasha 381i · a venue booking ACTED this turn (its result says so) — the only time "Booking now" is said
     # Sasha 299 · (4) (Tyler, 27 Oct) A BOOK TAP RUNS THE ROUTE AND THE HOLD BY CODE: its two calls (venues.tap_plan — only what he
     # already gave) stand in for the first model step; the model then only writes the words (or nothing, when a code line ends the turn)
@@ -1331,7 +1360,10 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 shown_here = bool(ev) and draws(surface, ev.get("kind"), wa)
                 if shown_here:
                     tstate["drawn"] = True   # Sasha 251 · something reached their screen this turn
-                    yield {**ev, "turn": turn_key}
+                    key = card_key(ev)   # Sasha 395 · ONE answer, each card ONCE: the same card again is not drawn again; a newer one
+                    if drawn_cards.get(key) != ev:   # replaces it in place (the page replaces by `card`)
+                        drawn_cards[key] = ev
+                        yield {**ev, "card": key, "turn": turn_key}
                 elif ev:   # Sasha 349 · a card this surface can't draw: never counted as shown, and she is told so
                     log.warning("[agent] a %s card isn't drawn on %s — not shown", ev.get("kind"), surface)
             mr = model_result(r, u.name)
@@ -1347,7 +1379,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     figures: Dict[str, Any] = {}   # Sasha 249 · get_total's trip_figures (read only — the guard never re-prices the trip)
     allowed |= await _basket_amounts(ctx, figures)
     bad = guard_check("".join(raw), allowed, await _anything_booked(ctx), figures or None, other, acted_now)
-    guard_log = list(bad) + [f"internal dropped: {x}" for x in internal_log]
+    guard_log = list(bad) + [f"internal dropped: {x}" for x in internal_log] + [f"ALARM state word: {x}" for x in state_alarms]
     if bad:   # once: back to the model to rewrite — honestly (Sasha 205: no length rewrite; a safety trim below)
         spoken = " ".join(said).strip()
         msgs.append({"role": "user", "content": "[guard] Your last reply can't be sent: " + "; ".join(bad)
@@ -2221,7 +2253,7 @@ async def agent_turn(request: Request):
                     timing = ""
                 if remembers:
                     if ev.get("type") == "render":   # Sasha 349 · the reply's payload: its cards, kept WITH its text in the one record
-                        seen.setdefault("payload", []).append({k: v for k, v in ev.items() if k != "turn"})
+                        seen["payload"] = one_per_card(seen.get("payload", []) + [{k: v for k, v in ev.items() if k != "turn"}])   # Sasha 395
                     if ev.get("type") == "render" and ev.get("kind") == "venues" and ev.get("preset"):
                         seen.update(cards=(ev["preset"].get("cards") or []), ribbon=ev.get("ribbon"), focus=ev.get("focus"))
                     elif ev.get("type") == "render" and ev.get("kind") == "discover":   # Sasha 276 · its place / independent cards, remembered

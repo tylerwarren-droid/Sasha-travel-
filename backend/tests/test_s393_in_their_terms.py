@@ -74,11 +74,12 @@ PERSON_SAID = ["Peñalver Callao, Sunday lunch: what time, and for how many?", "
 
 
 class NoInternalStateWord(unittest.TestCase):
-    def test_the_composers_one_guard_drops_every_state_word(self):
+    def test_every_state_word_is_an_alarm_never_an_edit(self):   # Sasha 395 · 393's filter → an alarm (logged, counted, never editing)
         for x in STATE_SAID:
-            self.assertTrue(AG._INTERNAL.search(x), x)
+            self.assertTrue(AG.state_word_alarm(x), x)
+            self.assertFalse(AG._INTERNAL.search(x), x)                                  # no longer dropped by the old filter
         for x in PERSON_SAID:
-            self.assertFalse(AG._INTERNAL.search(x), x)
+            self.assertIsNone(AG.state_word_alarm(x), x)
 
     def test_the_refusal_she_reads_is_in_their_terms(self):
         from agapi import venues as VN
@@ -93,6 +94,7 @@ class NoInternalStateWord(unittest.TestCase):
 
     def test_one_guard_not_a_second(self):
         self.assertEqual(inspect.getsource(AG).count("_INTERNAL = re.compile("), 1)
+        self.assertEqual(inspect.getsource(AG).count("STATE_WORDS = re.compile("), 1)
 
 
 SUNDAY = (date.today() + timedelta(days=(6 - date.today().weekday()) % 7 or 7)).isoformat()
@@ -109,7 +111,8 @@ def turn(steps, results, message):
     with mock.patch.object(LLM, "client", client(steps)), mock.patch.object(API, "call", call), \
             mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "on"}):
         evs = asyncio.run(go())
-    return next(e["text"] for e in evs if e["type"] == "done")
+    done = next(e for e in evs if e["type"] == "done")
+    return done["text"], done.get("guard") or []
 
 
 class TheAskIsCodesInTheirTerms(unittest.TestCase):
@@ -118,12 +121,14 @@ class TheAskIsCodesInTheirTerms(unittest.TestCase):
         ask = V.term_ask(["time", "party"], None, about)
         self.assertEqual(ask, "Peñalver Callao, Sunday lunch: what time, and for how many?")
         need = {"status": "need_term", "terms": ["time", "party"], "venue": "Peñalver Callao", "booked": False, "ask": ask, "about": about}
-        text = turn([[Block(type="text", text="Callao is on screen for Sunday lunch."),
+        text, guard = turn([[Block(type="text", text="Callao is on screen for Sunday lunch."),
                       Block(type="tool_use", id="h1", name="hold_venue", input={"name": "Peñalver Callao", "place_id": "ChIJ99",
                                                                                 "what": "lunch", "day": SUNDAY})],
                      [Block(type="text", text="Two things from your earlier requests aren't booked.")]],
                     {"hold_venue": {"ok": True, "result": need}}, "Book lunch at Peñalver Callao on Sunday")
-        self.assertEqual(text, ask)
+        # Sasha 395 · her words go out as she said them (no edit); the state word is an ALARM in the turn's guard; the ask is code's
+        self.assertEqual(text, "Callao is on screen for Sunday lunch. " + ask)
+        self.assertTrue(any(g.startswith("ALARM state word: Callao is on screen") for g in guard), guard)
 
     def test_every_missing_term_set_is_one_question_after_what_its_for(self):
         about = V.term_about("Casa Gate", None, "dinner", False)

@@ -2001,10 +2001,37 @@ async def start_count(ctx: Ctx, a: dict) -> dict:
     return {"from": day, "say": f"The real-booking count starts {day}. Everything before it stays as it is and isn't counted."}
 
 
+async def _named_movement(ctx: Ctx) -> Optional[dict]:
+    """Sasha 394 · THE TRIP BEING TALKED ABOUT, from THIS turn's own words (the person's, never the model's): an account's trips are its plans
+    AND its group movements — a group trip they name ("the Yerevan trip") is that movement (found 20 Nov: get_trip read only the plans and
+    she said "I couldn't find a Yerevan trip. The only trip on your account is a single booked flight"). None: no movement named."""
+    import re as _re
+    import unicodedata as _ud
+    words = str(getattr(ctx, "user_said", "") or "")
+    if not words or not ctx.account:
+        return None
+    norm = lambda s: " " + " ".join(_re.sub(r"[^a-z0-9]+", " ", _ud.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().lower()).split()) + " "
+    said = norm(words)
+    try:
+        from booking_signer import groups as G
+        mvs = await G.store().trips(ctx.account)
+    except Exception as e:   # no group record for this account (or it didn't answer): the plans answer, as before
+        log.info("[v0] the group trips weren't read for a named trip: %s", type(e).__name__)
+        return None
+    named = [m for m in mvs if m.get("destination") and norm(m["destination"]).strip() and norm(m["destination"]) in said]
+    return named[0] if len(named) == 1 else None
+
+
 async def get_trip(ctx: Ctx, a: dict) -> dict:
     """The trip as it stands, from the ONE trip record (its dates) and the ONE total — Sasha 251 · the read-back carries
-    basket.trip_figures()' total (found live 12 Oct: she read the items back and gave no total). Read only."""
+    basket.trip_figures()' total (found live 12 Oct: she read the items back and gave no total). Read only.
+    Sasha 394 · a GROUP trip their words name → that movement's ONE card (the master list and its to-dos, Pacioli's)."""
     from booking_signer import basket as BK
+    mv = await _named_movement(ctx)
+    if mv:
+        from booking_signer import groups as G
+        c = await G.card(ctx.account, mv["id"])
+        return {"card": c, "group_trip": mv.get("destination"), "people": len(c["rows"]), "say": c["say"], "page": "/group"}
     p = await _plan(ctx)
     rows = await BK.items(ctx.account, p["trip_id"])
     fig = await BK.trip_figures(ctx.account, p["trip_id"], p)   # Sasha 251 · the same figures get_total, the Trip tab and the guard read

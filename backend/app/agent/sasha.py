@@ -304,7 +304,7 @@ def render(tool: str, res: dict, args: dict) -> Optional[dict]:
         return {"type": "render", "kind": "read_back", "read_back": [l for l in res["read_back"]],
                 # Sasha 265 · item 4: the call's card IS the ONE question — its words and its buttons (the tap is the approval)
                 **yes_buttons(tool, res)}   # Sasha 330 · from THE ONE PLACE
-    if tool == "group_list" and isinstance(res.get("card"), dict):   # Sasha 345 · the master list goes out WITH the list
+    if tool in ("group_list", "get_trip") and isinstance(res.get("card"), dict):   # Sasha 345 · the master list goes out WITH the list · 394: a named group trip
         return {"type": "render", "kind": "group_list", **res["card"]}
     if tool in ("group_select", "group_upload") and res.get("read_back") and res.get("proposal_id"):   # Sasha 359 · who goes: the list, for a yes
         return {"type": "render", "kind": "read_back", "read_back": list(res["read_back"]), "act": "group_pick", "head": "Who's going · one tap",

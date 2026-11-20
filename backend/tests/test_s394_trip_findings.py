@@ -124,6 +124,45 @@ class EverySurface(unittest.TestCase):
         self.assertNotIn("Sunday 15 November", text)
 
 
+class TheTripBeingTalkedAbout(unittest.TestCase):
+    """Found on 394's proof (20 Nov, TEST organiser): "Show me the Yerevan trip" → get_trip read only the plans: "I couldn't find a Yerevan
+    trip. The only trip on your account is a single booked flight". An account's trips are its plans AND its group movements; the trip is
+    the one THEIR words name (ctx.user_said) — a group trip → its ONE card (to-dos included)."""
+
+    def setUp(self):
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+    def get(self, said, movements):
+        from agapi import v0 as API
+        st = mock.Mock()
+        st.trips = mock.AsyncMock(return_value=movements)
+        cards = []
+
+        async def card(account, mid=None):
+            cards.append(mid)
+            return {"title": "Acme → Yerevan", "rows": [], "check": "Nothing to sort on this trip that I could check; 4 not checked yet.",
+                    "todos": [], "say": "The master list: 7 booked."}
+        with mock.patch.object(G, "store", lambda: st), mock.patch.object(G, "card", card), \
+                mock.patch.object(API, "_plan", mock.AsyncMock(side_effect=API.ToolError("no_trip", "plans only"))):
+            try:
+                return run(API.get_trip(API.Ctx(account="acct394", user_said=said, surface="s2"), {})), cards
+            except API.ToolError as e:
+                return e.code, cards
+
+    def test_their_words_name_the_group_trip(self):
+        got, cards = self.get("Show me the Yerevan trip", [{"id": YEREVAN, "destination": "Yerevan"}, {"id": DINNER, "destination": "Lisbon"}])
+        self.assertEqual((cards, got["group_trip"]), ([YEREVAN], "Yerevan"))
+        self.assertIn("not checked", got["card"]["check"])
+
+    def test_no_group_trip_named_is_the_plans_as_before(self):
+        got, cards = self.get("show me my trip", [{"id": YEREVAN, "destination": "Yerevan"}])
+        self.assertEqual((got, cards), ("no_trip", []))
+
+    def test_two_named_is_never_a_guess(self):
+        got, cards = self.get("Yerevan or Lisbon?", [{"id": YEREVAN, "destination": "Yerevan"}, {"id": DINNER, "destination": "Lisbon"}])
+        self.assertEqual(cards, [])
+
+
 class Ratchets(unittest.TestCase):
     def test_only_trip_findings_calls_the_checker(self):
         hits = [str(p.relative_to(BACKEND)) for d in ("agapi", "app", "booking_signer", "products") for p in (BACKEND / d).rglob("*.py")

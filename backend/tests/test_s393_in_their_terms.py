@@ -80,6 +80,10 @@ class NoInternalStateWord(unittest.TestCase):
             self.assertFalse(AG._INTERNAL.search(x), x)                                  # no longer dropped by the old filter
         for x in PERSON_SAID:
             self.assertIsNone(AG.state_word_alarm(x), x)
+        # Sasha 395 · measured on the 395 gate: a TRUE screen sentence (a card drawn this turn, a surface with a screen) is no alarm
+        self.assertIsNone(AG.state_word_alarm("The payment is on the card on your screen.", screen_drawn=True))
+        self.assertTrue(AG.state_word_alarm("The payment is on the card on your screen."))           # nothing drawn / WhatsApp: a label
+        self.assertTrue(AG.state_word_alarm("That's on the booking record.", screen_drawn=True))    # never a fact for the person
 
     def test_the_refusal_she_reads_is_in_their_terms(self):
         from agapi import venues as VN

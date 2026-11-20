@@ -588,13 +588,18 @@ _INTERNAL = re.compile(
 #: 393's roots (search_venues' refusal in the person's terms, the status tools only on their ask, the context's "shown to them") mean it
 #: should never fire — when it does, the turn logs it LOUDLY (a warning, and the turn's guard list) and her words go out as she said them.
 STATE_WORDS = re.compile(
-    r"(?i)\bon(?: the| their| your)? screen\b|\bscreen now\b|\b(?:booking|conversation) record\b|\bon (?:the|my) record\b|\bthis request\b|"
+    r"(?i)\b(?:booking|conversation) record\b|\bon (?:the|my) record\b|\bthis request\b|"
     r"\bmandate\b|\bpointer\b|\bpending items?\b|\bopen items?\b")
+#: "the screen" is a FACT when this turn drew a card on a surface that has one ("The payment is on the card on your screen" — measured on the
+#: 395 gate: 393's filter had been DROPPING that true sentence from S2 / voice payment turns), and a state label otherwise ("Callao is on
+#: screen", on WhatsApp, with nothing drawn)
+SCREEN_WORDS = re.compile(r"(?i)\bon(?: the| their| your)? screen\b|\bscreen now\b")
 
 
-def state_word_alarm(sentence: str) -> Optional[str]:
-    """Sasha 395 · → the state word her sentence carries (logged as an alarm by the turn), else None. Never edits the sentence."""
-    m = STATE_WORDS.search(sentence or "")
+def state_word_alarm(sentence: str, screen_drawn: bool = False) -> Optional[str]:
+    """Sasha 395 · → the state word her sentence carries (logged as an alarm by the turn), else None. Never edits the sentence.
+    screen_drawn: this turn drew a card on a surface with a screen — "on your screen" is then true, not a label."""
+    m = STATE_WORDS.search(sentence or "") or (None if screen_drawn else SCREEN_WORDS.search(sentence or ""))
     return m.group(0) if m else None
 
 
@@ -1073,7 +1078,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 break
             if _norm(x) and _norm(x) in said_norms:   # Sasha 215 · never a sentence twice in a turn ("It's quoted." after each flight)
                 continue
-            alarm = state_word_alarm(names_masked(x, tstate["allowed"]))
+            alarm = state_word_alarm(names_masked(x, tstate["allowed"]), screen_drawn=bool(tstate["drawn"]) and not wa)
             if alarm and not _V.is_told(x, told):   # Sasha 395 · 393's state words: an ALARM (logged, counted) — her words are NOT edited
                 log.warning("[alarm] a state word reached her words (%r): %s", alarm, x[:120])
                 state_alarms.append(x[:80])

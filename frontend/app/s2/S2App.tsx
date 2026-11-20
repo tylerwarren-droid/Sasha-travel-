@@ -65,7 +65,8 @@ type Card =
   | { k: 'capabilities'; groups: { group: string; items: string[] }[] }
   | { k: 'plans'; items: Plan[]; on?: string; updates?: CalUpdate[] }
   | { k: 'notice'; title: string; lines: string[]; status?: string }
-  | { k: 'group_list'; title: string; rows: { name: string; role?: string | null; grade?: string | null; status: string; price_eur?: number | null }[]; counts?: string; link: string; empty?: string | null; report?: string }   // Sasha 345 · the master list's card (364: role)
+  | { k: 'group_list'; title: string; rows: { name: string; role?: string | null; grade?: string | null; status: string; price_eur?: number | null }[]; counts?: string; link: string; empty?: string | null; report?: string
+      todos?: { say: string; for: string; form?: { link: string; prepared: boolean; you_only: string[] } }[]; check?: string }   // Sasha 394 · THIS trip's to-dos, Pacioli's   // Sasha 345 · the master list's card (364: role)
   | { k: 'counter_card'; card: Ev }   // CR 75 · fine print: the counter card (each line quoted)
   | { k: 'my_cards'; cards: { product: string; network: string; status: string }[] }
   | { k: 'accident'; view: Ev }
@@ -188,7 +189,8 @@ function cardsOf(ev: Ev): Card[] {
   if (k === 'kind_ask' && Array.isArray(ev.choices) && ev.choices.length) return [{ k: 'kind_ask', ask: String(ev.ask || ''), choices: ev.choices.map(String) }]   // Sasha 297
   if (k === 'plans' && Array.isArray(ev.items)) return [{ k: 'plans', items: ev.items, on: ev.on, updates: ev.calendar_updates }]   // Sasha 312
   if (k === 'group_list' && ev.title) return [{ k: 'group_list', title: String(ev.title), rows: Array.isArray(ev.rows) ? ev.rows : [], counts: ev.counts, link: String(ev.link || '/group'), empty: ev.empty ?? null,
-    ...(typeof ev.report === 'string' && ev.report.startsWith('https://') ? { report: ev.report } : {}) }]   // Sasha 345 · 385: + the trip's final report
+    ...(typeof ev.report === 'string' && ev.report.startsWith('https://') ? { report: ev.report } : {}),
+    ...(Array.isArray(ev.todos) ? { todos: ev.todos } : {}), ...(typeof ev.check === 'string' ? { check: ev.check } : {}) }]   // Sasha 345 · 385: + the trip's final report · 394: + its to-dos (Pacioli's)
   if (k === 'notice' && ev.title) return [{ k: 'notice', title: String(ev.title), lines: Array.isArray(ev.lines) ? ev.lines : [], status: ev.status }]
   if (k === 'pay_here') return [{ k: 'pay', client_secret: ev.client_secret, url: ev.url, total_eur: ev.total_eur, already_paid: ev.already_paid }]
   if (k === 'pay' && typeof ev.url === 'string' && ev.url.startsWith('https://')) return [{ k: 'paylink', url: ev.url, label: typeof ev.label === 'string' ? ev.label : undefined }]   // Sasha 349

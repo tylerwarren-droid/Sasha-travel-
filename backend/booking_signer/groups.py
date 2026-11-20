@@ -1554,8 +1554,14 @@ async def card(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
         empty = None
     title = f"{mv.get('company')} → {mv.get('destination')}" if mv else "Group movement"
     counts = ", ".join(f"{n} {s}" for s, n in (v.get("counts") or {}).items())
+    # Sasha 394 · 382 + 387(b) · THIS trip's to-dos, Pacioli's (trip.check by THIS movement; trip_findings.of_trip: only its own, only open)
+    from . import trip_findings as TF
+    todos = await TF.of_trip(account, mv.get("id"), {str(r["member_id"]): r["name"] for r in v.get("rows") or [] if r.get("member_id")}) \
+        if mv and planned else None
+    say = empty or f"The master list: {counts}. It's on the card, and the full list is on the Group page."
     return {"title": title, "rows": rows, "counts": counts, "link": "/group", "empty": empty, "actions": v.get("actions") or [],   # Sasha 352
-            "say": empty or f"The master list: {counts}. It's on the card, and the full list is on the Group page."}
+            **({"todos": todos["todos"], "check": todos["say"]} if todos else {}),
+            "say": say + (f" {todos['say']}" if todos and todos.get("say") else "")}
 
 
 __all__ = ["read_text", "read_csv", "read_xlsx", "read_photo", "members_from", "batch_question", "limit_for", "with_limits", "plan", "view",

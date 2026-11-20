@@ -104,6 +104,9 @@ def families(message: str, history: Optional[List[dict]] = None, trip: Optional[
             got.add("reserve")
     if organiser:
         got.add("group")
+        # Sasha 394 · 382 · a group trip's requirements come ONLY from Pacioli (trip.check, on the trip's card) — never a second path
+        # (entry_documents stays for a traveller outside a group until Pacioli holds individual trips: FOR CR)
+        got.discard("entry")
     if "reserve" in got:   # a place is booked once found: reserving brings finding (found by the gate: "a table for two at the Sasha
         got.add("find")    # Test Venue…" offered no search_venues, and she asked for travellers' details instead)
     return ({"core"} | got) if got else {"core", "find"}   # nothing named: a place, if it's a business (she tries first)

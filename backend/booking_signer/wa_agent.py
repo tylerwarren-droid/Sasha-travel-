@@ -214,6 +214,9 @@ def _card(ev: dict, out, title: str) -> None:
                                             for r in (ev.get("rows") or [])[:12]])
         if str(ev.get("report") or "").startswith("https://"):   # Sasha 385 · the trip's final report, traveller by traveller
             lines.append(f"Full report → {ev['report']}")
+        if ev.get("check") or ev.get("todos"):   # Sasha 394 · THIS trip's to-dos, Pacioli's — drawn by code (trip_findings.lines)
+            from . import trip_findings as TF
+            lines += TF.lines({"say": ev.get("check"), "todos": ev.get("todos") or []})
     elif k == "plans":
         for it in (ev.get("items") or [])[:8]:
             lines.append(" · ".join(x for x in (str(it.get("when") or "")[:16].replace("T", " "), it.get("title"), it.get("status")) if x))

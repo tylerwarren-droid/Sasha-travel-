@@ -381,6 +381,17 @@ export function GroupListCard({ c, send }: { c: Ev; send?: (t: string) => void }
           </div>))}
           {rows.length > 25 && <div style={{ fontSize: 13, color: C.dim }}>…and {rows.length - 25} more on the Group page.</div>}
         </div>)}
+      {typeof c.check === 'string' && c.check ? (   /* Sasha 394 · THIS trip's to-dos — Pacioli's (trip.check), only its own, only open; drawn by code */
+        <div data-trip-todos style={{ marginTop: 10, borderTop: `1px solid ${C.line}`, paddingTop: 8 }}>
+          <div style={{ fontSize: 13.5, color: C.dim }}>{String(c.check)}</div>
+          {(Array.isArray(c.todos) ? c.todos : []).map((d: Ev, i: number) => (
+            <div key={i} data-trip-todo={d.who} style={{ fontSize: 14, padding: '4px 0' }}>
+              <span style={{ color: C.dim }}>To do · {String(d.for)}: </span>{String(d.say)}
+              {d.form && typeof d.form.link === 'string' && /^https:\/\//.test(d.form.link) ? (
+                <div style={{ fontSize: 13 }}><a href={d.form.link} target="_blank" rel="noopener noreferrer" style={{ color: C.gold, fontWeight: 600 }}>Official form</a>
+                  {d.form.prepared && Array.isArray(d.form.you_only) && d.form.you_only.length ? <span style={{ color: C.dim }}> · prepared for them; they only {d.form.you_only.join(', ')}</span> : null}</div>) : null}
+            </div>))}
+        </div>) : null}
       {send ? <NextButtons actions={cur.actions as NextAction[]} send={send} /> : null}
       <a href={String(cur.link || '/group')} style={{ display: 'inline-block', marginTop: 10, color: C.gold, fontWeight: 600 }}>Open the master list</a>
       {typeof cur.report === 'string' && cur.report.startsWith('https://') ? (   /* Sasha 385 · the trip's final report, traveller by traveller */

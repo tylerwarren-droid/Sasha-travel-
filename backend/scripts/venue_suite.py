@@ -57,7 +57,7 @@ async def real_test_venue(a: str) -> None:
     h = await API.call(_ctx(a, first), "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form",
                                                      "idempotency_key": "venue-suite-h1"})
     ok("VENUE 2 (Austen): the party they didn't give is ASKED — only that — never 2, nothing prepared (Sasha 381)",
-       h.get("ok") and h["result"]["status"] == "need_term" and h["result"]["ask"] == "For how many people?",
+       h.get("ok") and h["result"]["status"] == "need_term" and h["result"]["ask"].endswith(": for how many people?"),   # Sasha 393 · "<what it's for>: for how many people?"
        str(h.get("error") or h.get("result"))[:200])
     b = await API.call(_ctx(a, "for 2", before=first), "hold_venue", {**v, "day": day, "time": "21:00", "party": 2, "route": "form",
                                                                       "idempotency_key": "venue-suite-h2"})
@@ -240,7 +240,7 @@ async def routes_offline(a: str) -> None:
         nt = await API.call(_ctx(a, "book Casa Gate for 2 this week at 21:00"), "hold_venue", {**v, "day": later, "time": "21:00",
                                                                                      "idempotency_key": "vo-n"})
         ok("VENUE ROUTE · a day they didn't give: AgAPI names it (term_not_given), she asks ONLY it — nothing prepared, nothing sent (381)",
-           nt.get("ok") and nt["result"]["status"] == "need_term" and nt["result"]["ask"] == "Which day?"
+           nt.get("ok") and nt["result"]["status"] == "need_term" and nt["result"]["ask"].endswith(": which day?")   # Sasha 393 · "<what it's for>: which day?"
            and not {OP.VENUE_PREPARE_BOOKING, OP.VENUE_SUBMIT_BOOKING} & set(VF.CALLS[n0:]), str(nt.get("error") or nt.get("result"))[:160])
     finally:
         GW.api, GW.tap_platform, VN._read, WB.trip_day_words, GW._tell, GW.STORE, VN.engine_channel = real

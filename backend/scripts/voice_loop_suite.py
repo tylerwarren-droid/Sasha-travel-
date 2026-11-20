@@ -1,4 +1,4 @@
-"""Sasha 210 · ONE FULL LOOP, SMOOTH — ten scripted voice conversations with the /next agent (the voice path itself:
+"""Sasha 210 · ONE FULL LOOP, SMOOTH — ten scripted voice conversations with the /next agent (Sasha 396: /next is S2 — surface s2) (the voice path itself:
 turn_with_quiver, its acknowledgements and its spoken phrases), plan → flights → "book it" → the payment link on the phone.
 Scratch guests, each with a fictional linked WhatsApp number (Ofcom's drama range) whose messages are CAPTURED, never sent;
 Duffel replayed in the gate; Stripe TEST; all cleaned up after. Part of the deploy gate (scripts/gate.py).
@@ -105,7 +105,7 @@ async def one(name: str, steps: list, travellers: str, ends_paid: bool, country:
             t = {"user": said, "spoken": [], "tools": [], "renders": [], "text": "", "guard": [], "first_sound": None,
                  "had_trip": bool(await _PS.latest(a))}
             t0 = time.perf_counter()
-            async for ev in AG.turn_with_quiver(a, said, history, session):
+            async for ev in AG.turn_with_quiver(a, said, history, session, surface="s2"):   # Sasha 396 · /next IS S2 now (one engine)
                 if ev["type"] in ("say", "filler"):
                     t["spoken"].append((ev["type"], ev["text"]))
                     t["first_sound"] = t["first_sound"] or int((time.perf_counter() - t0) * 1000)

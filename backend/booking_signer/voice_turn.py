@@ -91,15 +91,19 @@ def _agent_open(st: dict, now) -> bool:
 async def _agent(account: str, key: str, transcript: str, st: dict, now, tap: Optional[dict]):
     """The one brain's turn (surface "wa": S2's tools and the one-yes rule) on the voice page's own row, its messages as GW.Out
     items. tap: this request's own signed-in session — the person's yes is then AgAPI's in_app_tap."""
-    from agapi import venue_submit as VS
+    from agapi import s2_memory as MEM, venue_submit as VS
     from . import guest_whatsapp as GW, wa_agent as WA
     out = GW.Out()
+    # Sasha 392 · this door's messages are recorded in the ONE conversation record where they arrive and leave (as WhatsApp's are):
+    # the brain reads ONLY that record (s2_memory.recent_of), never a door's own history copy
+    await MEM.record(account, MEM.message("in", "voice", transcript))
     tok = VS.TAP.set(tap) if tap else None
     try:
         await WA.agent_turn({"account_id": account, "wa_id_sha256": key}, transcript, "", st, out, now)
     finally:
         if tok is not None:
             VS.TAP.reset(tok)
+    await MEM.record(account, MEM.message("out", "voice", out.said(), GW._tool_of(out), booking=bool(getattr(out, "booking", False))))
     WA.set_agent_state(st, voice_venue=now.isoformat())
     return out
 

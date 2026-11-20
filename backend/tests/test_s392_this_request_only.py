@@ -85,6 +85,37 @@ class HistoryIsAPointer(unittest.TestCase):
         self.assertIn("booking=bool(getattr(out", inspect.getsource(GW._send))
 
 
+class EveryDoorWritesTheOneRecord(unittest.TestCase):
+    """Found on the 392 gate (b3137d84): the voice / REST door kept its own history copy and never wrote the ONE record — once the brain
+    read only the record, its "yes" landed on nothing. Every door that calls the brain records what it hears and says."""
+
+    def test_the_voice_doors_second_turn_hears_its_first(self):
+        from datetime import datetime, timezone
+        from booking_signer import voice_turn as VTN
+        MEM._MEM.clear()
+        seen = []
+
+        async def quiver(account, message, history, session, surface="s1"):
+            seen.append([m["content"] for m in history])
+            yield {"type": "done", "text": "For how many people?" if len(seen) == 1 else "Booked."}
+
+        async def nothing(*a, **k):
+            return None
+        st = {}
+        with mock.patch("app.agent.sasha.turn_with_quiver", quiver), mock.patch("app.agent.sasha.over_budget", nothing), \
+                mock.patch("agapi.s2_memory.remember", nothing), mock.patch("agapi.s2_memory.closing", nothing):
+            for said in ("Book Casa Lucio on Saturday at 21:00", "4 people"):
+                asyncio.run(VTN._agent(ACCT, "v" * 64, said, st, datetime.now(timezone.utc), None))
+        self.assertEqual(seen[0], [])
+        self.assertEqual(seen[1], ["Book Casa Lucio on Saturday at 21:00", "For how many people?"])   # from the ONE record
+
+    def test_every_caller_of_the_brain_is_a_recording_door(self):
+        import pathlib
+        src = (pathlib.Path(__file__).resolve().parents[1] / "booking_signer/voice_turn.py").read_text()
+        self.assertIn('MEM.message("in", "voice", transcript)', src)
+        self.assertIn('MEM.message("out", "voice", out.said()', src)
+
+
 class EachPlacesPhotoOnWhatsApp(unittest.TestCase):
     def test_the_photos_then_the_list_one_ordered_answer(self):
         cards = [{"name": n, "place_id": f"p{i}", "photo": f"https://lh3.googleusercontent.com/p{i}"}

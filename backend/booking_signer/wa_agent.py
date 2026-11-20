@@ -401,9 +401,11 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         await place_detail(account, payload[5:], out)
     # Sasha 392 · the ONE conversation record's reader (s2_memory.recent_of: a booking line is a pointer to the record) — never WhatsApp's
     # own st["history"] copy
-    history = [m for m in MEM.recent_of(await MEM._load(account)) if m.get("role") in ("user", "assistant")]
-    if history and history[-1].get("role") == "user" and history[-1].get("content") == (body or ""):
-        history = history[:-1]   # this message is already in the record (recorded where it arrived): it's the turn's own message
+    def before_this(h: list) -> list:   # this message is already in the record (recorded where it arrived): the turn's own, not history
+        if h and h[-1].get("role") == "user" and h[-1].get("content") in ((body or ""), MEM.masked(body or "")):
+            return h[:-1]
+        return h
+    history = before_this([m for m in MEM.recent_of(await MEM._load(account)) if m.get("role") in ("user", "assistant")])
     a = agent_state(st)
     last = a.get("last_seen")
     away = (not history) or (last and _hours(now, last) > AWAY_HOURS)
@@ -418,7 +420,7 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
             # Sasha 246 · HOW SHE STARTS: a greeting back gets only "Hey <first name>, what can I help you with?"; a request is
             # simply answered. What she remembers comes back as history (used when THEY refer to it) — never recited, and the
             # old cards are not sent again.
-            history = [m for m in (rec.get("recent") or []) if m.get("role") in ("user", "assistant")][-12:] or history
+            history = before_this([m for m in (rec.get("recent") or []) if m.get("role") in ("user", "assistant")][-12:]) or history
             if GREETING.match(message or ""):
                 out.text(rec["line"])
                 _remember_history(st, body or message, rec["line"])

@@ -93,7 +93,10 @@ class ThroughTheRealTurn(Base):
                 "place_id": "ChIJcasagate254"}
         rungs = {"email": ALL4["email"]}
         with mock.patch.object(VN, "_read", reader(rungs, "Casa Gate")), mock.patch.object(VN, "engine_channel", engine_from(rungs, None)):
-            return run(VN.hold_venue(API.Ctx(account=ACCT, mode="test", user_said=words, said_before=before, session="s381h-" + words,
+            VN.request_closed(ACCT)   # Sasha 392 · the earlier turn is THIS request's words
+            if before:
+                VN.request_heard(ACCT, before)
+            return run(VN.hold_venue(API.Ctx(account=ACCT, mode="test", user_said=words, session="s381h-" + words,
                                              surface="s2", via="wa"), args))
 
     def scope(self):

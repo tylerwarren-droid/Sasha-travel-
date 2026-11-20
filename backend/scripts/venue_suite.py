@@ -25,8 +25,11 @@ from scripts.flight_suite import RESULTS, ok  # noqa: E402
 
 
 def _ctx(a: str, said: str = "", via: str = "page", before: str = "", session: str = "venue-suite-real"):
-    from agapi import v0 as API   # Sasha 381 · CR 196: a conversation's turn — its id is the instruction's proof in the app
-    return API.Ctx(account=a, mode="test", user_said=said, via=via, said_before=before, session=session)   # Sasha 326 · via "wa": asked on WhatsApp
+    from agapi import v0 as API, venues as VN   # Sasha 381 · CR 196: a conversation's turn — its id is the instruction's proof in the app
+    VN.request_closed(a)   # Sasha 392 · the earlier turn is THIS request's words
+    if before:
+        VN.request_heard(a, before)
+    return API.Ctx(account=a, mode="test", user_said=said, via=via, session=session)   # Sasha 326 · via "wa": asked on WhatsApp
 
 
 def _words(args: dict) -> str:

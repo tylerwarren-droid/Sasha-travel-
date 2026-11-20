@@ -87,8 +87,8 @@ class Base(unittest.TestCase):
         return [b["person"] for o, b, _a in self.agapi.calls if o == "venue.prepare_booking"][-1]
 
     def ctx(self, said, surface="s2"):   # Sasha 381 · the conversation's earlier words come with it (the instruction spans turns)
-        c = API.Ctx(account=ACCT, mode="test", user_said=said, session=self.session, surface=surface,
-                    said_before="\n".join(getattr(self, "_said", [])))
+        VN.request_heard(ACCT, said)   # Sasha 392 · each turn joins THIS request (the instruction spans turns)
+        c = API.Ctx(account=ACCT, mode="test", user_said=said, session=self.session, surface=surface)
         self._said = [*getattr(self, "_said", []), said]
         return c
 

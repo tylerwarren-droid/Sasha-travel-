@@ -63,8 +63,22 @@ def masked(text: str) -> str:
 # ONE payload — its text with its cards — so on return the page draws both again, from here (never a second copy in the tab).
 # `recent` (the model's last lines) is read from it; nothing else keeps the conversation.
 
-def message(direction: str, ch: str, text: str, tool: Optional[str] = None, cards: Optional[list] = None) -> dict:
+#: Sasha 392 · EU 287 S11 (Sasha 387 part 1, Tyler's go) · the tools whose answer reports a booking's STATE — a line of hers from such a
+#: turn is kept for the person's own scrollback, but handed to the model only as a POINTER to the ONE booking record, never its words
+BOOKING_TOOLS = frozenset({"hold_venue", "book_venue", "cancel_venue", "change_venue", "running_late", "hold_booking", "book",
+                           "change_booking", "cancel_booking", "get_status", "my_plans", "group_book", "group_confirm", "book_all"})
+POINTER = ("[You reported on a booking here. Its state NOW is on the booking record: call get_status — never repeat what this line said "
+           "about a day, a time, a party or whether it's booked.]")
+
+
+def booked_turn(calls) -> bool:
+    return any(isinstance(c, dict) and c.get("tool") in BOOKING_TOOLS for c in calls or [])
+
+
+def message(direction: str, ch: str, text: str, tool: Optional[str] = None, cards: Optional[list] = None, booking: bool = False) -> dict:
     m = {"at": NOW().isoformat(), "dir": "in" if direction == "in" else "out", "ch": str(ch or "s2")[:12], "text": masked(text)}
+    if booking and m["dir"] == "out":
+        m["booking"] = True   # Sasha 392 · this line reported a booking: the model hears a pointer to the record, never these words
     if tool:
         m["tool"] = str(tool)[:20]
     if cards:
@@ -87,7 +101,9 @@ def messages_of(m: Optional[dict]) -> List[dict]:
 
 def recent_of(m: Optional[dict], n: int = KEEP) -> List[dict]:
     """The model's last lines, from the record (role/content; `cards` marks the line that showed some)."""
-    out = [{"role": "user" if x["dir"] == "in" else "assistant", "content": x.get("text") or "", **({"cards": True} if x.get("cards") else {})}
+    out = [{"role": "user" if x["dir"] == "in" else "assistant",
+            "content": POINTER if (x.get("booking") and x["dir"] == "out") else (x.get("text") or ""),   # Sasha 392 · a pointer, never the words
+            **({"cards": True} if x.get("cards") else {})}
            for x in messages_of(m) if x.get("text") or x.get("cards")]
     return out[-n:]
 
@@ -145,7 +161,7 @@ def fold(mem: Optional[dict], said: str, reply: str, seen: dict) -> dict:
     m = {"summary": [], "thing": None, "pending": None, "screen": None, **(mem or {})}
     if seen.get("ch") != "wa":   # WhatsApp's messages are recorded where they arrive and leave (guest_whatsapp), once
         appended(m, message("in", seen.get("ch") or "s2", said), message("out", seen.get("ch") or "s2", reply, seen.get("tool") or "sasha",
-                                                                          seen.get("payload") or None))
+                                                                          seen.get("payload") or None, booking=booked_turn(seen.get("calls"))))
     else:
         appended(m)
     calls = seen.get("calls") or []
@@ -338,6 +354,11 @@ async def verified_history(account: str, session: Optional[str], history: List[d
     mine = [(x["role"], masked(str(x.get("content") or ""))) for x in client[len(client) - k:]]
     if k and mine == [(x["role"], str(x.get("content") or "")) for x in stored[len(stored) - k:]]:
         return history
+    if k and [r for r, _ in mine] == [x["role"] for x in stored[len(stored) - k:]] and \
+            all(sc == POINTER or c == sc for (_, c), sc in zip(mine, (str(x.get("content") or "") for x in stored[len(stored) - k:]))):
+        # Sasha 392 · the same conversation — but a line of hers that reported a booking is the record's pointer, never the page's copy
+        return [{"role": x["role"], "content": str(x.get("content") or "")} for x in client[:len(client) - k]] + \
+               [{"role": x["role"], "content": str(x.get("content") or "")} for x in stored[len(stored) - k:]]
     log.info("[memory] the client's history isn't the stored conversation — the stored turns are used")
     return [{"role": x["role"], "content": str(x.get("content") or "")} for x in stored]
 

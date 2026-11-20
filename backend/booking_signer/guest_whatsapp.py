@@ -484,7 +484,8 @@ class Out:
             already in the card is said once: as the card's);
           · else with her voice note → that ONE media message, her words as its caption;
           · else ONE text.
-        A document the turn produced stays an attachment of its own (WhatsApp can't put one on buttons). WhatsApp's size limits are fit()
+        An image or a document the turn produced (each place's own photo — Sasha 392, Tyler: no carousel in-session without a template)
+        goes FIRST, in order, then that one message: ONE ordered answer for the inbound, from this composer only. WhatsApp's size limits are fit()
         at sending (split, never cut). Another tool's answer (a product's PDF, its steps) is that tool's own: not composed here."""
         if not getattr(self, "one", False) or len(self.items) <= 1:
             return self
@@ -576,7 +577,7 @@ async def _send(ch: dict, frm: str, out: Out, last_inbound_at: Optional[datetime
             else:   # no buttons: the same question, answered by typing
                 opts = " · ".join(f"{t}" for t, _ in it[2])
                 results.append(await SENDER.send(frm, ch["number_e164"], body=f"{it[1]}\n(Reply: {opts})"))
-    await _record_out(ch, out.said(), _tool_of(out))
+    await _record_out(ch, out.said(), _tool_of(out), booking=bool(getattr(out, "booking", False)))
     return results
 
 
@@ -644,13 +645,13 @@ def _tool_of(out: "Out") -> str:
     return SPC.normalize(sp)
 
 
-async def _record_out(ch: dict, text: str, tool: str) -> None:
+async def _record_out(ch: dict, text: str, tool: str, booking: bool = False) -> None:
     """Sasha 349 · THE ONE CONVERSATION RECORD (s2_memory messages): what went out on WhatsApp, and which tool said it — a reply
-    answers THAT tool (_follow_last_tool)."""
+    answers THAT tool (_follow_last_tool). Sasha 392 · `booking`: the turn reported a booking (the model hears a pointer to the record)."""
     if not text.strip() or not ch.get("account_id"):
         return
     from agapi import s2_memory as MEM
-    await MEM.record(ch["account_id"], MEM.message("out", "wa", text, tool))
+    await MEM.record(ch["account_id"], MEM.message("out", "wa", text, tool, booking=booking))
 
 
 def _with_menu(out: Out) -> None:

@@ -126,6 +126,11 @@ def _venues(ev: dict, out) -> None:
         return
     lines = [f"{i}. {c.get('name')}" + (f" · ★{c['rating']}" if c.get("rating") else "") + (f" · {c.get('area')}" if c.get("area") else "")
              for i, c in enumerate(cards, 1)]
+    # Sasha 392 · Tyler: each place's OWN photo on WhatsApp — part of the ONE composed answer (Out.compose orders the images, then the list).
+    # A carousel (one message) needs an approved template even in-session (Twilio's content-type table), so the images go first, in order.
+    for i, c in enumerate(cards, 1):
+        if c.get("photo"):
+            out.media(f"{i}. {_cut(c.get('name'), 60)}", c["photo"])
     out.pick("\n".join(lines), "See the places",
              [(_cut(c.get("name"), TITLE), _cut(" · ".join(x for x in (f"★{c['rating']}" if c.get("rating") else "", c.get("area") or c.get("type") or "") if x), DESC),
                f"pick:{c.get('place_id')}") for c in cards if c.get("place_id")])
@@ -394,7 +399,11 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
     message = message_of(account, body, payload, button_text)
     if payload.startswith("pick:"):   # Sasha 248 · ONE PLACE CARD on WhatsApp: the tapped place's detail — as text + its link — first
         await place_detail(account, payload[5:], out)
-    history = [m for m in (st.get("history") or []) if m.get("role") in ("user", "assistant")]
+    # Sasha 392 · the ONE conversation record's reader (s2_memory.recent_of: a booking line is a pointer to the record) — never WhatsApp's
+    # own st["history"] copy
+    history = [m for m in MEM.recent_of(await MEM._load(account)) if m.get("role") in ("user", "assistant")]
+    if history and history[-1].get("role") == "user" and history[-1].get("content") == (body or ""):
+        history = history[:-1]   # this message is already in the record (recorded where it arrived): it's the turn's own message
     a = agent_state(st)
     last = a.get("last_seen")
     away = (not history) or (last and _hours(now, last) > AWAY_HOURS)
@@ -458,6 +467,7 @@ async def agent_turn(ch: dict, body: str, payload: str, st: dict, out, now, butt
         elif t == "done":
             text = str(ev.get("text") or text)
             seen["calls"] = ev.get("tools") or []
+    out.booking = MEM.booked_turn(seen.get("calls"))   # Sasha 392 · this answer reported a booking: recorded as a pointer for the model
     rb_ev = next((ev for ev in renders if ev.get("kind") == "read_back" and (ev.get("read_back") or (ev.get("ask") and ev.get("choices")))), None)
     shown = text
     acted = any(isinstance(c, dict) and c.get("tool") in ("hold_venue", "book_venue", "cancel_venue") and c.get("ok")

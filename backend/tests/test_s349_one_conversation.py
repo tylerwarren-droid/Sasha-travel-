@@ -101,7 +101,7 @@ class AReplyAnswersTheToolThatSpokeLast(unittest.TestCase):
         out.space = lambda: "diligence"
         self.assertEqual(GW._tool_of(out), "diligence")
         src = (ROOT / "backend/booking_signer/guest_whatsapp.py").read_text()
-        self.assertIn("    await _record_out(ch, out.said(), _tool_of(out))\n    return results", src)   # deliver: every send recorded
+        self.assertIn("    await _record_out(ch, out.said(), _tool_of(out), booking=bool(getattr(out, \"booking\", False)))\n    return results", src)   # deliver: every send recorded
         d = (ROOT / "backend/booking_signer/inbound_phone.py").read_text()   # Sasha 379b · where AgAPI's one call returns AD's answer
         self.assertIn('MEM.message("out", "wa", "[Applied Diligence answered on Kanoe\'s number]", "diligence")', d)   # AgAPI's reply
 

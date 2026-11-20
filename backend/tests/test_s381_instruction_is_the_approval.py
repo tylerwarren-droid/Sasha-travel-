@@ -38,7 +38,10 @@ class TheTermsAreTheirs(unittest.TestCase):
     """The door owns the person's words (what they SAID); AgAPI owns which terms are REQUIRED (term_not_given)."""
 
     def ctx(self, said, before=""):
-        return API.Ctx(account=ACCT, user_said=said, said_before=before, surface="s2")
+        VN.request_closed(ACCT)   # Sasha 392 · the earlier turn is THIS request's words
+        if before:
+            VN.request_heard(ACCT, before)
+        return API.Ctx(account=ACCT, user_said=said, surface="s2")
 
     def test_said_terms_reads_only_their_words(self):
         a = {"name": "Casa Gate", "day": "2026-11-20", "time": "21:00", "country": "ES", "party": 2}

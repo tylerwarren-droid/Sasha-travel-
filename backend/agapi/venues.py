@@ -882,13 +882,43 @@ def _ask_terms(a: dict, missing: List[str], words: str = "") -> dict:
 CHECK_IN = "15:00"   # Sasha 253 · G8 — a stay's time is the hotel's check-in (the old flow's), never a term the person gives
 
 
+#: Sasha 392 · THIS REQUEST's words — account → {id, words, at}: from the person's booking message until it becomes an act or a hand-over
+#: (or REQUEST_S quiet). A booking's terms are read only from these, never from the chat's history (EU 287 S5: "4" from Saturday's
+#: request was taken for Sunday's: the last 4,000 characters of EVERY line were read).
+_REQ: Dict[str, dict] = {}
+
+
+def request_heard(account: Optional[str], words: str) -> str:
+    """Every turn's words join the person's open request (a new one after an act or REQUEST_S quiet). → the request id."""
+    import uuid as _u
+    now = _clock.time()
+    r = _REQ.get(str(account or ""))
+    if not r or now - r["at"] > REQUEST_S:
+        r = {"id": "req_" + _u.uuid4().hex[:16], "words": [], "at": now}
+        _REQ[str(account or "")] = r
+    if str(words or "").strip():
+        r["words"].append(str(words)[:2000])
+    r["at"] = now
+    return r["id"]
+
+
+def request_closed(account: Optional[str]) -> None:
+    """The request became an act or a hand-over: the next booking message is a new request (its terms its own)."""
+    _REQ.pop(str(account or ""), None)
+
+
 def _words_of(ctx) -> str:
-    """Their own words in this conversation: what they said before + this turn."""
-    return "\n".join(x for x in (getattr(ctx, "said_before", "") or "", str(getattr(ctx, "user_said", "") or "")) if x)
+    """Sasha 392 · THIS REQUEST's words (+ this turn, when it isn't in them yet) — never the conversation's earlier requests."""
+    r = _REQ.get(str(getattr(ctx, "account", "") or "")) or {}
+    words = list(r.get("words") or [])
+    now = str(getattr(ctx, "user_said", "") or "")
+    if now and (not words or words[-1] != now[:2000]):
+        words.append(now)
+    return "\n".join(w for w in words if w)
 
 
 def said_terms(ctx, a: dict) -> Dict[str, Any]:
-    """Sasha 381 · the booking's terms THE PERSON SAID — their own words in this conversation (ctx.said_before + this turn), each read by
+    """Sasha 381 · the booking's terms THE PERSON SAID — Sasha 392: THIS request's words (_words_of), each read by
     agapi.said and matching the booking (a detail that can't be read plainly is not said). Reads only; WHICH terms are required is
     AgAPI's (term_not_given). A stay's time is its check-in, not theirs."""
     from agapi import said as SD
@@ -930,7 +960,7 @@ async def _terms_asked(ctx, a: dict) -> Optional[dict]:
     if not eu:
         return {"status": "not_sent", "venue": venue, "booked": False,
                 "say": "The booking system doesn't know you yet, so nothing was sent — ask me again in a minute."}
-    got = await AM.for_booking(ctx, eu, str(getattr(ctx, "user_said", "") or "") or str(venue or ""), said)
+    got = await AM.for_booking(ctx, eu, _words_of(ctx) or str(venue or ""), said)   # Sasha 392 · THIS request's words, every turn of it
     missing = [m for m in got.get("missing") or [] if m != "prepared_id"]   # the booking isn't prepared yet: that one is Sasha's to do
     if got.get("code") == "term_not_given" and missing:
         return _ask_terms(a, missing, _words_of(ctx))
@@ -1265,7 +1295,6 @@ async def alternative_answer(ctx, read_back_id: Optional[str], rank: Optional[st
     place = option_place(held, alt)
     # the tap's own words: exactly the option they tapped — THEIR instruction (CR 196), every term in it; its proof is this tap's door
     ctx.user_said = f"Book {place['name']} on {b['date']} at {b['time']} for {party}"
-    ctx.said_before = ""
     person = held.get("person")   # the SAME person the options were prepared for (kept on the hold) — never read again by a re-resolve
     if not person:
         return {"status": "not_sent", "venue": place["name"], "booked": False,
@@ -1418,6 +1447,7 @@ def floor(card: Optional[dict], rd: dict, dec: Optional[dict] = None) -> dict:
 async def floor_out(ctx, a: dict, rd: dict, res: Optional[dict], card: Optional[dict], dec: Optional[dict] = None,
                     at: Optional[str] = None) -> dict:
     """Sasha 286 · the floor, handed over: the button on their screen (the hand-over card) and the row 283's way back reads."""
+    request_closed(ctx.account)   # Sasha 392 · handed over: the request ends here
     f = floor(card, rd, dec)
     venue = _API().plain_venue(rd["venue"])
     party = ((res or {}).get("how_many") or {}).get("count") or a.get("party") or 0
@@ -1820,6 +1850,7 @@ async def _act(ctx, rung: str, p: dict, rd: dict, res: dict, extra: Optional[dic
     ctx.act_name = None   # claimed once before anything is sent (never the card's yes rule: there is no card)
     try:
         await claim(ctx)
+        request_closed(ctx.account)   # Sasha 392 · this request is an act now: the next booking message is a new request
     except ToolError as e:
         log.info("[venues] %s: the same instruction again (%s) — never a second send", venue, e.code)
         return await _tap_refused(ctx, held, "approval_consumed", {}, venue)
@@ -1846,7 +1877,7 @@ async def _instruction(ctx, held: dict) -> Optional[dict]:
         return {"status": "not_sent", "venue": _API().plain_venue(held["venue"]), "booked": False,
                 "say": "The booking system doesn't know you yet, so nothing was sent — ask me again in a minute."}
     held["end_user"] = eu
-    words = str(getattr(ctx, "user_said", "") or "").strip() or held.get("summary") or held["venue"]
+    words = _words_of(ctx).strip() or held.get("summary") or held["venue"]   # Sasha 392 · the instruction is THIS request's words
     got = await AM.for_booking(ctx, eu, words, {"prepared_id": held["prepared_id"], "party": held["party"],
                                                 "date": str(held["when"])[:10], "time": str(held["when"])[11:16]})
     if got.get("mandate_id"):

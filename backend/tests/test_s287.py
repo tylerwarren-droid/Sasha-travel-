@@ -134,7 +134,10 @@ class Memory:
 
 def ctx(said="", surface="s2", before=""):
     from agapi import v0 as API
-    c = API.Ctx(account=ACCT, surface=surface, user_said=said, mode="test", session="s287", said_before=before)
+    VN.request_closed(ACCT)   # Sasha 392 · the earlier turn is THIS request's words
+    if before:
+        VN.request_heard(ACCT, before)
+    c = API.Ctx(account=ACCT, surface=surface, user_said=said, mode="test", session="s287")
     c.started = datetime.now(timezone.utc)
     return c
 
@@ -375,7 +378,7 @@ class TheirWords(unittest.TestCase):
         for read in ("SD.day(", "SD.time_(", "SD.people(", "_words_of(ctx)"):
             self.assertIn(read, src)
         words_src = inspect.getsource(VN._words_of)
-        self.assertTrue("said_before" in words_src and "user_said" in words_src)
+        self.assertTrue("_REQ" in words_src and "user_said" in words_src and "said_before" not in words_src)   # Sasha 392 · THIS request
 
 
 class TheLane(unittest.TestCase):

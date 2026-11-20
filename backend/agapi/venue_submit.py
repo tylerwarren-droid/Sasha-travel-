@@ -553,7 +553,7 @@ FINAL = ("confirmed", "booked", "declined", "refused", "failed", "not_allowed", 
 #: no-answer is NOT final (the person may still say "try once more", or fill in their form) — venue.booking_status is read again
 #: the venue.booking_status fields get_status shows as they are (Sasha 269 · CR 100 §C: never re-derived here)
 STATUS_KEYS = ("state", "words", "say_now", "answered", "next_call", "next_step", "ask", "choices", "calls",
-               "booking", "follow_up", "rec")   # Sasha 325 · rec: the act's entry on AgAPI's record when last read   # Sasha 271 · CR 102: the act's own booking (a stay) and the call the rules attach (R5/R6)
+               "booking", "follow_up", "rec", "when", "party")   # Sasha 392 · when / party: the record's · Sasha 325 · rec: the act's entry on AgAPI's record when last read   # Sasha 271 · CR 102: the act's own booking (a stay) and the call the rules attach (R5/R6)
 
 
 def unkept(step: dict) -> dict:
@@ -633,6 +633,16 @@ async def bookings(account: str, read: bool = True) -> List[dict]:
                **({"next_step": unkept(st["next_step"])} if st.get("next_step") else {})}   # Sasha 269 · as AgAPI says them
         if any(new.get(k) != a.get(k) for k in new):
             a.update(new)
+            changed = True
+    # Sasha 392 · EU 287 S10 · a booking's time and party are AgAPI's ONE record's (venue.bookings: at, party), never the hold's copy kept
+    # when it was sent — a change made since is what every line says
+    for a in acts if isinstance(rec, list) else []:
+        g = next((x for x in rec if x.get("act_id") == a.get("act_id")), None)
+        if not g:
+            continue
+        mine = {k: v for k, v in (("when", str(g.get("at") or "")[:16] or None), ("party", g.get("party"))) if v}
+        if any(a.get(k) != v for k, v in mine.items()):
+            a.update(mine)
             changed = True
     if changed:
         # Sasha 259 · MERGED into the store as it is NOW, never the copy read before the awaits above: a booking or a cancellation

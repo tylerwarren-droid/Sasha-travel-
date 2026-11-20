@@ -105,6 +105,8 @@ class FakeApi:
 class Base(unittest.TestCase):
     def setUp(self):
         GW._SEEN_SIDS.clear(); GW._SEEN_STEPS.clear()   # Sasha 355 · a message's steps: their own record   # Sasha 206 · each test's MessageSids are its own
+        from agapi import s2_memory as _MEMS   # Sasha 392 · each test's conversation is its own (the ONE record is what her turn reads now)
+        _MEMS._MEM.clear()
         from products import space as _SPC   # Sasha 256 · each test starts with no space set (the one record's process copy)
         _SPC._SPACE.clear()
         self.addCleanup(_SPC._SPACE.clear)

@@ -162,10 +162,12 @@ class TheAgentTurn(unittest.TestCase):
         async def no_budget(account):
             return None
         ch = {"account_id": ACCOUNT, "wa_id_sha256": "k" * 64}
-        st = {"history": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hello!"}]}
+        st = {}
+        rec = {"messages": [{"at": "2026-11-20T10:00:00", "dir": "in", "ch": "wa", "text": "hi"},   # Sasha 392 · the ONE conversation record
+                            {"at": "2026-11-20T10:00:01", "dir": "out", "ch": "wa", "text": "Hello!"}]}
         out = GW.Out()
         with mock.patch("app.agent.sasha.turn_with_quiver", quiver), mock.patch("app.agent.sasha.over_budget", no_budget), \
-                mock.patch("agapi.s2_memory.remember", remember):
+                mock.patch("agapi.s2_memory.remember", remember), mock.patch("agapi.s2_memory._load", mock.AsyncMock(return_value=rec)):
             run(WA.agent_turn(ch, "a table for 2 tomorrow at 9", "", st, out, NOW))
         self.assertEqual(calls[0][1:3], ("wa:" + "k" * 64, "wa"))
         self.assertEqual(calls[0][3][-1]["content"], "Hello!")
@@ -300,6 +302,8 @@ class MemoryClosingVoice(unittest.TestCase):
     def setUp(self):
         import asyncio
         asyncio.set_event_loop(asyncio.new_event_loop())
+        from agapi import s2_memory as _MEMS   # Sasha 392 · each test's conversation is its own (her turn reads the ONE record)
+        _MEMS._MEM.clear()
 
     def run_turn(self, body, st, recall=None, voice_in=False, reply="Here you go."):
         calls, notes = [], []
@@ -318,6 +322,10 @@ class MemoryClosingVoice(unittest.TestCase):
             notes.append(text)
             return b"mp3"
         out = GW.Out()
+        from agapi import s2_memory as _MEMS   # Sasha 392 · the conversation so far lives in the ONE record (her turn reads it there)
+        if st.get("history") and not _MEMS._MEM.get(self.CH["account_id"]):
+            _MEMS._MEM[self.CH["account_id"]] = {"messages": [{"at": NOW.isoformat(), "dir": "in" if m["role"] == "user" else "out", "ch": "wa",
+                                                              "text": m["content"]} for m in st["history"]]}
         with mock.patch("app.agent.sasha.turn_with_quiver", quiver), mock.patch("app.agent.sasha.over_budget", nothing), \
                 mock.patch("agapi.s2_memory.remember", nothing), mock.patch("agapi.s2_memory.closing", nothing), \
                 mock.patch("agapi.s2_memory.recall", rec), mock.patch.object(WA, "TTS", tts):

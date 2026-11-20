@@ -605,8 +605,9 @@ async def _search_venues(ctx: Ctx, a: dict) -> dict:
     from agapi import venues as VN
     picked = VN.named_on_screen(ctx.account, a.get("what"))
     if picked:   # Sasha 217 · a place already on their cards is PICKED, never searched for again (it brought other places)
-        raise ToolError("already_on_screen", f"{picked.get('name')} is on their screen — that's their pick: call read_booking_route "
-                                             f"with place_id {picked.get('place_id')} (never search for it again)")
+        raise ToolError("already_on_screen", f"{picked.get('name')} is the place they picked (place_id {picked.get('place_id')}) — never "
+                                             "search for it again. To book it: hold_venue with this place_id (it asks for anything they "
+                                             "haven't said). To say how it books: read_booking_route.")
     from agapi import test_venues as TV
     tv = await TV.search(ctx, a)   # Sasha 256 · a TEST person who names Kanoe's test venue: its card, no Places call
     if tv is not None:

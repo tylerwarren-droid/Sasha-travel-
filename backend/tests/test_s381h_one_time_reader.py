@@ -29,6 +29,7 @@ from agapi import said as SD, v0 as API, venues as VN, venue_submit as VS
 from app.agent import voice as V
 from tests.test_s254_handle_it_live import use_fake_agapi
 from tests.test_s254_one_decider import ACCT, ALL4, Base, engine_from, reader
+from tests.asks import q  # noqa: E402  (Sasha 393 · the question part of a term ask)
 
 run = asyncio.run
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
@@ -120,8 +121,8 @@ class ThroughTheRealTurn(Base):
         day = (VN._today("ES") + timedelta(days=3)).isoformat()
         first = f"book Casa Gate on {day} at nine for 3"
         out = self.hold(first, day, "21:00")
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "9am or 9pm?"))
-        self.assertEqual(V.yes_line("hold_venue", {"ok": True, "result": out}), "9am or 9pm?")   # said by code, word for word
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "9am or 9pm?"))
+        self.assertEqual(q(V.yes_line("hold_venue", {"ok": True, "result": out})), "9am or 9pm?")   # said by code, word for word
         out = self.hold("9pm", day, "21:00", before=first)
         self.assertNotEqual(out.get("status"), "need_term", out)
         self.assertEqual(self.scope()["time"], "21:00")
@@ -129,7 +130,7 @@ class ThroughTheRealTurn(Base):
     def test_nine_thirty_never_books_21_00(self):
         day = (VN._today("ES") + timedelta(days=3)).isoformat()
         out = self.hold(f"book Casa Gate on {day} at nine thirty for 3", day, "21:00")   # the model's guess: never accepted
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "9:30am or 9:30pm?"))
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "9:30am or 9:30pm?"))
 
 
 class OneSentMemory(unittest.TestCase):

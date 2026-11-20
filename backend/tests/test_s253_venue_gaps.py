@@ -34,6 +34,7 @@ from booking_signer.vault import crypto as VC
 from scripts.venue_suite import FakeApi
 from tests import test_guest_whatsapp_s75 as TG
 from tests.test_s253_gaps import ScriptedBrain
+from tests.asks import q  # noqa: E402  (Sasha 393 · the question part of a term ask)
 
 ACCT = "00000000-0000-4000-8000-000000000254"
 run = asyncio.run
@@ -220,7 +221,7 @@ class G7NoSlot(Base):
         from tests.test_s254_handle_it_live import use_fake_agapi
         fake = use_fake_agapi(self)
         out = self.hold({"email": {}}, day=LATER)
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "What time?"))
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "What time?"))
         self.assertNotIn("venue.prepare_booking", fake.ops())
 
     def test_a_given_time_wins_over_open_slot(self):   # Sasha 319 · the slot goes to AgAPI's booking record (the one sender)
@@ -510,7 +511,7 @@ class OldS1Untouched(Base):
         from tests.test_s254_handle_it_live import use_fake_agapi
         use_fake_agapi(self)
         out = self.hold({"email": {}}, open_slot="quote", day=LATER)
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "What time?"))
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "What time?"))
 
     def test_nothing_of_sashas_own_reaches_the_venue(self):   # Sasha 319 · old S1 too: AgAPI's acts are the one sender
         LY.find_for.return_value = ITEM

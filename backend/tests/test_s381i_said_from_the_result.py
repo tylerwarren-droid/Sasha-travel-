@@ -27,6 +27,7 @@ from agapi import said as SD, v0 as API, venues as VN, venue_submit as VS
 from app.agent import sasha as S, voice as V
 from tests.test_s254_handle_it_live import use_fake_agapi
 from tests.test_s254_one_decider import ACCT, ALL4, Base, engine_from, reader
+from tests.asks import q  # noqa: E402  (Sasha 393 · the question part of a term ask)
 
 run = asyncio.run
 REAL_CLAIM = API.claim
@@ -60,7 +61,7 @@ class EveryRefusalSaysItsOwnLine(unittest.TestCase):
 
     def test_a_term_missing(self):
         out = VN._ask_terms({"name": "Casa Gate"}, ["date"], "book Casa Gate at 21:00 for 2")
-        self.assertEqual(said_line(out), "Which day?")
+        self.assertEqual(q(said_line(out)), "Which day?")
 
     def test_only_an_act_says_booking_now(self):
         acted = {"status": "requested", "acted": True, "line": "Booking now: Casa Gate, 2 people, Sat 14 Nov at 21:00. " + V.REQUESTED}
@@ -162,7 +163,7 @@ class TypedOrSpoken(Base):
     def test_spoken_11_37_is_asked(self):
         day = (VN._today("ES") + timedelta(days=3)).isoformat()
         out = self.hold(f"book Casa Gate on {day} at 11:37 for 2", day, "11:37", spoken=True)
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "11:37am or 11:37pm?"))
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "11:37am or 11:37pm?"))
 
     def test_the_rules(self):
         self.assertEqual(SD.times_in("at 11:37", spoken=False), ["11:37"])

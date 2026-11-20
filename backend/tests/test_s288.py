@@ -26,6 +26,7 @@ from unittest import mock
 from agapi import s2_status as SS, venue_submit as VS, venue_truth as VT, venues as VN
 from app.agent import voice as V
 from tests import test_s287 as T
+from tests.asks import q  # noqa: E402  (Sasha 393 · the question part of a term ask)
 
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 ACCT, PID, CARD, RES = T.ACCT, T.PID, T.CARD, T.RES
@@ -124,7 +125,7 @@ class AMissingTermIsAsked(Base):
 
     def test_asked_then_sent(self):
         out = self.hold("Book Casa Gate on Friday at 9pm")
-        self.assertEqual((out["status"], out["ask"], self.agapi.sends), ("need_term", "For how many people?", []))
+        self.assertEqual((out["status"], q(out["ask"]), self.agapi.sends), ("need_term", "For how many people?", []))
         out = self.hold("for 2", before="Book Casa Gate on Friday at 9pm")
         self.assertEqual((out["status"], out["line"], self.agapi.sends), ("requested", DONE, ["rbk_288"]))
         act = next(a for a in self.mem.kinds["venue_acts"] if a["act_id"] == "act_288")

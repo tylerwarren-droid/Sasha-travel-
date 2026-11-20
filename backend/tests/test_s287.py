@@ -29,6 +29,7 @@ from unittest import mock
 
 from agapi import agapi_route as AR, s2_memory as M, venue_submit as VS, venue_truth as VT, venues as VN
 from app.agent import sasha as S, voice as V
+from tests.asks import q  # noqa: E402  (Sasha 393 · the question part of a term ask)
 
 run = asyncio.run
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
@@ -237,7 +238,7 @@ class AMissingTermIsAsked(Base):
 
     def test_asked_then_sent_on_the_answer(self):
         out = self.hold("Book Casa Gate on Friday at 9pm")
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "For how many people?"))
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "For how many people?"))
         self.assertEqual((self.agapi.sends, self.agapi.ops), ([], ["users.register", "approvals.mandate"]))   # AgAPI named it; nothing
         # prepared, nothing sent, nothing recorded (its term_not_given)
         out = self.hold("2 of us", before="Book Casa Gate on Friday at 9pm")
@@ -245,7 +246,7 @@ class AMissingTermIsAsked(Base):
         self.assertTrue(out["line"].startswith("Booking now: Casa Gate, 2 people, Fri 30 Oct at 21:00."), out["line"])
 
     def test_no_time_is_asked_and_nothing_is_sent(self):
-        self.assertEqual(self.hold("Book Casa Gate for 2 on Friday")["ask"], "What time?")
+        self.assertEqual(q(self.hold("Book Casa Gate for 2 on Friday")["ask"]), "What time?")
         self.assertEqual(self.agapi.sends, [])
         self.assertEqual(_said(self.tap(rid="rbk_other")), V.NOTHING_WAITING)                   # no card waits for a tap
         self.assertNotIn("approvals.in_app_tap", self.agapi.ops)

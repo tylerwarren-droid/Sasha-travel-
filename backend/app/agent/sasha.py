@@ -568,7 +568,11 @@ _INTERNAL = re.compile(
     # Sasha 212 · her notes to herself between tools ("Retrying with preparation first.", "Trip exists now; retry the hold.")
     r"\bretr(?:y|ies|ying|ied)\b|\b[a-z]+_[a-z]+(?:_[a-z]+)*\b|\btrip exists\b|\btake back\b|\bcorrect what i said\b|"
     r"(?:\bnot|n['’]t)\s+(?:actually\s+|really\s+)?(?:a\s+)?real\b|\btests?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b|\bpretend\b|\bno real\b|"
-    r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b")
+    r"\bnothing (?:is|will be|gets|'s|has been) (?:actually |really )?(?:charged|taken|paid|reserved)\b|\bwon'?t (?:actually |really )?be charged\b|"
+    # Sasha 393 · the state names the code gives HER (the screen she's told about, the record, the request) — never said to the person
+    # ("Callao is on screen for Sunday lunch.", 20 Nov 07:57: search_venues' "… is on their screen — that's their pick")
+    r"\bon(?: the| their| your)? screen\b|\bscreen now\b|\b(?:booking|conversation) record\b|\bon (?:the|my) record\b|\bthis request\b|"
+    r"\bmandate\b|\bpointer\b|\bpending items?\b|\bopen items?\b")
 
 
 def opener_of(text: str) -> Optional[str]:

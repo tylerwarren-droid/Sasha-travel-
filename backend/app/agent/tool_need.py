@@ -17,7 +17,11 @@ import re
 from typing import Dict, Iterable, List, Optional, Set
 
 FAMILIES: Dict[str, Iterable[str]] = {
-    "core": ("what_i_can_do", "note_not_yet", "get_status", "my_plans", "remember_name", "save_contact"),
+    "core": ("what_i_can_do", "note_not_yet", "remember_name", "save_contact"),
+    # Sasha 393 · their bookings' state is said ONLY when THEY ask about it (their own words, this message) — never fetched to be appended to
+    # another answer ("Two things from your earlier requests aren't booked", found 20 Nov 07:57 on "Book lunch at Peñalver Callao on
+    # Sunday"). The ONE reminder of open items is the morning summary.
+    "status": ("get_status", "my_plans"),
     "activity": ("get_activity", "keep_note"),
     # a trip's tools by what the turn is doing (Sasha 352's states): planning · booking · after it's booked
     "plan": ("prepare_trip", "propose_trip", "search_flights", "search_stays", "swap_stay", "choose_offer", "check_offer", "get_trip",
@@ -62,6 +66,15 @@ WORDS = {
                 r"swap|travellers? list|grade|per diem|limit"),
     "founder": _W(r"outcomes?|the count|real bookings?"),
 }
+#: Sasha 393 · the person asking about their bookings / plans — read from THEIR message only (never her lines, never history)
+STATUS_ASK = re.compile(
+    r"(?i)\bis (?:it|that|this|the [\w' ]{1,30}|my [\w' ]{1,30}) (?:booked|confirmed|done|sorted|on)\b|"
+    r"\bdid (?:it|you|that|they|this) (?:book|go through|work|confirm|reply|answer|get back)|\bbooked\s*\?|"
+    r"\bmy (?:bookings?|plans?|reservations?|trips?|itinerary|tables?|schedule)\b|"
+    r"\bwhat(?:'s| is| have i| do i have| did i)\b.{0,24}\b(?:booked|coming up|planned|left|pending|reserved)\b|"
+    r"\bwhat(?:'s| is) (?:on|next|happening)\b|\bstatus\b|\bupcoming\b|\bany (?:news|word|reply|update)|\bheard (?:back|from)|"
+    r"\bstill (?:waiting|pending)|\bconfirm(?:ed|ation)\b|\bhave i (?:got|booked)|\bschedule\b|\bagenda\b|"
+    r"\b(?:anything|what) (?:else )?(?:booked|pending|open|outstanding)\b|\bwhere (?:are we|is it|are things) (?:at|with)\b")
 #: "Book it", "yes", "go ahead": a booking — WHICH one is the record's (a trip waiting to be booked · a place on their screen), never guessed
 GO_AHEAD = re.compile(r"(?i)\b(?:book(?:ing)?|yes|yeah|yep|go ahead|confirm|do it|here)\b")
 HISTORY_LINES = 2   # the last exchange decides with the message ("Yes", "two of us" answer her last line)
@@ -82,6 +95,8 @@ def families(message: str, history: Optional[List[dict]] = None, trip: Optional[
     own words ("the executives", "the interns"), any role, so the group tools are always offered to them (never a list of role words)."""
     text = " ".join([message or ""] + [_text(m.get("content")) for m in (history or [])[-HISTORY_LINES:] if isinstance(m, dict)])
     got = {f for f, w in WORDS.items() if w.search(text)}
+    if STATUS_ASK.search(message or ""):   # Sasha 393 · THEIR ask only — this message's words, never a line of hers in the history
+        got.add("status")
     if GO_AHEAD.search(text):
         if trip or (trip is None and not places):
             got.add("book")

@@ -874,8 +874,9 @@ def _ask_terms(a: dict, missing: List[str], words: str = "") -> dict:
     from app.agent import voice as V
     terms = [m for m in missing if m in V.TERM_ASK]
     unsure = list((SD.unsure_hours(words) or [None])[-1] or []) or None if "time" in terms else None
-    return {"status": "need_term", "terms": terms, "venue": a.get("name"), "booked": False, "ask": V.term_ask(terms, unsure),
-            **({"unsure": unsure} if unsure else {}),
+    about = V.term_about(a.get("name"), a.get("day"), a.get("what"), "date" not in terms)   # Sasha 393 · what it's for, in their terms
+    return {"status": "need_term", "terms": terms, "venue": a.get("name"), "booked": False, "ask": V.term_ask(terms, unsure, about),
+            **({"unsure": unsure} if unsure else {}), **({"about": about} if about else {}),
             "how": "Say `ask` word for word — nothing else. When they answer, call hold_venue again with it."}
 
 

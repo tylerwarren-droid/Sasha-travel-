@@ -29,6 +29,7 @@ from agapi import v0 as API, venue_submit as VS, venue_truth as VT, venues as VN
 from app.agent import voice as V
 from tests.test_s254_handle_it_live import MDT, PREP, use_fake_agapi
 from tests.test_s254_one_decider import ACCT, ALL4, Base, local, reader, engine_from
+from tests.asks import q  # noqa: E402  (Sasha 393 · the question part of a term ask)
 
 run = asyncio.run
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
@@ -75,11 +76,11 @@ class ActedOnTheInstruction(Base):
 
     def test_no_party_agapi_names_it_and_she_asks_only_it(self):
         out, day, hhmm = self.instruct("book Casa Gate {day} at {hhmm}", party=None)
-        self.assertEqual((out["status"], out["ask"], out["terms"]), ("need_term", "For how many people?", ["party"]))
+        self.assertEqual((out["status"], q(out["ask"]), out["terms"]), ("need_term", "For how many people?", ["party"]))
         self.assertNotIn("venue.prepare_booking", self.agapi.ops())                               # nothing prepared
         (m,) = [b for o, b, _a in self.agapi.calls if o == "approvals.mandate"]                  # AgAPI asked, with ONLY what they said
         self.assertEqual(m["scope"]["booking"], {"date": day, "time": hhmm})
-        self.assertEqual(V.yes_line("hold_venue", {"ok": True, "result": out}), "For how many people?")   # said by code, word for word
+        self.assertEqual(q(V.yes_line("hold_venue", {"ok": True, "result": out})), "For how many people?")   # said by code, word for word
 
     def test_the_whole_instruction_books_in_the_same_turn_in_one_line(self):
         out, day, hhmm = self.instruct("book Casa Gate {day} at {hhmm} for 2")
@@ -97,7 +98,7 @@ class ActedOnTheInstruction(Base):
 
     def test_a_guessed_party_never_reaches_scope_booking(self):
         out, day, hhmm = self.instruct("book Casa Gate {day} at {hhmm}", party=2)                # the model filled 2 in; they never said it
-        self.assertEqual(out["ask"], "For how many people?")
+        self.assertEqual(q(out["ask"]), "For how many people?")
         (m,) = [b for o, b, _a in self.agapi.calls if o == "approvals.mandate"]
         self.assertNotIn("party", m["scope"]["booking"])
 
@@ -112,7 +113,7 @@ class ActedOnTheInstruction(Base):
             return await real(op, body, approval, account)
         with mock.patch.object(VS, "CALL", missing):
             out, _d, _h = self.instruct("book Casa Gate {day} at {hhmm} for 2")
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "What time?"))                # exactly AgAPI's missing term
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "What time?"))                # exactly AgAPI's missing term
         self.assertNotIn("venue.submit_booking", self.agapi.ops())
 
     def test_outside_the_instruction_is_its_read_back_with_its_own_yes(self):

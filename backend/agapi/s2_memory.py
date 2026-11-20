@@ -67,8 +67,7 @@ def masked(text: str) -> str:
 #: turn is kept for the person's own scrollback, but handed to the model only as a POINTER to the ONE booking record, never its words
 BOOKING_TOOLS = frozenset({"hold_venue", "book_venue", "cancel_venue", "change_venue", "running_late", "hold_booking", "book",
                            "change_booking", "cancel_booking", "get_status", "my_plans", "group_book", "group_confirm", "book_all"})
-POINTER = ("[You reported on a booking here. Its state NOW is on the booking record: call get_status — never repeat what this line said "
-           "about a day, a time, a party or whether it's booked.]")
+POINTER = "[An earlier booking update was here. Its details are not in this line.]"   # Sasha 393 · names no tool, asks for nothing
 
 
 def booked_turn(calls) -> bool:

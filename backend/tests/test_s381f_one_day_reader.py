@@ -21,6 +21,7 @@ from unittest import mock
 from agapi import said as SD, v0 as API, venues as VN
 from tests.test_s254_handle_it_live import use_fake_agapi
 from tests.test_s254_one_decider import ACCT, ALL4, Base, engine_from, reader
+from tests.asks import q  # noqa: E402  (Sasha 393 · the question part of a term ask)
 
 run = asyncio.run
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
@@ -84,7 +85,7 @@ class ThroughTheRealTurn(Base):
 
     def test_no_day_is_asked_only_then(self):
         out = self.hold("book Casa Gate at 21:00 for 2", (VN._today("ES") + timedelta(days=3)).isoformat())
-        self.assertEqual((out["status"], out["ask"]), ("need_term", "Which day?"))
+        self.assertEqual((out["status"], q(out["ask"])), ("need_term", "Which day?"))
 
 
 class AFailedBuildsRecordingIsNeverReplayed(unittest.TestCase):

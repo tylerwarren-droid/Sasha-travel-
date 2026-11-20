@@ -102,9 +102,38 @@ def hour_ask(h: int, mi: int = 0) -> str:
     return f"{t}am or {t}pm?"
 
 
-def term_ask(terms: List[str], unsure: Optional[List[int]] = None) -> str:
-    """The ask for exactly these terms; the time, when they said a bare hour, is that hour's side (hour_ask)."""
-    return " ".join(hour_ask(*unsure) if t == "time" and unsure else TERM_ASK[t] for t in terms if t in TERM_ASK)
+#: Sasha 393 · the terms asked together, after what they're about: "Peñalver Callao, Sunday lunch: what time, and for how many?"
+TERM_PART = {"date": "which day", "time": "what time", "party": "for how many"}
+
+
+def term_ask(terms: List[str], unsure: Optional[List[int]] = None, about: Optional[str] = None) -> str:
+    """The ask for exactly these terms; the time, when they said a bare hour, is that hour's side (hour_ask). Sasha 393 · `about`: the
+    booking it's for, in their terms (the venue, the day, the meal) — then ONE question for every term."""
+    terms = [t for t in terms if t in TERM_ASK]
+    if not about:
+        return " ".join(hour_ask(*unsure) if t == "time" and unsure else TERM_ASK[t] for t in terms)
+    parts = [hour_ask(*unsure).rstrip("?") if t == "time" and unsure else
+             ("for how many people" if t == "party" and len(terms) == 1 else TERM_PART[t]) for t in terms]
+    q = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + ", and " + parts[-1]
+    return f"{about}: {q}?"
+
+
+def term_about(venue: Optional[str], day: Optional[str], what: Optional[str], day_said: bool) -> Optional[str]:
+    """Sasha 393 · what a term ask is about, in the person's terms: "Peñalver Callao, Sunday lunch" (the day only when they said it)."""
+    from datetime import date as _d
+    v = " ".join(str(venue or "").split()).strip()
+    if not v:
+        return None
+    when = ""
+    if day_said and day:
+        try:
+            d = _d.fromisoformat(str(day)[:10])
+            when = d.strftime("%A") if 0 <= (d - _d.today()).days < 7 else f"{d.strftime('%a')} {d.day} {d.strftime('%b')}"
+        except ValueError:
+            when = ""
+    meal = str(what or "").strip().lower() if str(what or "").strip().lower() in ("breakfast", "brunch", "lunch", "dinner", "drinks") else ""
+    tail = " ".join(x for x in (when, meal) if x)
+    return f"{v}, {tail}" if tail else v
 
 
 def booked_now(ref: Optional[str]) -> str:
@@ -168,7 +197,7 @@ def yes_line(tool: str, r: dict) -> str:
     if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("status") in PENDING and res.get("line"):
         return res["line"]
     if tool == "hold_venue" and isinstance(res, dict) and res.get("status") == "need_term" and res.get("terms") \
-            and res.get("ask") == term_ask(res["terms"], res.get("unsure")):
+            and res.get("ask") == term_ask(res["terms"], res.get("unsure"), res.get("about")):
         return res["ask"]   # Sasha 381 · exactly the terms AgAPI says they didn't give, asked word for word — never a yes card
     if tool in ("book_venue", "hold_venue") and isinstance(res, dict) and res.get("status") in REFUSED and (res.get("line") or res.get("say")):
         # Sasha 381i · a booking that did NOT act (already sent, outside the instruction, no proof, nothing sent) says ITS OWN line from

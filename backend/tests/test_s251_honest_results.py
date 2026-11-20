@@ -136,7 +136,7 @@ class TheLoop(unittest.TestCase):
         class R(dict):
             def get(self, name, d=None):
                 return next(calls) if name == "search_venues" else d
-        evs, text = turn([[SEARCH], [SEARCH], [Block(type="text", text="Casa Marea is on your screen — tap it if it tempts you.")]], R())
+        evs, text = turn([[SEARCH], [SEARCH], [Block(type="text", text="Casa Marea is up — tap it if it tempts you.")]], R())
         self.assertIn("tap it", text)
         self.assertFalse([e for e in evs if e["type"] == "replace"])
 

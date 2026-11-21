@@ -113,6 +113,54 @@ class TheConversationsScreen(unittest.TestCase):
         self.assertIn("screen_before", inspect.getsource(AG.turn))
 
 
+class ABookingsDayIsTheirWords(unittest.TestCase):
+    """Found on the 397 gate (Saturday 21 Nov): "Saturday at half past nine" said on a Saturday — the reader read today, the model passed
+    next Saturday, and she asked "which day?". The day has ONE source: their words through the one reader (venues.day_of_words)."""
+
+    def day_for(self, said, today, model_day):
+        from datetime import date as _d
+        from agapi import venues as VN
+        VN.request_closed("acct397")
+        VN.request_heard("acct397", said)
+        ctx = API.Ctx(account="acct397", user_said=said, surface="s2")
+        with mock.patch.object(VN, "_today", lambda country=None: today):
+            a = VN.day_of_words(ctx, {"name": "Casa Gate", "day": model_day, "time": "21:00", "party": 2, "country": "ES"})
+            terms = VN.said_terms(ctx, a)
+        return a["day"], terms
+
+    def test_every_weekday_said_on_every_weekday_is_the_readers_day(self):
+        from datetime import date as _d, timedelta as _td
+        names = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+        monday = _d(2026, 11, 16)
+        for t in range(7):
+            today = monday + _td(days=t)
+            for i, n in enumerate(names):
+                want = today + _td(days=(i - today.weekday()) % 7)
+                wrong = (want + _td(days=7)).isoformat()                                             # the model's other reading
+                day, terms = self.day_for(f"Book Casa Gate for 2 on {n} at 21:00", today, wrong)
+                self.assertEqual(day, want.isoformat(), (today.isoformat(), n))
+                self.assertEqual(terms.get("date"), want.isoformat(), (today.isoformat(), n))        # said — never "which day?"
+
+    def test_today_tonight_tomorrow(self):
+        from datetime import date as _d
+        sat = _d(2026, 11, 21)
+        for said, want in (("a table tonight at 21:00 for 2", "2026-11-21"), ("today at 21:00 for 2", "2026-11-21"),
+                           ("tomorrow at 21:00 for 2", "2026-11-22")):
+            self.assertEqual(self.day_for(said, sat, "2026-11-28")[0], want, said)
+
+    def test_no_single_day_named_keeps_the_rule_of_asking(self):
+        from datetime import date as _d
+        sat = _d(2026, 11, 21)
+        day, terms = self.day_for("next Friday at 21:00 for 2", sat, "2026-11-27")                   # 381f: asked, never guessed
+        self.assertEqual((day, terms.get("date")), ("2026-11-27", None))
+        day, terms = self.day_for("Friday or Saturday at 21:00 for 2", sat, "2026-11-27")            # two days: never a guess
+        self.assertEqual(day, "2026-11-27")
+
+    def test_hold_venue_reads_the_day_first(self):
+        from agapi import venues as VN
+        self.assertIn("a = day_of_words(ctx, a)", inspect.getsource(VN.hold_venue))
+
+
 class Ratchets(unittest.TestCase):
     def test_one_reader_no_merge_of_two_records(self):
         self.assertFalse(hasattr(API, "_named_movement"))

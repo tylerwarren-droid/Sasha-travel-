@@ -814,6 +814,7 @@ async def hold_venue(ctx, a: dict) -> dict:
     from agapi.v0 import stale
     from agapi import test_venues as TV
     a = await TV.vet(ctx, a)   # Sasha 256 · the test venue: held for a test person only — a live person's hold naming it is refused
+    a = day_of_words(ctx, a)   # Sasha 397 · the day is THEIR words' (the one reader), never the model's when they named one
     GW = _API()
     held = _HELD.get(ctx.account)
     if held and held.get("rung") == "platform_choice" and \
@@ -916,6 +917,20 @@ def _words_of(ctx) -> str:
     if now and (not words or words[-1] != now[:2000]):
         words.append(now)
     return "\n".join(w for w in words if w)
+
+
+def day_of_words(ctx, a: dict) -> dict:
+    """Sasha 397 · A BOOKING'S DAY HAS ONE SOURCE: the person's words, read by the one reader (agapi.said.days_in). When THIS request's
+    words name exactly one day, that day IS the booking's day — the model's `day` is never a second source, never compared, never asked
+    about. Found on the 397 gate (Saturday 21 Nov): "Saturday at half past nine at night", said on a Saturday — the reader read today, the
+    model passed next Saturday, said_terms found its date wasn't in their words and asked "which day?". No day named, or more than one
+    (and "next Friday", which 381f leaves to be asked): the model's argument stands, and said_terms decides as before."""
+    from agapi import said as SD
+    named = sorted(set(SD.days_in(_words_of(ctx), _today(a.get("country")))))
+    if len(named) == 1 and str(a.get("day") or "")[:10] != named[0].isoformat():
+        log.info("[venues] the day is their words' (%s), not the model's (%s)", named[0].isoformat(), a.get("day"))
+        return {**a, "day": named[0].isoformat()}
+    return a
 
 
 def said_terms(ctx, a: dict) -> Dict[str, Any]:

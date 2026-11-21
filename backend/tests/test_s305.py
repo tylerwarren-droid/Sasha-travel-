@@ -15,8 +15,8 @@ from booking_signer import basket as BK, flight_manage as FM
 from tests.test_flight_manage_226 import FakeDuffel, order
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-NEW_SEG = {"origin": {"iata_code": "MAD"}, "destination": {"iata_code": "LGW"}, "departing_at": "2026-11-27T07:15:00",
-           "arriving_at": "2026-11-27T08:50:00", "marketing_carrier": {"iata_code": "U2"}, "marketing_carrier_flight_number": "7650"}
+NEW_SEG = {"origin": {"iata_code": "MAD"}, "destination": {"iata_code": "LGW"}, "departing_at": "2037-11-27T07:15:00",
+           "arriving_at": "2037-11-27T08:50:00", "marketing_carrier": {"iata_code": "U2"}, "marketing_carrier_flight_number": "7650"}
 
 
 def run(c):
@@ -64,14 +64,14 @@ class Base(unittest.TestCase):
 class TheOrderIsTheTruth(Base):
     def test_one_reader_reads_the_order_and_forgets_on_our_own_change(self):
         v = run(FM.order_now("ord_1"))
-        self.assertEqual((v["reference"], v["flights"], v["departs"]), ("ABC123", "U2 7640", "2026-11-20T08:30:00"))
+        self.assertEqual((v["reference"], v["flights"], v["departs"]), ("ABC123", "U2 7640", "2037-11-20T08:30:00"))
         run(FM.order_now("ord_1"))
         self.assertEqual(self.duffel.paths().count("/air/orders/ord_1"), 1)   # a poll inside FRESH_S reuses the read
-        q = run(FM.change_quote("ord_1", "2026-11-27", "out"))
+        q = run(FM.change_quote("ord_1", "2037-11-27", "out"))
         c = run(FM.change_confirm(q["change_offer_id"]))
         self.assertEqual(c["status"], "changed")
         # the change RE-READS the order: the new flight and reference are Duffel's, never the offer's or the old read's
-        self.assertEqual((c["booking_reference"], c["order"]["flights"], c["order"]["departs"]), ("NEW456", "U2 7650", "2026-11-27T07:15:00"))
+        self.assertEqual((c["booking_reference"], c["order"]["flights"], c["order"]["departs"]), ("NEW456", "U2 7650", "2037-11-27T07:15:00"))
         self.assertEqual(run(FM.order_now("ord_1"))["reference"], "NEW456")
 
     def test_no_token_or_no_order_is_said_never_guessed(self):
@@ -82,16 +82,16 @@ class TheOrderIsTheTruth(Base):
 
 
 class NoSecondCopy(Base):
-    ROW = {"id": "it1", "kind": "flight", "state": "booked", "order_id": "ord_1", "day": "2026-11-20", "booking_reference": "ABC123",
-           "status_line": "✈️ easyJet U2 7640 MAD→LGW · 2026-11-20 · booked · ref ABC123",
-           "snapshot": {"owner": "easyJet", "flights": "U2 7640", "from": "MAD", "to": "LGW", "departs": "2026-11-20T08:30:00", "amount": "99.00"}}
+    ROW = {"id": "it1", "kind": "flight", "state": "booked", "order_id": "ord_1", "day": "2037-11-20", "booking_reference": "ABC123",
+           "status_line": "✈️ easyJet U2 7640 MAD→LGW · 2037-11-20 · booked · ref ABC123",
+           "snapshot": {"owner": "easyJet", "flights": "U2 7640", "from": "MAD", "to": "LGW", "departs": "2037-11-20T08:30:00", "amount": "99.00"}}
 
     def test_a_changed_flight_reads_as_the_order_stands(self):
         self.duffel.changed = True
         [r] = run(BK.live([dict(self.ROW)]))
         self.assertTrue(r["live"])
         self.assertEqual((r["snapshot"]["flights"], r["snapshot"]["departs"], r["day"], r["booking_reference"]),
-                         ("U2 7650", "2026-11-27T07:15:00", "2026-11-27", "NEW456"))
+                         ("U2 7650", "2037-11-27T07:15:00", "2037-11-27", "NEW456"))
         self.assertEqual(r["snapshot"]["amount"], "99.00")   # what was paid at booking stays the booking's own
         self.assertIn("U2 7650", BK.words(r))
         self.assertNotIn("7640", BK.words(r))                # the line kept at booking named the old flight: built again
@@ -127,7 +127,7 @@ class OneBookingOneRow(Base):
         from agapi import itinerary as IT
         from booking_signer import plan_store as PS, rental_moments as RM
         flight = {**NoSecondCopy.ROW, "trip_item_id": "ti-1", "trip_id": "t1"}
-        ladder = {"id": "ti-1", "source": "ladder", "venue": "Flight U2 7640 Madrid → London (TEST booking)", "date": "2026-11-20",
+        ladder = {"id": "ti-1", "source": "ladder", "venue": "Flight U2 7640 Madrid → London (TEST booking)", "date": "2037-11-20",
                   "time": "08:30", "status": "confirmed", "status_words": "booked", "route": "form", "route_words": "", "manage": "ladder",
                   "type": "flight"}
         with mock.patch.object(PS, "plans", mock.AsyncMock(return_value=[{"trip_id": "t1", "title": "Flight Madrid → London"}])), \
@@ -146,7 +146,7 @@ class TheBannerToo(Base):
         from booking_signer import paid_watch as PW, plan_store as PS
         self.duffel.cancelled = True
         flight = {**NoSecondCopy.ROW, "trip_item_id": "ti-1", "state": "booked"}
-        copy = {"trip_item_id": "ti-1", "venue": "Flight U2 7640 Madrid → London (TEST booking)", "date": "2026-11-20", "time": "08:30",
+        copy = {"trip_item_id": "ti-1", "venue": "Flight U2 7640 Madrid → London (TEST booking)", "date": "2037-11-20", "time": "08:30",
                 "status": "confirmed", "reference": "ABC123"}
         with mock.patch.object(PS, "by_id", mock.AsyncMock(return_value={"trip_id": "t1"})), \
                 mock.patch.object(VN, "venue_bookings", mock.AsyncMock(return_value=[copy])), \
@@ -161,7 +161,7 @@ class TheBannerToo(Base):
 class WhatSheSaysAfter(Base):
     def test_change_words_are_the_order_now_and_the_charge(self):
         from agapi import s2_manage as M
-        q = run(FM.change_quote("ord_1", "2026-11-27", "out"))
+        q = run(FM.change_quote("ord_1", "2037-11-27", "out"))
         said = M.changed_words(run(FM.change_confirm(q["change_offer_id"])))
         for part in ("U2 7650", "07:15", "NEW456", "€60.50 was charged to the Duffel test balance", M.NO_REAL_MONEY):
             self.assertIn(part, said)
@@ -218,15 +218,15 @@ class FoundOnTheSecondWalk(unittest.TestCase):
         from agapi import s2_manage as M
         src = (ROOT / "agapi" / "s2_manage.py").read_text()
         self.assertIn("k = (v[\"time\"], v[\"flights\"], v[\"cost\"])", src)
-        opt = lambda oid, t, fn: {"change_offer_id": oid, "departs": f"2026-11-22T{t}:00", "new_flights": fn, "change_total_amount": "125.00",
+        opt = lambda oid, t, fn: {"change_offer_id": oid, "departs": f"2037-11-22T{t}:00", "new_flights": fn, "change_total_amount": "125.00",
                                   "change_total_currency": "EUR", "lines": ["I'll move it.", "€125.00.", FM.TEST_LINE]}
         options = [opt("a", "06:00", "ZZ 8828"), opt("b", "06:00", "ZZ 8828"), opt("c", "12:00", "ZZ 5354"), opt("d", "12:00", "ZZ 5354")]
-        off = {"order_id": "ord_back", "new_date": "2026-11-22", "leg": None, "options": options, "default": "a",
+        off = {"order_id": "ord_back", "new_date": "2037-11-22", "leg": None, "options": options, "default": "a",
                "at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc)}
         M._CHANGE["acct-305"] = off
         try:
             with mock.patch.object(M, "plans_of", mock.AsyncMock(return_value=[dict(RIO[1])])):
-                r = run(M.change_booking(Ctx(), {"what": "flight", "name": "Rio", "new_date": "2026-11-22"}))
+                r = run(M.change_booking(Ctx(), {"what": "flight", "name": "Rio", "new_date": "2037-11-22"}))
         finally:
             M._CHANGE.pop("acct-305", None)
             M._HELD.pop("acct-305", None)
@@ -244,13 +244,13 @@ class Ctx:
         self.started = datetime.now(timezone.utc)
 
 
-RIO = [{"kind": "flight", "title": "LATAM LA 8065", "when": "2026-11-15T10:00:00", "where": "MAD → GIG", "status": "booked",
+RIO = [{"kind": "flight", "title": "LATAM LA 8065", "when": "2037-11-15T10:00:00", "where": "MAD → GIG", "status": "booked",
         "id": "f-out", "order_id": "ord_out", "trip": "7 Days in Rio", "trip_id": "t1", "source": "flight", "legs": 1},
-       {"kind": "flight", "title": "LATAM LA 8064", "when": "2026-11-21T18:00:00", "where": "GIG → MAD", "status": "booked",
+       {"kind": "flight", "title": "LATAM LA 8064", "when": "2037-11-21T18:00:00", "where": "GIG → MAD", "status": "booked",
         "id": "f-back", "order_id": "ord_back", "trip": "7 Days in Rio", "trip_id": "t1", "source": "flight", "legs": 1},
-       {"kind": "hotel", "title": "Marriott Test Hotel (sandbox)", "when": "2026-11-15T15:00", "status": "confirmed",
+       {"kind": "hotel", "title": "Marriott Test Hotel (sandbox)", "when": "2037-11-15T15:00", "status": "confirmed",
         "id": "act_01STAY", "source": "venue", "trip": "7 Days in Rio"},
-       {"kind": "dinner", "title": "Taverna Correo", "when": "2026-11-16T21:00", "status": "confirmed", "id": "act_01DIN", "source": "venue"}]
+       {"kind": "dinner", "title": "Taverna Correo", "when": "2037-11-16T21:00", "status": "confirmed", "id": "act_01DIN", "source": "venue"}]
 
 
 class OneResolver(unittest.TestCase):
@@ -283,7 +283,7 @@ class OneResolver(unittest.TestCase):
             with self.assertRaises(Exception) as e:
                 run(self.M.booking_meant(Ctx(), {"name": "Marriott"}, "hotel"))
             self.assertEqual(getattr(e.exception, "code", None), "which_booking")
-            self.assertIn("2026-11-15", str(e.exception))
+            self.assertIn("2037-11-15", str(e.exception))
             self.assertEqual(run(self.M.booking_meant(Ctx(), {"id": "act_01STAY"}, "hotel"))["id"], "act_01STAY")
 
     def test_hotel_nights_go_by_its_route(self):   # Sasha 306 MOVED: was "wait for AgAPI" — CR 137 takes a stay's nights
@@ -301,8 +301,8 @@ class OneResolver(unittest.TestCase):
     def test_a_one_flight_order_never_asks_duffel_for_a_leg(self):
         with mock.patch.object(FM, "change_quote", mock.AsyncMock(return_value={"why": "stop here"})) as cq:
             with self.assertRaises(Exception):
-                run(self.M.change_booking(Ctx(), {"what": "flight", "name": "Rio", "leg": "back", "new_date": "2026-11-22"}))
-        self.assertEqual(cq.call_args.args, ("ord_back", "2026-11-22", None))
+                run(self.M.change_booking(Ctx(), {"what": "flight", "name": "Rio", "leg": "back", "new_date": "2037-11-22"}))
+        self.assertEqual(cq.call_args.args, ("ord_back", "2037-11-22", None))
 
 
 if __name__ == "__main__":

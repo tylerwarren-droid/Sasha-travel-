@@ -145,8 +145,8 @@ class ChangeOptionsAreOneSource(unittest.TestCase):
         o, TF = self.TF.order(), self.TF
         def at(oid, total, hhmm, fn):
             x = TF.change_offer(oid, total, fn=fn)
-            x["slices"]["add"][0]["segments"][0] = {**x["slices"]["add"][0]["segments"][0], "departing_at": f"2026-11-27T{hhmm}:00",
-                                                    "arriving_at": f"2026-11-27T{hhmm}:00"}
+            x["slices"]["add"][0]["segments"][0] = {**x["slices"]["add"][0]["segments"][0], "departing_at": f"2037-11-27T{hhmm}:00",
+                                                    "arriving_at": f"2037-11-27T{hhmm}:00"}
             return x
         return o, [at("oco_0715", "60.50", "07:15", "7650"), at("oco_1748", "90.00", "17:48", "7654"), at("oco_2010", "120.00", "20:10", "7652")]
 
@@ -174,7 +174,7 @@ class ChangeOptionsAreOneSource(unittest.TestCase):
     def test_the_quote_carries_every_option_with_its_own_id_and_words(self):
         _o, offers = self.offers()
         self.fake([offers])
-        q = run(self.FM.change_quote("ord_1", "2026-11-27", "out"))
+        q = run(self.FM.change_quote("ord_1", "2037-11-27", "out"))
         self.assertEqual(q["change_offer_id"], "oco_0715")   # the cheapest is still the one read back (Sasha 226)
         self.assertEqual([(x["change_offer_id"], x["departs"][11:16]) for x in q["options"]],
                          [("oco_0715", "07:15"), ("oco_1748", "17:48"), ("oco_2010", "20:10")])
@@ -192,7 +192,7 @@ class ChangeOptionsAreOneSource(unittest.TestCase):
         for p in pats:
             p.start()
             self.addCleanup(p.stop)
-        first = run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2026-11-27", "approval": {"said": "move my flight to the 27th"}}))
+        first = run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2037-11-27", "approval": {"said": "move my flight to the 27th"}}))
         self.assertEqual(first["status"], "awaiting_yes")
         self.assertIn("17:48", " ".join(first["read_back"]))   # what she says lists the 17:48 …
         self.assertIn("17:48", [x["time"] for x in first["options"]])
@@ -218,7 +218,7 @@ class ChangeOptionsAreOneSource(unittest.TestCase):
         for p in T.plans_patches() + [mock.patch.object(API, "claim", mock.AsyncMock()), mock.patch.object(self.FM, "change_confirm", confirm)]:
             p.start()
             self.addCleanup(p.stop)
-        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2026-11-27"}))   # the 07:15 read back
+        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2037-11-27"}))   # the 07:15 read back
         later = datetime.now(timezone.utc) + timedelta(seconds=5)
         r = run(M.change_booking(T.ctx(started=later), {"what": "flight", "approval": {"said": "Yes, the 17:48 please"}}))
         self.assertEqual(r["status"], "awaiting_yes")
@@ -235,7 +235,7 @@ class ChangeOptionsAreOneSource(unittest.TestCase):
         for p in T.plans_patches():
             p.start()
             self.addCleanup(p.stop)
-        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2026-11-27"}))
+        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2037-11-27"}))
         r = run(M.change_booking(T.ctx(), {"what": "flight", "new_time": "12:00"}))
         self.assertEqual(r["status"], "not_offered")
         self.assertEqual([x["time"] for x in r["options"]], ["07:15", "17:48", "20:10"])
@@ -251,8 +251,8 @@ class ChangeOptionsAreOneSource(unittest.TestCase):
         for p in T.plans_patches():
             p.start()
             self.addCleanup(p.stop)
-        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2026-11-27"}))
-        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2026-11-28"}))
+        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2037-11-27"}))
+        run(M.change_booking(T.ctx(), {"what": "flight", "new_date": "2037-11-28"}))
         self.assertEqual(seen["n"], 2)
 
 

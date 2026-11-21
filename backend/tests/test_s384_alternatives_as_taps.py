@@ -30,14 +30,14 @@ from tests.test_s329 import AgAPI, Base, CARD, Ctx, DEC, RD, RES, STANDIN, VENUE
 SAY = (f"{VENUE} has no table at 22:00 on Fri 20 Nov. I can book that evening at 22:30 or 21:45; 22:00 on Sat 21 Nov; or Casa Vecina "
        "nearby at 22:00 — tap one and I'll book it.")
 ALTS = [
-    {"rank": 1, "kind": "same_venue_time", "venue": VENUE, "date": "2026-11-20", "time": "22:30", "reason": "30 min after",
-     "book": {"place_id": "ChIJ329", "date": "2026-11-20", "time": "22:30", "party": 2}},
-    {"rank": 2, "kind": "same_venue_time", "venue": VENUE, "date": "2026-11-20", "time": "21:45", "reason": "15 min before",
-     "book": {"place_id": "ChIJ329", "date": "2026-11-20", "time": "21:45", "party": 2}},
-    {"rank": 3, "kind": "same_time_other_day", "venue": VENUE, "date": "2026-11-21", "time": "22:00", "reason": "1 day later",
-     "book": {"place_id": "ChIJ329", "date": "2026-11-21", "time": "22:00", "party": 2}},
-    {"rank": 4, "kind": "nearby_venue", "venue": "Casa Vecina", "date": "2026-11-20", "time": "22:00", "reason": "300 m away",
-     "book": {"place_id": "ChIJvecina", "url": "https://casavecina.example", "date": "2026-11-20", "time": "22:00", "party": 2}},
+    {"rank": 1, "kind": "same_venue_time", "venue": VENUE, "date": "2037-11-20", "time": "22:30", "reason": "30 min after",
+     "book": {"place_id": "ChIJ329", "date": "2037-11-20", "time": "22:30", "party": 2}},
+    {"rank": 2, "kind": "same_venue_time", "venue": VENUE, "date": "2037-11-20", "time": "21:45", "reason": "15 min before",
+     "book": {"place_id": "ChIJ329", "date": "2037-11-20", "time": "21:45", "party": 2}},
+    {"rank": 3, "kind": "same_time_other_day", "venue": VENUE, "date": "2037-11-21", "time": "22:00", "reason": "1 day later",
+     "book": {"place_id": "ChIJ329", "date": "2037-11-21", "time": "22:00", "party": 2}},
+    {"rank": 4, "kind": "nearby_venue", "venue": "Casa Vecina", "date": "2037-11-20", "time": "22:00", "reason": "300 m away",
+     "book": {"place_id": "ChIJvecina", "url": "https://casavecina.example", "date": "2037-11-20", "time": "22:00", "party": 2}},
 ]
 
 
@@ -58,7 +58,7 @@ class NoTableAgAPI(AgAPI):
 
     def _submit(self, body):
         pid = body["prepared_id"]
-        if self.when.get(pid) == ("2026-11-20", "22:00") and self.alts is not None:
+        if self.when.get(pid) == ("2037-11-20", "22:00") and self.alts is not None:
             self.n += 1
             aid = f"act_{self.n:03d}"
             self.acts[aid] = {"state": "failed"}
@@ -69,7 +69,7 @@ class NoTableAgAPI(AgAPI):
                 out["alternatives"] = [json.loads(json.dumps(x)) for x in self.alts]
             return out
         self.prepared[pid]["zona"] = "Salón Interior"   # no question for these: straight through
-        d, t = self.when.get(pid) or ("2026-11-20", "22:00")
+        d, t = self.when.get(pid) or ("2037-11-20", "22:00")
         self.n += 1
         aid = f"act_{self.n:03d}"
         self.acts[aid] = {"state": "confirmed"}
@@ -126,9 +126,9 @@ class TheOptionsAreTaps(Base384):
         self.assertTrue(done["line"].startswith("Booking now:"), done["line"])
         prep = self.ag.bodies("venue.prepare_booking")[-1]                                      # CR 203's SEAM: the option's own terms
         self.assertEqual((prep["date"], prep["time"], prep["party"], prep["place"]["place_id"], prep["person"]["name"]),
-                         ("2026-11-20", "21:45", 2, "ChIJ329", "Tyler Warren"))                     # … for the SAME person
+                         ("2037-11-20", "21:45", 2, "ChIJ329", "Tyler Warren"))                     # … for the SAME person
         self.assertEqual(self.holds, [])                                                         # no second search: straight to the act
-        self.assertIn(f"Book {VENUE} on 2026-11-20 at 21:45 for 2", json.dumps(self.ag.mandates[-1], ensure_ascii=False))   # the tap's words
+        self.assertIn(f"Book {VENUE} on 2037-11-20 at 21:45 for 2", json.dumps(self.ag.mandates[-1], ensure_ascii=False))   # the tap's words
         self.assertEqual(self.ag.mandates[-1]["scope"]["booking"]["time"], "21:45")               # CR 196: the tap IS the approval
         self.assertNotIn(ALTS[0]["book"]["time"], json.dumps(self.ag.mandates[-1]))
         self.assertEqual(VN._HELD.get("00000000-0000-4000-8000-000000000329"), None)              # no second card held
@@ -153,10 +153,10 @@ class TheOptionsAreTaps(Base384):
 
 SAY_1848 = f"No tables at dinner on Fri 20 Nov at {VENUE}. Would you like a restaurant nearby at 22:00, or lunch there instead?"
 ALTS_1848 = [
-    {"rank": 1, "kind": "other_service_time", "venue": VENUE, "date": "2026-11-20", "time": "13:30", "reason": "lunch at 13:30 — no dinner",
-     "book": {"place_id": "ChIJ329", "date": "2026-11-20", "time": "13:30", "party": 2}},
-    {"rank": 2, "kind": "nearby_venue", "venue": "Casa Vecina", "date": "2026-11-20", "time": "22:00", "reason": "300 m away",
-     "book": {"place_id": "ChIJvecina", "date": "2026-11-20", "time": "22:00", "party": 2}},
+    {"rank": 1, "kind": "other_service_time", "venue": VENUE, "date": "2037-11-20", "time": "13:30", "reason": "lunch at 13:30 — no dinner",
+     "book": {"place_id": "ChIJ329", "date": "2037-11-20", "time": "13:30", "party": 2}},
+    {"rank": 2, "kind": "nearby_venue", "venue": "Casa Vecina", "date": "2037-11-20", "time": "22:00", "reason": "300 m away",
+     "book": {"place_id": "ChIJvecina", "date": "2037-11-20", "time": "22:00", "party": 2}},
 ]
 
 

@@ -33,7 +33,7 @@ CANCEL = "https://agapi-sandbox.example/fixtures/platform/covermanager/cancel?re
 VENUE = "Taberna Sandbox"
 RD = {"venue": VENUE, "rungs": {}, "place_id": "ChIJ329", "read_id": "r329", "country": "ES"}
 RES = {"who": {"name": "Tyler Warren", "contact": {"mobile_e164": "+15005550123"}}, "how_many": {"count": 2},
-       "when": {"at": "2026-11-20T22:00"}, "what": {"category": "restaurant"}}
+       "when": {"at": "2037-11-20T22:00"}, "what": {"category": "restaurant"}}
 CARD = {"name": VENUE, "website": "https://taberna.example", "place_id": "ChIJ329", "phone": "+34910000329"}
 DEC = {"route": "platform", "channel": "CoverManager booking", "how_far": "hand_over", "say_text": "They book on CoverManager.",
        "button": {"label": "Book on CoverManager", "link": STANDIN, "sends": False}}
@@ -81,7 +81,7 @@ class AgAPI:
 
     def _lines(self, pid):
         picked = "; ".join(f"{k}: {v}" for k, v in self.prepared[pid].items())
-        return ["Sasha fills in your booking on CoverManager for Taberna Sandbox (stand-in) and presses Book: date: 2026-11-20; "
+        return ["Sasha fills in your booking on CoverManager for Taberna Sandbox (stand-in) and presses Book: date: 2037-11-20; "
                 "time: 22:00; party: 2" + (f"; {picked}" if picked else "") + ".",
                 "If their page asks for a card, a deposit or a sign-in, or shows a security check, it stops and hands the booking back to you."]
 
@@ -97,14 +97,14 @@ class AgAPI:
                     "hand_over": {"link": STANDIN, "copy": [], "why": "choice"}, "ask": dict(ASK)}
         self.acts[aid] = {"state": "confirmed", "words": "Reserva confirmada"}
         return {"prepared_id": pid, "status": "confirmed", "submitted": True, "how": "platform_form", "venue": VENUE, "act_id": aid,
-                "reference": "SBX-ABC123", "say": "Booked: Taberna Sandbox, 2026-11-20 22:00, 2 people, ref SBX-ABC123."}
+                "reference": "SBX-ABC123", "say": "Booked: Taberna Sandbox, 2037-11-20 22:00, 2 people, ref SBX-ABC123."}
 
     def _cancel(self, body):
         aid = body["act_id"]
         if self.cancel == "cancelled":
             self.acts[aid] = {"state": "cancelled", "words": "Reserva anulada"}
             return {"act_id": aid, "status": "cancelled", "cancel_act_id": "act_cxl", "venue_words": {"untrusted_text": "Reserva anulada"},
-                    "say": "Cancelled: Taberna Sandbox, 2026-11-20 22:00, 2 people, ref SBX-ABC123 — their page says “Reserva anulada”."}
+                    "say": "Cancelled: Taberna Sandbox, 2037-11-20 22:00, 2 people, ref SBX-ABC123 — their page says “Reserva anulada”."}
         say = "Cancelling it there charges a fee — that's your call, so I cancelled nothing. Here's their page."
         return {"act_id": aid, "status": "not_allowed", "cancel_act_id": "act_cxl", "why": ["fee"], "takeover": CANCEL, "link": CANCEL,
                 "manage_url": CANCEL, "say": f"{say} Here's their own link: {CANCEL}"}
@@ -213,7 +213,7 @@ class Base(unittest.TestCase):
 
     def hold(self):
         return run(VN.follow(Ctx("book Taberna Sandbox friday 22:00 for 2"), {"name": VENUE, "city": "Madrid"}, RD, RES,
-                             "2026-11-20T22:00", datetime.now(timezone.utc), CARD, DEC))
+                             "2037-11-20T22:00", datetime.now(timezone.utc), CARD, DEC))
 
     def yes(self):
         return run(VN.book_venue(Ctx("Yes, book it"), {"approval": {"said": "Yes, book it"}}))
@@ -267,7 +267,7 @@ class NoVerifiedPersonNothingIsPressed(Base):
     def test_nothing_pressed(self):
         ctx = Ctx("book Taberna Sandbox friday 22:00 for 2")
         ctx.session = None
-        out = run(VN.follow(ctx, {"name": VENUE, "city": "Madrid"}, RD, RES, "2026-11-20T22:00", datetime.now(timezone.utc), CARD, DEC))
+        out = run(VN.follow(ctx, {"name": VENUE, "city": "Madrid"}, RD, RES, "2037-11-20T22:00", datetime.now(timezone.utc), CARD, DEC))
         self.assertEqual(out["status"], "not_sent")
         self.assertEqual(self.ag.bodies("venue.submit_booking", approved=True), [])
         self.assertNotIn("sandbox.simulate_approval", self.ag.ops())

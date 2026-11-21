@@ -87,8 +87,8 @@ class EveryKindBooksAgAPIsVenue(Base384):
     """(b) every alternative kind × the tap → prepare with AgAPI's own identity → platform_book. AgAPI's venue name differs from the Places
     listing on purpose (Peñalver: "… Cava Baja | Restaurante La Latina" vs "La Taberna de Peñalver") — never compared."""
     ALTS = [{**x, "venue": (x["venue"] + " | Restaurante (AgAPI's name)") if x["kind"] != "nearby_venue" else x["venue"]} for x in ALTS] + [
-        {"rank": 5, "kind": "other_service_time", "venue": VENUE + " (AgAPI's name)", "date": "2026-11-20", "time": "14:00",
-         "reason": "lunch that day", "book": {"place_id": "ChIJ329", "date": "2026-11-20", "time": "14:00", "party": 2}}]
+        {"rank": 5, "kind": "other_service_time", "venue": VENUE + " (AgAPI's name)", "date": "2037-11-20", "time": "14:00",
+         "reason": "lunch that day", "book": {"place_id": "ChIJ329", "date": "2037-11-20", "time": "14:00", "party": 2}}]
 
     def kind(self, rank, pid, same, booked=True):
         q = self.options()

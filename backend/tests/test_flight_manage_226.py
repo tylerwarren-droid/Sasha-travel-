@@ -12,16 +12,16 @@ from unittest import mock
 
 from booking_signer import flight_manage as FM
 
-SEG_OUT = {"origin": {"iata_code": "MAD"}, "destination": {"iata_code": "LGW"}, "departing_at": "2026-11-20T08:30:00",
-           "arriving_at": "2026-11-20T10:05:00", "marketing_carrier": {"iata_code": "U2"}, "marketing_carrier_flight_number": "7640"}
+SEG_OUT = {"origin": {"iata_code": "MAD"}, "destination": {"iata_code": "LGW"}, "departing_at": "2037-11-20T08:30:00",
+           "arriving_at": "2037-11-20T10:05:00", "marketing_carrier": {"iata_code": "U2"}, "marketing_carrier_flight_number": "7640"}
 
 
 def order(actions=("cancel", "change"), change_allowed=True, two_way=False):
     slices = [{"id": "sli_out", "origin": {"iata_code": "MAD"}, "destination": {"iata_code": "LGW"}, "segments": [SEG_OUT]}]
     if two_way:
         slices.append({"id": "sli_back", "origin": {"iata_code": "LGW"}, "destination": {"iata_code": "MAD"}, "segments": [
-            {**SEG_OUT, "origin": {"iata_code": "LGW"}, "destination": {"iata_code": "MAD"}, "departing_at": "2026-11-27T18:00:00",
-             "arriving_at": "2026-11-27T21:20:00", "marketing_carrier_flight_number": "7641"}]})
+            {**SEG_OUT, "origin": {"iata_code": "LGW"}, "destination": {"iata_code": "MAD"}, "departing_at": "2037-11-27T18:00:00",
+             "arriving_at": "2037-11-27T21:20:00", "marketing_carrier_flight_number": "7641"}]})
     return {"id": "ord_1", "live_mode": False, "booking_reference": "ABC123", "owner": {"name": "easyJet"},
             "available_actions": list(actions), "cancelled_at": None, "slices": slices,
             "conditions": {"change_before_departure": {"allowed": change_allowed, "penalty_amount": "45.00", "penalty_currency": "EUR"},
@@ -32,8 +32,8 @@ def change_offer(oid, total, penalty="45.00", fn="7650"):
     return {"id": oid, "live_mode": False, "change_total_amount": total, "change_total_currency": "EUR", "new_total_amount": "200.00",
             "new_total_currency": "EUR", "penalty_total_amount": penalty, "penalty_total_currency": "EUR",
             "expires_at": "2026-10-10T14:05:00Z", "slices": {"add": [{"origin": {"iata_code": "MAD"}, "destination": {"iata_code": "LGW"},
-                                                                      "segments": [{**SEG_OUT, "departing_at": "2026-11-27T07:15:00",
-                                                                                    "arriving_at": "2026-11-27T08:50:00",
+                                                                      "segments": [{**SEG_OUT, "departing_at": "2037-11-27T07:15:00",
+                                                                                    "arriving_at": "2037-11-27T08:50:00",
                                                                                     "marketing_carrier_flight_number": fn}]}],
                                                              "remove": [{"id": "sli_out"}]}}
 
@@ -152,24 +152,24 @@ class Cancel(Base):
 class Change(Base):
     def test_quote_picks_the_cheapest_and_says_total_and_penalty(self):
         f = self.fake()
-        q = run(FM.change_quote("ord_1", "2026-11-27", "out"))
+        q = run(FM.change_quote("ord_1", "2037-11-27", "out"))
         self.assertTrue(q["possible"])
         self.assertEqual((q["change_offer_id"], q["change_total_amount"], q["change_total_currency"], q["penalty_amount"]),
                          ("oco_cheap", "60.50", "EUR", "45.00"))
         self.assertEqual(q["new_flights"], "U2 7650")
-        self.assertEqual(q["departs"], "2026-11-27T07:15:00")
+        self.assertEqual(q["departs"], "2037-11-27T07:15:00")
         self.assertEqual(q["lines"], [
             "I'll move your easyJet flight U2 7640 on Fri 20 Nov to U2 7650, Fri 27 Nov 07:15 MAD → 08:50 LGW (booking ABC123).",
             "The change costs €60.50 in total, including the airline's €45.00 change fee (Duffel's own quote, valid until 14:05 UTC).",
             "This is a TEST booking — no money moves."])
         req = next(b for _m, p, b in f.calls if p == "/air/order_change_requests")["data"]
         self.assertEqual(req["slices"], {"remove": [{"slice_id": "sli_out"}],
-                                         "add": [{"origin": "MAD", "destination": "LGW", "departure_date": "2026-11-27", "cabin_class": "economy"}]})
+                                         "add": [{"origin": "MAD", "destination": "LGW", "departure_date": "2037-11-27", "cabin_class": "economy"}]})
         self.assertFalse(any("confirm" in p or p == "/air/order_changes" for p in f.paths()), f.paths())   # a quote changes nothing
 
     def test_offers_fetched_when_not_embedded(self):
         f = self.fake(embed_offers=False)
-        q = run(FM.change_quote("ord_1", "2026-11-27"))
+        q = run(FM.change_quote("ord_1", "2037-11-27"))
         self.assertEqual(q["change_offer_id"], "oco_cheap")
         self.assertIn("/air/order_change_offers", f.paths())
 
@@ -182,29 +182,29 @@ class Change(Base):
 
     def test_not_allowed_by_conditions_is_said_plainly(self):
         f = self.fake(the_order=order(change_allowed=False))
-        q = run(FM.change_quote("ord_1", "2026-11-27", "out"))
+        q = run(FM.change_quote("ord_1", "2037-11-27", "out"))
         self.assertFalse(q["possible"])
         self.assertIn("easyJet doesn't allow changing this booking through our booking system (Duffel) — the fare doesn't allow changes", q["say"])
         self.assertEqual(f.paths(), ["/air/orders/ord_1"])
 
     def test_not_in_available_actions(self):
         self.fake(the_order=order(actions=("cancel",)))
-        q = run(FM.change_quote("ord_1", "2026-11-27"))
+        q = run(FM.change_quote("ord_1", "2037-11-27"))
         self.assertFalse(q["possible"])
         self.assertIn("doesn't allow changing", q["say"])
 
     def test_which_leg_on_a_return(self):
         self.fake(the_order=order(two_way=True))
-        self.assertEqual(run(FM.change_quote("ord_1", "2026-11-28"))["ask"], "leg")
+        self.assertEqual(run(FM.change_quote("ord_1", "2037-11-28"))["ask"], "leg")
         f = self.fake(the_order=order(two_way=True))
-        run(FM.change_quote("ord_1", "2026-11-28", "back"))
+        run(FM.change_quote("ord_1", "2037-11-28", "back"))
         req = next(b for _m, p, b in f.calls if p == "/air/order_change_requests")["data"]
         self.assertEqual(req["slices"]["remove"], [{"slice_id": "sli_back"}])
         self.assertEqual(req["slices"]["add"][0]["origin"], "LGW")
 
     def test_provider_error_is_its_own_words(self):
         self.fake(fail={"/air/order_change_requests": (422, {"errors": [{"message": "Order change is not supported for this airline"}]})})
-        q = run(FM.change_quote("ord_1", "2026-11-27"))
+        q = run(FM.change_quote("ord_1", "2037-11-27"))
         self.assertIn("Order change is not supported for this airline", q["why"])
         self.fake(fail={"/air/order_changes/oce_1": (422, {"errors": [{"message": "Insufficient balance"}]})})
         c = run(FM.change_confirm("oco_cheap"))

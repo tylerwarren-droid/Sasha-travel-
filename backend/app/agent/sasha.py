@@ -1016,6 +1016,12 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
     booked_now = None
     internal_log: List[str] = []
     state_alarms: List[str] = []   # Sasha 395 · 393's state words heard in her words (an alarm, never an edit)
+    try:   # Sasha 397 · a card already on THIS conversation's screen (the one record) makes "on your screen" true
+        from agapi import s2_memory as _MEMs
+        screen_before = (not wa) and await _MEMs.screen_has_cards(account)
+    except Exception as e:
+        log.info("[agent] the conversation's screen wasn't read: %s", type(e).__name__)
+        screen_before = False
     # Sasha 213 · ONE TURN, ONE STATE: what's on screen this turn (cards, ribbon) and the names she may say — from THIS
     # turn's tool results only
     screen = _SCREEN.get(session or "-") or {}
@@ -1084,7 +1090,7 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                 break
             if _norm(x) and _norm(x) in said_norms:   # Sasha 215 · never a sentence twice in a turn ("It's quoted." after each flight)
                 continue
-            alarm = state_word_alarm(names_masked(x, tstate["allowed"]), screen_drawn=bool(tstate["drawn"]) and not wa)
+            alarm = state_word_alarm(names_masked(x, tstate["allowed"]), screen_drawn=(bool(tstate["drawn"]) or screen_before) and not wa)
             if alarm and not _V.is_told(x, told):   # Sasha 395 · 393's state words: an ALARM (logged, counted) — her words are NOT edited
                 log.warning("[alarm] a state word reached her words (%r): %s", alarm, x[:120])
                 state_alarms.append(x[:80])

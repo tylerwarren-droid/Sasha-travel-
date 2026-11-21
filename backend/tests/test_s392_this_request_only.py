@@ -20,8 +20,14 @@ from app.agent import sasha as AG
 from booking_signer import guest_whatsapp as GW, wa_agent as WA
 
 ACCT = "00000000-0000-4000-8000-000000000392"
-SAT = (date.today() + timedelta(days=(5 - date.today().weekday()) % 7 or 7)).isoformat()
-SUN = (date.fromisoformat(SAT) + timedelta(days=1)).isoformat()
+def _the(word: str) -> str:   # Sasha 397 · the day THE READER takes the word for (on a Saturday, "Saturday" is its own answer — never ours)
+    from agapi import said as SD
+    t = date.today()
+    return next((t + timedelta(days=i)).isoformat() for i in range(0, 15) if SD.day(word, t + timedelta(days=i), t))
+
+
+SAT = _the("on Saturday")
+SUN = _the("on Sunday")
 
 
 class TwoRequests(unittest.TestCase):

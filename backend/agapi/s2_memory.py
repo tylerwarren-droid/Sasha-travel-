@@ -332,6 +332,15 @@ async def put_kind(account: Optional[str], name: str, value: Any) -> bool:
     return await put_kinds(account, {name: value})
 
 
+async def screen_has_cards(account: Optional[str]) -> bool:
+    """Sasha 397 · a card is on THIS conversation's screen: one of her lines in the one record (since "New chat") carried cards, on a door
+    that has a screen (not WhatsApp). The alarm's truth for "it's on your screen" (395/396: "drawn this turn" was too narrow)."""
+    if not account:
+        return False
+    m = await _load(account) or {}
+    return any(x.get("dir") == "out" and x.get("cards") and x.get("ch") != "wa" for x in messages_of(m))
+
+
 def before_this(lines: List[dict], said: Optional[str]) -> List[dict]:
     """This turn's own message is already in the record (recorded where it arrived): it is the turn, not its history."""
     if said and lines and lines[-1].get("role") == "user" and lines[-1].get("content") in (said, masked(said)):
@@ -598,5 +607,5 @@ async def clear_conversation(account: str) -> dict:
 
 
 __all__ = ["remember", "closing", "recall", "fold", "line_for", "masked", "opening", "first_name", "set_name", "OPEN", "ASK_NAME",
-           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "conversation", "before_this", "door_history", "door_said", "clear_conversation",
+           "kinds", "kind", "put_kinds", "put_kind", "accounts_with", "conversation", "screen_has_cards", "before_this", "door_history", "door_said", "clear_conversation",
            "message", "messages_of", "recent_of", "record", "last_tool", "last_out_tool", "MESSAGES_MAX"]

@@ -314,6 +314,13 @@ async def prepare(account: str, place: dict, person: dict, date: str, time_: str
     eu = await end_user(account)   # Sasha 285 · CR 118 (a): whose access record decides "Kanoe sends it" (their kanoe_whatsapp switch)
     if eu:
         body["end_user"] = eu
+    try:   # Sasha 397 · the ONE trip record: the booking carries its trip T (trip:<T>, CR 132) on AgAPI's record — the plan its day is on
+        from booking_signer import trip_record as TR
+        t = await TR.trip_on(account, date)
+        if t:
+            body["external_ref"] = TR.ref(t)
+    except Exception as e:   # no plan store: the booking still goes, with no trip on it (said by the itinerary as today)
+        log.info("[venue_submit] the trip wasn't read for the booking: %s", type(e).__name__)
     r = await _call(account, OP.VENUE_PREPARE_BOOKING, body)
     if not r.get("ok"):
         return {"ok": False, "error": _err(r)}

@@ -206,45 +206,38 @@ def _fold(s: str) -> str:
 
 
 def match(facts: dict, rows: List[dict]) -> Tuple[Optional[dict], Optional[str]]:
-    """A reference beats a K-reference beats the venue within ±90 min. None → a booking made outside Sasha."""
-    if facts.get("reference"):
-        hit = next((r for r in rows if r.get("booking_reference") and r["booking_reference"].upper() == facts["reference"].upper()), None)
-        if hit:
-            return hit, "reference"
-    if facts.get("sasha_ref"):
-        hit = next((r for r in rows if (r.get("sasha_reference") or "").upper() == facts["sasha_ref"].upper()), None)
-        if hit:
-            return hit, "sasha_ref"
-    if facts.get("venue") and facts.get("at") and "T" in facts["at"]:
-        at = datetime.fromisoformat(facts["at"])
-        for r in rows:
-            if not (r.get("date") and r.get("time")):
-                continue
-            words = [w for w in re.findall(r"[a-z0-9]+", _fold(facts["venue"])) if len(w) > 2]
-            if words and all(w in _fold(r.get("venue") or "") for w in words):
-                rt = datetime.fromisoformat(f"{r['date']}T{r['time']}")
-                if abs((rt - at).total_seconds()) <= 90 * 60:
-                    return r, "venue_and_time"
-    # Sasha 175 · a PLATFORM's email for a booking Sasha sent the guest to (live: "La Gaditana Castellana" for "Gaditana Retiro",
-    # "Alcaravea Cea Bermúdez" for "Alcaravea"): a branch name differs, so one distinctive shared word + the time (±90 min)
-    if facts.get("via") and facts.get("venue") and facts.get("at") and "T" in facts["at"]:
-        at = datetime.fromisoformat(facts["at"])
-        mine = {w for w in re.findall(r"[a-z0-9]+", _fold(facts["venue"])) if len(w) >= 5 and w not in _GENERIC}
-        for r in rows:
-            if r.get("status") not in ("link_sent", "pending", "guest_booked") or not (r.get("date") and r.get("time")):
-                continue
-            theirs = {w for w in re.findall(r"[a-z0-9]+", _fold(r.get("venue") or "")) if len(w) >= 5 and w not in _GENERIC}
-            rt = datetime.fromisoformat(f"{r['date']}T{r['time']}")
-            if mine & theirs and abs((rt - at).total_seconds()) <= 90 * 60:
-                return r, "platform_link"
-    # Sasha 175 · live (Booksy): the email names no shop Sasha can read, and the guest took the slot that was free (10:30, the link
-    # said 18:00). A platform's email on the SAME DAY as the guest's ONE open platform link that day is that link.
-    if facts.get("via") and facts.get("at"):
-        day = facts["at"][:10]
-        open_links = [r for r in rows if r.get("status") in ("link_sent", "pending", "guest_booked") and r.get("date") == day]
-        if len(open_links) == 1:
-            return open_links[0], "platform_day"
-    return None, None
+    """A reference beats a K-reference beats the venue within ±90 min. (row, basis) when exactly ONE booking fits; (None, None) when
+    none does (a booking made outside Sasha); (None, "two or more … not guessed") when several do — Sasha 399: held and said, never
+    the first one that looked near (booking_signer.one_booking, the ONE rule)."""
+    from .one_booking import decide
+
+    def at_of(r: dict) -> Optional[datetime]:
+        try:
+            return datetime.fromisoformat(f"{r['date']}T{r['time']}") if r.get("date") and r.get("time") else None
+        except ValueError:
+            return None
+    at = datetime.fromisoformat(facts["at"]) if facts.get("at") and "T" in facts["at"] else None
+    near = lambda r: at is not None and at_of(r) is not None and abs((at_of(r) - at).total_seconds()) <= 90 * 60
+    words = [w for w in re.findall(r"[a-z0-9]+", _fold(facts.get("venue") or "")) if len(w) > 2]
+    mine = {w for w in re.findall(r"[a-z0-9]+", _fold(facts.get("venue") or "")) if len(w) >= 5 and w not in _GENERIC}
+    open_link = lambda r: r.get("status") in ("link_sent", "pending", "guest_booked")
+    ref, kref = str(facts.get("reference") or "").upper(), str(facts.get("sasha_ref") or "").upper()
+    tiers = [
+        ("reference", [r for r in rows if ref and str(r.get("booking_reference") or "").upper() == ref]),
+        ("sasha_ref", [r for r in rows if kref and str(r.get("sasha_reference") or "").upper() == kref]),
+        ("venue_and_time", [r for r in rows if words and near(r) and all(w in _fold(r.get("venue") or "") for w in words)]),
+        # Sasha 175 · a PLATFORM's email for a booking Sasha sent the guest to (live: "La Gaditana Castellana" for "Gaditana Retiro",
+        # "Alcaravea Cea Bermúdez" for "Alcaravea"): a branch name differs, so one distinctive shared word + the time (±90 min)
+        ("platform_link", [r for r in rows if facts.get("via") and mine and open_link(r) and near(r)
+                           and mine & {w for w in re.findall(r"[a-z0-9]+", _fold(r.get("venue") or "")) if len(w) >= 5 and w not in _GENERIC}]),
+        # Sasha 175 · live (Booksy): the email names no shop Sasha can read, and the guest took the slot that was free (10:30, the link
+        # said 18:00). A platform's email on the SAME DAY as the guest's ONE open platform link that day is that link.
+        ("platform_day", [r for r in rows if facts.get("via") and facts.get("at") and open_link(r) and r.get("date") == facts["at"][:10]]),
+    ]
+    got, basis, ok = decide(tiers, key=lambda r: str(r.get("id") or (r.get("venue"), r.get("date"), r.get("time"))))
+    if ok:
+        return got, basis
+    return None, (basis if basis.startswith("two or more") else None)
 
 
 _GENERIC = {"restaurante", "restaurant", "taberna", "madrid", "barberia", "barber", "salon", "spa", "massage", "masajes", "centro",
@@ -532,6 +525,14 @@ def cancel_link(sender: str, text: str) -> Optional[str]:
     return None
 
 
+async def _held_find(account: str, mid: str, body: str, kind: str, facts: dict, parsed_by: str, why: str) -> None:
+    """Sasha 399 · a held (unmatched) confirmation is a find with NO booking — so it is read once, and never offered or attached."""
+    await STORE.put_find({"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": mid,
+                          "body_sha256": hashlib.sha256((body or "").encode()).hexdigest(), "kind": kind,
+                          "facts": {**facts, "unmatched": why}, "parsed_by": parsed_by, "trip_item_id": None, "match_basis": None,
+                          "offered_action": None, "offered_sentence": None, "offer_sha256": None, "action_status": "none"})
+
+
 async def sync(account: str) -> List[dict]:
     """One narrow search; each new matching message read by rules; facts kept, bodies never. Returns the new finds."""
     from . import guest_whatsapp as GW
@@ -573,6 +574,11 @@ async def sync(account: str) -> List[dict]:
         body = _body_text(payload)
         kind, facts, parsed_by = read(_header(payload, "Subject"), _header(payload, "From"), body, now)
         row, basis = match(facts, rows)
+        if not row and basis and kind in ("confirmation", "change"):   # Sasha 399 · several bookings fit: held and said, never guessed
+            from . import written as W
+            await W.hold(account, "gmail", "gmail-" + m["id"], f"{_header(payload, 'Subject')}\n{body}"[:2000], basis, now)
+            await _held_find(account, m["id"], body, kind, facts, parsed_by, basis)
+            continue
         if not row and facts.get("via") and kind in ("confirmation", "change"):
             # Sasha 328 · a PLATFORM's email for a booking AgAPI made (it pressed Book on their page): it IS that booking — matched on the
             # ONE booking record (the act, by its reference, else the venue at its time), its cancel link kept there. Never a second
@@ -580,11 +586,18 @@ async def sync(account: str) -> List[dict]:
             from agapi import venue_submit as VS
             from agapi.s2_gmail_receipts import _html_text
             frm = _header(payload, "From")
-            act = await VS.attach_from_mail(account, facts, cancel_link(frm, body or _html_text(payload)))
+            act, why = await VS.attach_from_mail(account, facts, cancel_link(frm, body or _html_text(payload)))
+            if act is None and why:   # Sasha 399 · several of AgAPI's acts fit: held and said, never the first that looked near
+                from . import written as W
+                await W.hold(account, "gmail", "gmail-" + m["id"], f"{_header(payload, 'Subject')}\n{body}"[:2000], why, now)
+                await _held_find(account, m["id"], body, kind, facts, parsed_by, why)
+                continue
             if act:
+                # Sasha 399 · match_basis is the table's own (reference | venue_and_time | sasha_ref | null): the act's basis in facts —
+                # "agapi_act" there was refused by mailbox_finds_match_basis_check, so an act's find was never kept
                 find0 = {"id": str(uuid.uuid4()), "account_id": account, "gmail_message_id": m["id"], "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
-                         "kind": kind, "facts": {**facts, "agapi_act": act["act_id"]}, "parsed_by": parsed_by, "trip_item_id": None,
-                         "match_basis": "agapi_act", "offered_action": None, "offered_sentence": None, "offer_sha256": None, "action_status": "done"}
+                         "kind": kind, "facts": {**facts, "agapi_act": act["act_id"], "act_basis": why}, "parsed_by": parsed_by, "trip_item_id": None,
+                         "match_basis": None, "offered_action": None, "offered_sentence": None, "offer_sha256": None, "action_status": "done"}
                 await STORE.put_find(find0)
                 found.append(find0)
                 continue

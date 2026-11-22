@@ -21,7 +21,7 @@ import logging
 import re
 import secrets
 import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 log = logging.getLogger("agapi.venue_submit")
 
@@ -474,33 +474,43 @@ def _fold(s: str) -> str:
     return "".join(ch for ch in unicodedata.normalize("NFD", s or "") if unicodedata.category(ch) != "Mn").lower()
 
 
-async def attach_from_mail(account: str, facts: dict, cancel_link: Optional[str]) -> Optional[dict]:
+async def attach_from_mail(account: str, facts: dict, cancel_link: Optional[str]) -> Tuple[Optional[dict], str]:
     """Sasha 328 · the platform's confirmation email (the ONE Gmail reader: booking_signer.mailbox) for a booking AgAPI made there → THAT act
     (its reference; else the venue on its day within 90 minutes), and its cancel link kept on it — a POINTER beside the act, like its
-    place_id (_pointer_of): never its state, never a card. → the act, or None (not one of AgAPI's platform bookings)."""
+    place_id (_pointer_of): never its state, never a card.
+    Sasha 399 · decided by the ONE rule (booking_signer.one_booking): exactly one act fits, else none. Tyler's 19 Nov Peñalver: three acts
+    at 21:45 named "La Taberna de Peñalver" (two at Barrio Salamanca, one at Cava Baja) — the first that looked near was taken; now it is
+    held and said. Nothing here writes a venue, date or time onto the act: only the pointers below.
+    → (the act, its basis) · (None, why) when several fit (held) · (None, "") when none does (not one of AgAPI's platform bookings)."""
     from datetime import datetime as _dt
+    from booking_signer.one_booking import decide
     acts = [a for a in await acts_of(account) if a.get("route") == "platform" and not a.get("question") and not a.get("cancels")]
     ref = str(facts.get("reference") or "").strip().upper()
-    hit = next((a for a in acts if ref and str(a.get("reference") or "").strip().upper() == ref), None)
-    if hit is None and facts.get("venue") and "T" in str(facts.get("at") or ""):
-        mine = {w for w in re.findall(r"[a-z0-9]+", _fold(facts["venue"])) if len(w) > 2}
-        for a in acts:
-            try:
-                near = abs((_dt.fromisoformat(str(a.get("when"))[:16]) - _dt.fromisoformat(str(facts["at"])[:16])).total_seconds()) <= 90 * 60
-            except ValueError:
-                continue
-            theirs = {w for w in re.findall(r"[a-z0-9]+", _fold(a.get("venue") or "")) if len(w) > 2}
-            if near and mine and theirs and (mine <= theirs or theirs <= mine):   # "La Taberna" ⊂ "La Taberna del Puerto", either way
-                hit = a
-                break
-    if hit is None:
-        return None
+    mine = {w for w in re.findall(r"[a-z0-9]+", _fold(facts.get("venue") or "")) if len(w) > 2}
+
+    def near(a: dict) -> bool:
+        if "T" not in str(facts.get("at") or ""):
+            return False
+        try:
+            return abs((_dt.fromisoformat(str(a.get("when"))[:16]) - _dt.fromisoformat(str(facts["at"])[:16])).total_seconds()) <= 90 * 60
+        except ValueError:
+            return False
+
+    def named(a: dict) -> bool:
+        theirs = {w for w in re.findall(r"[a-z0-9]+", _fold(a.get("venue") or "")) if len(w) > 2}
+        return bool(mine and theirs and (mine <= theirs or theirs <= mine))   # "La Taberna" ⊂ "La Taberna del Puerto", either way
+    party = facts.get("party")
+    tiers = [("reference", [a for a in acts if ref and str(a.get("reference") or "").strip().upper() == ref]),
+             ("the venue at its time", [a for a in acts if near(a) and named(a) and (not party or not a.get("party") or int(a["party"]) == int(party))])]
+    hit, basis, ok = decide(tiers, key=lambda a: a.get("act_id"))
+    if not ok:
+        return None, (basis if basis.startswith("two or more") else "")
     kw: Dict[str, Any] = {"confirmed_by_mail": True}
     if cancel_link and cancel_link.startswith("https://"):
         kw["cancel_link"] = cancel_link[:500]
     if ref and not hit.get("reference"):
         kw["reference"] = facts["reference"]
-    return await _amend(account, hit["act_id"], **kw)
+    return await _amend(account, hit["act_id"], **kw), basis
 
 
 def _message_of(res: dict, held: dict, said: str) -> dict:

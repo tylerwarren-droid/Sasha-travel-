@@ -81,12 +81,6 @@ def pick(cands: List[Mapping[str, Any]], subject: Optional[str], text: Optional[
     fh, ch = _fold(hay), _compact(hay)
     said_day = (_when(hay, now) or "")[:10] or None
 
-    def one(rule: str, hits: List[Mapping[str, Any]]):
-        ids = {str(h["trip_item_id"]) for h in hits}
-        if len(ids) == 1:
-            return dict(hits[0]), rule
-        return None, (f"two or more bookings fit by {rule} — not guessed" if ids else "")
-
     tiers = [
         ("Sasha's reference", [c for c in cands if c.get("own_reference") and len(_compact(c["own_reference"])) >= 4
                                and _compact(c["own_reference"]) in ch]),
@@ -98,11 +92,9 @@ def pick(cands: List[Mapping[str, Any]], subject: Optional[str], text: Optional[
         ("the guest's surname and the day", [c for c in cands if said_day and _local_day(c) == said_day and len(_surname(c)) >= 3
                                              and re.search(rf"\b{re.escape(_fold(_surname(c)))}\b", fh)]),
     ]
-    for rule, hits in tiers:
-        got, why = one(rule, hits)
-        if got is not None or why:
-            return got, why or rule
-    return None, "nothing in it names one of the bookings (no reference; no venue name or surname with the day)"
+    from .one_booking import decide   # Sasha 399 · the ONE rule: exactly one fits, else none — never the nearest-looking
+    got, basis, ok = decide(tiers, key=lambda h: str(h["trip_item_id"]))
+    return (got, basis) if ok else (None, basis)
 
 
 async def file(provider_id: str, channel: str, sender: Optional[str], subject: Optional[str], text: Optional[str], now: datetime,
@@ -116,6 +108,8 @@ async def file(provider_id: str, channel: str, sender: Optional[str], subject: O
     got, basis = pick(cands, subject, words, now)
     if got is None:
         log.info("[written] %s %s not matched: %s", channel, provider_id, basis)
+        if account:   # Sasha 399 · HELD and said as unmatched — never dropped, never put on the nearest-looking booking
+            await hold(account, channel, provider_id, words, basis, now)
         return None
     o = got.get("request") or {}
     try:
@@ -139,6 +133,42 @@ async def file(provider_id: str, channel: str, sender: Optional[str], subject: O
     log.info("[written] %s %s → %s (%s): %s", channel, provider_id, got["trip_item_id"], basis, reading["result"])
     return {"trip_item_id": str(got["trip_item_id"]), "venue": got.get("venue"), "result": reading["result"], "why": reading["why"],
             "basis": basis, "day": _local_day(got)}
+
+
+# ── Sasha 399 · an UNMATCHED confirmation is held, said, and never written onto any booking ──────────────────────────────────────
+# The one place one waits: the person's own conversation record (s2_memory kind HELD_KIND) — its words, the channel, when and why it
+# didn't match. No venue, date or time is taken from it; nothing reads it as a booking. A venue writing to Sasha's own address with
+# no account is kept where it always was (the inbound quarantine; an SMS's booking_inbound row with no booking).
+HELD_KIND = "unmatched_confirmations"
+HOLD_DAYS = 30
+
+
+async def hold(account: str, channel: str, provider_id: str, words: Optional[str], why: str, now: datetime) -> None:
+    from agapi import s2_memory as M
+    try:
+        rows = [r for r in (await held(account)) if r.get("id") != provider_id]
+        rows.append({"id": provider_id, "channel": channel, "at": now.isoformat(), "why": why, "words": str(words or "")[:2000]})
+        await M.put_kind(account, HELD_KIND, rows[-20:])
+    except Exception as e:   # said in the log, and the caller still says "unmatched — nothing changed"
+        log.error("[written] an unmatched confirmation was not held: %s", type(e).__name__)
+
+
+async def held(account: Optional[str], now: Optional[datetime] = None) -> List[dict]:
+    """The person's held confirmations (the last HOLD_DAYS): what get_status says as "held — it doesn't name one booking"."""
+    if not account:
+        return []
+    from agapi import s2_memory as M
+    kept = await M.kind(account, HELD_KIND)
+    rows = [dict(r) for r in kept if isinstance(r, dict)] if isinstance(kept, list) else []
+    cut = (now or datetime.now().astimezone()) - timedelta(days=HOLD_DAYS)
+
+    def recent(r: dict) -> bool:
+        try:
+            at = datetime.fromisoformat(str(r.get("at")))
+            return (at if at.tzinfo else at.astimezone()) >= (cut if cut.tzinfo else cut.astimezone())
+        except ValueError:
+            return False
+    return [r for r in rows if recent(r)]
 
 
 async def account_of_email(addr: Optional[str]) -> Optional[str]:

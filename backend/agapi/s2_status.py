@@ -16,10 +16,14 @@ booking_signer/live_events.on_settled), the Trip banner (/api/booking/plan → t
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 # the words for each state — the ONE place they are written (hold_booking's read-back status uses HELD as it always said it)
 HELD = "not booked — waiting for the yes"
+#: Sasha 399 · confirmations held because they name no ONE booking — said with the status, never attached to any booking
+UNMATCHED = ("{n} confirmation{s} you sent me didn't name exactly one of your bookings, so I kept it aside and changed nothing — "
+             "forward it again with their reference, or tell me which booking it's for.")
 WORDS = {"nothing": "Nothing is booked yet.",
          "held": "Not booked — read back and waiting for your yes.",
          "awaiting_payment": "Waiting for your payment — nothing is booked until it's paid.",
@@ -166,7 +170,16 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
            [b["reference"] for b in vb if b.get("status") in ("confirmed", "guest_booked") and b.get("reference")]
     from agapi import booking_decide as BD   # Sasha 254 · R12 — an automatic stop is said here too, never only logged
     stops = BD.stops_of(account)
-    return {**st, **d, "trip_state": trip_state, "refs": list(dict.fromkeys(refs)), "ledger_open": open_n, **({"stopped": stops} if stops else {})}
+    from booking_signer import written as W   # Sasha 399 · a confirmation that names no ONE booking: held, and said — never on one
+    try:
+        held = await W.held(account)
+    except Exception as e:
+        logging.getLogger("agapi.s2_status").info("[s2-status] held confirmations not read: %s", type(e).__name__)
+        held = []
+    unmatched = ({"unmatched_confirmations": [{"at": h.get("at"), "channel": h.get("channel"), "why": h.get("why")} for h in held],
+                  "unmatched_line": UNMATCHED.format(n=len(held), s="" if len(held) == 1 else "s")} if held else {})
+    return {**st, **d, "trip_state": trip_state, "refs": list(dict.fromkeys(refs)), "ledger_open": open_n, **({"stopped": stops} if stops else {}),
+            **unmatched}
 
 
 def public(st: Dict[str, Any]) -> Dict[str, Any]:
@@ -175,4 +188,4 @@ def public(st: Dict[str, Any]) -> Dict[str, Any]:
             "trip_state": st.get("trip_state") or st.get("state")}   # Sasha 258 · the trip's own (the Trip tab's banner)
 
 
-__all__ = ["status_of", "decide", "public", "WORDS", "HELD", "ON_IT"]
+__all__ = ["status_of", "decide", "public", "WORDS", "HELD", "ON_IT", "UNMATCHED"]

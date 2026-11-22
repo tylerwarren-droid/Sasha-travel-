@@ -1874,8 +1874,9 @@ async def forwarded_confirmation(account: str, number: Optional[str], body: str,
         log.error("[guest_whatsapp] a forwarded confirmation was not filed: %s: %s", type(e).__name__, e)
         got = None
     if got is None:
+        # Sasha 399 · held (written.hold), said as unmatched — never put on the booking that looked nearest
         return ("That reads like a booking confirmation, but I can't tell which of your bookings it's for — it needs their "
-                "reference, or the venue's name and the day. Nothing was changed.")
+                "reference, or the venue's name and the day. I've kept it aside as unmatched; no booking was changed.")
     when = SN.day_words(got.get("day")) if got.get("day") else ""
     if got["result"] == "confirmed":
         return f"✅ Confirmed in writing: {got['venue']}{', ' + when if when else ''}. I've filed their confirmation on it (forwarded by you)."

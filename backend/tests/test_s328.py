@@ -290,7 +290,8 @@ class TheConfirmationEmailAndCancel(Base):
         act = next(a for a in run(VS.acts_of(ACCT)) if a["act_id"] == "act_booked")
         print("\n── the act after CoverManager's email ──\n" + json.dumps({k: act.get(k) for k in ("act_id", "reference", "cancel_link")}))
         self.assertEqual(act["cancel_link"], CANCEL)                       # https, CoverManager's own host, named a cancel
-        self.assertEqual((found[0]["match_basis"], found[0]["offered_action"]), ("agapi_act", None))   # never "Add it to your itinerary?"
+        # Sasha 399 · match_basis is the table's (mailbox_finds_match_basis_check refused "agapi_act"): the act is named in facts
+        self.assertEqual((found[0]["match_basis"], found[0]["facts"]["agapi_act"], found[0]["offered_action"]), (None, "act_booked", None))
         self.assertNotIn("cancel_link", found[0]["facts"])                 # one place: the act
         self.assertEqual(self.mb.applied, [])                              # no second trip item
         self.assertEqual(run(VS.bookings(ACCT))[0]["cancel_link"], CANCEL)

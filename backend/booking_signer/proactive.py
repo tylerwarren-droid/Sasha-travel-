@@ -81,6 +81,12 @@ def status_words(status: str) -> str:
     return STATUS_WORDS.get(status, status)
 
 
+def brief_state(b: dict) -> str:
+    """Sasha 399 · a booking's state as its own record says it (status_words), else the status table's — whole, never cut short."""
+    w = str(b.get("status_words") or "").strip() or status_words(b.get("status") or "")
+    return (w[:1].lower() + w[1:]) if w else "not confirmed yet"
+
+
 def day_word(b: dict, now: Optional[datetime]) -> str:
     """Sasha 119 · "Tomorrow" only when it IS tomorrow: a day-before held by the quiet hours goes out at 08:00 on the day
     itself (live, 3 Oct 08:38: "Tomorrow, 21:00 at Hanakura" about that same evening) — then it is "Tonight" / "Today"."""
@@ -124,9 +130,11 @@ def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datet
         return f"{venue} confirmed in writing ✅: {when}, {_party(b)}{ref}."
     if kind == "morning_brief":
         items = extra["items"]
+        # Sasha 399 · each booking's state in ITS OWN record's words (the row's status_words, from the ONE status table) — a page handed
+        # over is "prepared, not booked", a failed press "not booked"; never "not confirmed yet" said of every state but confirmed
         return "Today: " + " · ".join(f"{x.get('time') or '—'} {x.get('venue')} ("
                                       + ("TEST booking" if (x.get("booking_reference") or "").startswith("TEST-") or "(TEST booking" in (x.get("venue") or "")
-                                         else "confirmed" if x.get("status") in CONFIRMED else "not confirmed yet") + ")"
+                                         else "confirmed" if x.get("status") in CONFIRMED else brief_state(x)) + ")"
                                       for x in items)
     raise ValueError(kind)
 

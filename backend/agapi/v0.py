@@ -1938,7 +1938,8 @@ async def _paid_out(ctx: Ctx, got: dict, where: str) -> dict:
 # ── Pacioli ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 STATUS_HOW = ("line is THE status, the same words as the Trip tab. Say every part of it — what's booked AND what's \"Chosen, not "
-              "booked yet\" or still a request — in your own short words; never leave a not-booked item out, never call it booked.")
+              "booked yet\" or still a request — in your own short words; never leave a not-booked item out, never call it booked. "
+              "If unmatched_line is set, say it too (Sasha 399): a confirmation kept aside, on no booking.")
 
 
 async def get_status(ctx: Ctx, a: dict) -> dict:

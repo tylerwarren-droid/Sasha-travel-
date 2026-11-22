@@ -288,7 +288,8 @@ class PlatformEmailsBookOnTheirOwn(unittest.TestCase):
         self.assertEqual((row["id"], basis), ("t1", "platform_link"))
         row, basis = MB.match({"via": "CoverManager", "venue": "Alcaravea Cea Bermúdez", "at": "2026-10-07T20:30"}, rows)
         self.assertEqual(row["id"], "t2")
-        self.assertEqual(MB.match({"via": "TheFork", "venue": "Restaurante Madrid Centro", "at": "2026-10-07T21:00"}, rows), (None, None))
+        row, why = MB.match({"via": "TheFork", "venue": "Restaurante Madrid Centro", "at": "2026-10-07T21:00"}, rows)
+        self.assertEqual((row, "not guessed" in why), (None, True))   # Sasha 399 · two open links that day: held and said, never a guess
         self.assertEqual(MB.match({"venue": "La Gaditana Castellana", "at": "2026-10-07T21:00"}, rows), (None, None))   # not a platform's
 
     def test_thefork_wording_is_a_confirmation(self):
@@ -303,4 +304,5 @@ class BooksyByTheDay(unittest.TestCase):
         row, basis = MB.match({"via": "Booksy", "venue": None, "at": "2026-10-07T10:30"}, rows)
         self.assertEqual((row["id"], basis), ("b1", "platform_day"))
         two = rows + [{"id": "b2", "venue": "x", "date": "2026-10-07", "time": "21:00", "status": "link_sent"}]
-        self.assertEqual(MB.match({"via": "Booksy", "venue": None, "at": "2026-10-07T10:30"}, two), (None, None))   # never a guess
+        row, why = MB.match({"via": "Booksy", "venue": None, "at": "2026-10-07T10:30"}, two)
+        self.assertEqual((row, "not guessed" in why), (None, True))   # never a guess — Sasha 399: held and said

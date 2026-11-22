@@ -98,6 +98,57 @@ async def trip_on(account: Optional[str], day: Optional[str]) -> Optional[str]:
     return str(on[0].get("trip_id") or on[0].get("id")) if len(on) == 1 else None
 
 
+#: Sasha 398 · the kind, in the ONE conversation record, that POINTS at the trip this conversation is about: {kind, id} — never its content
+NOW = "trip_now"
+
+
+async def remember(account: Optional[str], t: Optional[Dict[str, Any]]) -> None:
+    """Sasha 398 · the trip the reader just resolved IS the trip this conversation is about (a pointer; cleared by "New chat")."""
+    if not account or not t or t.get("several") or not t.get("id"):
+        return
+    from agapi import s2_memory as MEM
+    try:
+        await MEM.put_kind(account, NOW, {"kind": t["kind"], "id": str(t["id"])})
+    except Exception as e:
+        log.info("[trip_record] the trip now wasn't kept: %s", type(e).__name__)
+
+
+async def current(account: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Sasha 398 · THE ONE ANSWER to "which trip is this conversation about?" — every screen, message and tool asks it here: the trip the
+    reader last resolved in THIS conversation (still on the record), else the person's latest personal T. None: no trip."""
+    if not account:
+        return None
+    from agapi import s2_memory as MEM
+    try:
+        k = await MEM.kind(account, NOW)
+    except Exception:
+        k = None
+    if isinstance(k, dict) and k.get("id"):
+        t = next((x for x in await trips(account) if x["kind"] == k.get("kind") and str(x["id"]) == str(k["id"])), None)
+        if t:
+            return t
+    p = await plan_now(account)
+    return {"kind": "personal", "id": p["trip_id"], "trip_id": p["trip_id"], "title": p.get("title")} if p else None
+
+
+async def plan_now(account: Optional[str], strict: bool = False) -> Optional[dict]:
+    """Sasha 398 · the PERSONAL plan this conversation is about (plan_store's shape): the one pointed at, else the latest. A group trip in
+    talk leaves the person's own latest plan for the personal tools. strict: an outage raises (never read as "no trip")."""
+    if not account:
+        return None
+    from agapi import s2_memory as MEM
+    from . import plan_store as PS
+    try:
+        k = await MEM.kind(account, NOW)
+    except Exception:
+        k = None
+    if isinstance(k, dict) and k.get("kind") == "personal" and k.get("id"):
+        p = await PS.by_id(account, str(k["id"]))
+        if p:
+            return p
+    return await PS.latest(account, strict=strict)
+
+
 async def booked_parts(account: str, rows: List[dict]) -> List[dict]:
     """A personal T's basket rows with every BOOKED part read from its own record (the Duffel order, basket.live — Sasha 305), never the
     basket's copy. Plan state (suggested / chosen / pending_payment) is the basket's own."""
@@ -105,4 +156,4 @@ async def booked_parts(account: str, rows: List[dict]) -> List[dict]:
     return await BK.live(rows)
 
 
-__all__ = ["trips", "find", "named", "trip_on", "booked_parts", "ref"]
+__all__ = ["trips", "find", "named", "trip_on", "booked_parts", "ref", "remember", "current", "plan_now", "NOW"]

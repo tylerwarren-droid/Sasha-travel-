@@ -405,7 +405,13 @@ export function GroupTripNow() {
   const [c, setC] = useState<Ev | null>(null)
   useEffect(() => {
     let off = false
-    const pull = () => observe(bookingReq('/api/booking/group/list').then(r => {
+    // Sasha 398 · ONLY the trip THIS CONVERSATION is about (the ONE reader: /trip/now) — a group card when that trip IS a group trip, never
+    // "the organiser's open movement" beside a chat about his own trips (Tyler's /next, 22 Nov)
+    const pull = () => observe(bookingReq('/api/booking/trip/now').then(async now => {
+      const n = (now.json || {}) as Ev
+      if (off) return
+      if (!now.ok || n.kind !== 'group' || typeof n.movement_id !== 'string') { setC(null); return }
+      const r = await bookingReq(`/api/booking/group/list?movement=${encodeURIComponent(n.movement_id)}`)
       const j = (r.json || {}) as Ev
       if (off || !r.ok || !j.movement || !Array.isArray(j.rows) || !j.rows.length) return
       const mv = j.movement as Ev

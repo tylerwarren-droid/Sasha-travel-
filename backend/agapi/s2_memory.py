@@ -582,7 +582,7 @@ async def recall(account: str, session: Optional[str], surface: Optional[str] = 
 # she showed in it are forgotten (a "yes" in the new chat can never land on them). Bookings, trips and receipts are not here (the trip
 # record, the acts, the ledger) — nor are her name for them, or the kinds that track an act (venue_acts, prepared, outcomes_open …).
 CONVERSATION = ("messages", "recent", "summary", "thing", "pending", "screen", "decided", "session", "session_lines")
-CONVERSATION_KINDS = ("handover", "screen", "openers")
+CONVERSATION_KINDS = ("handover", "screen", "openers", "trip_now")   # Sasha 398 · + the trip this conversation is about (a pointer)
 
 
 async def clear_conversation(account: str) -> dict:

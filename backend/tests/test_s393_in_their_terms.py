@@ -101,7 +101,13 @@ class NoInternalStateWord(unittest.TestCase):
         self.assertEqual(inspect.getsource(AG).count("STATE_WORDS = re.compile("), 1)
 
 
-SUNDAY = (date.today() + timedelta(days=(6 - date.today().weekday()) % 7 or 7)).isoformat()
+def _the(word: str) -> str:   # Sasha 398 · the day THE READER takes the word for (on a Sunday, "Sunday" is today — never our own count)
+    from agapi import said as SD
+    t = date.today()
+    return next((t + timedelta(days=i)).isoformat() for i in range(0, 15) if SD.day(word, t + timedelta(days=i), t))
+
+
+SUNDAY = _the("on Sunday")
 
 
 def turn(steps, results, message):

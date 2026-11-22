@@ -231,9 +231,9 @@ def stale(at: Optional[datetime]) -> bool:
 
 async def _latest(ctx: Ctx) -> Optional[dict]:
     """The account's plan, or None when it has none — and an OUTAGE (the store not answering) said as one, never as "no trip"."""
-    from booking_signer import plan_store as PS
-    try:
-        return await PS.latest(ctx.account, strict=True)
+    from booking_signer import plan_store as PS, trip_record as TR
+    try:   # Sasha 398 · THE trip this conversation is about, from the ONE reader (never "the latest touched" on its own)
+        return await TR.plan_now(ctx.account, strict=True)
     except PS.StoreDown:
         raise unreachable("store_unreachable")
 
@@ -2013,9 +2013,11 @@ async def get_trip(ctx: Ctx, a: dict) -> dict:
             f"{x.get('title')} ({x.get('start') or '?'} – {x.get('end') or '?'})" for x in t["several"]) + " — ask which one; never a guess.")
     if t and t["kind"] == "group":
         from booking_signer import groups as G
+        await TR.remember(ctx.account, t)   # Sasha 398 · the conversation is about THIS trip now (every screen asks trip_record.current)
         c = await G.card(ctx.account, t["movement_id"])
         return {"card": c, "group_trip": t.get("title"), "people": len(c["rows"]), "say": c["say"], "page": "/group"}
     p = (await PS.by_id(ctx.account, t["trip_id"]) if t else None) or await _plan(ctx)
+    await TR.remember(ctx.account, {"kind": "personal", "id": p["trip_id"]})   # Sasha 398 · this conversation's trip, for every screen
     rows = await TR.booked_parts(ctx.account, await BK.items(ctx.account, p["trip_id"]))   # booked: from its own record, never the copy
     fig = await BK.trip_figures(ctx.account, p["trip_id"], p)   # Sasha 251 · the same figures get_total, the Trip tab and the guard read
     hotel = lambda d: (d.get("hotel") or {}).get("name") if isinstance(d.get("hotel"), dict) else d.get("hotel")

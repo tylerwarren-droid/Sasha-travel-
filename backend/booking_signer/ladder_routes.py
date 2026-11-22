@@ -487,7 +487,14 @@ async def plan_view(request: Request):
     await PWT.sweep(account)   # Sasha 183 · a payment waiting is booked before anything is shown
     await JN.file(account)   # Sasha 177 · each booking in its journey (dates AND place), before the view
     tid = request.query_params.get("trip_id")   # Sasha 175 · any of the account's trips, by id (the Trips tab)
-    p = (await PS.by_id(account, tid)) if tid and re.fullmatch(r"[0-9a-f-]{36}", tid) else await PS.latest(account)
+    from . import trip_record as TR
+    if not (tid and re.fullmatch(r"[0-9a-f-]{36}", tid)):
+        # Sasha 398 · the trip THIS CONVERSATION is about (the ONE reader's answer) — never "the latest touched" on its own (Tyler's /next,
+        # 22 Nov: the panel showed Madrid → London and a Lisbon movement while the chat answered about his own trips)
+        cur = await TR.current(account)
+        if cur and cur["kind"] == "group":
+            return {"plan": None, "plans": await PS.plans(account), "group": {"movement_id": cur["movement_id"], "title": cur.get("title")}}
+    p = (await PS.by_id(account, tid)) if tid and re.fullmatch(r"[0-9a-f-]{36}", tid) else await TR.plan_now(account)
     if not p:
         return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
@@ -503,6 +510,15 @@ async def plan_view(request: Request):
     return {"plan": view, "plans": await PS.plans(account), **({"trip_total": tt} if tt else {}),
             **({"trip_status": ts} if (ts := await trip_status(account, p.get("trip_id"))) else {}),
             "card": card}
+
+
+@router.get("/trip/now")
+async def trip_now(request: Request):
+    """Sasha 398 · which trip this conversation is about — the ONE reader's answer (trip_record.current) for every screen: the desktop pane,
+    the Trip tab and the group card ask it, never their own "latest" or "open movement". {} when there is none."""
+    from . import trip_record as TR
+    t = await TR.current(account_for(request))
+    return {k: t[k] for k in ("kind", "id", "title", "movement_id", "trip_id") if t and t.get(k)} if t else {}
 
 
 @router.get("/handover/word")

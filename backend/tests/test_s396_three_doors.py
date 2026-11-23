@@ -25,10 +25,14 @@ class EveryDoorEveryKind(unittest.TestCase):
     def test_drawn_only_where_the_doors_own_renderer_draws_it(self):
         kinds = set(AG.RENDER.values()) | set(AG.S2_DRAWS) | set(WA.KIND_MAP) | set(getattr(AG, "KINDS", set())) | {"focus", "nonsense"}
         for k in sorted(kinds):
-            self.assertEqual(AG.draws("s2", k), k in AG.S2_DRAWS, ("s2", k))                    # /s2 and /next (S2's page)
-            self.assertEqual(AG.draws("s2", k, wa=True), k in WA.KIND_MAP, ("wa", k))           # WhatsApp: wa_agent's renderers
+            # Sasha 402 · a kind outside a door's renderer is never drawn there; inside it, only an event its renderer draws (its payload:
+            # tests/test_s402_cards_drawn runs the real renderers on the stream's own events)
+            if k not in AG.S2_DRAWS:
+                self.assertFalse(AG.draws("s2", {"kind": k}), ("s2", k))                       # /s2 and /next (S2's page)
+            if k not in WA.KIND_MAP:
+                self.assertFalse(AG.draws("s2", {"kind": k}, wa=True), ("wa", k))              # WhatsApp: wa_agent's renderers
             for door in ("s1", "next", None):                                                   # no page renders these: nothing drawn
-                self.assertFalse(AG.draws(door, k), (door, k))
+                self.assertFalse(AG.draws(door, {"kind": k}), (door, k))
 
     def test_a_card_not_drawn_is_told_to_her_as_not_shown(self):
         src = (pathlib.Path(AG.__file__)).read_text()

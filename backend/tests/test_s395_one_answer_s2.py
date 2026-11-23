@@ -52,13 +52,13 @@ class OneCardPerAnswer(unittest.TestCase):
         evs = turn({"get_trip": same, "group_list": same})
         cards = [e for e in evs if e.get("type") == "render" and e.get("kind") == "group_list"]
         self.assertEqual(len(cards), 1)
-        self.assertEqual(cards[0]["card"], "group_list")
+        self.assertEqual(cards[0]["card_key"], "group_list")   # Sasha 402 · its own field
 
     def test_a_newer_card_replaces_it_in_place(self):
         newer = {**CARD, "counts": "2 booked"}
         evs = turn({"get_trip": {"ok": True, "result": {"card": CARD, "say": "x"}}, "group_list": {"ok": True, "result": {"card": newer, "say": "x"}}})
         cards = [e for e in evs if e.get("type") == "render" and e.get("kind") == "group_list"]
-        self.assertEqual({e["card"] for e in cards}, {"group_list"})                         # ONE card: the page replaces by its key
+        self.assertEqual({e["card_key"] for e in cards}, {"group_list"})                         # ONE card: the page replaces by its key
         self.assertEqual(AG.one_per_card(cards)[0]["counts"], "2 booked")                    # as it stands at the end
 
     def test_every_card_kind_twice_is_one_card_in_the_record_and_on_whatsapp(self):
@@ -75,7 +75,7 @@ class OneCardPerAnswer(unittest.TestCase):
         src = inspect.getsource(AG)
         self.assertIn('seen["payload"] = one_per_card(', src)                               # the record: one per card
         page = (__import__("pathlib").Path(__file__).resolve().parents[2] / "frontend/app/s2/S2App.tsx").read_text()
-        self.assertIn("typeof ev.card === 'string'", page)                                     # the page replaces by the server's key
+        self.assertIn("typeof ev.card_key === 'string'", page)                                 # the page replaces by the server's key (Sasha 402)
 
 
 if __name__ == "__main__":

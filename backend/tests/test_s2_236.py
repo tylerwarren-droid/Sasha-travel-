@@ -167,7 +167,7 @@ class BookSaysThisScreen(unittest.TestCase):
 @unittest.skipUnless(os.path.exists(S2APP), "the frontend isn't beside the backend here")
 class S2Draws(unittest.TestCase):
     def test_handover_and_the_trip(self):
-        src = open(S2APP, encoding="utf-8").read()
+        src = open(S2APP, encoding="utf-8").read() + open(os.path.join(os.path.dirname(S2APP), "..", "..", "lib", "cards-of.ts"), encoding="utf-8").read()   # Sasha 402
         self.assertIn("k === 'handover'", src)
         self.assertIn("Tap to finish", src)
         self.assertIn("<TripPanel", src)                                               # S1's board itself, on the same records

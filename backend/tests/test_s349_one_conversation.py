@@ -109,7 +109,7 @@ class AReplyAnswersTheToolThatSpokeLast(unittest.TestCase):
 class OnePayload(unittest.TestCase):
     def test_what_s2_draws_is_one_list_on_both_sides(self):
         from app.agent import sasha as AG
-        s2 = (FE / "app/s2/S2App.tsx").read_text()
+        s2 = (FE / "app/s2/S2App.tsx").read_text() + (FE / "lib/cards-of.ts").read_text()   # Sasha 402 · cardsOf lives in lib/cards-of.ts
         block = s2[s2.index("export const S2_KINDS = ["):s2.index("] as const", s2.index("export const S2_KINDS = ["))]
         self.assertEqual(set(re.findall(r"'([a-z_]+)'", block)), set(AG.S2_DRAWS))
         for k in AG.S2_DRAWS:
@@ -119,8 +119,10 @@ class OnePayload(unittest.TestCase):
 
     def test_a_card_a_surface_cant_draw_is_never_shown_and_she_is_told(self):
         from app.agent import sasha as AG
-        self.assertTrue(AG.draws("s2", "flights") and not AG.draws("s2", "focus"))
-        self.assertFalse(AG.draws("next", "focus") or AG.draws("s1", "flights"))   # Sasha 396 · a door with no renderer draws nothing
+        drawn = {"kind": "flights", "card": {"title": "Flights", "options": [{"name": "Iberia"}]}}   # Sasha 402 · an EVENT, with its payload
+        self.assertTrue(AG.draws("s2", drawn) and not AG.draws("s2", {"kind": "focus"}))
+        self.assertFalse(AG.draws("s2", {"kind": "flights", "card": "flights"}))           # Sasha 402 · a payload the page can't draw
+        self.assertFalse(AG.draws("next", {"kind": "focus"}) or AG.draws("s1", drawn))   # Sasha 396 · a door with no renderer draws nothing
         src = (ROOT / "backend/app/agent/sasha.py").read_text()
         self.assertIn('mr["on_screen"] = "nothing from this result was shown on their screen', src)
         self.assertNotIn("_V.promises_card", src)                                  # 345's phrase guard retired

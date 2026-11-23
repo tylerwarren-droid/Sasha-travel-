@@ -266,15 +266,60 @@ S2_DRAWS = frozenset({"venues", "read_back", "calendar", "pay_here", "pay", "kee
                       "activities", "discover", "kind_ask", "flights", "stays", "flight_chosen", "total", "trip"})
 
 
-def draws(surface: Optional[str], kind: Optional[str], wa: bool = False) -> bool:
-    """Sasha 349 · does this door draw a card of this kind? Sasha 396 · from EACH door's OWN renderer — S2 (/s2 and /next): S2_DRAWS;
-    WhatsApp: wa_agent.KIND_MAP; a door with no renderer: nothing. Before: every kind on WhatsApp and on "s1" counted as drawn (EU 288
-    §5.2), so "it's on your screen" could be said of a card nobody drew."""
-    k = str(kind or "")
+def _opts(c: Any) -> bool:
+    return isinstance(c, dict) and isinstance(c.get("options"), list) and bool(c["options"])
+
+
+def _https(u: Any) -> bool:
+    return isinstance(u, str) and u.startswith("https://")
+
+
+#: Sasha 402 · EU 294 P1 · WHAT S2's PAGE DRAWS FROM AN EVENT — frontend/lib/cards-of.ts's cardsOf, kind by kind (the payload each one
+#: reads). tests/test_s402_cards_drawn holds the two equal on the STREAM's own events (node runs the real cardsOf), so "drawn" here is
+#: what the page draws — never a kind with a payload it can't read (395 replaced flights/stays/counter_card's payload with a string).
+S2_NEEDS: Dict[str, Any] = {
+    "venues": lambda e: isinstance(e.get("preset"), dict) and bool((e["preset"].get("cards") if isinstance(e["preset"].get("cards"), list) else None)
+                                                                    or [c for c in e["preset"].get("all") or [] if isinstance(c, dict) and c.get("place_id")]),
+    "discover": lambda e: isinstance(e.get("groups"), list) and isinstance(e.get("options"), list) and bool(e["options"]),
+    "read_back": lambda e: isinstance(e.get("read_back"), list),
+    "calendar": lambda e: bool(e.get("links")),
+    "keep_capture": lambda e: True,
+    "wa_open": lambda e: isinstance(e.get("open"), str) and e["open"].startswith("https://wa.me/"),
+    "capabilities": lambda e: isinstance(e.get("groups"), list),
+    "kind_ask": lambda e: isinstance(e.get("choices"), list) and bool(e["choices"]),
+    "plans": lambda e: isinstance(e.get("items"), list),
+    "group_list": lambda e: bool(e.get("title")),
+    "notice": lambda e: bool(e.get("title")),
+    "pay_here": lambda e: True,
+    "pay": lambda e: _https(e.get("url")),
+    "counter_card": lambda e: bool(e.get("card")),
+    "my_cards": lambda e: True,
+    "accident": lambda e: bool(e.get("view")),
+    "claim_status": lambda e: bool(e.get("claim")),
+    "operators": lambda e: isinstance(e.get("buttons"), list) and bool(e["buttons"]),
+    "handover": lambda e: _https(e.get("url")) or (bool(e.get("external")) and str(e.get("url") or "").startswith("http://")),
+    "prepared": lambda e: isinstance(e.get("url"), str),
+    "subscriptions": lambda e: isinstance(e.get("items"), list),
+    "activities": lambda e: isinstance(e.get("cards"), list),
+    "flights": lambda e: _opts(e.get("card")),
+    "stays": lambda e: _opts(e.get("card")),
+    "trip": lambda e: (not (isinstance(e.get("cards"), list) and e["cards"]) and not e.get("total"))
+                      or bool(e.get("total")) or any(_opts(c) for c in e.get("cards") or []),
+    "total": lambda e: bool(e.get("total")),
+    "flight_chosen": lambda e: True,
+}
+
+
+def draws(surface: Optional[str], ev: Any, wa: bool = False) -> bool:
+    """Sasha 349 · does this door draw this card? Sasha 396 · from EACH door's OWN renderer. Sasha 402 · EU 294 P1: THIS EVENT, not its
+    kind — WhatsApp: its renderer run dry (wa_agent.drawn); S2 (/s2 and /next): what cardsOf draws from it (S2_NEEDS); a door with no
+    renderer: nothing. A card is counted as drawn only where it is actually drawn."""
+    e = ev if isinstance(ev, dict) else {"kind": ev}
+    k = str(e.get("kind") or "")
     if wa:
         from booking_signer import wa_agent as _WA
-        return k in _WA.KIND_MAP
-    return surface == "s2" and k in S2_DRAWS
+        return k in _WA.KIND_MAP and _WA.drawn(e)
+    return surface == "s2" and k in S2_DRAWS and bool(S2_NEEDS.get(k, lambda _e: False)(e))
 KINDS |= {"keep_handoff"}   # Sasha 228 · /next's "Add from your phone" (QR + short link → /s2's Add my passport): on the read-back's event
 
 
@@ -1374,13 +1419,13 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
                                                {"ref": o.get("ref"), "website": o.get("link")}), "name": o.get("name")}   # a ref is never a listing
                                            for o in ev.get("options") or [] if o.get("kind") in ("place", "independent") and o.get("name") and o.get("ref")]
                         tstate["searched"] = {"what": str(args.get("what") or "")[:120], "where": str(args.get("where") or "")[:120]}   # its line was said by code
-                shown_here = bool(ev) and draws(surface, ev.get("kind"), wa)
+                shown_here = bool(ev) and draws(surface, ev, wa)   # Sasha 402 · this event, as the door's renderer draws it
                 if shown_here:
                     tstate["drawn"] = True   # Sasha 251 · something reached their screen this turn
                     key = card_key(ev)   # Sasha 395 · ONE answer, each card ONCE: the same card again is not drawn again; a newer one
                     if drawn_cards.get(key) != ev:   # replaces it in place (the page replaces by `card`)
                         drawn_cards[key] = ev
-                        yield {**ev, "card": key, "turn": turn_key}
+                        yield {**ev, "card_key": key, "turn": turn_key}   # Sasha 402 · its OWN field: "card" is flights' / stays' payload
                 elif ev:   # Sasha 349 · a card this surface can't draw: never counted as shown, and she is told so
                     log.warning("[agent] a %s card isn't drawn on %s — not shown", ev.get("kind"), surface)
             mr = model_result(r, u.name)

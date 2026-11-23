@@ -360,6 +360,20 @@ def render(ev: dict, out, st: dict, now) -> None:
         f(ev, out)
 
 
+def drawn(ev: dict) -> bool:
+    """Sasha 402 · EU 294 P1 · is THIS event drawn on WhatsApp? Its own renderer, run dry: drawn only when it put something in the message
+    (a kind mapped to _nothing — kind_ask, focus, inline, discover — draws nothing, and a payload it can't read draws nothing)."""
+    from datetime import datetime
+    from . import guest_whatsapp as GW
+    out = GW.Out()
+    try:
+        render(ev, out, {}, datetime.now())
+    except Exception as e:   # a payload the renderer can't read is not drawn (and said in the log, never counted as shown)
+        log.warning("[wa_agent] a %s card couldn't be drawn: %s", ev.get("kind"), type(e).__name__)
+        return False
+    return bool(out.items)
+
+
 def last_of_each_card(renders: List[dict]) -> List[dict]:
     """Sasha 238 · a card shown twice in one turn is drawn once, as it stands at the end. Sasha 395 · the ONE rule (sasha.one_per_card) —
     no list of kinds of its own."""

@@ -95,7 +95,7 @@ class Discover(unittest.TestCase):
 
     @unittest.skipUnless(FRONT.exists(), "the frontend isn't beside the backend here (Railway's image)")
     def test_the_screen(self):
-        fe = (FRONT / "app" / "s2" / "S2App.tsx").read_text(encoding="utf-8")
+        fe = (FRONT / "app" / "s2" / "S2App.tsx").read_text(encoding="utf-8") + (FRONT / "lib" / "cards-of.ts").read_text(encoding="utf-8")   # Sasha 402 · cardsOf there
         self.assertIn("k === 'discover' && Array.isArray(ev.groups) && Array.isArray(ev.options) && ev.options.length", fe)   # refused: no cards
         self.assertIn("onBook={o.kind === 'independent' ? (n: string) => choose(n, '') : choose}", fe)   # an independent's ref never sent as place_id
         self.assertIn("data-hand-over-link", fe); self.assertIn("data-copy", fe)                              # a marketplace: their link + copy, no send

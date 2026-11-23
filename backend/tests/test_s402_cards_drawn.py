@@ -40,7 +40,9 @@ STAYS = {"ok": True, "result": {"city": "London", "stays": [{"name": "Hotel Fict
 COUNTER = {"ok": True, "result": {"say": "Decline the collision cover.", "render": {"kind": "counter_card", "card": {
     "counter": {"decline": [{"say": "Decline the collision cover."}], "check": [], "keep": []}, "framing": "x"}}}}
 NO_FLIGHTS = {"ok": True, "result": {"party": 1, "leg": "out", "flights": []}}   # a card with nothing to draw
+PROPOSAL = {"ok": True, "result": {"party": 1, "flight_options": {"out": FLIGHTS["result"]["flights"]}, "breakdown": {"total_eur": 240}}}
 SCRIPTS = {"search_flights": (FLIGHTS, {"origin": "Madrid", "destination": "London", "date": "2037-12-01"}),
+           "propose_trip": (PROPOSAL, {"destination": "London"}),
            "search_stays": (STAYS, {"city": "London", "checkin": "2037-12-01", "nights": 2}),
            "rental_cover": (COUNTER, {"country": "es", "rental_company": "Fictio Rent"})}
 
@@ -85,8 +87,8 @@ class TheStreamsOwnEventsAreDrawn(unittest.TestCase):
             self.assertTrue(evs, tool)
             for ev in evs:
                 self.assertIsInstance(ev.get("card_key"), str, tool)                            # the identity, in its own field
-                if ev["kind"] in ("flights", "stays", "counter_card"):
-                    self.assertIsInstance(ev.get("card"), dict, tool)                           # the payload, never the key
+                if ev["kind"] in ("flights", "stays", "counter_card") and "card" in ev:
+                    self.assertIsInstance(ev["card"], dict, tool)                               # the payload, never the key
                 self.assertTrue(cards_of(ev), f"{tool}: the stream counted a card the page draws nothing of")
             self.assertTrue(told_on_screen(seen), tool)
 
@@ -121,7 +123,10 @@ class EveryDoorAsksItsOwnRenderer(unittest.TestCase):
                {"kind": "stays", "card": {"title": "x", "options": [{"name": "a"}]}}, {"kind": "counter_card", "card": "counter_card"},
                {"kind": "counter_card"}, {"kind": "venues", "preset": {"all": [{"place_id": "p"}]}}, {"kind": "venues", "preset": {}},
                {"kind": "pay", "url": "http://x"}, {"kind": "pay", "url": "https://x"}, {"kind": "kind_ask", "choices": []},
-               {"kind": "trip"}, {"kind": "trip", "cards": [{"options": []}]}, {"kind": "total", "total": {"eur": 1}}]
+               {"kind": "trip"}, {"kind": "trip", "cards": [{"options": []}]}, {"kind": "total", "total": {"eur": 1}},
+               # propose_trip: its legs in `cards`, its total beside them (never drawn on S2 before this ticket)
+               {"kind": "flights", "cards": [{"title": "out", "options": [{"name": "Iberia"}]}], "total": {"eur": 240}},
+               {"kind": "flights", "cards": [], "total": {"eur": 240}}, {"kind": "flights", "cards": []}]
         for ev in evs:
             self.assertEqual(AG.draws("s2", ev), bool(cards_of(ev)), ev)
 

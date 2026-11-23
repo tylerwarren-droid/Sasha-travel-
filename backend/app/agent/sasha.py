@@ -301,8 +301,8 @@ S2_NEEDS: Dict[str, Any] = {
     "prepared": lambda e: isinstance(e.get("url"), str),
     "subscriptions": lambda e: isinstance(e.get("items"), list),
     "activities": lambda e: isinstance(e.get("cards"), list),
-    "flights": lambda e: _opts(e.get("card")),
-    "stays": lambda e: _opts(e.get("card")),
+    "flights": lambda e: _opts(e.get("card")) or any(_opts(c) for c in e.get("cards") or []) or bool(e.get("total")),   # + propose_trip's legs
+    "stays": lambda e: _opts(e.get("card")) or any(_opts(c) for c in e.get("cards") or []) or bool(e.get("total")),
     "trip": lambda e: (not (isinstance(e.get("cards"), list) and e["cards"]) and not e.get("total"))
                       or bool(e.get("total")) or any(_opts(c) for c in e.get("cards") or []),
     "total": lambda e: bool(e.get("total")),

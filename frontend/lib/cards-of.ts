@@ -50,8 +50,12 @@ export function cardsOf(ev: Ev): Ev[] {
   // Sasha 349 · a search's OPTIONS, in the conversation (the 236 trip-board card stood in for them: no cards, and a placeholder trip)
   const opts = (c: Ev | undefined, kind: 'flight' | 'hotel'): Ev[] => (c && Array.isArray(c.options) && c.options.length
     ? [{ k: 'options', kind, title: String(c.title || ''), leg: c.leg, options: c.options }] : [])
-  if (k === 'flights') return opts(ev.card, 'flight')
-  if (k === 'stays') return opts(ev.card, 'hotel')
+  // Sasha 402 · a search's ONE card (ev.card) AND a proposal's card per leg (ev.cards — propose_trip), with the total it carries: before,
+  // only ev.card was read, so a trip proposal's flights were never drawn on S2 while the server counted them (EU 294 P1)
+  const optsAll = (kind: 'flight' | 'hotel'): Ev[] => [...opts(ev.card, kind), ...(Array.isArray(ev.cards) ? ev.cards.flatMap((c: Ev) => opts(c, kind)) : []),
+    ...(ev.total ? [{ k: 'total', total: ev.total }] : [])]
+  if (k === 'flights') return optsAll('flight')
+  if (k === 'stays') return optsAll('hotel')
   if (k === 'trip' && !(Array.isArray(ev.cards) && ev.cards.length) && !ev.total) return [{ k: 'trip' }]   // Sasha 354 · what is pending now: the trip's ONE card (its next actions: Pay · Keep it / Switch)
   if (k === 'trip') return [...(Array.isArray(ev.cards) ? ev.cards.flatMap((c: Ev) => opts(c, 'flight')) : []), ...(ev.total ? [{ k: 'total', total: ev.total }] : [])]
   if (k === 'total' && ev.total) return [{ k: 'total', total: ev.total }]

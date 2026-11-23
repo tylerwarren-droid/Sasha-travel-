@@ -88,11 +88,18 @@ class MemoryInboundStore:
         self.rows: Dict[str, dict] = {}
         self.calls = calls_store
 
-    async def call_for_number(self, number: str, since: datetime) -> Optional[dict]:
+    async def calls_for_number(self, number: str, since: datetime) -> List[dict]:
+        """Sasha 401 · EVERY booking call to this number in the window (never the latest): one_booking.reply_for decides."""
         keys = {number, PT.number_key(number)}
-        found = [c for c in self.calls.calls.values() if c.get("dialled_number") in keys and c.get("created_at") and c["created_at"] >= since
-                 and c.get("status") in ("placed", "answered", "not_reached")]
-        return dict(max(found, key=lambda c: c["created_at"])) if found else None
+        out = []
+        for c in self.calls.calls.values():
+            if c.get("dialled_number") in keys and c.get("created_at") and c["created_at"] >= since \
+                    and c.get("status") in ("placed", "answered", "not_reached"):
+                item = self.calls.trip_items.get(c.get("trip_item_id")) or {}
+                out.append({**dict(c), "venue": c.get("venue_name") or c.get("venue") or item.get("provider_name"),
+                            "own_reference": (c.get("brief") or {}).get("own_reference"), "booking_reference": item.get("booking_reference"),
+                            "local_date": c.get("local_date") or item.get("local_date"), "local_time": c.get("local_time") or item.get("local_time")})
+        return out
 
     async def put(self, row: dict) -> bool:
         if row["provider_id"] in self.rows:
@@ -147,11 +154,16 @@ class PostgresInboundStore:
         except StorageUnavailable as e:
             raise e.rehint("016_inbound_phone.sql") from None
 
-    async def call_for_number(self, number, since):
-        return _row(await self._run(lambda c: c.fetchrow(
-            "select * from booking_calls where dialled_number = any($1::text[]) and created_at >= $2 "
-            "and status in ('placed','answered','not_reached') order by created_at desc limit 1",
-            [number, PT.number_key(number)], since)))
+    async def calls_for_number(self, number, since):
+        """Sasha 401 · EVERY booking call to this number in the window (never the latest), with its booking's day, time, references and
+        owner: one_booking.reply_for decides which one a reply answers."""
+        rows = await self._run(lambda c: c.fetch(
+            "select k.*, t.date_time, t.local_timezone, t.booking_reference, t.provider_name as venue, p.owner_id as owner_id, "
+            "k.brief->>'own_reference' as own_reference "
+            "from booking_calls k left join trip_items t on t.id = k.trip_item_id left join trips p on p.id = t.trip_id "
+            "where k.dialled_number = any($1::text[]) and k.created_at >= $2 and k.status in ('placed','answered','not_reached')",
+            [number, PT.number_key(number)], since))
+        return [{**_row(r), "account_id": str(r["owner_id"]) if r["owner_id"] else _row(r).get("account_id")} for r in rows]
 
     async def put(self, row):
         r = await self._run(lambda c: c.fetchval(
@@ -427,14 +439,14 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         # (approvals.in_app_tap, session kind "whatsapp"). Set for this message's handling only.
         wa_tok = VS.WA.set({"wa_id": sender, "message_id": sid})
         try:   # Sasha 357 · a failure here (the database) reaches the webhook's ONE outcome above: told, never an empty answer
-            inner = await GW.dispatch(p, lambda n: STORE.call_for_number(n, NOW() - MATCH_WINDOW))
+            inner = await GW.dispatch(p, lambda n: STORE.calls_for_number(n, NOW() - MATCH_WINDOW))   # a venue we called? (yes/no)
         finally:
             VS.WA.reset(wa_tok)
         if inner is not None:
             return _twiml(inner)
     now = NOW()
     try:
-        call = await STORE.call_for_number(sender, now - MATCH_WINDOW) if sender else None
+        call, held = await reply_call(sender, body, now)   # Sasha 401 · the ONE rule — never the latest call to this number
         if call is None and channel == "sms" and body:
             # Sasha 118 · a venue texting from a number Sasha did not call (the manager's mobile): matched by what it says
             from . import written as W
@@ -447,6 +459,9 @@ async def _sms(p: dict, channel: str, sender: Optional[str], body: str, sid: str
         fresh = await STORE.put(row)
         if fresh and call:
             await _read_sms(row, call, body, now)
+        elif fresh and held:   # held (this row, unattached) and said to each person it might be for
+            from . import one_booking as OB
+            await OB.say_held(held[0], held[1])
     except StorageUnavailable as e:
         log.error("[inbound_phone] %s %s not recorded: %s", channel, sid, e.detail)
         return Response(e.detail, status_code=503)   # non-2xx: Twilio retries, nothing is lost
@@ -487,10 +502,13 @@ async def voice(request: Request):
     sender, sid = p.get("From", ""), p.get("CallSid")
     now = NOW()
     try:
-        call = await STORE.call_for_number(sender, now - MATCH_WINDOW) if sender else None
-        await STORE.put({"provider_id": sid, "channel": "voicemail", "from_key": PT.number_key(sender) if sender else "unknown",
+        call, held = await reply_call(sender, None, now)   # Sasha 401 · a voicemail: the only booking it can answer, else held
+        fresh = await STORE.put({"provider_id": sid, "channel": "voicemail", "from_key": PT.number_key(sender) if sender else "unknown",
                          "to_number": p.get("To"), "body_text": None, "call_id": str(call["call_id"]) if call else None,
                          "trip_item_id": str(call["trip_item_id"]) if call else None, "received_at": now})
+        if fresh and held:
+            from . import one_booking as OB
+            await OB.say_held(held[0], held[1])
     except StorageUnavailable as e:
         log.error("[inbound_phone] call %s not recorded: %s", sid, e.detail)
     es, en = _GREETING
@@ -517,6 +535,19 @@ async def recording(request: Request):
     return Response("", status_code=204)
 
 
+async def reply_call(sender: Optional[str], words: Optional[str], now: datetime):
+    """Sasha 401 · the booking call a reply from this number answers — (call, None) by the ONE rule; (None, (candidates, why)) when several
+    fit (held and said); (None, None) when no booking was called at this number."""
+    from . import one_booking as OB
+    if not sender:
+        return None, None
+    cands = await STORE.calls_for_number(sender, now - MATCH_WINDOW)
+    if not cands:
+        return None, None
+    got, why, ok = OB.reply_for(cands, words, now, key=lambda c: str(c.get("trip_item_id") or c.get("call_id")))
+    return (got, None) if ok else (None, (cands, why))
+
+
 # ── Sasha 90 (a) · a written confirmation EMAILED to Sasha's own address after a call ─────────────────────────────
 
 WRITTEN_WINDOW = timedelta(days=14)
@@ -534,14 +565,11 @@ async def match_written(subject: Optional[str], text: Optional[str], now: dateti
     import re
     hay = f"{subject or ''}\n{text or ''}"
     calls = [c for c in await STORE.booking_calls_since(now - WRITTEN_WINDOW) if (c.get("brief") or {}).get("sasha_email")]
+    from .one_booking import decide   # Sasha 401 · the ONE rule (it took the newest call when several named the surname)
     by_ref = [c for c in calls if (c["brief"].get("own_reference") or "") and re.search(rf"\b{re.escape(c['brief']['own_reference'])}\b", hay, re.I)]
-    if len(by_ref) == 1:
-        return by_ref[0]
-    if by_ref:
-        return None
     by_name = [c for c in calls if len(_surname(c["brief"])) >= 3 and re.search(rf"\b{re.escape(_surname(c['brief']))}\b", hay, re.I)]
-    items = {str(c["trip_item_id"]) for c in by_name}
-    return max(by_name, key=lambda c: c["created_at"]) if len(items) == 1 else None
+    got, _, ok = decide([("Sasha's reference", by_ref), ("the guest's surname", by_name)], key=lambda c: str(c["trip_item_id"]))
+    return got if ok else None
 
 
 async def on_written_email(provider_id: str, sender: Optional[str], subject: Optional[str], text: Optional[str], now: datetime) -> bool:

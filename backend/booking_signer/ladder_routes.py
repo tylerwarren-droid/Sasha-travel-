@@ -40,6 +40,8 @@ from .call_store import cap_window
 from .store import StorageUnavailable, UnknownTrip
 
 log = logging.getLogger("sasha.booking_ladder")
+REPLY_WINDOW = timedelta(days=21)   # Sasha 401 · a reply to Sasha's own address answers a booking emailed in the last three weeks
+
 router = APIRouter(tags=["booking-ladder"])
 APPROVAL_WINDOW = timedelta(minutes=15)
 
@@ -827,15 +829,22 @@ async def inbound(request: Request):
     to_list = data.get("to") if isinstance(data.get("to"), list) else [data.get("to")]
     if not ours or not any((_address(a) or "").endswith("@" + ours) for a in to_list):
         return {"ok": True, "ignored": "not addressed to Sasha's domain"}
-    act = E.act_id_of(data.get("to"))
+    act = E.act_id_of(data.get("to"))   # a reply to the booking's OWN reply address: that booking (an exact identifier)
     sender = _address(data.get("from"))
+    held = None
     if act is None and sender:
-        # rule 1 · a reply to Sasha's OWN address (given on the phone, or a reply-all): the venue Sasha last emailed from
-        # that very address — matched by the sender, never by guessing from the words
+        # rule 1 · a reply to Sasha's OWN address (given on the phone, or a reply-all). Sasha 401 · EU 292: it was the LAST email sent to
+        # that address; now every booking emailed there in the window is a candidate and the ONE rule reads the reply (one_booking)
+        from . import one_booking as OB
         try:
-            act = await LADDER_STORE.email_for_sender(sender)
+            cands = await LADDER_STORE.emails_for_sender(sender, now - REPLY_WINDOW)
         except StorageUnavailable as ex:
             return _refuse(503, ex.rule, ex.detail)
+        if cands:
+            words, _ = await _reply_text(pid)
+            got, why, ok = OB.reply_for(cands, f"{data.get('subject') or ''}\n{words or ''}", now,
+                                        key=lambda c: str(c.get("trip_item_id") or c["email_id"]))
+            act, held = (got["email_id"], None) if ok else (None, (cands, why))
     try:
         if act is not None and not await LADDER_STORE.email_exists(act) and await LADDER_STORE.link_exists(act):
             return await _link_confirmation(act, pid, data, now)
@@ -857,7 +866,12 @@ async def inbound(request: Request):
         if act is None or not await LADDER_STORE.email_exists(act):
             await LADDER_STORE.quarantine({"provider_id": pid, "to_addrs": data.get("to"), "from_addr": data.get("from"),
                                            "subject": data.get("subject"), "received_at": now,
-                                           "reason": "not addressed to any email Sasha sent" if act is None else "addressed to an unknown email id"})
+                                           "reason": ("several bookings were emailed at that address and it names none of them — held"
+                                                      if held else "not addressed to any email Sasha sent") if act is None
+                                           else "addressed to an unknown email id"})
+            if held:   # Sasha 401 · held (the quarantine) and said to each person it might be for
+                from . import one_booking as OB
+                await OB.say_held(*held)
             # S-56 · a stop sent to the wrong address still counts, if it comes from a venue Sasha wrote to
             sender = _address(data.get("from"))
             known = await S.STOP_STORE.address_venue(sender) if sender and S.STOP_STORE is not None else None

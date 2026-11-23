@@ -297,10 +297,17 @@ class MemoryLadderStore(MemoryLinks):
         e = self.emails.get(email_id)
         return dict(e) if e else None
 
-    async def email_for_sender(self, addr: str) -> Optional[str]:
-        sent = [(e.get("sent_at") or e["created_at"], k) for k, e in self.emails.items()
-                if e["status"] == "sent" and str(e["email"].get("to", "")).lower() == addr.lower()]
-        return max(sent)[1] if sent else None
+    async def emails_for_sender(self, addr: str, since) -> List[dict]:
+        """Sasha 401 · EVERY booking email sent to this address in the window (never the last one): one_booking.reply_for decides."""
+        out = []
+        for k, e in self.emails.items():
+            at = e.get("sent_at") or e.get("created_at")
+            if e["status"] == "sent" and str(e["email"].get("to", "")).lower() == addr.lower() and at and at >= since:
+                item = self.trip_items.get(e.get("trip_item_id")) or {}
+                out.append({**dict(e), "email_id": k, "venue": e.get("venue_name") or item.get("provider_name"),
+                            "booking_reference": item.get("booking_reference"), "local_date": e.get("local_date") or item.get("local_date"),
+                            "local_time": e.get("local_time") or item.get("local_time")})
+        return out
 
     async def request_of_email(self, email_id: str) -> Optional[dict]:
         e = self.emails.get(email_id)
@@ -479,11 +486,14 @@ class PostgresLadderStore(PostgresLinks):
         eid = _uuid_or_none(email_id)
         return None if eid is None else _row(await self._run(lambda c: c.fetchrow("select * from booking_emails where email_id = $1", eid)))
 
-    async def email_for_sender(self, addr):
-        v = await self._run(lambda c: c.fetchval(
-            "select email_id from booking_emails where status = 'sent' and lower(email->>'to') = lower($1) "
-            "order by coalesce(sent_at, created_at) desc limit 1", addr))
-        return str(v) if v else None
+    async def emails_for_sender(self, addr, since):
+        """Sasha 401 · EVERY booking email sent to this address in the window, with its booking's day, time, reference and owner."""
+        rows = await self._run(lambda c: c.fetch(
+            "select e.email_id, e.trip_item_id, e.account_id, t.date_time, t.local_timezone, t.booking_reference, t.provider_name as venue "
+            "from booking_emails e left join trip_items t on t.id = e.trip_item_id "
+            "where e.status = 'sent' and lower(e.email->>'to') = lower($1) and coalesce(e.sent_at, e.created_at) >= $2", addr, since))
+        return [{**dict(r), "email_id": str(r["email_id"]), "trip_item_id": str(r["trip_item_id"]) if r["trip_item_id"] else None,
+                 "account_id": str(r["account_id"]) if r["account_id"] else None} for r in rows]
 
     async def request_of_email(self, email_id):
         eid = _uuid_or_none(email_id)

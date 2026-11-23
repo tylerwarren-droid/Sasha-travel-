@@ -69,8 +69,8 @@ class ThroughTheWebhook(unittest.TestCase):
             return ""
 
         class Store:
-            async def call_for_number(self, n, since):
-                return None
+            async def calls_for_number(self, n, since):   # Sasha 401 · every call to the number, never the latest
+                return []
 
             async def put(self, row):
                 return True

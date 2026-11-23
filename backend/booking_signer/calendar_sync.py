@@ -202,8 +202,7 @@ class PostgresCalendarStore:
             "consent_text_sha256, last_ok_at) values ($1,$2,$3,$4,$5,$6,$7,$5) on conflict (account_id) do update set "
             "vault_item_id = excluded.vault_item_id, google_calendar_id = excluded.google_calendar_id, scopes = excluded.scopes, "
             "consent_at = excluded.consent_at, consent_wording_version = excluded.consent_wording_version, "
-            "consent_text_sha256 = excluded.consent_text_sha256, last_ok_at = excluded.last_ok_at, needs_reconnect_at = null, "
-            "told_reconnect_at = null",
+            "consent_text_sha256 = excluded.consent_text_sha256, last_ok_at = excluded.last_ok_at",   # Sasha 400 · health: connections.py
             uuid.UUID(row["account_id"]), uuid.UUID(row["vault_item_id"]), row.get("google_calendar_id"), row["scopes"],
             row["consent_at"], row["consent_wording_version"], row["consent_text_sha256"]))
 
@@ -212,7 +211,7 @@ class PostgresCalendarStore:
         return n.endswith(" 1")
 
     async def set_link(self, account, **kw):
-        cols = [k for k in kw if k in ("last_ok_at", "needs_reconnect_at", "told_reconnect_at")]
+        cols = [k for k in kw if k in ("last_ok_at",)]
         if cols:
             sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(cols))
             await self._run(lambda c: c.execute(f"update calendar_links set {sets} where account_id = $1", uuid.UUID(account),
@@ -280,23 +279,15 @@ async def _token(account: str, link: dict, purpose: str) -> str:
 
 # ── the drainer ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-async def _expired(account: str, link: dict) -> None:
-    """invalid_grant: 'Expired, reconnect' — and the guest is told ONCE (WhatsApp if linked)."""
-    now = NOW()
-    await STORE.set_link(account, needs_reconnect_at=now)
-    if link.get("told_reconnect_at"):
-        return
-    await STORE.set_link(account, told_reconnect_at=now)
-    try:
-        from . import guest_whatsapp as GW
-        ch = await GW.STORE.channel_of_account(account) if GW.STORE else None
-        if ch and GW.guest_numbers():
-            st = await GW.STORE.get_state(ch["wa_id_sha256"])
-            await GW.deliver(ch, sorted(GW.guest_numbers())[0], GW.Out().text(
-                f"Your Google Calendar connection has expired (a limit while we're in testing). Reconnect: {web_url()}"),
-                st.get("last_inbound_at"))
-    except Exception as e:
-        log.warning("[calendar] the reconnect message failed: %s", type(e).__name__)
+async def _broke(account: str, rule: str) -> bool:
+    """Sasha 400 · a refused token → the ONE health truth (connections.broke: the one rule, kept, said once, said while it lasts)."""
+    from . import connections as CN
+    return await CN.broke(account, "google_calendar", rule)
+
+
+async def _broken(account: str) -> bool:
+    from . import connections as CN
+    return await CN.is_broken(account, "google_calendar")
 
 
 async def sync_one(row: dict) -> str:
@@ -311,7 +302,7 @@ async def sync_one(row: dict) -> str:
     if link is None:
         await STORE.done(row["id"], NOW())
         return "done: no calendar connected"
-    if link.get("needs_reconnect_at"):
+    if await _broken(account):
         return "kept: the connection needs reconnecting"
     action = calendar_action(item["status"])
     existing = await STORE.get_event(item["id"])
@@ -321,9 +312,8 @@ async def sync_one(row: dict) -> str:
     try:
         token = await _token(account, link, "calendar_sync")
     except UseRefused as e:
-        if e.rule == "connection_invalid_grant":
-            await _expired(account, link)
-            return "kept: expired (invalid_grant)"
+        if await _broke(account, e.rule):   # Sasha 400 · the one rule (not only invalid_grant): kept until it works again
+            return f"kept: the connection needs reconnecting ({e.rule})"
         await STORE.fail(row["id"], e.rule)
         return f"failed: {e.rule}"
     cal = link.get("google_calendar_id") or "primary"
@@ -428,14 +418,13 @@ async def sync_account(account: str, link: Optional[dict] = None) -> List[str]:
     link = link or await STORE.get_link(account)
     if not link:
         return ["no calendar connected"]
-    if link.get("needs_reconnect_at"):
+    if await _broken(account):
         return ["kept: the connection needs reconnecting"]
     try:
         token = await _token(account, link, "calendar_sync")
     except UseRefused as e:
-        if e.rule == "connection_invalid_grant":
-            await _expired(account, link)
-            return ["kept: expired (invalid_grant)"]
+        if await _broke(account, e.rule):
+            return [f"kept: the connection needs reconnecting ({e.rule})"]
         return [f"failed: {e.rule}"]
     cal = link.get("google_calendar_id") or "primary"
     out: List[str] = []
@@ -522,12 +511,16 @@ async def busy(account: str, start: datetime, end: datetime) -> Optional[List[Tu
         return None
     try:
         link = await STORE.get_link(account)
-        if not link or link.get("needs_reconnect_at"):
+        if not link or await _broken(account):
             return None
-        token = await _token(account, link, "calendar_freebusy")
+        try:
+            token = await _token(account, link, "calendar_freebusy")
+        except UseRefused as e:   # Sasha 400 · the ONE health truth; free/busy then can't say (None)
+            await _broke(account, e.rule)
+            return None
         items = [{"id": "primary"}] + ([{"id": link["google_calendar_id"]}] if link.get("google_calendar_id") else [])
         st, j = await GOOGLE_HTTP("POST", f"{CAL}/freeBusy", token, {"timeMin": start.isoformat(), "timeMax": end.isoformat(), "items": items})
-    except (UseRefused, StorageUnavailable) as e:
+    except StorageUnavailable as e:
         log.info("[calendar] free/busy skipped: %s", getattr(e, "rule", type(e).__name__))
         return None
     except Exception as e:
@@ -592,8 +585,9 @@ async def calendar_view(request: Request):
             link = await STORE.get_link(account)
         except StorageUnavailable as e:
             return _refuse(503, e.rule, e.detail)
-    return {"configured": configured(), "connected": bool(link and not link.get("needs_reconnect_at")),
-            "expired": bool(link and link.get("needs_reconnect_at")), "consent": consent(),
+    broken = bool(link) and await _broken(account)   # Sasha 400 · the ONE health truth
+    return {"configured": configured(), "connected": bool(link and not broken),
+            "expired": broken, "consent": consent(),
             "last_ok_at": link["last_ok_at"].isoformat() if link and link.get("last_ok_at") else None}
 
 
@@ -666,6 +660,8 @@ async def calendar_callback(request: Request):
                           "consent_at": now, "consent_wording_version": c["version"], "consent_text_sha256": c["sha256"]})
     if old and old.get("vault_item_id") != item_id:   # a reconnect: the old token shredded
         await VC.STORE.revoke(account, old["vault_item_id"], now)
+    from . import connections as CN
+    await CN.working(account, "google_calendar")   # Sasha 400 · reconnected: the notice clears
     return RedirectResponse(web_url("google=connected"), status_code=303)
 
 
@@ -685,6 +681,8 @@ async def calendar_disconnect(request: Request):
     await VC.STORE.revoke(account, link["vault_item_id"], NOW())
     await VC.STORE.event(account, link["vault_item_id"], "revoked", {"provider": "google.com"}, NOW())
     await STORE.delete_link(account)
+    from . import connections as CN
+    await CN.gone(account, "google_calendar")   # Sasha 400 · disconnected: nothing broken to say
     return {"disconnected": True, "at_google": revoked,
             "say": "Disconnected. Sasha's copy of the access is deleted" + (" and Google has revoked it." if revoked == "revoked" else
                    "; to be sure, remove \"Sasha by Kanoe\" at myaccount.google.com → Security → Third-party access.")}

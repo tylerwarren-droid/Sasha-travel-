@@ -167,11 +167,16 @@ class Drain(Base):
         self.connect()
         self.refresh_error = "connection_invalid_grant"
         self.item("confirmed", "t-1"); self.item("confirmed", "t-2")
-        with mock.patch.object(CS, "_expired", wraps=CS._expired) as exp:
-            self.assertEqual(run(CS.drain_once()), ["kept: expired (invalid_grant)", "kept: the connection needs reconnecting"])
-        self.assertEqual(exp.call_count, 1)
+        from booking_signer import channel as CH, connections as CN   # Sasha 400 · the ONE health truth
+        CN._MEM.pop(ACCOUNT, None)
+        self.addCleanup(CN._MEM.pop, ACCOUNT, None)
+        told = mock.AsyncMock(return_value={"to": "s2"})
+        with mock.patch.object(CH, "tell", told):
+            self.assertEqual(run(CS.drain_once()), ["kept: the connection needs reconnecting (connection_invalid_grant)",
+                                                    "kept: the connection needs reconnecting"])
+        self.assertEqual(told.await_count, 1)                                     # told once
         self.assertEqual(len(run(CS.STORE.take())), 2)                            # kept for after the reconnect
-        self.assertIsNotNone(CS.STORE.links[ACCOUNT]["needs_reconnect_at"])
+        self.assertTrue(run(CN.is_broken(ACCOUNT, "google_calendar")))
 
     def test_no_connection_no_sync(self):
         self.item("confirmed")

@@ -135,14 +135,14 @@ class TheWholeClass(unittest.TestCase):
                 self.assertIn("wip_on_phone(ctx)", line + body.split(line)[1][:120], fn)
 
     def test_every_outcome_send_is_the_one_send(self):
-        """No booking outcome is sent on WhatsApp AND published apart: _tell_whatsapp is called by channel.tell only (and the Gmail
-        reconnect line, which isn't a booking's)."""
+        """No booking outcome is sent on WhatsApp AND published apart: _tell_whatsapp is called by channel.tell only (Sasha 400: the
+        Gmail reconnect line too — booking_signer/connections.broke says it through channel.tell)."""
         hits = []
         for f in list((BACKEND / "agapi").glob("*.py")) + list((BACKEND / "booking_signer").glob("*.py")):
             for i, line in enumerate(f.read_text().splitlines(), 1):
                 if "_tell_whatsapp(" in line and "def _tell_whatsapp" not in line:
                     hits.append(f"{f.name}:{line.strip()[:60]}")
-        self.assertEqual(sorted({h.split(":")[0] for h in hits}), ["channel.py", "mailbox.py"], hits)   # 366: channel.progress too — still channel
+        self.assertEqual(sorted({h.split(":")[0] for h in hits}), ["channel.py"], hits)   # 366: channel.progress too — still channel
         for f in ("agapi/venue_calls.py", "agapi/venue_submit.py", "booking_signer/paid_watch.py"):
             self.assertIn("CH.tell(", (BACKEND / f).read_text(), f)
 

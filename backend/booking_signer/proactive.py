@@ -135,7 +135,7 @@ def render(kind: str, b: dict, extra: Optional[dict] = None, now: Optional[datet
         return "Today: " + " · ".join(f"{x.get('time') or '—'} {x.get('venue')} ("
                                       + ("TEST booking" if (x.get("booking_reference") or "").startswith("TEST-") or "(TEST booking" in (x.get("venue") or "")
                                          else "confirmed" if x.get("status") in CONFIRMED else brief_state(x)) + ")"
-                                      for x in items)
+                                      for x in items) + (f" · {extra['connections']}" if extra.get("connections") else "")   # Sasha 400 (one line: a template variable)
     raise ValueError(kind)
 
 
@@ -590,7 +590,8 @@ async def tick(now: datetime, only_account: Optional[str] = None) -> List[dict]:
                                                                             "label": place["label"]}))
         today = [b for b in rows if starts_at(b) and starts_at(b).astimezone(starts_at(b).tzinfo).date() == now.astimezone(starts_at(b).tzinfo).date()]
         if reminders_ok and today and "morning_brief" not in prefs.get("off_kinds", []) and _due("morning_brief", today[0], now):
-            due.append((PRIORITY["morning_brief"], "morning_brief", today[0], {"items": today}))
+            from . import connections as CN   # Sasha 400 · a broken connection is said in the brief while it lasts
+            due.append((PRIORITY["morning_brief"], "morning_brief", today[0], {"items": today, "connections": await CN.said(account)}))
         for _, kind, b, extra in sorted(due, key=lambda d: d[0]):
             tz = _zone(b)
             local_day = now.astimezone(tz).date()   # the SENDING day: the cap counts per day sent; the dedupe is per booking

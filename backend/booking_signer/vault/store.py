@@ -40,6 +40,10 @@ class MemoryVaultStore:
     async def list(self, account: str) -> List[dict]:
         return [_meta(r) for r in sorted(self.items.values(), key=lambda r: r["created_at"]) if r["account_id"] == account]
 
+    async def live_connections(self) -> List[dict]:
+        """Sasha 400 · every live connection (kind oauth, not revoked), metadata only — what connections.check_all looks at."""
+        return [{**_meta(r), "account_id": str(r["account_id"])} for r in self.items.values() if r.get("kind") == "oauth" and not r.get("revoked_at")]
+
     async def get(self, account: str, item_id: str) -> Optional[dict]:
         r = self.items.get(item_id)
         return _meta(r) if r and r["account_id"] == account else None
@@ -122,6 +126,11 @@ class PostgresVaultStore:
         rows = await self._run(lambda c: c.fetch(f"select {', '.join(META)} from vault_items where account_id = $1 order by created_at",
                                                  uuid.UUID(account)))
         return [_meta(dict(r)) for r in rows]
+
+    async def live_connections(self):
+        """Sasha 400 · every live connection (kind oauth, not revoked), metadata only — never a sealed column."""
+        rows = await self._run(lambda c: c.fetch(f"select account_id, {', '.join(META)} from vault_items where kind = 'oauth' and revoked_at is null"))
+        return [{**_meta(dict(r)), "account_id": str(r["account_id"])} for r in rows]
 
     async def get(self, account, item_id):
         r = await self._run(lambda c: c.fetchrow(f"select {', '.join(META)} from vault_items where id = $1 and account_id = $2",

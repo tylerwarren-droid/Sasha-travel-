@@ -110,7 +110,9 @@ class FromTheRecord(Base):
         self.assertEqual((e["status"], e["summary"]), ("tentative", "(requested) DiverXO"))
 
     def test_an_expired_connection_is_kept_not_written(self):
-        run(self.store.set_link(ACCT, needs_reconnect_at="2026-10-10T15:53:32Z"))
+        from booking_signer import connections as CN   # Sasha 400 · the ONE health truth, not the link's columns
+        CN._MEM[ACCT] = {"google_calendar": {"since": "2026-10-10T15:53:32+00:00", "why": "connection_invalid_grant"}}
+        self.addCleanup(CN._MEM.pop, ACCT, None)
         self.assertEqual(run(CS.sync_account(ACCT)), ["kept: the connection needs reconnecting"])
         self.assertEqual(self.google.calls, [])
 

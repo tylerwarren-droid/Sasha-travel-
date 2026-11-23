@@ -3109,8 +3109,9 @@ async def watch_gmail_confirmation(ch: dict, frm: str, account: str, venue: str,
     their Gmail for the confirmation. mailbox.sync matches it to the booking (reference, else venue + day) and offers it
     here — "Yes" files it on the booking and its receipt. Nothing found is said, never assumed."""
     from . import mailbox as MB
+    from . import connections as CN   # Sasha 400 · the ONE health truth
     link = await MB.STORE.get_link(account) if MB.STORE else None
-    if not link or link.get("needs_reconnect_at"):
+    if not link or await CN.is_broken(account, "gmail"):
         st = await STORE.get_state(ch["wa_id_sha256"])
         await deliver(ch, frm, Out().text(f"Your Gmail isn't connected{' (it needs reconnecting)' if link else ''}, so I can't find "
                                           f"{venue}'s confirmation myself. Forward it to me, or connect Gmail in You."), st.get("last_inbound_at"))

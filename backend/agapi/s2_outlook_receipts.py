@@ -72,10 +72,15 @@ async def receipts(account: str) -> Optional[List[dict]]:
     lk = await OL.link(account)
     if not lk:
         return None
+    from booking_signer import connections as CN   # Sasha 400 · the ONE health truth (Outlook had none: a refusal was silent)
+    if await CN.is_broken(account, "outlook"):
+        return None
     try:
         token = await VC.use_connection(account, lk["id"], purpose="outlook_read")
-    except VC.UseRefused:
+    except VC.UseRefused as e:
+        await CN.broke(account, "outlook", e.rule)
         return None
+    await CN.working(account, "outlook")
     status, j = await GRAPH_HTTP(f"{GRAPH}/messages", token, {"$search": f'"{query()}"', "$top": MAX,
                                                               "$select": "id,from,subject,receivedDateTime,body"})
     if status != 200:

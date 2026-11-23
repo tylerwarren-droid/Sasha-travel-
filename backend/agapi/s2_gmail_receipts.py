@@ -47,8 +47,9 @@ async def connected(account: str) -> bool:
         from booking_signer import mailbox as MB
         if MB.STORE is None:
             return False
+        from booking_signer import connections as CN   # Sasha 400 · the ONE health truth
         link = await MB.STORE.get_link(account)
-        return bool(link and not link.get("needs_reconnect_at"))
+        return bool(link and not await CN.is_broken(account, "gmail"))
     except Exception:
         return False
 
@@ -68,12 +69,14 @@ async def receipts(account: str) -> Optional[List[dict]]:
     from booking_signer.vault import crypto as VC
     if MB.STORE is None:
         return None
+    from booking_signer import connections as CN   # Sasha 400 · the ONE health truth
     link = await MB.STORE.get_link(account)
-    if not link or link.get("needs_reconnect_at"):
+    if not link or await CN.is_broken(account, "gmail"):
         return None
     try:
         token = await VC.use_connection(account, link["vault_item_id"], purpose="gmail_read")
-    except VC.UseRefused:
+    except VC.UseRefused as e:
+        await CN.broke(account, "gmail", e.rule)   # never silently None: kept and said once
         return None
     try:
         status, j = await MB.GMAIL_HTTP("GET", f"{MB.GMAIL}/messages", token, {"q": QUERY, "maxResults": MAX})

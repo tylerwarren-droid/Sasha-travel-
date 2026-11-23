@@ -26,9 +26,12 @@ def link(**kw):
 
 
 class _Run:
-    """sync() with the refresh answering `rule` (None: works); what was said, on which door."""
+    """sync() with the refresh answering `rule` (None: works); what was said (Sasha 400: through the ONE health truth, connections.py,
+    which says it on the one outcome channel)."""
     def __init__(self, rule=None, row=None):
-        self.store, self.wa, self.events, self.news = MB.MemoryMailboxStore(), [], [], []
+        from booking_signer import connections as CN
+        CN._MEM.pop(ACCT, None)
+        self.store, self.said = MB.MemoryMailboxStore(), []
         asyncio.run(self.store.put_link(row or link()))
         self.rule = rule
 
@@ -36,63 +39,60 @@ class _Run:
         raise VC.UseRefused(self.rule, "Google refused the connection's token")
 
     def sync(self):
-        async def wa(account, text):
-            self.wa.append(text)
-            return "sent"
+        from booking_signer import channel as CH
 
-        async def keep(account, key, text, url=None):
-            self.news.append((key, text, url))
+        async def tell(account, text, **kw):
+            self.said.append((text, kw.get("event"), kw.get("news_url")))
+            return {"to": "s2"}
         with mock.patch.object(MB, "STORE", self.store), mock.patch.object(VC, "use_connection", self._use), \
-                mock.patch.object(LE, "WA_SEND", wa), mock.patch.object(LE, "publish", lambda a, e: self.events.append(e) or e), \
-                mock.patch.object(LE, "keep_news", keep):
+                mock.patch.object(CH, "tell", tell):
             return asyncio.run(MB.sync(ACCT))
 
 
 class TheLinkNeverDiesSilently(unittest.TestCase):
-    def test_invalid_grant_tells_once_on_both_doors_in_the_same_sync(self):
+    """Sasha 400 moved the truth to booking_signer/connections.py (one per connection, said while it lasts): the same promises hold."""
+
+    def broken(self):
+        from booking_signer import connections as CN
+        return asyncio.run(CN.is_broken(ACCT, "gmail"))
+
+    def test_invalid_grant_tells_once_with_its_one_step(self):
         r = _Run("connection_invalid_grant")
         self.assertEqual(r.sync(), [])
-        self.assertEqual(r.wa, [f"{MB.RECONNECT_LINE}: {MB.reconnect_url()}"])          # WhatsApp: the line + its one link
-        self.assertEqual(r.events[0]["render"], {"kind": "reconnect", "label": "Reconnect Gmail", "url": "/you#gmail"})   # /s2, open now
-        self.assertEqual(r.news[0][2], "/you#gmail")                                      # /s2, its next visit
-        st = asyncio.run(r.store.get_link(ACCT))
-        self.assertTrue(st["needs_reconnect_at"] and st["told_reconnect_at"])
+        text, event, url = r.said[0]
+        self.assertIn("Gmail connection stopped working", text)
+        self.assertEqual(event["render"], {"kind": "reconnect", "label": "Reconnect Gmail", "url": "/you#gmail"})
+        self.assertEqual(url, "/you#gmail")
+        self.assertTrue(self.broken())
         r.sync(); r.sync()                                                                # and never again
-        self.assertEqual(len(r.wa), 1)
-        self.assertEqual(len(r.events), 1)
-
-    def test_a_link_dead_before_323_is_told_on_its_first_sync(self):
-        from datetime import datetime, timezone
-        r = _Run(row=link(needs_reconnect_at=datetime(2026, 10, 20, tzinfo=timezone.utc)))
-        r.sync()
-        self.assertEqual(len(r.wa), 1)
-        r.sync()
-        self.assertEqual(len(r.wa), 1)
+        self.assertEqual(len(r.said), 1)
 
     def test_google_busy_is_not_a_death(self):
         for rule in ("connection_http_503", "connection_http_429", "connection_http_500"):
             r = _Run(rule)
             r.sync()
-            self.assertEqual((r.wa, r.events), ([], []), rule)
-            self.assertFalse(asyncio.run(r.store.get_link(ACCT)).get("needs_reconnect_at"), rule)
+            self.assertEqual(r.said, [], rule)
+            self.assertFalse(self.broken(), rule)
 
     def test_any_other_refusal_is_dead_and_told(self):
         for rule in ("connection_invalid_client", "connection_unauthorized_client", "vault_item_unavailable"):
             r = _Run(rule)
             r.sync()
-            self.assertEqual(len(r.wa), 1, rule)
+            self.assertEqual(len(r.said), 1, rule)
 
     def test_a_reconnect_rearms_the_telling(self):
+        from booking_signer import connections as CN
         r = _Run("connection_invalid_grant")
         r.sync()
-        asyncio.run(r.store.put_link(link()))                                             # reconnected (put_link clears both)
+        asyncio.run(CN.working(ACCT, "gmail"))                                            # reconnected (on_connected says so)
         r.sync()
-        self.assertEqual(len(r.wa), 2)
+        self.assertEqual(len(r.said), 2)
 
-    def test_postgres_reconnect_clears_both_stamps(self):
+    def test_a_reconnect_clears_it_and_no_timer_tells(self):
         src = (ROOT / "backend/booking_signer/mailbox.py").read_text()
-        self.assertIn("needs_reconnect_at = null, told_reconnect_at = null", src)
-        self.assertNotIn("asyncio.sleep(", src[src.index("async def link_dead"):src.index("async def _told_auto")])   # no timer
+        self.assertIn('await CN.working(account, "gmail")   # Sasha 400 · reconnected: the notice clears', src)
+        cn = (ROOT / "backend/booking_signer/connections.py").read_text()
+        self.assertNotIn("asyncio.sleep(", cn[cn.index("async def broke"):cn.index("async def working")])   # told by the result, never a timer
 
 
 class MyBookingsDemoClean(unittest.TestCase):

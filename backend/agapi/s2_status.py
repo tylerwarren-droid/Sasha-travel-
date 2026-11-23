@@ -178,8 +178,14 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
         held = []
     unmatched = ({"unmatched_confirmations": [{"at": h.get("at"), "channel": h.get("channel"), "why": h.get("why")} for h in held],
                   "unmatched_line": UNMATCHED.format(n=len(held), s="" if len(held) == 1 else "s")} if held else {})
+    from booking_signer import connections as CN   # Sasha 400 · a broken connection is said while it lasts (the ONE health truth)
+    try:
+        conn = await CN.said(account)
+    except Exception as e:
+        logging.getLogger("agapi.s2_status").info("[s2-status] connections not read: %s", type(e).__name__)
+        conn = None
     return {**st, **d, "trip_state": trip_state, "refs": list(dict.fromkeys(refs)), "ledger_open": open_n, **({"stopped": stops} if stops else {}),
-            **unmatched}
+            **unmatched, **({"connections_line": conn} if conn else {})}
 
 
 def public(st: Dict[str, Any]) -> Dict[str, Any]:

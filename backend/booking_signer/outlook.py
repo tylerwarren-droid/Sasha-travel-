@@ -141,6 +141,8 @@ async def outlook_callback(request: Request):
                                                        "consent_version": c["version"], "consent_sha256": c["sha256"]}, now)
     if old:
         await VC.STORE.revoke(account, old["id"], now)
+    from . import connections as CN
+    await CN.working(account, "outlook")   # Sasha 400 · (re)connected: the notice clears
     return RedirectResponse(web_url("outlook=connected"), status_code=303)
 
 
@@ -155,6 +157,8 @@ async def outlook_disconnect(request: Request):
     if not lk:
         return {"disconnected": False}
     await VC.STORE.revoke(account, lk["id"], NOW())
+    from . import connections as CN
+    await CN.gone(account, "outlook")   # Sasha 400 · disconnected: nothing broken to say
     return {"disconnected": True, "at_microsoft": "to remove Sasha's permission at Microsoft too: https://myapps.microsoft.com → Sasha → Revoke permissions"}
 
 

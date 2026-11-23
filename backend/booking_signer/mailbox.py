@@ -346,12 +346,12 @@ class PostgresMailboxStore:
             "insert into mailbox_links (account_id, vault_item_id, consent_at, consent_wording_version, consent_text_sha256) "
             "values ($1,$2,$3,$4,$5) on conflict (account_id) do update set vault_item_id = excluded.vault_item_id, "
             "consent_at = excluded.consent_at, consent_wording_version = excluded.consent_wording_version, "
-            "consent_text_sha256 = excluded.consent_text_sha256, needs_reconnect_at = null, told_reconnect_at = null",
+            "consent_text_sha256 = excluded.consent_text_sha256",   # Sasha 400 · health is connections.py's, never these columns
             uuid.UUID(row["account_id"]), uuid.UUID(row["vault_item_id"]), row["consent_at"], row["consent_wording_version"],
             row["consent_text_sha256"]))
 
     async def set_link(self, account, **kw):
-        cols = [k for k in kw if k in ("last_sync_at", "history_id", "needs_reconnect_at", "told_reconnect_at", "address")]   # 328 · address: sql/047
+        cols = [k for k in kw if k in ("last_sync_at", "history_id", "address")]   # 328 · address: sql/047
         if cols:
             sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(cols))
             await self._run(lambda c: c.execute(f"update mailbox_links set {sets} where account_id = $1", uuid.UUID(account), *[kw[k] for k in cols]))
@@ -398,7 +398,7 @@ class PostgresMailboxStore:
         await self._run(lambda c: c.execute(f"update mailbox_finds set {sets} where id = $1", uuid.UUID(fid), *vals))
 
     async def all_links(self):
-        rows = await self._run(lambda c: c.fetch("select * from mailbox_links where needs_reconnect_at is null"))
+        rows = await self._run(lambda c: c.fetch("select * from mailbox_links"))   # Sasha 400 · every link: a broken one is checked
         return [{**dict(r), "account_id": str(r["account_id"]), "vault_item_id": str(r["vault_item_id"])} for r in rows]
 
     async def set_time(self, account, trip_item_id, at):
@@ -540,21 +540,18 @@ async def sync(account: str) -> List[dict]:
     link = await STORE.get_link(account)
     if not link:
         return []
-    if link.get("needs_reconnect_at"):   # Sasha 323 · dead: said once (a link that died before 323 is told on its first sync after)
-        if not link.get("told_reconnect_at"):
-            await link_dead(account, link, "already marked")
+    from . import connections as CN   # Sasha 400 · the ONE health truth: broken → the loop checks it; nothing read meanwhile
+    if await CN.is_broken(account, "gmail"):
         return []
     try:
         token = await VC.use_connection(account, link["vault_item_id"], purpose="gmail_read")
     except VC.UseRefused as e:
-        if transient(e.rule):   # Google busy / unreachable: not a death — retried on the next sync
-            log.warning("[mailbox] the Gmail link's token refresh failed for now (%s) — retried next sync", e.rule)
-        else:
-            await link_dead(account, link, e.rule)
+        await CN.broke(account, "gmail", e.rule)   # transient: nothing (retried next sync); else kept and said once
         return []
     except Exception as e:   # the network itself: not a death
         log.warning("[mailbox] the Gmail link's token refresh failed for now (%s) — retried next sync", type(e).__name__)
         return []
+    await CN.working(account, "gmail")
     rows = await GW._upcoming(account, names=False) if GW.STORE else []   # Sasha 143 · domains only: no listing re-read
     domains = [r.get("venue_domain") for r in rows if r.get("venue_domain")]
     q = build_query(domains)
@@ -658,46 +655,8 @@ async def sync(account: str) -> List[dict]:
     return found
 
 
-# ── Sasha 323 · THE LINK NEVER DIES SILENTLY ────────────────────────────────────────────────────────────────────────
-# The one truth for "is the Gmail link alive" is the token refresh every sync starts with (the link's needs_reconnect_at). A refusal
-# Google means (anything but a 5xx / 429 / network failure — invalid_grant is the 7-day expiry of an app in "Testing") marks it dead
-# and Tyler is told ONCE, in that same sync, on WhatsApp and on /s2 (told_reconnect_at). Reconnecting clears both (put_link), so the
-# next death is told again. No timer, no reminder loop.
-RECONNECT_LINE = "Your Gmail link stopped working. Tap to reconnect"
-
-
-def reconnect_url() -> str:
-    return os.getenv("SASHA_WEB_URL", "https://project.kanoe.ai").rstrip("/") + "/you#gmail"
-
-
-def transient(rule: str) -> bool:
-    """A refusal that is not the link dying: Google answering 5xx / 429 (connection_http_5xx, connection_http_429)."""
-    return bool(re.fullmatch(r"connection_http_(5\d\d|429)", rule or ""))
-
-
-async def link_dead(account: str, link: dict, rule: str) -> dict:
-    """Marked dead (if not yet) and told ONCE — WhatsApp (the line + its link) and /s2 (the line now on an open page, kept for its
-    next visit, with one button to /you). → {told: whatsapp result | None, s2: bool}."""
-    from . import live_events as LE
-    now = NOW()
-    if not link.get("needs_reconnect_at"):
-        await STORE.set_link(account, needs_reconnect_at=now)
-    log.warning("[mailbox] the Gmail link's token refresh was refused: %s — it needs a reconnect", rule)
-    if link.get("told_reconnect_at"):
-        return {"told": None, "s2": False}
-    url = reconnect_url()
-    wa = await LE._tell_whatsapp(account, f"{RECONNECT_LINE}: {url}")
-    s2 = False
-    try:
-        LE.publish(account, {"type": "proactive", "say": RECONNECT_LINE + ".",
-                             "render": {"kind": "reconnect", "label": "Reconnect Gmail", "url": "/you#gmail"}})
-        await LE.keep_news(account, f"mailbox-reconnect:{now.date().isoformat()}", RECONNECT_LINE + ".", url="/you#gmail")
-        s2 = True
-    except Exception as e:
-        log.warning("[mailbox] the reconnect line wasn't kept for /s2: %s", type(e).__name__)
-    await STORE.set_link(account, told_reconnect_at=now)   # once: both doors were tried in this same sync
-    log.info("[mailbox] the reconnect line: WhatsApp %s, /s2 %s", wa, s2)
-    return {"told": wa, "s2": s2}
+# ── Sasha 323 → Sasha 400 · THE LINK NEVER DIES SILENTLY: its health is booking_signer/connections.py's (broke / working / broken),
+# said once and then by get_status and the morning brief while it lasts; the 6-hourly loop checks a broken link until it works.
 
 
 async def _told_train(account: str, got: dict) -> None:
@@ -792,7 +751,11 @@ _task: Optional[asyncio.Task] = None
 async def _forever() -> None:
     while True:
         try:
+            from . import connections as CN
             for link in await STORE.all_links():
+                if await CN.is_broken(link["account_id"], "gmail"):   # Sasha 400 · it clears itself when it works again
+                    if not await CN.check(link["account_id"], "gmail", link["vault_item_id"]):
+                        continue
                 found = await sync(link["account_id"])
                 if found:
                     log.info("[mailbox] %d new find(s) for an account", len(found))
@@ -840,8 +803,10 @@ async def mailbox_view(request: Request):
         finds = await STORE.list_finds(account) if (STORE and link) else []
     except StorageUnavailable as e:
         return _refuse(503, e.rule, e.detail)
-    return {"configured": configured(), "invited": invited(account), "connected": bool(link and not link.get("needs_reconnect_at")),
-            "expired": bool(link and link.get("needs_reconnect_at")), "consent": consent(),
+    from . import connections as CN
+    broken = await CN.is_broken(account, "gmail")   # Sasha 400 · the ONE health truth
+    return {"configured": configured(), "invited": invited(account), "connected": bool(link and not broken),
+            "expired": bool(link and broken), "consent": consent(),
             "finds": [{"id": f["id"], "kind": f["kind"], "facts": {k: v for k, v in f["facts"].items() if k != "sasha_ref"},
                        "action": f.get("offered_action"), "status": f["action_status"],
                        "offer_sha256": f.get("offer_sha256"), "sentence": f.get("offered_sentence")}
@@ -885,6 +850,8 @@ async def on_connected(account: str, refresh_token: str, version: str, now: date
                           "consent_text_sha256": c["sha256"]})
     if old:
         await VC.STORE.revoke(account, old["vault_item_id"], now)
+    from . import connections as CN
+    await CN.working(account, "gmail")   # Sasha 400 · reconnected: the notice clears
     try:   # Sasha 328 · a (re)connected mailbox may be another address: its own is read again at the first sync, below
         await STORE.set_link(account, address=None)
     except Exception as e:
@@ -934,6 +901,8 @@ async def mailbox_disconnect(request: Request):
         log.warning("[mailbox] revoke at Google failed: %s", type(e).__name__)
     await VC.STORE.revoke(account, link["vault_item_id"], NOW())
     n = await STORE.delete_account_finds(account)   # §5.5 · the finds go; facts stay only on bookings the guest accepted
+    from . import connections as CN
+    await CN.gone(account, "gmail")   # Sasha 400 · disconnected: nothing broken to say
     return {"disconnected": True, "at_google": revoked, "finds_deleted": n}
 
 

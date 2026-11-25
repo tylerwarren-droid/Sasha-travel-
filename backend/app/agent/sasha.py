@@ -532,6 +532,12 @@ def stays_card(res: dict) -> dict:
                         for h in res.get("stays") or []]}
 
 
+def pick_words(airline: Any, leg: Optional[str], departs: Any) -> str:
+    """Sasha 403 · THE words a flight's Choose button says — written HERE only: the card shows them, and a tap that says them back names
+    that one offer (trip_record.tapped_offer reads them off the trip's own rows with this same function)."""
+    return f"the {airline} flight {'home' if leg == 'back' else 'out'} at {str(departs or '')[11:16]}"
+
+
 def flight_card(res: dict, args: dict) -> dict:
     """Sasha 205 · search_flights' result as the Live Workspace's flight card (the same shape the current UI renders),
     each to CHOOSE — the Choose button says "the <airline> one" to her."""
@@ -548,7 +554,7 @@ def flight_card(res: dict, args: dict) -> dict:
                                                        f["flights"]] if x),
                      "price": f"€{f['price_eur']:,.2f} total for {party} · TEST", "dep": dep, "chosen": bool(f.get("chosen")),
                      # Sasha 210 · a tap says exactly which flight (two options can share an airline)
-                     "pick": f"the {f['airline']} flight {'home' if leg == 'back' else 'out'} at {dep}"})
+                     "pick": pick_words(f["airline"], leg, f["departs"])})   # Sasha 403 · the ONE writer of a tap's words
     return {"type": "flight", "_provider": "duffel", "trip_pick": True, "options": opts, "leg": leg,
             "title": f"Flights · {args.get('origin')} → {args.get('destination')}" + (" (home)" if leg == "back" else "")}
 
@@ -1215,6 +1221,15 @@ async def turn(account: str, message: str, history: List[dict], session: Optiona
         from agapi import venues as _VNt
         plan = _VNt.tap_plan(account, session, API.TAP_PICK.get())
         tap_uses = [_TapUse(f"toolu_tap_{turn_key}_{i}", n, a) for i, (n, a) in enumerate(plan or [])]
+    # Sasha 403 · A FLIGHT TAP IS ITS OFFER, BY CODE (Tyler, option B): the card's Choose button says that flight's words (pick_words);
+    # words that name exactly ONE offer on the trip meant (trip_record.tapped_offer — the trip's own basket rows) run choose_offer on
+    # that offer BEFORE the model is asked, which then only says it. Found by the 403 gate: on the tap the model ran get_trip and
+    # search_flights first — re-deriving what the tap had already decided. Every door: the S2 / next button, WhatsApp's say: row, voice.
+    if not tap_uses and account:
+        from booking_signer import trip_record as _TRo
+        _oid = await _TRo.tapped_offer(account, message)
+        if _oid:
+            tap_uses = [_TapUse(f"toolu_offer_{turn_key}", "choose_offer", {"offer_id": _oid})]
     # Sasha 306 · item 2: a change / cancel request's FIRST STEP IS ITS QUOTE TOOL, by code (the Book tap's pattern above): never "move it"
     # answered from an earlier turn without Duffel's price. Its arguments are filled by a model that takes a forced tool choice (the
     # agent models refuse one: found live, "tool_choice … not supported for this model"); the price / refund / read-back is then said

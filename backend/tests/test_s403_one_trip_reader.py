@@ -114,3 +114,61 @@ class TheBucketIsOne(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AFlightTapIsItsOffer(unittest.TestCase):
+    """Sasha 403 · option B (Tyler): a tap names exactly one offer, so choose_offer runs on the tap BEFORE the model is asked. Found by the
+    403 gate: on "the British Airways flight out at 08:30" the model ran get_trip and search_flights first."""
+    IB = {"id": "off_ib", "owner": "Iberia", "departs": "2037-01-09T08:00", "arrives": "2037-01-10T06:00", "from": "MAD", "to": "SGN",
+          "flights": "IB1", "stops": 1, "minutes": 900, "price_eur": 700}
+    BA = {**IB, "id": "off_ba", "owner": "British Airways", "departs": "2037-01-09T08:30", "flights": "BA1"}
+
+    def rows(self, *cards, leg="out"):
+        return [{"id": f"r_{c['id']}", "kind": "flight", "state": "suggested", "slice_key": f"{leg}:MAD-SGN", "provider_ref": c["id"],
+                 "snapshot": {**c, "name": c["owner"]}} for c in cards]
+
+    def offer(self, words, rows):
+        from booking_signer import basket as BK
+        with mock.patch.object(TR, "plan_now", mock.AsyncMock(return_value={"trip_id": "t_vn"})), \
+                mock.patch.object(BK, "items", mock.AsyncMock(return_value=rows)):
+            return run(TR.tapped_offer("acct403", words))
+
+    def test_the_cards_own_words_name_its_one_offer(self):
+        from app.agent import sasha as AG
+        card = AG.flight_card({"flights": [{"offer_id": c["id"], "airline": c["owner"], "departs": c["departs"], "duration_minutes": 900,
+                                            "from": "MAD", "to": "SGN", "stops": 1, "flights": c["flights"], "price_eur": 700}
+                                           for c in (self.IB, self.BA)], "leg": "out"}, {"origin": "MAD", "destination": "SGN"})
+        ba = next(o for o in card["options"] if o["provider_offer_id"] == "off_ba")
+        self.assertEqual(ba["pick"], "the British Airways flight out at 08:30")
+        self.assertEqual(self.offer(ba["pick"], self.rows(self.IB, self.BA)), "off_ba")              # the card's words → its offer
+        self.assertIsNone(self.offer("the British Airways flight home at 08:30", self.rows(self.IB, self.BA)))   # another leg: none
+        self.assertIsNone(self.offer("a cheaper flight please", self.rows(self.IB, self.BA)))        # not a tap: the model hears it
+        twin = {**self.BA, "id": "off_ba2"}
+        self.assertIsNone(self.offer(ba["pick"], self.rows(self.IB, self.BA, twin)))                # two offers say it: never a guess
+
+    def test_the_tap_runs_choose_offer_before_the_model(self):
+        import os
+        import app.services.llm as LLM
+        from agapi import v0 as API
+        from app.agent import sasha as AG
+        from app.agent.fakes import Block, client
+        from booking_signer import basket as BK
+        calls = []
+
+        async def call(ctx, name, a):
+            calls.append((name, dict(a)))
+            ctx.calls.append({"tool": name, "ok": True})
+            return {"ok": True, "result": {"status": "chosen", "chosen": {"offer_id": a.get("offer_id")}}}
+        steps = [[Block(type="text", text="Done — the British Airways flight out at 08:30 is in your trip.")]]
+
+        async def go():
+            return [e async for e in AG.turn("acct403", "the British Airways flight out at 08:30", [], "s403-tap", surface="s2")]
+        with mock.patch.object(LLM, "client", client(steps)), mock.patch.object(API, "call", call), \
+                mock.patch.object(TR, "plan_now", mock.AsyncMock(return_value={"trip_id": "t_vn"})), \
+                mock.patch.object(BK, "items", mock.AsyncMock(return_value=self.rows(self.IB, self.BA))), \
+                mock.patch.dict(os.environ, {"SASHA_S1_PARITY": "on"}):
+            evs = run(go())
+        self.assertEqual((calls[0][0], calls[0][1].get("offer_id")), ("choose_offer", "off_ba"))   # by code, first
+        tools = [e["name"] for e in evs if e.get("type") == "tool"]                                 # the turn's tools, as the gate counts them
+        self.assertEqual(tools, ["choose_offer"])                                                   # nothing re-derived (the turn-end price
+        # guard's read-only get_total / get_trip are code's own reads, never a tool of the turn)

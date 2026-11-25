@@ -190,6 +190,35 @@ async def bucket(conn, owner, title: str):
     return tid
 
 
+async def tapped_offer(account: Optional[str], words: Optional[str]) -> Optional[str]:
+    """Sasha 403 · the ONE flight offer a tap names: the words its Choose button said (app.agent.sasha.pick_words) matched, exactly, against
+    the live flight rows of the trip meant (plan_now — its basket rows, the record of what was offered). Exactly one → its offer id;
+    none or several → None (the model hears the words, as before)."""
+    said = " ".join(str(words or "").split()).lower()
+    if not account or not said.startswith("the ") or " flight " not in said:
+        return None
+    p = await plan_now(account)
+    if not p or not p.get("trip_id"):
+        return None
+    from . import basket as BK
+    from agapi.v0 import _flight_out
+    from app.agent.sasha import pick_words
+    try:
+        rows = await BK.items(account, p["trip_id"], tuple(BK.LIVE))
+    except Exception as e:
+        log.info("[trip_record] the trip's offers weren't read: %s", type(e).__name__)
+        return None
+    hits = set()
+    for r in rows:
+        if r.get("kind") != "flight":
+            continue
+        f = _flight_out(r.get("snapshot") or {}, r)
+        leg = (r.get("slice_key") or "out:").split(":", 1)[0]
+        if f.get("offer_id") and " ".join(pick_words(f.get("airline"), leg, f.get("departs")).split()).lower() == said:
+            hits.add(str(f["offer_id"]))
+    return hits.pop() if len(hits) == 1 else None
+
+
 async def booked_parts(account: str, rows: List[dict]) -> List[dict]:
     """A personal T's basket rows with every BOOKED part read from its own record (the Duffel order, basket.live — Sasha 305), never the
     basket's copy. Plan state (suggested / chosen / pending_payment) is the basket's own."""
@@ -197,4 +226,4 @@ async def booked_parts(account: str, rows: List[dict]) -> List[dict]:
     return await BK.live(rows)
 
 
-__all__ = ["trips", "find", "named", "trip_on", "booked_parts", "ref", "remember", "current", "plan_now", "NOW", "group_now", "bucket", "plans"]
+__all__ = ["trips", "find", "named", "trip_on", "booked_parts", "ref", "remember", "current", "plan_now", "NOW", "group_now", "bucket", "plans", "tapped_offer"]

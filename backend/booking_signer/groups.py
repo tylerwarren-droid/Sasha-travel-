@@ -287,26 +287,36 @@ class PgStore:
         return await self._run(go)
 
     async def movement(self, owner: str, movement_id: Optional[str] = None) -> Optional[dict]:
+        """A movement BY ITS ID. Sasha 403 · EU 292: with none, WHICH trip is meant is trip_record's (group_now) — never this store's own
+        "newest opened" (its opened_at pointer is gone)."""
+        if not movement_id:
+            from . import trip_record as TR
+            movement_id = await TR.group_now(owner, self)
+            if not movement_id:
+                return None
+
         async def go(c):
-            q = ("select m.*, g.name as company, g.owner_id from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
-                 + "and m.archived_at is null "   # Sasha 364 · an archived trip is never the open one
-                 + ("and m.id = $2 " if movement_id else "") + "order by m.opened_at desc, m.created_at desc limit 1")   # Sasha 351 · the OPEN trip
-            r = await c.fetchrow(q, uuid.UUID(owner), *([uuid.UUID(movement_id)] if movement_id else []))
+            r = await c.fetchrow("select m.*, g.name as company, g.owner_id from group_movements m join groups g on g.id = m.group_id "
+                                 "where g.owner_id = $1 and m.archived_at is null and m.id = $2",   # Sasha 364 · never an archived trip
+                                 uuid.UUID(owner), uuid.UUID(movement_id))
             return _row(r) if r else None
         return await self._run(go)
 
     async def open(self, owner: str, movement_id: str) -> bool:
-        """Sasha 351 · the organiser's CURRENT trip is the one they opened last (sql/056 opened_at) — never just the newest made."""
-        r = await self._run(lambda c: c.execute("update group_movements m set opened_at = now() from groups g where g.id = m.group_id "
-                                                "and g.owner_id = $1 and m.id = $2", uuid.UUID(owner), uuid.UUID(movement_id)))
-        return str(r).split()[-1] != "0"
+        """Sasha 351 · the organiser opens a trip. Sasha 403 · it is the ONE pointer (trip_record.remember: the conversation's trip), never
+        a column of this store's own (opened_at is no longer written or read)."""
+        if not await self.movement(owner, movement_id):
+            return False
+        from . import trip_record as TR
+        await TR.remember(owner, {"kind": "group", "id": movement_id})
+        return True
 
     async def trips(self, owner: str) -> List[dict]:
         async def go(c):
-            rows = await c.fetch("select m.id, g.name as company, m.destination, m.starts_on, m.ends_on, m.opened_at, "
+            rows = await c.fetch("select m.id, g.name as company, m.destination, m.starts_on, m.ends_on, "
                                  "(select count(*) from group_members gm where gm.movement_id = m.id) as people from group_movements m "
                                  "join groups g on g.id = m.group_id where g.owner_id = $1 and m.archived_at is null "
-                                 "order by m.opened_at desc, m.created_at desc limit 50",
+                                 "order by m.created_at desc limit 50",   # Sasha 403 · a list, newest made first — never a pointer
                                  uuid.UUID(owner))
             return [_row(r) for r in rows]
         return await self._run(go)
@@ -336,7 +346,11 @@ class PgStore:
 
     # ── the company and its roster ──
     async def company(self, owner: str, name: Optional[str] = None, create: bool = False) -> Optional[dict]:
-        """The organiser's company by its name (made when `create`), else the one of their OPEN trip, else their latest company."""
+        """The organiser's company by its name (made when `create`), else the one of the trip meant (trip_record.group_now), else their
+        latest company."""
+        from . import trip_record as TR
+        mid = None if name else await TR.group_now(owner, self)
+
         async def go(c):
             if name:
                 r = await c.fetchrow("select * from groups where owner_id = $1 and lower(name) = lower($2) order by created_at desc limit 1",
@@ -344,8 +358,8 @@ class PgStore:
                 if r is None and create:
                     r = await c.fetchrow("insert into groups (owner_id, name) values ($1,$2) returning *", uuid.UUID(owner), name[:200])
                 return _row(r) if r else None
-            r = await c.fetchrow("select g.* from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 "
-                                 "and m.archived_at is null order by m.opened_at desc, m.created_at desc limit 1", uuid.UUID(owner))   # the OPEN trip's company
+            r = await c.fetchrow("select g.* from group_movements m join groups g on g.id = m.group_id where g.owner_id = $1 and m.id = $2",
+                                 uuid.UUID(owner), uuid.UUID(mid)) if mid else None   # Sasha 403 · the trip MEANT (trip_record), its company
             r = r or await c.fetchrow("select * from groups where owner_id = $1 order by created_at desc limit 1", uuid.UUID(owner))
             return _row(r) if r else None
         return await self._run(go)
@@ -466,20 +480,22 @@ class MemStore:
         return mid
 
     async def movement(self, owner, movement_id=None):
-        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and not m.get("archived")
-                     and (not movement_id or m["id"] == movement_id)), key=lambda m: m["opened"])
-        return dict(ms[-1]) if ms else None
+        if not movement_id:   # Sasha 403 · which trip is meant: trip_record's
+            from . import trip_record as TR
+            movement_id = await TR.group_now(owner, self)
+        m = self.movements.get(movement_id) if movement_id else None
+        return dict(m) if m and m["owner_id"] == owner and not m.get("archived") else None
 
     async def open(self, owner, movement_id):
         m = self.movements.get(movement_id)
         if not m or m["owner_id"] != owner:
             return False
-        self._opened += 1
-        m["opened"] = self._opened
+        from . import trip_record as TR   # Sasha 403 · the ONE pointer
+        await TR.remember(owner, {"kind": "group", "id": movement_id})
         return True
 
     async def trips(self, owner):
-        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and not m.get("archived")), key=lambda m: -m["opened"])
+        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner and not m.get("archived")), key=lambda m: -m["opened"])   # newest made first (a list, never a pointer)
         return [{k: m.get(k) for k in ("id", "company", "destination", "starts_on", "ends_on")} | {"people": len(self.rows[m["id"]])} for m in ms]
 
     async def set_rules(self, owner, movement_id, rules):
@@ -496,9 +512,10 @@ class MemStore:
         if name:
             g = self._group(owner, name, create)
             return dict(g) if g else None
-        ms = sorted((m for m in self.movements.values() if m["owner_id"] == owner), key=lambda m: m["opened"])
-        if ms:
-            return dict(self.groups[ms[-1]["group_id"]])
+        from . import trip_record as TR   # Sasha 403 · the trip meant, its company
+        mid = await TR.group_now(owner, self)
+        if mid and mid in self.movements:
+            return dict(self.groups[self.movements[mid]["group_id"]])
         gs = [g for g in self.groups.values() if g["owner_id"] == owner]
         return dict(gs[-1]) if gs else None
 
@@ -1006,6 +1023,8 @@ async def create_trip(account: str, company: Optional[str], destination: str, st
     if mid is None:
         mid = await st.new_movement(account, company.strip()[:200], destination.strip()[:120], starts_on, ends_on,
                                     (hotel_area or "").strip()[:200] or None)
+        from . import trip_record as TR   # Sasha 403 · the trip just made IS the trip meant (the ONE pointer)
+        await TR.remember(account, {"kind": "group", "id": mid})
         lim = await st.company_limits(account, company.strip()[:200])   # Sasha 365 · the company's limits, on the record, go with every trip
         lim = {k: v for k, v in (lim or {}).items() if k != "by_member"}   # a person's own limit is keyed to that trip's member
         if lim:
@@ -1455,10 +1474,12 @@ async def edit_person(account: str, person_id: str, fields: Dict[str, Any]) -> D
 
 
 async def trips(account: str) -> Dict[str, Any]:
-    """Sasha 351 · the organiser's trips (newest opened first) — the first is the OPEN one: everything on /group and in the chat is about it.
+    """Sasha 351 · the organiser's trips; Sasha 403 · the OPEN one is the trip meant (trip_record.group_now), never the list's first.
     Sasha 358 · no trip with nobody on it can be made (create_trip refuses it), and the last one switched off ends it (set_on_trip)."""
+    from . import trip_record as TR
     ts = await store().trips(account)
-    return {"trips": [{**t, "open": i == 0} for i, t in enumerate(ts)]}
+    now = await TR.group_now(account)
+    return {"trips": [{**t, "open": str(t["id"]) == str(now)} for t in ts]}
 
 
 async def open_trip(account: str, which: str) -> Dict[str, Any]:

@@ -41,7 +41,7 @@ class Switching(unittest.TestCase):
 
     def test_book_my_flights_with_a_relocation_open_and_a_trip_asks_once(self):
         plans = [{"trip_id": "t1", "title": "Vietnam, Nov", "start": "2026-11-12", "cities": ["Hanoi"]}]
-        with mock.patch("booking_signer.plan_store.plans", mock.AsyncMock(return_value=plans)):
+        with mock.patch("booking_signer.trip_record.plan_now", mock.AsyncMock(return_value=plans[0])):   # Sasha 403 · the trip meant
             q = asyncio.run(SW.ambiguous("a", "book my flights", [], "relocation"))
             self.assertIsNotNone(q)
             self.assertEqual([t for t, _ in q[1]], ["Vietnam trip", "Move to Madrid"])

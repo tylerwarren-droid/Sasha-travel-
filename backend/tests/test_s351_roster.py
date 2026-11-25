@@ -312,10 +312,14 @@ class MigrationOnPostgres(unittest.TestCase):
             go(c.execute(blk("056_group_open_trip.sql")))
             go(c.execute(blk("060_archived_trips.sql")))                                    # idempotent
             st = G.PgStore(runc)
-            self.assertEqual(go(st.movement(str(org)))["id"], str(m2))                    # the newest made is open, as before
-            self.assertTrue(go(st.open(str(org), str(m1))))
-            self.assertEqual(go(st.movement(str(org)))["id"], str(m1))                    # opened → THE trip
-            self.assertEqual([t["id"] for t in go(st.trips(str(org)))], [str(m1), str(m2)])
+            from booking_signer import trip_record as TR
+            TR._NOW.pop(str(org), None)
+            with mock.patch("agapi.s2_memory.kind", mock.AsyncMock(return_value=None)), \
+                    mock.patch("agapi.s2_memory.put_kind", mock.AsyncMock(return_value=False)):
+                self.assertIsNone(go(st.movement(str(org))))                              # Sasha 403 · two, none meant: asked, never the newest
+                self.assertTrue(go(st.open(str(org), str(m1))))
+                self.assertEqual(go(st.movement(str(org)))["id"], str(m1))                # opened → THE trip (the ONE pointer)
+            self.assertEqual([t["id"] for t in go(st.trips(str(org)))], [str(m2), str(m1)])   # a list, newest made first
             self.assertFalse(go(st.open(str(uuid.uuid4()), str(m2))))                     # another organiser's trip: never opened
             link = go(c.fetchval("select id from public.group_members where person_id = $1 and id <> $1 limit 1", luis_person))
             with mock.patch.object(KEEP, "STORE", KEEP.PostgresKeepStore(runc)), mock.patch("booking_signer.vault.kms.kek", lambda: kms), \

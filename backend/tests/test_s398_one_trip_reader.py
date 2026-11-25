@@ -30,15 +30,7 @@ PLANS = [{"trip_id": "t_london", "title": "Flight Madrid → London", "start": "
 MOVES = [{"id": "mv_jean", "destination": "Lisbon", "company": "Jean Incorporated", "starts_on": "2026-12-15", "ends_on": "2026-12-20"}]
 BY_ID = {p["trip_id"]: {**p, "plan": {"days": []}} for p in PLANS}
 
-#: Sasha 398 · every file that still reads the basket's rows or picks a trip itself — each moves onto trip_record next. ONLY SHRINKS.
-NOT_YET_CLEAN = {
-    "agapi/itinerary.py", "agapi/s2_manage.py", "agapi/s2_status.py", "agapi/s2_tools.py", "agapi/v0.py",
-    "booking_signer/basket_book.py", "booking_signer/groups.py", "booking_signer/handoff_phone.py", "booking_signer/itinerary_q.py",
-    "booking_signer/ladder_routes.py", "booking_signer/paid_watch.py", "booking_signer/switching.py", "booking_signer/wa_brain.py",
-    "products/relocation/after.py",
-}
-OWN = {"booking_signer/trip_record.py", "booking_signer/basket.py", "booking_signer/plan_store.py"}   # the reader and T's own writers
-READS = re.compile(r"\b(?:BK|basket)\.(?:items|live)\(|\b(?:PS|plan_store)\.(?:latest|by_id|plans)\(")
+#: Sasha 403 · the list and the detector are ONE: tests/test_s403_one_trip_reader (NOT_YET_CLEAN) and tests/trip_readers (call AND SQL)
 
 
 def run(c):
@@ -116,17 +108,10 @@ class EveryScreenAsksIt(Records):
 
 
 class Ratchet(unittest.TestCase):
-    def test_no_new_reader_outside_the_one_record_and_the_list_only_shrinks(self):
-        hits = set()
-        for d in ("agapi", "app", "booking_signer", "products"):
-            for p in (BACKEND / d).rglob("*.py"):
-                rel = p.relative_to(BACKEND).as_posix()
-                if rel in OWN:
-                    continue
-                if any(READS.search(line.split("#", 1)[0]) for line in p.read_text().splitlines()):
-                    hits.add(rel)
-        self.assertEqual(hits - NOT_YET_CLEAN, set(), "a NEW trip reader outside booking_signer/trip_record")   # never a new one
-        self.assertEqual(NOT_YET_CLEAN - hits, set(), "moved onto trip_record: take it off NOT_YET_CLEAN")      # the list only shrinks
+    def test_the_one_ratchet(self):
+        """Sasha 403 · 398's ratchet saw calls only and kept its own list; the ONE list and detector are 403's."""
+        from tests import test_s403_one_trip_reader as R403, trip_readers as R
+        self.assertEqual(set(R.readers()), R403.NOT_YET_CLEAN)
 
 
 if __name__ == "__main__":

@@ -90,10 +90,8 @@ async def guest_booked(account: str, *, type_: str, provider_name: str, on: date
 
     async def fn(conn):
         async with conn.transaction():
-            tid = await conn.fetchval("select id from trips where owner_id = $1 and title = $2 and status in ('draft','active') "
-                                      "order by created_at limit 1", acct, title)
-            if tid is None:
-                tid = await conn.fetchval("insert into trips (owner_id, title) values ($1, $2) returning id", acct, title)
+            from booking_signer import trip_record as _TR   # Sasha 403 · the ONE general-bookings trip
+            tid = await _TR.bucket(conn, acct, title)
             return await conn.fetchval(
                 "insert into trip_items (trip_id, type, status, provider_name, date_time, local_timezone, party_size, location_name) "
                 "values ($1, $2, 'guest_booked', $3, ($4::date + $5::time) at time zone $6, $6, $7, $8) returning id",

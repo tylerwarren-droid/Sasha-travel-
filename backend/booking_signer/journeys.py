@@ -98,17 +98,11 @@ def _run():
     return PS._run()
 
 
-async def _plans(conn, account) -> List[dict]:
-    rows = await conn.fetch("select id, title, destinations, depart_date, return_date from trips where owner_id = $1 and destinations ? 'plan' "
-                            "and status in ('draft','active') order by updated_at desc", uuid.UUID(account))
-    out = []
-    for r in rows:
-        d = r["destinations"]
-        d = json.loads(d) if isinstance(d, str) else d
-        cities = (d or {}).get("cities") or []
-        out.append({"trip_id": str(r["id"]), "title": r["title"], "start": r["depart_date"], "end": r["return_date"], "cities": cities,
-                    "country": country_of_plan(r["title"] or "", cities)})
-    return out
+async def _plans(account) -> List[dict]:
+    """Sasha 403 · EU 292 claim 1 · the account's trips from the ONE reader (trip_record.plans) — this module's own SQL over trips is gone
+    (it listed archived trips the other screens hid). The country is this module's reading of each plan, as before."""
+    from . import trip_record as TR
+    return [{**p, "country": country_of_plan(p.get("title") or "", p.get("cities") or [])} for p in await TR.plans(account)]
 
 
 async def file(account: Optional[str]) -> int:
@@ -117,10 +111,15 @@ async def file(account: Optional[str]) -> int:
     if not account or run is None:
         return 0
 
+    try:
+        plans = await _plans(account)
+    except Exception as e:
+        log.info("[journeys] no plans: %s", type(e).__name__)
+        return 0
+    if not plans:
+        return 0
+
     async def go(conn):
-        plans = await _plans(conn, account)
-        if not plans:
-            return 0
         rows = await conn.fetch(
             "select ti.id, ti.provider_name, ti.location_name, ti.local_timezone, "
             "to_char(ti.date_time at time zone coalesce(ti.local_timezone, 'UTC'), 'YYYY-MM-DD') as day, "
@@ -267,7 +266,7 @@ async def journeys(account: Optional[str], rows: List[dict]) -> dict:
     plans = []
     if account and run is not None:
         try:
-            plans = await run(lambda c: _plans(c, account))
+            plans = await _plans(account)
         except Exception as e:
             log.info("[journeys] no plans: %s", type(e).__name__)
     cities, saved = await _extra(account) if account else ({}, [])

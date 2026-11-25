@@ -212,8 +212,8 @@ async def trip_figures(account: str, trip_id: Optional[str] = None, plan: Option
     chooses: that is refresh(), and only hold_booking calls it). `plan` the plan store's row when the caller has it; else the
     account's latest plan (or the trip named). No trip → figures with no lines."""
     if plan is None:
-        from . import plan_store as PS
-        plan = await (PS.by_id(account, trip_id) if trip_id else PS.latest(account))
+        from . import plan_store as PS, trip_record as TR   # Sasha 403 · no trip named: the trip MEANT (trip_record), never its own pick
+        plan = await (PS.by_id(account, trip_id) if trip_id else TR.plan_now(account))
     trip_id = trip_id or (plan or {}).get("trip_id")
     if not trip_id:
         return figures_of([], None, plan)

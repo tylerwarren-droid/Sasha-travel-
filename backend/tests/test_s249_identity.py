@@ -14,6 +14,7 @@ from __future__ import annotations
 import tests.founder_fixture  # noqa: F401,E402  (Sasha 249 · the fixtures name the founder; no fallback any more)
 
 import asyncio
+import inspect
 import os
 import pathlib
 import re
@@ -179,16 +180,16 @@ class T3TripsBelongToTheActor(Keys):
 
     def test_plans_are_read_by_owner(self):
         from booking_signer import journeys as JN
+        from booking_signer import plan_store as PS   # Sasha 403 · journeys reads trips through the ONE reader (trip_record → plan_store)
         got = []
 
-        class Conn:
-            async def fetch(self, sql, *args):
-                got.append((sql, args))
-                return []
-        run(JN._plans(Conn(), GUEST))
-        sql, args = got[0]
-        self.assertIn("owner_id = $1", sql)
-        self.assertEqual(args, (uuid.UUID(GUEST),))
+        async def plans(account):
+            got.append(account)
+            return []
+        with mock.patch.object(PS, "plans", plans):
+            run(JN._plans(GUEST))
+        self.assertEqual(got, [GUEST])
+        self.assertIn("owner_id = $1", inspect.getsource(PS.plans))
 
 
 class OneFounderDecision(unittest.TestCase):

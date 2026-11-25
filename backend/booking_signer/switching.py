@@ -192,11 +192,10 @@ async def ambiguous(account: str, body: str, waiting: List[str], asked_last: Opt
     prods = [x for x in ([asked_last] if asked_last else []) + waiting if x in ("relocation", "campus")]
     if not prods:
         return None
-    from . import plan_store as PS, journeys as JN
-    trips = [p for p in await PS.plans(account) if JN.product_of(p.get("title") or "") == "sasha" and p.get("start")]
-    if not trips:
+    from . import journeys as JN, trip_record as TR   # Sasha 403 · the trip MEANT (the conversation's, else the latest) — never trips[0]
+    t = await TR.plan_now(account)
+    if not t or JN.product_of(t.get("title") or "") != "sasha" or not t.get("start"):
         return None
-    t = trips[0]
     n = uuid.uuid4().hex[:6]
     tl = f"{JN.label(t).split(',')[0]} trip"[:20]
     pl = {"relocation": "Move to Madrid", "campus": "Campus visits"}[prods[0]]

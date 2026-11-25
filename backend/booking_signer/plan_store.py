@@ -135,11 +135,14 @@ async def save(account: Optional[str], itinerary: dict, message: str, now: datet
         dest = {"cities": cities, "plan": itinerary, "kanoe": "plan/1"}
         title = (itinerary.get("title") or "Your trip")[:200]
 
+        from . import trip_record as TR   # Sasha 403 · WHICH plan this may revise is the trip meant (trip_record), never the newest made
+        meant = (await TR.plan_now(account) or {}).get("trip_id")
+
         async def fn(conn):
             # a revision of the same plan (made within 6 h, sharing its title or a city) updates it: one trip, not one per edit
             prev = await conn.fetchrow("select id, title, destinations from trips where owner_id = $1 and destinations ? 'plan' "
-                                       "and status in ('draft','active') and created_at > now() - interval '6 hours' "
-                                       "order by created_at desc limit 1", uuid.UUID(account))
+                                       "and status in ('draft','active') and created_at > now() - interval '6 hours' and id = $2",
+                                       uuid.UUID(account), uuid.UUID(meant)) if meant else None
             if prev:
                 pd = prev["destinations"]
                 pd = json.loads(pd) if isinstance(pd, str) else pd
@@ -254,12 +257,17 @@ async def _edit(account: str, trip_id: Optional[str], change) -> Any:
     run = _run()
     if not account or run is None:
         return None
+    if not trip_id:   # Sasha 403 · no trip named: the trip MEANT (trip_record.plan_now) — it edited the newest CREATED plan, while every
+        from . import trip_record as TR   # reader showed the newest TOUCHED one (or the conversation's)
+        p = await TR.plan_now(account)
+        trip_id = (p or {}).get("trip_id")
+        if not trip_id:
+            return None
 
     async def fn(conn):
         async with conn.transaction():
-            q = ("select id, destinations from trips where owner_id = $1 and destinations ? 'plan' and status in ('draft','active') "
-                 + ("and id = $2 " if trip_id else "") + "order by created_at desc limit 1 for update")
-            r = await conn.fetchrow(q, *([uuid.UUID(account), uuid.UUID(trip_id)] if trip_id else [uuid.UUID(account)]))
+            r = await conn.fetchrow("select id, destinations from trips where owner_id = $1 and destinations ? 'plan' and status in "
+                                    "('draft','active') and id = $2 for update", uuid.UUID(account), uuid.UUID(trip_id))
             if not r:
                 return None
             d = r["destinations"]

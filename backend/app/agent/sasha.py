@@ -521,11 +521,14 @@ def yes_buttons(tool: str, res: dict) -> dict:
     return {}
 
 
+from booking_signer import supplier as SUPPLIER   # noqa: E402 · Sasha 404 · what a supplier IS (its display name), the ONE source
+
+
 def stays_card(res: dict) -> dict:
     """search_stays' result as a Live Workspace card, each to CHOOSE (the Choose button says "the <name> one")."""
     from app.services.world_itinerary import hotel_name   # Sasha 246 · the hotel's name on its card, never its page title
     return {"type": "hotel", "trip_pick": True, "title": f"Places to stay · {res.get('city')}",
-            "options": [{"name": hotel_name(h["name"]) or h["name"], "detail": " · ".join(x for x in [f"{h.get('stars')}★" if h.get("stars") else "",
+            "options": [{"name": SUPPLIER.shown(hotel_name(h["name"]) or h["name"]), "detail": " · ".join(x for x in [f"{h.get('stars')}★" if h.get("stars") else "",
                                                                        f"★ {h['rating']} ({h.get('reviews') or 0} Google reviews)" if h.get("rating") else "",
                                                                        h.get("about") or ""] if x),
                          "price": f"est. €{h['estimate_eur_per_night']:,}/night" if h.get("estimate_eur_per_night") else ""}
@@ -548,7 +551,8 @@ def flight_card(res: dict, args: dict) -> dict:
     for f in fl:
         hm = f["duration_minutes"]
         dep = str(f["departs"])[11:16]
-        opts.append({"name": f["airline"], "provider": "duffel", "provider_offer_id": f["offer_id"],
+        # Sasha 404 · a test carrier is a demo supplier: its name, marked (the ONE source)
+        opts.append({"name": SUPPLIER.shown(f["airline"]), "provider": "duffel", "provider_offer_id": f["offer_id"],
                      "detail": " · ".join(x for x in [f.get("tag") or "", f"dep {dep}", f"{f['from']}-{f['to']}", f"{hm // 60}h {hm % 60:02d}m",
                                                        "nonstop" if not f["stops"] else f"{f['stops']} stop{'s' if f['stops'] > 1 else ''}",
                                                        f["flights"]] if x),

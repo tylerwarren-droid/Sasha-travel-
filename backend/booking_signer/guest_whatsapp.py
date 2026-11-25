@@ -2724,8 +2724,10 @@ def _hours_of(read: dict, now) -> dict:
 
 
 def plain_venue(name: Optional[str]) -> str:
-    """Sasha 171 · the venue as the guest knows it: the demo's stand-in mark is said once, in the read-back, not in every line."""
-    return (name or "").replace(" (TEST stand-in)", "")
+    """Sasha 171 · the venue as the guest knows it. Sasha 404 · a demo supplier ALWAYS shows its mark (KANOE "THE DMC SPACE"): THE display
+    name, from the ONE source — never stripped here."""
+    from . import supplier as SP
+    return str(SP.shown(name) or "")
 
 
 _NEED_Q = {"what": "What should I book there — a table, a massage, a class…?", "when": "Which day and time?",
@@ -2860,12 +2862,9 @@ async def _ask_yes(ctx: dict, rung: str, rid: str, read_back: dict, sentence: st
     sha = read_back["sha256"]
     out.text("What I'll " + ("say" if rung == "call" else "send") + ":\n" +   # Sasha 388 · no route line: AgAPI's route is data
              "\n".join("• " + _BULLET.sub("", ln) for ln in guest_lines(rung, read_back["lines"])))   # Sasha 117 · one bullet
-    if kind == "confirm" and "(TEST stand-in)" not in (venue or "") and _founder_demo(ctx.get("account")) \
-            and "Sasha Test Venue" not in (venue or ""):   # Sasha 186 · said plainly which it is: a REAL booking
-        sentence = f"✅ Real booking: {venue} itself gets this — it's not a test.\n{sentence}"
-    if kind == "confirm" and "(TEST stand-in)" in (venue or ""):   # Sasha 169 · the stand-in (still underneath: nothing changes)
-        # Sasha 220 · the founder's call: the stand-in note is no longer said — only the place's own name, without its tag
-        sentence = sentence.replace(" (TEST stand-in)", "")
+    from . import supplier as _SP   # Sasha 404 · what the supplier IS, from the ONE source (Sasha 220's untagging is superseded:
+    if kind == "confirm" and _SP.kind_of(venue) == "real" and _founder_demo(ctx.get("account")):   # a demo shows its mark)
+        sentence = f"✅ Real booking: {venue} itself gets this — it's not a test.\n{sentence}"   # Sasha 186 · said plainly: a REAL booking
     tag = f"{rid[:8]}:{sha[:16]}"
     yes_title = "Yes, book it" if kind == "confirm" else "Yes, cancel"
     out.ask(sentence, [(yes_title, f"yes:{tag}"), ("No", f"no:{tag}")])

@@ -188,7 +188,7 @@ class TestLabel(unittest.TestCase):
                  "status_words": "Confirmed — their ref TV-D521E5-A9", "type": "restaurant", "category": "restaurant"},
                 {"venue": "Real Place", "date": "2026-11-13", "time": "20:00", "status": "requested", "type": "restaurant"}]
         t = "\n".join(PS.text(PS.merge(p, rows)))
-        self.assertIn("Sasha Test Venue: TEST · booked (demo)", t)
+        self.assertIn("Sasha Test Venue · Demo: TEST · booked (demo)", t)   # Sasha 404 · the demo supplier, marked
         self.assertNotIn("TEST · Real Place", t)
         self.assertTrue(WB.is_test({"venue": "Flight BA 0105 Madrid → Hanoi (TEST booking)"}))
 

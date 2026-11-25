@@ -587,13 +587,14 @@ async def _contact_answer(ctx: dict, pend: dict, body: str) -> bool:
 
 RESET = re.compile(r"^\s*(?:please\s+)?(?:reset|clear)\s+(?:the\s+|my\s+)?demo\s*[.!]?\s*$", re.I)
 _TEST_SQL = ("(ti.provider_name ilike 'Sasha Test Venue%' or ti.provider_name ilike '%(TEST booking%' or ti.booking_reference like 'TEST-%' "
-             "or ti.provider_name ilike '%(TEST stand-in)%' "
+             "or ti.provider_name ilike '%(TEST stand-in)%' or ti.provider_name ilike '% · Demo%' "   # Sasha 404 · + the ONE mark
              "or ti.booking_reference like 'TV-%')")
 
 
 def is_test(b: dict) -> bool:
     v, ref = b.get("venue") or "", b.get("ref") or b.get("booking_reference") or ""
-    return bool(re.match(r"Sasha Test Venue", v) or "(TEST booking" in v or "(TEST stand-in)" in v or re.match(r"(TEST|TV)-", ref)
+    from . import supplier as SP   # Sasha 404 · a demo supplier, from the ONE source
+    return bool(SP.is_demo(v) or "(TEST booking" in v or re.match(r"(TEST|TV)-", ref)
                 or re.search(r"their ref TV-", b.get("status_words") or ""))
 
 

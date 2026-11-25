@@ -129,7 +129,7 @@ class StandIn(unittest.TestCase):
     def test_the_name_says_so_and_fits(self):
         from booking_signer import ladder_routes as LR
         n = LR.standin_name("Cooking Class in Hoi An by Cam Thanh Tours Plus and a very long name indeed")
-        self.assertTrue(n.endswith("(TEST stand-in)"))
+        self.assertTrue(n.endswith(" · Demo stand-in"))   # Sasha 404 · a demo supplier, marked (supplier.STANDIN)
         self.assertLessEqual(len(n), 80)
         self.assertTrue(WB.is_test({"venue": n}))
 

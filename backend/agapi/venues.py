@@ -281,7 +281,8 @@ async def _read(ctx, a: dict) -> dict:
     if status != 200:
         raise _err((rd or {}).get("rule") or "read_failed", GW.refusal_words(rd or {}, status))
     venue = (rd.get("listing") or {}).get("name") or a.get("name") or rd.get("venue")
-    if "(TEST stand-in)" in str(rd.get("venue") or ""):
+    from booking_signer import supplier as _SP   # Sasha 404 · the ONE decision
+    if _SP.is_standin(rd.get("venue")):
         venue = rd["venue"]
     rungs = {r["rung"]: r for r in rd.get("rungs") or [] if r.get("available")}
     out = {"read_id": rd["read_id"], "country": rd.get("country"), "venue": venue, "facts": rd.get("facts") or [], "place_id": a.get("place_id"),

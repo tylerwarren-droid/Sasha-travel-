@@ -28,7 +28,7 @@ import { announce, failed, noted, observe, toConsole } from '@/lib/outcome'   //
 
 type Find = { what: string; where?: string; country?: string; near?: string; open_at?: string; priority?: string; draft?: unknown; named?: boolean
   bare_time?: { day: string; hour: number; minute: number } }
-type Read = { read_id: string; venue: string; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null
+type Read = { read_id: string; venue: string; supplier?: 'real' | 'real_test' | 'demo'; country: string | null; say: string; rungs: Rung[]; listing?: { name?: string } | null
   /** Sasha 161 · the server's decision and its one plain line (decide.py — the same words as WhatsApp) */
   plan?: { route: string | null; line: string | null; channel?: string | null; link?: string | null; label?: string | null } }   // Sasha 378 · AgAPI's ONE decision
 type State =
@@ -110,7 +110,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
       const all = days.flatMap((d) => (d.bookings ?? []).map((b) => ({ ...b, day: d.day, date: d.date })))
       if (seen === null) { seen = new Set(all.map((b) => String(b.id))); return }   // what was there before this choice opened
       const hit = all.find((b) => !seen!.has(String(b.id)) && b.date === at.slice(0, 10) && (b.time ?? '') === at.slice(11, 16))
-      if (hit) setElsewhere(`Booked on your phone ✅ — ${hit.venue.replace(/ \(TEST stand-in\)$/, '')}, ${hit.time} — it's on Day ${hit.day} of your trip.`)
+      if (hit) setElsewhere(`Booked on your phone ✅ — ${hit.venue}, ${hit.time} — it's on Day ${hit.day} of your trip.`)   // Sasha 404 · the name as the server shows it (a demo's with its mark)
     }
     observe(look(), 'Checking the trip for this booking', toConsole)
     const t = setInterval(() => observe(look(), 'Checking the trip for this booking', toConsole), 5000)
@@ -305,7 +305,7 @@ export default function ChatBooking({ find, preset, ribbon, highlight, onPickSay
             const fm = r.find((x) => x.rung === 'form' && x.available)
             const em = r.find((x) => x.rung === 'email' && x.available)
             const ph = r.find((x) => x.rung === 'phone' && x.available)
-            const venue = / \(TEST stand-in\)$/.test(state.read.venue ?? '') ? state.read.venue : (state.pick.name ?? state.read.venue)   // Sasha 169 · the stand-in says so
+            const venue = state.read.supplier === 'demo' ? state.read.venue : (state.pick.name ?? state.read.venue)   // Sasha 404 · a demo supplier: the server's name, with its mark (the server decides what it IS)
             const draft = (find.draft ?? null) as { when?: { at?: string }; how_many?: { count?: number } } | null
             // Sasha 158 · "book Casa Lucio tomorrow at 9": at a restaurant, a bare 9 is 21:00 (12 is noon) — the same rule as WhatsApp
             const bt = find.bare_time

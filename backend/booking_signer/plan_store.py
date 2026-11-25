@@ -554,7 +554,8 @@ def text(plan: dict) -> List[str]:
         head = f"Day {d.get('day')}{' · ' + day_words(d['date']) if d.get('date') else ''} — {d.get('city') or ''}"
         lines = [head]
         for b in sorted(d.get("bookings") or [], key=lambda x: x.get("time") or ""):
-            name = str(b.get("venue") or "").replace("(TEST stand-in)", "(our test venue stood in)")
+            from . import supplier as _SP   # Sasha 404 · THE display name (a demo's with its mark — never stripped here)
+            name = str(_SP.shown(b.get("venue")) or "")
             when = f"{b.get('time') or ''} ({b['edge']})" if b.get("edge") else (b.get("time") or "")
             lines.append(f"  • {when} {'TEST · ' if b.get('test') and not short_status(b).startswith('TEST') else ''}{name}: {short_status(b)}".replace("  •  ", "  • "))
         if d.get("stay") and d["stay"].get("first_night"):   # Sasha 198 R3 · the basket's stay, in its state's words

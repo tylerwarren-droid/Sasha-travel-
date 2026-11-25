@@ -49,7 +49,7 @@ class Base(unittest.TestCase):
 class ATestPerson(Base):
     def test_names_it_and_gets_only_its_card_without_places(self):
         r = run(TV.search(ctx(), {"what": "Sasha Test Venue", "where": "Madrid"}))
-        self.assertEqual([c["name"] for c in r["preset"]["cards"]], ["Sasha Test Venue"])
+        self.assertEqual([c["name"] for c in r["preset"]["cards"]], ["Sasha Test Venue · Demo"])   # Sasha 404 · marked
         self.assertTrue(r["preset"]["cards"][0]["test"])
         self.assertIn("not a real restaurant", r["venues"][0]["about"])
         self.assertEqual(self.api.calls, [])   # no Places / venues/find call

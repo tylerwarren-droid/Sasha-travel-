@@ -9,6 +9,7 @@ don't say where they'll be, the answer says so.
 from __future__ import annotations
 from products import tools as TL  # CR 165 · another tool is pointed to by the Menu, never its word
 
+from . import supplier as _SP   # Sasha 404 · THE display name (a demo's with its mark)
 import re
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
@@ -188,7 +189,7 @@ async def ask_anything(account: str, text: str, rows: List[dict], now: datetime)
             tab = next((x["label"] for x in j["journeys"] if str(r.get("trip_id")) == x["key"]), None) or j["home"]["label"]
             when = f"{SN.day_words(r['date'])}{' at ' + r['time'] if r.get('time') else ''}" if r.get("date") else "no day set yet"
             from . import plan_store as PS
-            out.append(f"{str(r.get('venue') or '').replace(' (TEST stand-in)', '')}: {when} — {PS.short_status(r)}"
+            out.append(f"{(_SP.shown(r.get('venue')) or '')}: {when} — {PS.short_status(r)}"
                        f"{' · ref ' + r['booking_reference'] if r.get('booking_reference') and r['booking_reference'] not in PS.short_status(r) else ''} (in your {tab} tab)")
         return out
     m = ASK_DAY.search(t)
@@ -215,7 +216,7 @@ async def ask_anything(account: str, text: str, rows: List[dict], now: datetime)
             return [f"Your {JN.label(p)} trip has no {m['d']} in it."]
         lines = [f"{JN.label(p)} · Day {day.get('day')} · {SN.day_words(day['date'])} — {day.get('city')}:"]
         for b in sorted(day.get("bookings") or [], key=lambda x: x.get("time") or ""):
-            lines.append(f"• {b.get('time') or ''} {str(b.get('venue') or '').replace(' (TEST stand-in)', '')}: {PS.short_status(b)}".replace("•  ", "• "))
+            lines.append(f"• {b.get('time') or ''} {(_SP.shown(b.get('venue')) or '')}: {PS.short_status(b)}".replace("•  ", "• "))
         for a in [a for a in day.get("activities") or [] if not a.get("replaced_by")][:3]:
             lines.append(f"· {a.get('time')}: {a.get('name')}")
         return ["\n".join(lines)]
@@ -240,7 +241,7 @@ async def ask_anything(account: str, text: str, rows: List[dict], now: datetime)
 
 def _line(r: dict) -> str:
     when = f"{SN.day_words(r['date'])}{' at ' + r['time'] if r.get('time') else ''}" if r.get("date") else "no day yet"
-    return f"• {when} — {str(r.get('venue') or '').replace(' (TEST stand-in)', '')}: {r.get('status_words') or r.get('status')}"
+    return f"• {when} — {(_SP.shown(r.get('venue')) or '')}: {r.get('status_words') or r.get('status')}"
 
 
 def trips_text(j: dict, text: str) -> List[str]:

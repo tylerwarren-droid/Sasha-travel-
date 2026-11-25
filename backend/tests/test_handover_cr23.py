@@ -293,8 +293,8 @@ class TestVenueConsent(Base):
 
 class TestNames(unittest.TestCase):
     def test_each_test_page_has_its_own_name(self):
-        self.assertEqual(HO._test_name(TV + "hotel"), "Kanoe Test Hotel")
-        self.assertEqual(HO._test_name(TV + "consent"), "Sasha Test Venue")
+        self.assertEqual(HO._test_name(TV + "hotel"), "Kanoe Test Hotel · Demo")   # Sasha 404 · marked
+        self.assertEqual(HO._test_name(TV + "consent"), "Sasha Test Venue · Demo")   # Sasha 404 · marked
 
 
 class FounderOverride(Base):

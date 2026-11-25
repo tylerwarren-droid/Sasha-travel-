@@ -709,7 +709,9 @@ async def view_status(hid: str, t: str = ""):
     rec = _rec_for(hid, t)
     if rec is None:
         return _no(404, "handover_unknown", "this link isn't valid any more")
-    return {"state": rec["state"], "say": rec.get("say"), "reference": rec.get("reference"), "return_to": rec.get("return_to")}
+    from . import supplier as _SP   # Sasha 404 · the page shows the venue as the ONE source names it (a demo's with its mark)
+    return {"state": rec["state"], "say": rec.get("say"), "reference": rec.get("reference"), "return_to": rec.get("return_to"),
+            "venue": _SP.shown(rec.get("venue")), "supplier": _SP.kind_of(rec.get("venue"))}
 
 
 @router.get("/handover/{hid}/fit")
@@ -937,7 +939,8 @@ async def ops_end(hid: str, request: Request):
 
 def _test_name(url: str) -> str:
     """Our test pages' own names: the hotel variant is "Kanoe Test Hotel" (its page says so), the rest "Sasha Test Venue"."""
-    return "Kanoe Test Hotel" if urlsplit(url).path.rstrip("/").endswith("/hotel") else "Sasha Test Venue"
+    from . import supplier as _SP   # Sasha 404 · demo suppliers, named with their mark (the ONE source)
+    return _SP.demo_name(_SP.DEMO_HOTEL) if urlsplit(url).path.rstrip("/").endswith("/hotel") else _SP.demo_name(_SP.DEMO_VENUES["kanoe-test-venue"])
 
 
 #: a fictional guest — never a real person's details through the cloud browser before a DPA

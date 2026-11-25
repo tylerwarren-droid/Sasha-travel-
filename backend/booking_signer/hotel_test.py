@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request
+
+from . import supplier as _SP   # Sasha 404 · the demo hotel, named with its mark
 from fastapi.responses import JSONResponse
 
 LABEL = "Test booking: no hotel contacted"
@@ -196,14 +198,14 @@ async def handover(request: Request):
          "who": {"name": H.FICTIONAL["person_name"]}}
     from .account import account_for
     try:
-        rec = await H.open_handover(page_url=url, m=m, step1=step1, step2=[], venue="Kanoe Test Hotel", account=account_for(request),
+        rec = await H.open_handover(page_url=url, m=m, step1=step1, step2=[], venue=_SP.demo_name(_SP.DEMO_HOTEL), account=account_for(request),
                                     form_id=None, read_only=False, request=o, fictional=True)
     except H.Refused as e:
         return _refuse(422, e.rule, e.say)
     out = {"handover_id": rec["id"], "view_url": H.view_url(rec), "taps_left": rec.get("taps_left") or 1,
            "say": HANDOVER_SAY.format(hotel=r["hotel"]), "ready_ms": rec.get("ready_ms")}
     from . import guest_whatsapp as GW   # Sasha 158 · the same tap, on the guest's phone too (one message)
-    out["phone"] = await GW.tap_to_finish(account_for(request), "Kanoe Test Hotel", out["view_url"], f"{r['checkin']}, {r['nights']} night(s)")
+    out["phone"] = await GW.tap_to_finish(account_for(request), _SP.demo_name(_SP.DEMO_HOTEL), out["view_url"], f"{r['checkin']}, {r['nights']} night(s)")
     done["handover"] = out
     return {"ok": True, **out}
 

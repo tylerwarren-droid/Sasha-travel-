@@ -26,7 +26,7 @@ log = logging.getLogger("agapi.booking_decide")
 #: It was SASHA_CALLS_PER_DAY (default 3); no env var is read for it any more.
 SERVER_CALLS_PER_DAY = 3
 
-TEST_VENUE_MARKS = ("(TEST stand-in)", "Sasha Test Venue")
+# Sasha 404 · TEST_VENUE_MARKS is gone: booking_signer.supplier.kind_of decides what a supplier is
 
 
 
@@ -49,7 +49,8 @@ def venue_type(category: Optional[str], nights: Optional[int] = None) -> str:
 
 def is_test_venue(rd: Optional[dict], card: Optional[dict] = None) -> bool:
     name = str((rd or {}).get("venue") or "") + " " + str((card or {}).get("name") or "")
-    return any(m in name for m in TEST_VENUE_MARKS) or bool((card or {}).get("test"))
+    from booking_signer import supplier as SP   # Sasha 404 · the ONE decision of what a supplier is
+    return SP.is_demo(name) or bool((card or {}).get("test")) or SP.is_demo(card or {})
 
 
 # ── when ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

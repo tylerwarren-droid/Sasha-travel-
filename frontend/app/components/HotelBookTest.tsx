@@ -53,7 +53,7 @@ export function HotelBookTest({ hotel, city, nights: n0, checkin: c0, party: p0 
     const t = setInterval(async () => {
       const r = await bookingReq(`/api/booking/handover/${p.hid}/status?t=${encodeURIComponent(p.t)}`).catch(() => null)
       const st = String(r?.json?.state ?? '')
-      if (st === 'booked') setP({ k: 'booked', done: p.done, say: `✅ Booked on the hotel's page${r?.json?.reference ? ` — their reference ${String(r.json.reference)}` : ''}. (Kanoe Test Hotel: our own test page, a fictional guest.)` })
+      if (st === 'booked') setP({ k: 'booked', done: p.done, say: `✅ Booked on the hotel's page${r?.json?.reference ? ` — their reference ${String(r.json.reference)}` : ''}.${r?.json?.supplier === 'demo' && r?.json?.venue ? ` (${String(r.json.venue)}: our own test page, a fictional guest.)` : ''}` })   // Sasha 404 · the server names it
       else if (st === 'answered') setP({ k: 'booked', done: p.done, say: `The hotel's page answered${r?.json?.say ? `: ${String(r.json.say)}` : ''} — not read as a confirmation.` })
     }, 2500)
     return () => clearInterval(t)

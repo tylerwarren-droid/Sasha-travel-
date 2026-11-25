@@ -36,29 +36,28 @@ _NAMES = {"kanoe-test-venue": re.compile(r"\b(?:(?:sasha|kanoe)\s+)?test\s+venue
 #: after the request — 21:00 for up to 8 confirms, more than 8 people or a Monday declines, a time it doesn't offer gets the nearest
 TAVERNA_CORREO = "https://agapi-sandbox-production.up.railway.app/fixtures/taverna-correo"
 #: Sasha 265 · item 4 · CR 99's sandbox CALL test venue: AgAPI's own fixture (its booking page; "lunch 13:00–15:00, dinner 20:00–22:30,
-#: closed Mondays"), with the AgAPI sandbox's FICTIONAL number (+1 500 555 0193 — a test range; nothing is dialled for a test person:
+#: closed Mondays"), with the demo venue's number from CONFIGURATION (Sasha 404: SASHA_DEMO_VENUE_PHONE, KANOE "DEMO CONTACTS" — never a literal; for a test person:
 #: the act's call_plan says simulate). Its page AND a phone, soon → the ONE question "fill in their page now, or shall I call them?"
 TAVERNA_SANDBOX = "https://agapi-sandbox-production.up.railway.app/fixtures/taverna"
-SANDBOX_PHONE = "+15005550193"
 _WEEK = {d: [("13:00", "15:00"), ("20:00", "22:30")] for d in range(1, 7)}   # Tuesday–Sunday (0 = Monday: closed)
 
 
 def _venues() -> List[dict]:
-    from booking_signer import form_rung as FR
-    return [{"place_id": "kanoe-test-venue", "name": "Sasha Test Venue", "test": True, "kind": "restaurant",
+    from booking_signer import form_rung as FR, supplier as SP   # Sasha 404 · demo suppliers: NAMED with their mark, from the ONE source
+    return [{"place_id": "kanoe-test-venue", "name": SP.demo_name(SP.DEMO_VENUES["kanoe-test-venue"]), "test": True, "kind": "restaurant",
              "website": FR.test_venue_url("plain"), "city": "Madrid", "country": "ES",
              "address": f"{TEST_LINE}, Madrid, Spain", "type": TEST_LINE, "type_source": "site", "google_type": None,
              "phone": None, "status": None, "listing_url": "", "rating": None, "rating_count": None, "price_level": None,
              "distance_m": None, "books": {"how": "site", "words": "Its own booking form"}},
-            {"place_id": "kanoe-taverna-correo", "name": "Taverna Correo", "test": True, "kind": "restaurant",
+            {"place_id": "kanoe-taverna-correo", "name": SP.demo_name(SP.DEMO_VENUES["kanoe-taverna-correo"]), "test": True, "kind": "restaurant",
              "website": TAVERNA_CORREO, "city": "Madrid", "country": "ES",
              "address": f"{TEST_LINE} (books by email), Madrid, Spain", "type": TEST_LINE, "type_source": "site", "google_type": None,
              "phone": None, "status": None, "listing_url": "", "rating": None, "rating_count": None, "price_level": None,
              "distance_m": None, "books": {"how": "email", "words": "By email"}},
-            {"place_id": "kanoe-taverna-sandbox", "name": "Taverna Sandbox", "test": True, "kind": "restaurant",
+            {"place_id": "kanoe-taverna-sandbox", "name": SP.demo_name(SP.DEMO_VENUES["kanoe-taverna-sandbox"]), "test": True, "kind": "restaurant",
              "website": TAVERNA_SANDBOX, "city": "Madrid", "country": "ES",
              "address": f"{TEST_LINE} (its page, or a call), Madrid, Spain", "type": TEST_LINE, "type_source": "site", "google_type": None,
-             "phone": SANDBOX_PHONE, "week": {str(k): v for k, v in _WEEK.items()}, "status": None, "listing_url": "", "rating": None,
+             "phone": SP.demo_venue_phone(), "week": {str(k): v for k, v in _WEEK.items()}, "status": None, "listing_url": "", "rating": None,
              "rating_count": None, "price_level": None, "distance_m": None, "books": {"how": "site", "words": "Its own page, or by phone"}}]
 
 
@@ -66,7 +65,8 @@ def TEST_VENUES() -> List[dict]:   # noqa: N802 · a function: test_venue_url re
     return [dict(v) for v in _venues()]
 
 
-TEST_IDS = ("kanoe-test-venue", "kanoe-taverna-correo", "kanoe-taverna-sandbox")
+from booking_signer.supplier import DEMO_VENUES as _DEMO   # noqa: E402 · Sasha 404 · the ONE registry
+TEST_IDS = tuple(_DEMO)
 
 
 def _plain(text: Optional[str]) -> str:
@@ -86,7 +86,8 @@ def names_test_venue(*texts: Optional[str]) -> bool:
 
 
 def is_test_card(card: Optional[dict]) -> bool:
-    return bool(card) and (bool(card.get("test")) or card.get("place_id") in TEST_IDS)
+    from booking_signer import supplier as SP   # Sasha 404 · the ONE decision of what a card is
+    return bool(card) and (bool(card.get("test")) or SP.is_demo(card))
 
 
 async def mode_of(account: Optional[str]) -> str:

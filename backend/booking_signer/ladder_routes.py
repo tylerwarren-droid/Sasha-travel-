@@ -108,7 +108,9 @@ async def _read_view(row: dict, read: Optional[dict] = None, at: Optional[str] =
     chosen = L.choose(read, account=row.get("account_id"))
     # Sasha 161 · the venue's LISTING name first: a reused read can carry the guest's own words as its name
     name = ((read.get("listing") or {}).get("name") or read["name"])
-    return {"read_id": row["read_id"], "venue": name, "country": read.get("country"), "listing": read.get("listing"),
+    from . import supplier as _SP   # Sasha 404 · what the supplier IS, decided HERE (the page reads `supplier`, never a name)
+    return {"read_id": row["read_id"], "venue": _SP.shown(name), "supplier": _SP.kind_of(name), "country": read.get("country"),
+            "listing": read.get("listing"),
             "facts": [{k: f[k] for k in ("kind", "value", "source_label", "source_url", "snippet", "fetched_at")} for f in read["facts"]],
             "sources": read["sources"], "rungs": chosen["rungs"], "say": chosen["say"], "plan": await _plan_for({**read, "name": name}, row),
             **({"listing_reread": read["listing_reread"]} if read.get("listing_reread") else {})}
@@ -293,11 +295,7 @@ def standin_captcha(asked_for) -> bool:
     return bool(re.search(r"\b(spa|massage|wellness)\b", str(asked_for or ""), re.I))
 
 
-STANDIN_MARK = "(TEST stand-in)"   # short: a venue name is at most 80 characters
-
-
-def standin_name(real: Optional[str]) -> str:
-    return f"{(real or 'the place you picked').strip()[:62]} {STANDIN_MARK}"
+from .supplier import STANDIN as STANDIN_MARK, standin_name   # noqa: E402,F401 · Sasha 404 · the ONE source (a demo supplier, marked)
 
 
 def _with_rehearsal(account: str, out: dict) -> dict:

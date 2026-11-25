@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from typing import Dict, List
 
 log = logging.getLogger("agapi.s2_hotel")
-TEST_HOTEL = "Kanoe Test Hotel"
+from booking_signer.supplier import DEMO_HOTEL as _DH, demo_name as _dn   # noqa: E402 · Sasha 404 · the ONE source
+TEST_HOTEL = _dn(_DH)   # a demo supplier: NAMED with its mark
 REPLIES: Dict[str, dict] = {}   # account → the hotel's latest reply (their words), for "did they answer?"
 
 

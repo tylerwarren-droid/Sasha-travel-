@@ -260,6 +260,10 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
         m = map_url(r.get("venue"), r.get("place_id"))
         if m:
             r["map_url"] = m
+    from booking_signer import supplier as SP   # Sasha 404 · every booking row's venue is THE display name: a demo supplier's with its mark
+    for r in out:                              # (AgAPI's record and the old rows hold the name they were made with — marked here, once)
+        if r.get("venue"):
+            r["venue"] = SP.shown(r["venue"])
     return [r for r in out if include_cancelled or r["status"] != "cancelled"]
 
 

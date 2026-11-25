@@ -526,8 +526,10 @@ async def reservations(request: Request):
         rows = await STORE.reservations(account_for(request))
     except StorageUnavailable as e:
         return _unavailable(e)
+    from . import supplier as _SP
     return {"reservations": [{
-        "id": r["id"], "trip_id": r["trip_id"], "intent_id": r["intent_id"], "channel": r.get("channel") or "form", "venue": r["venue"],
+        "id": r["id"], "trip_id": r["trip_id"], "intent_id": r["intent_id"], "channel": r.get("channel") or "form",
+        "venue": _SP.shown(r["venue"]),   # Sasha 404 · THE display name: a demo supplier's with its mark (the ONE source)
         # an ASKING call's reservation has no time of its own yet (S-64 step 9): null, never a made-up one
         "date": r["local_date"].isoformat() if r["local_date"] else None,
         "time": r["local_time"].strftime("%H:%M") if r["local_time"] else None, "timezone": r["local_timezone"],

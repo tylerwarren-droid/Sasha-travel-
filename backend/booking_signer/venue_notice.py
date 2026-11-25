@@ -90,9 +90,9 @@ def _lang(read: Mapping[str, Any]) -> str:
 
 def _our_test_venue(b: Mapping[str, Any]) -> bool:
     """The S2 demo setting's stand-in (its read is of OUR test venue): by its marked name, or the page it was read from."""
-    from .ladder_routes import STANDIN_MARK
+    from . import supplier as SP   # Sasha 404 · the ONE decision (the new mark and the old)
     read, row = b.get("read") or {}, b.get("read_row") or {}
-    return (STANDIN_MARK in str(read.get("name") or "") or STANDIN_MARK in str(row.get("venue_name") or "")
+    return (SP.is_standin(read.get("name")) or SP.is_standin(row.get("venue_name"))
             or "/api/booking/test-venue/" in str(read.get("sources") or ""))
 
 

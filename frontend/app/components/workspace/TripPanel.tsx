@@ -111,7 +111,7 @@ function JourneyList({ title, rows }: { title: string; rows: JRow[] | null }) {
               <div key={r.id} style={{ marginBottom: 6 }}><TrainLine t={r.train} status={r.status_words ?? r.status} /></div>
             ) : (
               <div key={r.id} style={{ marginBottom: 6 }}>
-                <div>{r.time ? `${r.time} · ` : ''}{r.venue.replace(/ \(TEST stand-in\)$/, '')}</div>
+                <div>{r.time ? `${r.time} · ` : ''}{r.venue}</div>
                 <div className="lw-note-s">{r.status_words ?? r.status}{r.route_words ? ` · ${r.route_words}` : ''}{r.booking_reference ? ` · ref ${r.booking_reference}` : ''}</div>
                 {r.venue_words ? <div className="lw-note-s">They said: &ldquo;{r.venue_words}&rdquo;</div> : null}
                 {(r.terms || []).map((t, k) => <div key={k} className="lw-note-s"><b>{termHead(t)}</b></div>)}

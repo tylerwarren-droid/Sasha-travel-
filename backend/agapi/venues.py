@@ -58,14 +58,16 @@ async def prepared_pages(account: Optional[str]) -> List[dict]:
 
 async def note_prepared(account: str, venue: str, when: str, party: Any, url: Optional[str], link_id: Optional[str] = None,
                         route: Optional[str] = None, platform: Optional[str] = None, place_id: Optional[str] = None,
-                        prepared_id: Optional[str] = None) -> None:
+                        prepared_id: Optional[str] = None, facts: Optional[dict] = None) -> None:
     """A prepared page drawn for them: on the record (the same booking prepared again replaces its line, never a second one).
     Sasha 283 · item 4c: EVERY page hand-over writes this row (the copy card, and a platform's page with its booking_links id) — the
     one place the way back reads."""
     row = {"venue": venue, "date": str(when or "")[:10], "time": str(when or "")[11:16], "party": int(party or 0),
            **({"url": url} if url else {}), **({"link_id": link_id} if link_id else {}), "at": datetime.now(timezone.utc).isoformat(),
            # Sasha 300 · the ONE itinerary's: the route it was handed over by, its platform, the venue's place ID (its map link)
-           **({"route": route} if route else {}), **({"platform": platform} if platform else {}), **({"place_id": place_id} if place_id else {})}
+           **({"route": route} if route else {}), **({"platform": platform} if platform else {}), **({"place_id": place_id} if place_id else {}),
+           # Sasha 408 · what AgAPI's prepare RECORDED (filled into their page or not; a human check) — the status words read these, never a guess
+           **({"filled": bool(facts.get("filled")), "human_check": bool(facts.get("human_check"))} if facts and facts.get("read") else {})}
     same = lambda r: _base(r.get("venue") or "") == _base(venue) and r.get("date") == row["date"] and r.get("time") == row["time"]
     rows = ([r for r in await prepared_pages(account) if not same(r)] + [row])[-10:]
     _PREPARED[account] = rows
@@ -495,7 +497,7 @@ OPEN_SLOT = {"enum": ["quote", "whenever"], "description": "ONLY when they want 
                                                           "the time. A day they named may stay in `day`."}
 NIGHTS = {"type": "integer", "minimum": 1, "maximum": 30,
           "description": "a REAL request to a hotel for this many nights from `day` (check-in; time may be left out): their own "
-                         "booking engine with the stay filled in, an email asking for a room, or a call that says the stay. Only "
+                         "booking engine with the stay's details, an email asking for a room, or a call that says the stay. Only "
                          "when they want to book with the hotel itself — a TEST stay is search_stays / hold_booking"}
 
 
@@ -2053,6 +2055,8 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
             return await _platform_handover(ctx, held, prep, venue, where)   # Sasha 316 · ONE message, the platform's own page
         if prep:
             held = {**held, "url": prep["link"], "human_step": prep.get("human_step"), "prep_say": prep.get("say")}
+        from agapi import booking_words as BW   # Sasha 408 · what was FILLED, and the human step, are AgAPI's record's — never `bool(prep)`
+        fx = BW.facts(prep)
         phone_fields = await _with_loyalty(ctx, held)   # Sasha 253 · G14 — the value only here, on their phone
         text = (f"📝 {venue} — your booking, ready to copy into their page:\n" + "\n".join(f"{x['label']}: {x['value']}" for x in phone_fields)
                 + f"\n\nTheir page: {held['url']}\n" + (prep.get("human_step") if prep and prep.get("human_step") else
@@ -2074,32 +2078,38 @@ async def _book_inner(ctx, held: dict, how: dict, venue: str, rung: str) -> dict
         dec = ((held.get("follow") or {}).get("decision")) or {}
         await note_prepared(ctx.account, venue, held["when"], held["party"], held.get("url"), place_id=held.get("place_id"),
                             platform=IT.platform_name(held.get("channel_name"), dec.get("channel"), (dec.get("button") or {}).get("label")),
-                            prepared_id=(prep or {}).get("prepared_id"))   # CR 132 (a) · on AgAPI's record too
+                            prepared_id=(prep or {}).get("prepared_id"),   # CR 132 (a) · on AgAPI's record too
+                            facts=fx)   # Sasha 408 · the row's status words read what the record said was filled
         from app.agent import voice as V
         from agapi import venue_submit as VS
         # Sasha 264 · item 2 (Tyler's spa, 14 Oct): AgAPI gave no filled page — their own page opened EMPTY and she said "Done — it's
         # on your screen". No prepared link = not filled: said so, plainly, with the details to copy (never an empty page called done)
-        filled = bool(prep)
+        filled = bool(fx["filled"])   # Sasha 408 · what AgAPI's record says it put INTO their page (a copy card is not a filled page)
         if not filled:
-            log.info("[venues] %s: venue.prepare_booking gave no filled page — their own page and the details to copy", venue)
+            log.info("[venues] %s: AgAPI's prepare filled nothing into their page — their page and the details to copy", venue)
         fw = held.get("follow")
-        if fw and filled:   # Sasha 284 · followed AgAPI's decision: its words and its button (prepare's own decision, with the prepared link)
-            dec = prep.get("decision") or fw["decision"]
+        if fw:   # Sasha 284 · followed AgAPI's decision: its words and its button. Sasha 408 · whatever was filled: a phrase that CLAIMS a fill is
+            #      replaced by the record's line below (booking_words.FILL_CLAIMS), never gated on a guess of "filled"
+            dec = (prep or {}).get("decision") or fw["decision"]
             label = V.OPEN_THEIR_PAGE if fw["refused"] else (dec.get("button") or {}).get("label") or V.OPEN_THEIR_PAGE
             return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where,
                     "booked": False, "route": dec.get("route"),
-                    "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": True, "button": label,
+                    "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": filled, "button": label,
                                  **({"human_step": held["human_step"], "prepared_by": OP.VENUE_PREPARE_BOOKING} if held.get("human_step") else {})},
                     **({"in_app": True} if VS.TAP.get() is not None else {}),
-                    "say": (said := next((x for x in ((prep.get("say") if fw["refused"] else dec.get("say_text")),)
-                                          if x and not V.asks_for_link(x)), None) or V.done_form(getattr(ctx, "surface", "s2"))),   # 286: never a link ask
+                    # Sasha 408 · AgAPI's words for what it did, as given — except a phrase that CLAIMS a fill (booking_words.FILL_CLAIMS:
+                    # "filled in for you … prove you're human", whatever its prepare recorded — FOR CR): then the RECORD's line
+                    "say": (said := (BW.handover_line(venue, fx, getattr(ctx, "surface", "s2")) if (not fw["refused"] and dec.get("say") in BW.FILL_CLAIMS)
+                                     else next((x for x in (((prep or {}).get("say") if fw["refused"] else dec.get("say_text")),)
+                                                if x and not V.asks_for_link(x)), None) or BW.handover_line(venue, fx, getattr(ctx, "surface", "s2")))),
                     "page_says": said}   # Sasha 299 · in the app said by code (voice.page_line): no model step just to say it
         return {"status": "page_on_phone" if sent else "page_link", "venue": venue, "when": held["summary"], "itinerary": where, "booked": False,
                 "prepared": {"venue": venue, "url": held["url"], "fields": held["fields"], "on_phone": sent, "filled": filled,
                              **({"human_step": held["human_step"], "prepared_by": OP.VENUE_PREPARE_BOOKING} if held.get("human_step") else {})},
                 **({"in_app": True} if VS.TAP.get() is not None else {}),
                 # Sasha 249 · her words for it are her voice's, never the engine's (which may name the booking platform)
-                "say": (V.done_form(getattr(ctx, "surface", "s2")) if filled else V.NOT_FILLED) + " Say exactly that — never that it's booked."}
+                "page_says": BW.handover_line(venue, fx, getattr(ctx, "surface", "s2")),   # Sasha 408 · the record's line, said by code
+                "say": BW.handover_line(venue, fx, getattr(ctx, "surface", "s2")) + " Say exactly that — never that it's booked."}
     if rung == "page":
         status, j = await GW.api(ctx.account, "POST", f"/api/booking/links/{held['id']}/opened", {"read_back_sha256": held["sha"]})
         if status != 200:

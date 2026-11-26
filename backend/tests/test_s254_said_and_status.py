@@ -155,7 +155,7 @@ class OneTruthPreparedPage(unittest.TestCase):
         st = self._status()
         self.assertEqual(st["state"], "prepared")
         self.assertIn("Prepared, not booked", st["line"])
-        self.assertIn("waiting for you to book it there", st["line"])
+        self.assertIn("waiting for you to book it on their page", st["line"])   # Sasha 408 · its row's own words (no fill claimed)
         self.assertIn(f"Hammam Al Ándalus — {self.day} 17:00", st["line"])
         self.assertFalse(st["anything_booked"])
         self.assertNotEqual(st["line"], ST.WORDS["nothing"])

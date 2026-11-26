@@ -31,7 +31,8 @@ WORDS = {"nothing": "Nothing is booked yet.",
          "booked": "Booked",
          "partly_booked": "Partly booked",
          "failed": "Not booked",
-         "prepared": "Prepared, not booked — their page is filled in, waiting for you to book it there",
+         # Sasha 408 · no fill is claimed here: each prepared page says its OWN record's words (booking_words.status_words)
+         "prepared": "Prepared, not booked",
          # Sasha 256 · CR 94: the venue's own answer to a request — another time offered is NOT a booking; the person decides
          "proposed": "Not booked — they offered another time; tell me if it suits",
          "declined": "Not booked — the venue said no",
@@ -154,7 +155,8 @@ async def status_of(account: str, trip_id: Optional[str] = None, sweep: bool = T
     on_record = {(VN._base(b.get("venue") or ""), str(b.get("date") or "")) for b in vb}
     pages = [x for x in await VN.prepared_pages(account) if (VN._base(x.get("venue") or ""), str(x.get("date") or "")) not in on_record]
     line_of = lambda x: f"{x['venue']} — {x.get('date') or ''} {x.get('time') or ''}".strip()
-    prep = [line_of(x) for x in pages if x.get("outcome") not in VN.WORD_BOOKED]
+    from agapi import booking_words as BW   # Sasha 408 · each page: what ITS record said was filled
+    prep = [f"{line_of(x)} ({BW.status_words(x).split(' — ', 1)[-1]})" for x in pages if x.get("outcome") not in VN.WORD_BOOKED]
     if prep:
         st["prepared"] = prep
     by_you = [line_of(x) for x in pages if x.get("outcome") in VN.WORD_BOOKED]   # Sasha 283 · item 4c: his "yes, it went through"

@@ -51,10 +51,11 @@ _PLATFORM_HOSTS = ("covermanager", "thefork", "eltenedor", "opentable", "resy", 
                    "dish.co", "restoo", "fresha", "treatwell", "booksy")
 
 
-def words(status: str, route: Optional[str] = None) -> str:
+def words(status: str, route: Optional[str] = None, row: Optional[dict] = None) -> str:
     from agapi import s2_status as ST
-    if status == "handed_over":
-        return ST.WORDS["your_whatsapp"] if route == "your_whatsapp" else ST.WORDS["prepared"]
+    if status == "handed_over":   # Sasha 408 · a prepared page: its OWN record's words (filled or to copy), never a fixed claim
+        from agapi import booking_words as BW
+        return ST.WORDS["your_whatsapp"] if route == "your_whatsapp" else BW.status_words(row or {})
     return ST.WORDS.get(_WORDS_KEY.get(status, "requested"), ST.WORDS["requested"])
 
 
@@ -251,10 +252,11 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
                     "time": h.get("time") or None, "party": h.get("party") or None, "type": "restaurant",
                     **({"url": h["url"]} if h.get("url") else {}), **({"link_id": h["link_id"]} if h.get("link_id") else {}),
                     **({"platform": platform_name(h.get("platform")) or _platform(str(h.get("url") or ""))} if route == "platform" else {}),
-                    **({"place_id": h["place_id"]} if h.get("place_id") else {})})
+                    **({"place_id": h["place_id"]} if h.get("place_id") else {}),
+                    **({"filled": h["filled"]} if "filled" in h else {})})   # Sasha 408 · what the prepare's record said
     for r in out:
         r["terms"] = row_terms(r)   # Sasha 301 · the venue's own terms, from its own words on this row
-        r["status_words"] = words(r["status"], r["route"])
+        r["status_words"] = words(r["status"], r["route"], r)
         r["route_words"] = route_words(r["route"], r.get("platform"))
         r["manage"] = "ladder" if r["source"] == "ladder" else MANAGE.get(r["route"], "their_page")
         m = map_url(r.get("venue"), r.get("place_id"))

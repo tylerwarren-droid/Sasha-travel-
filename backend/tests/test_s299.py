@@ -142,7 +142,7 @@ class TheCuts(unittest.TestCase):
                                     "prepared": {"filled": True, "url": "https://x.example/p"}, "page_says": "AgAPI's own line (test)."}}
         self.assertEqual(V.page_line("hold_venue", r), "AgAPI's own line (test).")   # the turn ends on it — no model step to say it
         r["result"]["prepared"]["filled"] = False
-        self.assertEqual(V.page_line("hold_venue", r), V.NOT_FILLED)
+        self.assertEqual(V.page_line("hold_venue", r), "AgAPI's own line (test).")   # Sasha 408 · the record's line, filled or not
 
 
 class ABookTapRunsByCode(unittest.TestCase):

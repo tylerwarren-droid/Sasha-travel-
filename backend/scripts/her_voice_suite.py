@@ -104,7 +104,7 @@ async def main() -> bool:
                                           for q in takeovers), str(takeovers[-1])[:600])
         lines = [s for s in said if s]
         check("3 nothing she's handed names a channel", V.check(lines) == [], str(V.check(lines)))
-        check("3 the request's confirmation is her voice", V.SENT == "Sent. I'll tell you when they reply." and V.check([V.SENT, V.DONE_FORM, V.DONE_FORM_WA]) == [])
+        check("3 the request's confirmation is her voice", V.SENT == "Sent. I'll tell you when they reply." and V.check([V.SENT]) == [])   # Sasha 408 · a prepared page's line is the record's (booking_words)
     finally:
         GR.address_of = real_addr
         VN._HELD.pop(acct, None)

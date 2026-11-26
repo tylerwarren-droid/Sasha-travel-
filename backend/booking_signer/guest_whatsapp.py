@@ -3025,8 +3025,15 @@ async def tap_to_finish(account: Optional[str], venue: str, url: str, what: str 
     ch = await STORE.channel_of_account(account)
     if not ch:
         return "not sent: no WhatsApp linked to this account"
-    out = await _tell(ch, f"👉 Tap to finish at {venue}: {url}\nEverything's filled in{f' — {what}' if what else ''}. The last tap is yours.",
-                      ("tap_to_finish", {1: venue, 2: what or "your booking", 3: url}))
+    from urllib.parse import parse_qs
+    from . import handover as H   # Sasha 408 · what is filled is the HAND-OVER's record (its live fill), never a fixed claim
+    rec = H._rec_for(u.path.rstrip("/").rsplit("/", 1)[-1], (parse_qs(u.query).get("t") or [""])[0]) or {}
+    filled = bool(rec.get("filled"))
+    from agapi import booking_words as BW
+    state = BW.details_state(filled) + (f" — {what}" if what else "")
+    out = await _tell(ch, f"👉 Tap to finish at {venue}: {url}\n{state}. The last tap is yours.",
+                      ("tap_to_finish", {1: venue, 2: what or "your booking", 3: url}) if filled else None)   # the approved template
+    # says "filled in": used only when the record says so (outside the 24-hour window an unfilled one isn't sent — said in the result)
     if "sent" in out and "not" not in out:
         _TAPPED.add(url)
     return out

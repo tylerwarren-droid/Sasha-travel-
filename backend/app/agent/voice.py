@@ -4,7 +4,6 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
   RULES        → appended to /s2's system text (WhatsApp shares it) and /next's under S1 parity (parity off: /next unchanged)
   ASK_BOOK     → the one booking question, when a venue has a form AND another way (agapi.venue_truth.ASK_FILL is this)
   CHOICES      → its two answers, as buttons / a list
-  done_form()  → the confirmation once a prefilled form is on their screen
   SENT         → the confirmation once a request has gone to the venue
   READ_BACK_ASK / read_back_line() → Sasha 262 · the one line over a read-back card, said by code (sasha.turn)
   faults()     → a transcript's breaches: a channel named, or a second question for the same detail
@@ -16,7 +15,7 @@ tools hand her word for word, and the transcript check the deploy gate runs. Not
   progress_due() → Sasha 279 · A: that line ONCE (twice at most, the second on a long wait), then quiet; the ring shows she works
   PAID / CLOSING / paid_line() / closing_line() → Sasha 279 · B + C: a finished booking, said once (live_events.completed only)
   BRIEF_MAX / brief()  → Sasha 264 · short, never twice: her own sentences capped, never last reply's or a card's (sasha.turn)
-  NOT_FILLED / PAGE_HERE / phone_line() / platform_line() / page_line() → Sasha 264 · a form or a platform's page, said as it is
+  PAGE_HERE / phone_line() / platform_line() / page_line() → Sasha 264 · a form or a platform's page, said as it is
 """
 from __future__ import annotations
 
@@ -27,8 +26,6 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 TRY_FIRST = "Let me see what I can do."   # Sasha 268 · item 7: her first answer to any request for a service (first_line, RULES)
 ASK_BOOK = "I'll book it. Want a prefilled form you just confirm, or shall I handle it and let you know?"
 CHOICES = ({"title": "Prefilled form", "route": "page"}, {"title": "Handle it", "route": None})
-DONE_FORM = "Done — it's on your screen, tap to confirm."
-DONE_FORM_WA = "Done — it's below, tap to confirm."   # WhatsApp: the card arrives as the next message, not "on your screen"
 SENT = "Sent. I'll tell you when they reply."
 #: Sasha 256 · the one line over a venue read-back card (its details are on the card, never recited). Sasha 262 (S2 item 10, row 911):
 #: said BY CODE and the turn ends there (sasha.turn) — the model once added "I haven't booked it yet. I need a clear yes first."
@@ -340,11 +337,7 @@ def asks_for_link(text: str) -> bool:
 LINK_ON_IT = "OK, I'm on it."   # theirs to fill by Sasha (owner kanoe): before the read-back's one question
 #: the person's to finish (owner "the person"), by what the link IS — the engine's say without the host it names (her voice never names
 #: how a booking travels), and never "no booking form" about a place
-LINK_THEIRS = {"captcha": "Their form asks you to prove you're human, so that last step is yours — here it is.",
-               "needs_sign_in": "Their form needs you to sign in, so it's yours to fill — here it is.",
-               "platform": "Here's their page — you finish it there.",
-               "not_a_booking_form": "That page isn't a booking form I can fill in — here it is to look at.",
-               "cant_read": "I couldn't read that page from here — here it is to open yourself."}
+from agapi.booking_words import LINK_THEIRS   # noqa: E402 · Sasha 408 · keyed by AgAPI's classification of the link: the ONE writer
 
 
 def link_line(channel: Optional[dict]) -> str:
@@ -367,7 +360,8 @@ RULES = f"""
 - Ask for every missing detail once, together, up front ("For two on Thursday at 9 — what name should it be under?"). Never ask
   again for something you have — from their Keep, what you remember, or earlier in this chat. If they move on without answering,
   don't ask it again: answer what they said, and leave the question where it is until they come back to it.
-- Confirm short: one or two sentences, then the card. "{DONE_FORM}" / "{SENT}"
+- Confirm short: one or two sentences, then the card — what the tool's result says it did, never more (a page is "filled in" only when
+  the result says so). "{SENT}"
 - When a tool fails (its result says ok: false), say plainly that it didn't work and what you'll do next. Never describe results,
   cards, a form, a booking, a message sent or a total that the tool didn't return — nothing is on their screen unless a tool put it
   there this turn.
@@ -485,8 +479,6 @@ def honest_faults(turns: Iterable[dict]) -> List[str]:
     return out
 
 
-def done_form(surface: str = "s2") -> str:
-    return DONE_FORM_WA if surface == "wa" else DONE_FORM
 
 
 def channel_words(text: str) -> List[str]:
@@ -1033,14 +1025,8 @@ def brief(sentences: Sequence[str], said: Iterable[str], seen: Iterable[str], co
 
 
 # ── Sasha 264 · items 2 and 3 — WHAT REACHED THEM, SAID AS IT IS ────────────────────────────────────────────────────────────────
-#: item 2: AgAPI's venue.prepare_booking gave no filled page (Tyler's spa: the venue's own page opened, every field empty, and she said
-#: "Done — it's on your screen, tap to confirm"). Never an empty page called prefilled: their page + the details to copy, said so.
-NOT_FILLED = "I couldn't fill in their form, so their page is on your screen with your details to copy in. It's not booked until you confirm there."
-CAPTCHA_TOO = " Their page asks you to prove you're human, which only you can do."
-
-
-def not_filled_line(captcha: bool = False) -> str:
-    return NOT_FILLED + (CAPTCHA_TOO if captcha else "")
+# Sasha 408 · NOT_FILLED / CAPTCHA_TOO / not_filled_line are gone: what was filled, and a human check, are said ONLY from AgAPI's record of
+# the prepare (agapi/booking_words.handover_line) — never a fixed sentence.
 
 
 #: item 3: a booking page is ALWAYS on their screen (a card they tap); their phone is an extra — and when that send fails, she says so.
@@ -1137,8 +1123,8 @@ def page_line(tool: str, r: dict) -> str:
     if res.get("status") not in ("page_on_phone", "page_link"):
         return ""
     prep = res.get("prepared")
-    if isinstance(prep, dict):   # their form: NOT filled → said so; filled and following AgAPI's decision → its own line (Sasha 299)
-        return NOT_FILLED if prep.get("filled") is False else str(res.get("page_says") or "")
+    if isinstance(prep, dict):   # Sasha 408 · THE record's line (booking_words.handover_line), filled or not — never a fixed sentence
+        return str(res.get("page_says") or "")
     if not res.get("page_url"):
         return ""
     return f"{res.get('page_says') or PAGE_HERE} {res.get('phone_line') or ''}".strip()   # a platform's page: its line, the phone's outcome
@@ -1149,7 +1135,8 @@ def platform_line(venue: str, party: int, when: str, filled: bool, gmail: bool) 
     I send" (she never sends on a platform), never an internal address, never the platform's name (her voice's first rule), and "filled
     in" only when the link really carries the slot."""
     who = f"{party} {'person' if party == 1 else 'people'}"
-    slot = f"it's filled in for {who}, {when}" if filled else f"pick {when} for {who} there"
+    from agapi.booking_words import slot_words   # Sasha 408 · the ONE writer: "filled in" only as the link's record holds it
+    slot = slot_words(filled, who, when)
     then = "I'll pick up their confirmation from your email." if gmail else "forward me the confirmation when it arrives."
     return f"{venue} books on their own booking page — {slot}. Tap to book there; {then}"
 
@@ -1243,10 +1230,10 @@ def no_answer_words(res: dict, channel: str = "page") -> str:
 
 
 __all__ = ["PROGRESS_S", "progress_line", "PROGRESS_MAX", "LONG_WAIT_S", "progress_due", "PAID", "CLOSING", "CLOSING_LATER", "paid_line",
-           "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "NOT_FILLED", "PAGE_HERE", "PHONE_FAILED", "phone_line",
+           "closing_line", "Steps", "STEPS", "BRIEF_MAX", "brief", "PAGE_HERE", "PHONE_FAILED", "phone_line",
            "NO_CALL_OPEN", "WA_TRY_AGAIN", "FORM_HERE", "no_answer_words", "act_line", "takeover_line", "HELLO", "HELLO_BACK", "CAMERA_OFF", "arrival_line", "STILL_HERE", "STILL_HERE_ES", "PICKUP", "PICKUP_READY", "PICKUP_NONE", "pickup_line", "KIND_ASK", "KIND_CHOICES", "KIND_ASK_ES", "KIND_CHOICES_ES", "kind_ask",
            "STEP_GAP_S", "STEP_STILL_S", "step_words", "progress_next", "progress_wait", "COMPOSING", "BOOK_IT", "WAIT_TO_CALL", "limits_channel", "ACKS", "next_ack", "ack_for", "first_ack", "forget_acks", "is_ack", "discover_line", "RESERVABLE", "FLOOR", "floor_line", "asks_for_link", "OPEN_WEBSITE", "OPEN_LISTING", "LINK_ON_IT", "LINK_THEIRS", "link_line",
-           "page_line", "platform_line", "handover_message", "SLOT_ROLES", "not_filled_line", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "DONE_FORM", "DONE_FORM_WA", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "done_form", "channel_words",
+           "page_line", "platform_line", "handover_message", "SLOT_ROLES", "TOTAL_LINE", "TOTAL_TOOLS", "total_line", "READ_BACK_ASK", "read_back_line", "OUTAGE", "OUTAGE_BOOKING", "outage_line", "TAP_SAYS", "tap_line", "HOLDING", "HOLD_AFTER_S", "holding_line", "ASK_BOOK", "CHOICES", "SENT", "CHANNEL_NAMES", "DETAILS", "RULES", "channel_words",
            "faults", "check", "SHOWS", "SAYS", "FAILED", "claims_shown", "plain_why", "failed_line", "unshown", "honest_faults",
            "TOLD", "told_line", "told_prefix", "is_told", "CANCEL_CHOICES", "TYPED_YES_CHOICES", "GROUP_PICK_CHOICES", "CANCEL_KEPT", "CARD_ANSWERED", "CANCEL_NOT_TAKEN", "SEND_ON_WHATSAPP", "OWN_WHATSAPP", "day_words", "REQUESTED", "ALTERNATIVES_ASK", "alternative_title", "TERM_ASK", "hour_ask", "term_ask", "REFUSED", "ACTING", "booked_now", "acted_line", "OUTSIDE", "outside_line", "outside_ask",
            "wa_sent_line", "wa_yes_line", "wa_offered_line", "wa_no_line", "wa_replied_line", "wa_stopped_line"]

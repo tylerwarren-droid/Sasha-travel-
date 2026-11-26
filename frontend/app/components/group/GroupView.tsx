@@ -193,7 +193,7 @@ export default function GroupView({ embedded = false }: { embedded?: boolean } =
       if (r?.ok && j.say) setSaid(j.say)
       await new Promise(res => setTimeout(res, 2000))
     }
-    setSaid('Still preparing — this page stopped waiting. Nothing is booked; reload to see the card.')
+    setSaid('Still preparing — this page stopped waiting before the answer came; reload to see where it stands.')   // Sasha 408 · unread is never a state
   }
   const act = async (action: 'book' | 'swap' | 'cancel', who: string[] | null, to?: string, more: Record<string, unknown> = {}) => {
     const name = { book: 'Book', swap: 'Swap', cancel: 'Cancel' }[action]

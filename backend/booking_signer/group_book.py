@@ -369,6 +369,13 @@ async def _prepare_worker(account: str, m: dict, st_: Optional[str], who: Option
     return "skip", {"name": m["name"], "member_id": m["id"], "kind": "no_fare", "why": "no fare left — nothing held"}
 
 
+def _any_service() -> bool:
+    """Sasha 408 · is ANY AgAPI booking service configured in this environment (live or sandbox)? Names only, never values."""
+    import os
+    from agapi import agapi_route as AR
+    return any(os.getenv(AR.key_name(t), "").strip() for t in ("live", "sandbox"))
+
+
 async def _agapi_reachable(account: str) -> bool:
     """A key for the group family's target exists (or a test's AgAPI) — else no record can be read, and nothing is settled from it."""
     if CALL is not None:
@@ -411,9 +418,13 @@ HELD = ("booked", "confirming", "incomplete")   # the master list's statuses AgA
 async def booked_line(account: str, movement_id: Optional[str]) -> str:
     """Sasha 371b · what is booked, said ONLY from AgAPI's record for THIS movement (the master list's status) — never assumed."""
     from . import groups as G
+    from agapi import booking_words as BW   # Sasha 408 · unread or no trip: said as that, never as a state
     if not movement_id:
-        return "Nothing is booked yet."
-    rows = (await G.view(account, movement_id)).get("rows") or []
+        return BW.UNREAD
+    view = await G.view(account, movement_id)
+    if view.get("record_unread"):
+        return BW.UNREAD
+    rows = view.get("rows") or []
     n = sum(1 for r in rows if r.get("status") == "booked")
     return "Nothing is booked yet." if not n else f"{n} of {len(rows)} {'is' if n == 1 else 'are'} already booked."
 
@@ -442,6 +453,11 @@ async def reconcile(account: str, movement_id: str, members: List[dict], records
     from . import groups as G, basket as BK
     if records is None:
         if not await _agapi_reachable(account):
+            # Sasha 408 · a booking service configured here, but not for this account's target: its record exists and wasn't read —
+            # SAID (Unread), never {} read as "nothing booked" (EU 309: booked workers shown "planned"). No service configured in this
+            # environment at all (a rig with no AgAPI): no record can exist anywhere — nothing recorded is the truth.
+            if _any_service():
+                raise Unread("the group's booking record couldn't be read here")
             return {}
         records = await _records(account, movement_id)
     for m in members:

@@ -165,24 +165,29 @@ class ANotFilledFormIsSaidAsIt(unittest.TestCase):
         """THE GATE (his spa): venue.prepare_booking gave no link → their own page, empty — "Done — it's on your screen" was said."""
         out = book("prepared", held_prepared(), prep=None)
         self.assertIs(out["prepared"]["filled"], False)
-        self.assertNotIn(V.DONE_FORM, out["say"])
-        self.assertTrue(out["say"].startswith(V.NOT_FILLED))
-        self.assertEqual(V.page_line("book_venue", {"ok": True, "result": out}), V.NOT_FILLED)
+        self.assertNotIn("filled in", out["say"])                                            # Sasha 408 · the record's line: nothing filled
+        self.assertIn("to copy in", out["say"])
+        self.assertEqual(V.page_line("book_venue", {"ok": True, "result": out}), out["page_says"])
         ev = S.render("book_venue", out, {})
         self.assertEqual((ev["kind"], ev["filled"]), ("prepared", False))   # the card says it too (S2Cards: "Not filled in")
 
     def test_a_filled_page_is_as_it_was(self):
-        out = book("prepared", held_prepared(), prep={"link": "https://agapi.example/p/1", "human_step": None})
+        # Sasha 408 · "filled" is AgAPI's record of what it put INTO their page (hand_over.carried, or their form) — never a link existing
+        out = book("prepared", held_prepared(), prep={"link": "https://agapi.example/p/1", "human_step": None,
+                                                     "hand_over": {"carried": ["date", "time", "party"], "copy": ["name"]}})
         self.assertIs(out["prepared"]["filled"], True)
-        self.assertTrue(out["say"].startswith(V.DONE_FORM))
-        self.assertEqual(V.page_line("book_venue", {"ok": True, "result": out}), "")
+        self.assertIn("has your details filled in", out["say"])
+        self.assertEqual(V.page_line("book_venue", {"ok": True, "result": out}), out["page_says"])
+        bare = book("prepared", held_prepared(), prep={"link": "https://agapi.example/p/1", "human_step": None})
+        self.assertIs(bare["prepared"]["filled"], False)                                     # a copy card is not a filled page
 
     def test_never_filled_in_over_an_empty_page(self):
         # Sasha 378 · CR 188: the rules' executor (_prepared_now) is gone with Sasha's decider — the ONE place a prepared page is said is
         # _book_inner (via _finish): AgAPI's words only over a FILLED page; an empty one is V.NOT_FILLED
         src = inspect.getsource(VN._book_inner)
-        self.assertIn("if fw and filled:", src)
-        self.assertIn("if filled else V.NOT_FILLED", src)
+        self.assertIn("if fw:", src)                                                       # Sasha 408 · AgAPI's words, a fill claim replaced
+        self.assertIn('filled = bool(fx["filled"])', src)                                    # Sasha 408 · the record's facts
+        self.assertIn("BW.handover_line(", src)
 
     def test_the_card_names_it(self):
         tsx = _tsx(self, "app/components/cards/S2Cards.tsx")

@@ -875,8 +875,9 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
     except GB.Unread as e:   # Sasha 376 · AgAPI's record unread: the view SAYS so (record_unread) — never a list that reads as nothing booked
         unread = str(e) or "unread"
         log.warning("[groups] AgAPI's record unread: %s", unread)
-    except Exception as e:
-        log.warning("[groups] the list not reconciled with AgAPI's record: %s", type(e).__name__)
+    except Exception as e:   # Sasha 408 · any failure to read the record is UNREAD — never a list read as nothing booked
+        unread = type(e).__name__
+        log.warning("[groups] the list not reconciled with AgAPI's record: %s", unread)
     from . import basket as BK
     for m in members:
         rows = [r for r in (await _items(account, m["trip_id"]) if m.get("trip_id") else []) if not BK.superseded(r)]
@@ -894,8 +895,9 @@ async def view(account: str, movement_id: Optional[str] = None) -> Dict[str, Any
                     "transport": _transport(rows), "hotel": (stay.get("snapshot") or {}).get("name") if stay else None,
                     "flight_eur": f_eur, "hotel_eur_per_night": h_eur, "price_eur": price, "limit": lim,
                     **(await _vault_marks(m)),
-                    "status": recorded.get(m["id"]) or ("planning…" if m["id"] in _PLANNING.get(account, set()) and not rows
-                                                        else status_of(rows, lim, await _has_documents(m))),   # Sasha 364 · live
+                    # Sasha 408 · the record unread: no booking state is said for anyone (a booked worker was shown "planned")
+                    "status": "not read yet" if unread else (recorded.get(m["id"]) or ("planning…" if m["id"] in _PLANNING.get(account, set()) and not rows
+                                                                                       else status_of(rows, lim, await _has_documents(m)))),   # Sasha 364
                     **({"record_why": whys[m["id"]]} if m["id"] in whys else {}),
                     **({"booked_parts": parts[m["id"]]} if m["id"] in parts else {}),
                     **({"price_eur": booked_rec[m["id"]]["price_eur"], "references": booked_rec[m["id"]]["references"],

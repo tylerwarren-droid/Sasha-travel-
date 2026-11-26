@@ -104,18 +104,20 @@ async def deepgram_ephemeral_key():
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"deepgram key error: {e}")
 
-async def text_to_speech(text: str, fmt: str = "mp3") -> bytes:
+async def text_to_speech(text: str, fmt: str = "mp3", voice: str = "aura-asteria-en", lang: str = "en") -> bytes:
     """Sasha 325 · THE ONE PLACE SASHA MAKES AUDIO — her voice (mp3) and her face's lip-sync (raw 24 kHz 16-bit PCM, the LiveAvatar LITE
     session's input): every line passes spoken.speakable first (no display mark is ever spoken — "star 1 person" was the trip line's "·"),
     then Deepgram aura-asteria-en. There is no other speech engine (the Next route /api/s2-voice/pcm, with its own partial strip, is gone)."""
     from app.agent import spoken as SP
-    clean = SP.speakable(text)
+    # Sasha 419 · a voice (Sasha's by default; Julia's is hers) and a language: speakable writes numbers as ENGLISH words, so Spanish
+    # keeps only the layout-mark strip and the Spanish voice reads its own digits
+    clean = SP.speakable(text) if lang == "en" else SP.marks(text)
     if len(clean) > 600:   # concise for voice
         clean = clean[:600].rsplit(" ", 1)[0] + "…"
     if not clean:
         return b""
     headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "application/json"}
-    params = {"model": "aura-asteria-en", **({"encoding": "linear16", "sample_rate": "24000", "container": "none"} if fmt == "pcm" else {"encoding": "mp3"})}
+    params = {"model": voice, **({"encoding": "linear16", "sample_rate": "24000", "container": "none"} if fmt == "pcm" else {"encoding": "mp3"})}
     from booking_signer.http_pool import request   # Sasha 150 · pooled, kept alive (no new TLS handshake per reply)
     response = await request("POST", DEEPGRAM_TTS_URL, timeout=15.0, json={"text": clean}, headers=headers, params=params)
     if response.status_code == 200:

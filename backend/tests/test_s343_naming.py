@@ -44,6 +44,9 @@ class TheScan(unittest.TestCase):
            re.compile(r"(?:read|one) by " + BRANDS),
            re.compile(r"""^\s*\w+\s*=\s*\(?\s*[f]?["']""" + BRANDS + r"\s*[🎓🇪🇸🏠:]"),
            re.compile(r"Hi, I'm (?!Sasha)")]
+    #: Sasha 419 · the ONE other voice Tyler named: LuxuryOffseason's Julia, "Julia, an AI for LuxuryOffseason" (KANOE B3 26 Nov 11:03 and
+    #: "LUXURYOFFSEASON — Julia" 13:29) — a separate product's voice, in its own module only; every Sasha channel still says Sasha
+    OTHER_VOICE = ("products/luxury/julia.py", re.compile(r"Hi, I'm Julia, an AI for Luxury Offseason\b"))
 
     def test_scan(self):
         import ast
@@ -64,7 +67,7 @@ class TheScan(unittest.TestCase):
                     if code.lstrip().startswith("#") or not re.search(r"[\"']", code):   # strings only: comments and docstring prose aren't sent
                         continue
                     for b in self.BAD:
-                        if b.search(code):
+                        if b.search(code) and not (str(f.relative_to(ROOT)) == self.OTHER_VOICE[0] and self.OTHER_VOICE[1].search(code)):
                             hits.append(f"{f.relative_to(ROOT)}:{i}: {code.strip()[:120]}")
         self.assertEqual(hits, [])
 

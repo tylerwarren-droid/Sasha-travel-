@@ -13,7 +13,7 @@ DEEPGRAM_API_BASE = (os.getenv("DEEPGRAM_API_BASE", "").strip() or "https://api.
 DEEPGRAM_STT_BASE = (os.getenv("DEEPGRAM_STT_BASE", "").strip() or DEEPGRAM_API_BASE).rstrip("/")
 DEEPGRAM_URL = f"{DEEPGRAM_STT_BASE}/v1/listen"
 
-async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> dict:
+async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm", language: str = "en-US") -> dict:
     """
     Transcribe audio bytes using Deepgram Nova-3.
     Returns transcript text and confidence score.
@@ -24,6 +24,9 @@ async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> 
         "smart_format": "true",
         "punctuate": "true",
     }
+    if language == "detect":   # Sasha 419 · Julia follows the person's language (English or Spanish): Deepgram names the language it heard
+        params.pop("language")
+        params["detect_language"] = "true"
 
     clean_mime = mime_type.split(";")[0].strip() if mime_type else "audio/mp4"
     headers = {
@@ -49,7 +52,8 @@ async def transcribe_audio(audio_data: bytes, mime_type: str = "audio/webm") -> 
     return {
         "transcript": best.get("transcript", "").strip(),
         "confidence": best.get("confidence", 0.0),
-        "words": best.get("words", [])
+        "words": best.get("words", []),
+        "language": channels[0].get("detected_language"),   # Sasha 419 · set only when asked to detect
     }
 
 

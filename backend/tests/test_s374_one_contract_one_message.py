@@ -37,7 +37,7 @@ class TheOneContract(unittest.TestCase):
         for name, sha in v["files"].items():
             self.assertEqual(hashlib.sha256((BACKEND / "kanoe_contract" / name).read_bytes()).hexdigest(), sha, name)
         agapi = json.loads((BACKEND / "kanoe_contract" / "AGAPI_MANIFEST.json").read_text())
-        self.assertEqual((KC.CONTRACT_VERSION, agapi["version"], v["version"]), ("1.98.0", "1.98.0", "1.98.0"))   # Sasha 386 · CR 203 + 204 (384: 1.94.0 (383: 1.93.0 · CR 202 (381: 1.90.0 · CR 192: 1.86.0)
+        self.assertEqual((KC.CONTRACT_VERSION, agapi["version"], v["version"]), ("1.104.0", "1.104.0", "1.104.0"))   # Sasha 419 · CR 232 (offseason.deltas) · Sasha 386 · CR 203 + 204 (384: 1.94.0 (383: 1.93.0 · CR 202 (381: 1.90.0 · CR 192: 1.86.0)
 
     def test_the_ratchet_finds_no_hand_written_copy(self):
         r = subprocess.run([sys.executable, "-m", "kanoe_contract.ratchet", ".", "--exclude", "tests"], cwd=BACKEND, capture_output=True, text=True)

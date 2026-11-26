@@ -25,6 +25,8 @@ from .campus import handover as HV
 from .campus import schools as SC
 
 router = APIRouter(prefix="/products", tags=["products"])
+from .luxury import routes as _julia   # noqa: E402  Sasha 419 · Julia, LuxuryOffseason's voice: /api/booking/products/julia/*
+router.include_router(_julia.router)
 STORE_KIND = {"kind": "memory (not started)"}
 
 

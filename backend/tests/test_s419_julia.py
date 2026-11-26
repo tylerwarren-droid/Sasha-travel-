@@ -186,5 +186,38 @@ class NothingOfHerOwn(unittest.TestCase):
         self.assertRegex(J.VOICE, r"^aura-")                                 # the engine's own set
 
 
+class HerDoor(unittest.TestCase):
+    """Found on the real path: /api/booking/* sits behind the booking key, which the site's server doesn't hold. Julia's two routes pass
+    the booking gate and answer ONLY with JULIA_SITE_SECRET."""
+
+    def req(self, path, key=None):
+        from starlette.requests import Request
+        headers = [(b"x-julia-key", key.encode())] if key is not None else []
+        return Request({"type": "http", "method": "POST", "path": path, "headers": headers, "query_string": b""})
+
+    def test_the_booking_gate_lets_only_her_two_routes_through(self):
+        from booking_signer import gate as G
+        for p in ("/api/booking/products/julia/hello", "/api/booking/products/julia/turn"):
+            self.assertIsNone(run(G.require_booking_key(self.req(p))))
+        from fastapi import HTTPException
+        with mock.patch.dict("os.environ", {G.ENV: "k"}):
+            with self.assertRaises(HTTPException):
+                run(G.require_booking_key(self.req("/api/booking/products/julia/other")))
+
+    def test_her_door_needs_the_sites_secret(self):
+        from fastapi import HTTPException
+        from products.luxury import routes as RT
+        with mock.patch.dict("os.environ", {"JULIA_SITE_SECRET": ""}):
+            with self.assertRaises(HTTPException) as e:
+                RT._authorized(self.req("/api/booking/products/julia/hello", "anything"))
+            self.assertEqual(e.exception.status_code, 503)
+        with mock.patch.dict("os.environ", {"JULIA_SITE_SECRET": "s419-fixture-secret"}):
+            for wrong in (None, "", "s419-fixture-secreT"):
+                with self.assertRaises(HTTPException) as e:
+                    RT._authorized(self.req("/api/booking/products/julia/hello", wrong))
+                self.assertEqual(e.exception.status_code, 401)
+            self.assertIsNone(RT._authorized(self.req("/api/booking/products/julia/hello", "s419-fixture-secret")))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -41,6 +41,9 @@ EXEMPT |= {("POST", "/api/booking/ops/invite-from-agapi")}
 EXEMPT |= {("GET", "/api/booking/outlook/callback")}
 # Sasha 198 R8 · Duffel's webhook: no key can ride on it; each event is HMAC-signed and verified (duffel_webhook.verify)
 EXEMPT |= {("POST", "/api/booking/travel/duffel/webhook")}
+# Sasha 419 · Julia (LuxuryOffseason's voice): called only by that site's server, which holds no booking key; each call carries
+# JULIA_SITE_SECRET, checked by the route itself (products/luxury/routes._authorized) — no secret, no answer
+EXEMPT |= {("POST", "/api/booking/products/julia/hello"), ("POST", "/api/booking/products/julia/turn")}
 
 
 async def require_booking_key(request: Request) -> None:

@@ -72,6 +72,23 @@ Each was found by bisecting the modules that run before the failing test.
 - 3 rules were deliberately retired by a later Sasha ticket, and each test now asserts the new rule (one-total-249 is the least certain).
 - 1 was a real regression: two "sourced" EspañaMe rows on the AgAPI hub page carried no source. Each now cites the official page its figures were read from.
 
+**6 Postgres tests that never ran** (the database URL was unset everywhere, so they had been skipping). Each was fixed in the test, at the commit that caused the drift:
+- `test_booking_calls` and `test_form_rung`: Sasha 319 (2daf1f47) retired Sasha's own send/place routes. The tests now hold the new rule: Sasha never sends a form, and a call is placed through AgAPI's call act.
+- `test_inbound_phone` ×3, which had three causes:
+  - the setup lacked sql/018 (Sasha 118);
+  - the SMS came from a number Sasha never called (Sasha 386);
+  - two clocks, so after 4 Nov the call fell outside the 30-day match window.
+  The WhatsApp harness is now one helper that both halves use.
+- `test_guest_whatsapp_s75` store: Sasha 392 (a4c7fbed) keeps no history in `guest_wa_state`, and the test now asserts that.
+- `test_s2_cr62`: it reads `trips` / `trip_items`, so it now builds them itself as temp tables.
+
+**EU's contract is vendored, never read from a sibling repo on disk.**
+- `backend/agapi/spec/v1` is `git archive` of applied-diligence **d63b7b7** `docs/agapi/v1` (AgAPI 1.3): 32 files, `diff -r` empty, EU's own SHA256SUMS. The sha is recorded in `backend/agapi/spec/VENDORED.md`, the same sha as agapi's CR 235 `spec/VENDORED.md`.
+- CI runs `shasum -c`, and `test_agapi_v1_sasha` also refuses any unlisted file. Conformance passes 93/93.
+- Sasha's code ratchets (the kanoe_contract ratchet, s369's no-default scan) skip exactly the files a vendored set's own SHA256SUMS lists (`tests/vendored.py`, derived, never a hand-kept list).
+
+**CI on cd0e8c3:** backend 3704 tests, 0 skipped, 0 failures, 32/32 sums OK. Frontend 161/161 and the build pass.
+
 **One named debt (not a skip):** `test_robustness_cr56.Injection.test_the_tool_list_is_scoped` is `@expectedFailure`. It is CR 56's ranked gap (the model gets every tool on every turn) and turns red the day it is fixed.
 
 ## The seam: every reader, and what it says now
@@ -89,6 +106,12 @@ Each was found by bisecting the modules that run before the failing test.
 - `group_book.MANDATE_FACTS["fare_not_refundable"]` is AgAPI's mandate reason for **refusing an offered fare**, not a booking's term.
 - The "They said: …" line quotes the venue's reply as their message, not as a term.
 - `payments_t0` (S-81) builds a deposit payment request from the venue's words on a call. **That is a third unsourced term**, outside this ticket's two. It is Tyler's question.
+
+## Open question (found fixing the Postgres tests): ⛔
+`MemoryGuestStore.put_state` (`booking_signer/guest_whatsapp.py:227`) still keeps a `history` that the Postgres store dropped in Sasha 392.
+- Removing it breaks `test_one_sasha_cr10.py` (lines 57 and 97). Those assertions read that key, which nothing real writes, so today they always pass.
+- Pointed at the one record (`s2_memory`) instead, they fail, because the one record holds relocation's turns word for word, the passport number included.
+- **Tyler's question:** under 392, is it by design that a product's answers (passport details included) go into Sasha's one conversation record, or is that a leak? Untouched until answered.
 
 ## Found on the real path (Step 1's golf proof): ⛔
 Asked on the live conductor, "What is the cancellation policy at Montgomerie Links golf course?" returns **HTTP 500** `run_general() missing 1 required positional argument: 'general_prompt'`.

@@ -30,20 +30,20 @@ class Store(GW.MemoryGuestStore):
 
 class TheCode(unittest.TestCase):
     def setUp(self):
+        self.ch = {"account_id": ACCT, "wa_id_sha256": GW.wa_key(NUM), "number_e164": NUM}
+        self.fresh()
+        self.addCleanup(VN._HELD.pop, ACCT, None)
+
+    def fresh(self):
+        """A new store holding the code, and the held booking — patched for THIS test only (stopped by addCleanup, never by hand)."""
         self.store = Store()
         now = GW.NOW()
         run(self.store.put_code({"code": "119218", "account_id": ACCT, "consent_at": now, "consent_wording_version": "v2",
                                  "consent_text_sha256": "x", "created_at": now}))
-        self.ch = {"account_id": ACCT, "wa_id_sha256": GW.wa_key(NUM), "number_e164": NUM}
         VN._HELD[ACCT] = {"venue": "DiverXO", "summary": "Fri 13 Nov 21:00, 2 people", "at": datetime.now(timezone.utc)}
-        self.p = [mock.patch.object(GW, "STORE", self.store)]
-        for p in self.p:
-            p.start()
-
-    def tearDown(self):
-        for p in self.p:
-            p.stop()
-        VN._HELD.pop(ACCT, None)
+        p = mock.patch.object(GW, "STORE", self.store)
+        p.start()
+        self.addCleanup(p.stop)
 
     def confirm(self, body, verified=True, read_back=True):
         with mock.patch.object(VS, "confirm_whatsapp", mock.AsyncMock(return_value={"ok": True, "state": "verified"} if verified else
@@ -53,12 +53,14 @@ class TheCode(unittest.TestCase):
         return said, c
 
     def test_the_bare_code_any_case_any_wrapping(self):   # found live: "119218" refused ("send the whole message")
+        # Sasha 424 · this loop called setUp()/tearDown() by hand: the first GW.STORE patch was overwritten, never stopped, and leaked
+        # into every later test (test_stage_b_hooks' conductor turn). Each wording now gets a fresh store; every patch ends by addCleanup.
         for body in ("119218", "Kanoe Link 119218", "kanoe link 119218", "code: 119218.", " 119218 "):
-            self.setUp()
-            said, c = self.confirm(body)
-            self.assertEqual(said, V.number_confirmed_line("DiverXO"), body)
-            c.assert_called_once()
-            self.tearDown()
+            with self.subTest(body=body):
+                self.fresh()
+                said, c = self.confirm(body)
+                self.assertEqual(said, V.number_confirmed_line("DiverXO"), body)
+                c.assert_called_once()
 
     def test_confirmed_only_when_agapis_record_reads_verified(self):
         said, _ = self.confirm("119218", verified=True, read_back=False)

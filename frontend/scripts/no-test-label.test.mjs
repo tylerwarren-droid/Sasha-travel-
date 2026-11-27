@@ -14,9 +14,21 @@ test('the labels go, the words around them stay', () => {
     ['Casa Marea (test)', 'Casa Marea'],
     ['Book it (TEST)', 'Book it'],
     ['Kept here · not sent (test)', 'Kept here · not sent'],
-    ['Casa Lucio (our test venue stood in)', 'Casa Lucio'],   // Sasha 219
-    ['21:00 · Casa Lucio (test venue stood in)', '21:00 · Casa Lucio'],
     ['Casa Lucio (TEST stand-in)', 'Casa Lucio'],
+  ]
+  for (const [a, b] of cases) assert.equal(untag(a), b, a)
+})
+
+// Sasha 404 RETIRED Sasha 219's stand-in strip ("a demo supplier always shows it is one … no-test-label.mjs still strips TEST and can
+// never remove the mark"): the demo mark (booking_signer/supplier.py SUFFIX / STANDIN) is never touched, and 219's pattern is gone.
+test('404 · a demo supplier\'s mark stays — only TEST goes', () => {
+  const cases = [
+    ['Casa Lucio · Demo stand-in', 'Casa Lucio · Demo stand-in'],
+    ['21:00 · Casa Lucio · Demo stand-in', '21:00 · Casa Lucio · Demo stand-in'],
+    ['Casa Lucio · Demo stand-in · TEST', 'Casa Lucio · Demo stand-in'],
+    ['Casa Marea · Demo (TEST)', 'Casa Marea · Demo'],
+    ['Casa Lucio (our test venue stood in)', 'Casa Lucio (our test venue stood in)'],   // Sasha 219's strip is gone
+    ['21:00 · Casa Lucio (test venue stood in)', '21:00 · Casa Lucio (test venue stood in)'],
   ]
   for (const [a, b] of cases) assert.equal(untag(a), b, a)
 })

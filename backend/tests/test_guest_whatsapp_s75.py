@@ -408,10 +408,11 @@ class OnPostgresStore(unittest.TestCase):
                 self.assertEqual((await st.channel_of_account(acct))["number_e164"], "+447700900999")
                 await st.set_opted_out(GW.wa_key("+447700900999"), NOW)
                 self.assertEqual((await st.channel_for(GW.wa_key("+447700900999")))["opted_out_at"], NOW)
-                state = {"history": [{"role": "user", "content": "dinner"}], "pending": {"kind": "cards", "nonce": "ab"},
-                         "last_inbound_at": NOW, "link_tries": ["2026-10-02T12:00:00+00:00"]}
+                state = {"pending": {"kind": "cards", "nonce": "ab"}, "last_inbound_at": NOW, "link_tries": ["2026-10-02T12:00:00+00:00"]}
                 # Sasha 206/207 (R1) · the number the guest last wrote to is kept (034)
-                await st.put_state("a" * 64, {**state, "last_to": "+14155238886"})
+                # Sasha 392 (a4c7fbed) · a history handed in is never kept: the ONE conversation record is s2_memory
+                said = {**state, "history": [{"role": "user", "content": "dinner"}], "last_to": "+14155238886"}
+                await st.put_state("a" * 64, said)
                 self.assertEqual(await st.get_state("a" * 64), {**state, "last_to": "+14155238886"})
                 await st.put_state("a" * 64, {**state, "last_to": None})            # a later save without it never erases it
                 self.assertEqual((await st.get_state("a" * 64))["last_to"], "+14155238886")

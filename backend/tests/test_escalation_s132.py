@@ -121,17 +121,3 @@ class OneYesOnWhatsApp(TG.Base):
         p.start()
         self.addCleanup(p.stop)
 
-    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
-
-    def test_one_yes_then_the_page(self):
-        self.say("dinner for 2 in Chamberí on Saturday at 9")
-        _, cards = GW.SENDER.contents[-1]
-        self.say("x", payload=cards[0][1])
-        said = "\n".join(self.bodies())
-        self.assertIn("• If you haven't booked on their page within 30 minutes, I'll email them. Your yes covers these steps", said)
-        body, buttons = GW.SENDER.contents[-1]
-        self.assertTrue(body.startswith("Send me their page?"))
-        self.assertEqual(self.links, [])                                                   # nothing made before the yes
-        self.say("Yes, send it", payload=buttons[0][1])
-        self.assertIn("Your yes covers these steps", self.links[0]["plan_line"])
-        self.assertTrue(self.bodies()[-1].startswith("Here's Botavara Chamberí on CoverManager"))   # Sasha 163

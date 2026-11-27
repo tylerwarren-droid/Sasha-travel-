@@ -1,0 +1,555 @@
+{
+  "version": "keep-vectors.1",
+  "note": "CR 63 · the Keep, built once: backend/agapi/keep.py. Frozen; any change is a new version.",
+  "valid": [
+    {
+      "id": "KV-1 passport",
+      "type": "passport",
+      "value": {
+        "number": "PAA123456",
+        "country": "es",
+        "expires_on": "2031-05-01"
+      },
+      "expect": {
+        "normalised": {
+          "number": "PAA123456",
+          "country": "ES",
+          "expires_on": "2031-05-01"
+        },
+        "masked": "Passport ES ••••456",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-2 passport",
+      "type": "passport",
+      "value": {
+        "number": "paa 123-456",
+        "country": "ES",
+        "expires_on": "2031-05-01"
+      },
+      "expect": {
+        "normalised": {
+          "number": "PAA123456",
+          "country": "ES",
+          "expires_on": "2031-05-01"
+        },
+        "masked": "Passport ES ••••456",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-3 national_id",
+      "type": "national_id",
+      "value": {
+        "kind": "DNI",
+        "number": "12345678z",
+        "country": "ES"
+      },
+      "expect": {
+        "normalised": {
+          "kind": "dni",
+          "number": "12345678Z",
+          "country": "ES"
+        },
+        "masked": "DNI (ES) ••••78Z",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-4 national_id",
+      "type": "national_id",
+      "value": {
+        "kind": "nie",
+        "number": "X1234567L",
+        "country": "ES"
+      },
+      "expect": {
+        "normalised": {
+          "kind": "nie",
+          "number": "X1234567L",
+          "country": "ES"
+        },
+        "masked": "NIE (ES) ••••67L",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-5 trusted_traveller",
+      "type": "trusted_traveller",
+      "value": {
+        "program": "tsa_precheck",
+        "number": "TT12345678"
+      },
+      "expect": {
+        "normalised": {
+          "program": "tsa_precheck",
+          "number": "TT12345678"
+        },
+        "masked": "TSA PreCheck ••••678",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-6 visa_residence",
+      "type": "visa_residence",
+      "value": {
+        "country": "ES",
+        "number": "E12345678",
+        "expires_on": "2027-01-31"
+      },
+      "expect": {
+        "normalised": {
+          "country": "ES",
+          "number": "E12345678",
+          "expires_on": "2027-01-31"
+        },
+        "masked": "Visa / residence ES ••••678",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-7 insurance_policy",
+      "type": "insurance_policy",
+      "value": {
+        "insurer": "Sanitas",
+        "number": "POL-889911"
+      },
+      "expect": {
+        "normalised": {
+          "insurer": "Sanitas",
+          "number": "POL889911"
+        },
+        "masked": "Sanitas policy ••••911",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-8 health_card",
+      "type": "health_card",
+      "value": {
+        "issuer": "SERMAS",
+        "number": "MDRD123456789"
+      },
+      "expect": {
+        "normalised": {
+          "issuer": "SERMAS",
+          "number": "MDRD123456789"
+        },
+        "masked": "SERMAS health card ••••6789",
+        "tier": "yes"
+      }
+    },
+    {
+      "id": "KV-9 loyalty",
+      "type": "loyalty",
+      "value": {
+        "program": "Iberia Plus",
+        "number": "IB 1234 5678"
+      },
+      "expect": {
+        "normalised": {
+          "program": "Iberia Plus",
+          "number": "IB12345678"
+        },
+        "masked": "Iberia Plus ••••678",
+        "tier": "free"
+      }
+    },
+    {
+      "id": "KV-10 home_address",
+      "type": "home_address",
+      "value": {
+        "line1": "Calle Mayor 1",
+        "city": "Madrid",
+        "postcode": "28013",
+        "country": "es"
+      },
+      "expect": {
+        "normalised": {
+          "line1": "Calle Mayor 1",
+          "city": "Madrid",
+          "postcode": "28013",
+          "country": "ES"
+        },
+        "masked": "Home address · ES",
+        "tier": "free"
+      }
+    },
+    {
+      "id": "KV-11 preference",
+      "type": "preference",
+      "value": {
+        "topic": "seat",
+        "text": "Aisle, near the front"
+      },
+      "expect": {
+        "normalised": {
+          "topic": "seat",
+          "text": "Aisle, near the front"
+        },
+        "masked": "Preference: seat",
+        "tier": "free"
+      }
+    },
+    {
+      "id": "KV-12 booking_reference",
+      "type": "booking_reference",
+      "value": {
+        "provider": "Iberia",
+        "reference": "UHQ9B1"
+      },
+      "expect": {
+        "normalised": {
+          "provider": "Iberia",
+          "reference": "UHQ9B1"
+        },
+        "masked": "Iberia booking ••••B1",
+        "tier": "read_back"
+      }
+    },
+    {
+      "id": "KV-13 door_code",
+      "type": "door_code",
+      "value": {
+        "place": "Calle Mayor flat",
+        "code": "4711#"
+      },
+      "expect": {
+        "normalised": {
+          "place": "Calle Mayor flat",
+          "code": "4711#"
+        },
+        "masked": "Door code · Calle Mayor flat",
+        "tier": "read_back"
+      }
+    },
+    {
+      "id": "KV-14 wifi",
+      "type": "wifi",
+      "value": {
+        "network": "CasaLucio",
+        "password": "tapas2026"
+      },
+      "expect": {
+        "normalised": {
+          "network": "CasaLucio",
+          "password": "tapas2026"
+        },
+        "masked": "Wi-Fi · CasaLucio",
+        "tier": "read_back"
+      }
+    },
+    {
+      "id": "KV-15 esim",
+      "type": "esim",
+      "value": {
+        "provider": "Airalo",
+        "activation_code": "LPA:1$smdp.example$ABCDEF123",
+        "iccid": "8934071234567890123"
+      },
+      "expect": {
+        "normalised": {
+          "provider": "Airalo",
+          "activation_code": "LPA:1$smdp.example$ABCDEF123",
+          "iccid": "8934071234567890123"
+        },
+        "masked": "eSIM · Airalo",
+        "tier": "read_back"
+      }
+    }
+  ],
+  "refused": [
+    {
+      "id": "KR-1 card",
+      "type": "card",
+      "value": {
+        "number": "4111111111111111"
+      },
+      "expect": {
+        "path": "/type",
+        "rule": "never_card"
+      }
+    },
+    {
+      "id": "KR-2 credit_card",
+      "type": "credit_card",
+      "value": {},
+      "expect": {
+        "path": "/type",
+        "rule": "never_card"
+      }
+    },
+    {
+      "id": "KR-3 otp",
+      "type": "otp",
+      "value": {},
+      "expect": {
+        "path": "/type",
+        "rule": "never_2fa"
+      }
+    },
+    {
+      "id": "KR-4 2fa",
+      "type": "2fa",
+      "value": {},
+      "expect": {
+        "path": "/type",
+        "rule": "never_2fa"
+      }
+    },
+    {
+      "id": "KR-5 password",
+      "type": "password",
+      "value": {},
+      "expect": {
+        "path": "/type",
+        "rule": "not_in_v1"
+      }
+    },
+    {
+      "id": "KR-6 insurance_policy",
+      "type": "insurance_policy",
+      "value": {
+        "insurer": "X",
+        "number": "5500 0000 0000 0004"
+      },
+      "expect": {
+        "path": "/value/number",
+        "rule": "never_card"
+      }
+    },
+    {
+      "id": "KR-7 preference",
+      "type": "preference",
+      "value": {
+        "topic": "pay",
+        "text": "card 4111-1111-1111-1111"
+      },
+      "expect": {
+        "path": "/value/text",
+        "rule": "never_card"
+      }
+    },
+    {
+      "id": "KR-8 door_code",
+      "type": "door_code",
+      "value": {
+        "place": "x",
+        "code": "OTP 1234"
+      },
+      "expect": {
+        "path": "/value/code",
+        "rule": "never_2fa"
+      }
+    },
+    {
+      "id": "KR-9 national_id",
+      "type": "national_id",
+      "value": {
+        "kind": "dni",
+        "number": "12345678A",
+        "country": "ES"
+      },
+      "expect": {
+        "path": "/value/number",
+        "rule": "checksum"
+      }
+    },
+    {
+      "id": "KR-10 passport",
+      "type": "passport",
+      "value": {
+        "number": "PAA123456",
+        "country": "ESP",
+        "expires_on": "2031-05-01"
+      },
+      "expect": {
+        "path": "/value/country",
+        "rule": "iso2"
+      }
+    },
+    {
+      "id": "KR-11 passport",
+      "type": "passport",
+      "value": {
+        "number": "PAA123456",
+        "country": "ES",
+        "expires_on": "2020-01-01"
+      },
+      "expect": {
+        "path": "/value/expires_on",
+        "rule": "expired"
+      }
+    },
+    {
+      "id": "KR-12 passport",
+      "type": "passport",
+      "value": {
+        "number": "PAA123456",
+        "country": "ES",
+        "expires_on": "2031-05-01",
+        "notes": "x"
+      },
+      "expect": {
+        "path": "/value/notes",
+        "rule": "unknown_field"
+      }
+    },
+    {
+      "id": "KR-13 trusted_traveller",
+      "type": "trusted_traveller",
+      "value": {
+        "program": "clear",
+        "number": "12345678"
+      },
+      "expect": {
+        "path": "/value/program",
+        "rule": "enum"
+      }
+    },
+    {
+      "id": "KR-14 rocket",
+      "type": "rocket",
+      "value": {},
+      "expect": {
+        "path": "/type",
+        "rule": "unknown_type"
+      }
+    }
+  ],
+  "use": [
+    {
+      "id": "KU-1 passport/fill",
+      "type": "passport",
+      "purpose": "fill",
+      "expect": {
+        "refused": null
+      }
+    },
+    {
+      "id": "KU-2 passport/show",
+      "type": "passport",
+      "purpose": "show",
+      "expect": {
+        "refused": "fill_only"
+      }
+    },
+    {
+      "id": "KU-3 passport/raw",
+      "type": "passport",
+      "purpose": "raw",
+      "expect": {
+        "refused": "never_raw"
+      }
+    },
+    {
+      "id": "KU-4 passport/value",
+      "type": "passport",
+      "purpose": "value",
+      "expect": {
+        "refused": "never_raw"
+      }
+    },
+    {
+      "id": "KU-5 passport/reveal",
+      "type": "passport",
+      "purpose": "reveal",
+      "expect": {
+        "refused": "never_raw"
+      }
+    },
+    {
+      "id": "KU-6 passport/plaintext",
+      "type": "passport",
+      "purpose": "plaintext",
+      "expect": {
+        "refused": "never_raw"
+      }
+    },
+    {
+      "id": "KU-7 passport/export",
+      "type": "passport",
+      "purpose": "export",
+      "expect": {
+        "refused": "never_raw"
+      }
+    },
+    {
+      "id": "KU-8 passport/please read me the number",
+      "type": "passport",
+      "purpose": "please read me the number",
+      "expect": {
+        "refused": "never_raw"
+      }
+    },
+    {
+      "id": "KU-9 loyalty/fill",
+      "type": "loyalty",
+      "purpose": "fill",
+      "expect": {
+        "refused": null
+      }
+    },
+    {
+      "id": "KU-10 door_code/show",
+      "type": "door_code",
+      "purpose": "show",
+      "expect": {
+        "refused": null
+      }
+    },
+    {
+      "id": "KU-11 door_code/fill",
+      "type": "door_code",
+      "purpose": "fill",
+      "expect": {
+        "refused": "read_back_only"
+      }
+    },
+    {
+      "id": "KU-12 wifi/raw",
+      "type": "wifi",
+      "purpose": "raw",
+      "expect": {
+        "refused": "never_raw"
+      }
+    }
+  ],
+  "use_line": [
+    {
+      "masked": "Passport ES ••••456",
+      "purpose": "fill",
+      "line": "I'll use your saved Passport ES ••••456 for this booking."
+    },
+    {
+      "masked": "Door code · Calle Mayor flat",
+      "purpose": "show",
+      "line": "I'll show your saved Door code · Calle Mayor flat on your phone."
+    }
+  ],
+  "envelope": [
+    {
+      "id": "KE-1 open a sealed passport",
+      "kms_key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "account": "acc_TEST",
+      "person": "usr_01M4TEST0000000000000000TT",
+      "item_id": "kpi_01M4TEST0000000000000000KP",
+      "type": "passport",
+      "wrapped_dek_b64": "AAECAwQFBgcICQoLZyP0OOHA5DylaL2gncRWQrPntQfETmlLAF7fviFUPo1KlqK83K2lCMLFP4uX0lfK",
+      "nonce_b64": "DA0ODxAREhMUFRYX",
+      "ciphertext_b64": "mRgtWkFTdM2nd97Wt4bB64zzU8ei3vw3+LfRPhEsunfcPy1zSj0mM8NhCmDmDlfTHmu+lbEQRFww3VwQu9DdR4U5ClBcOy1pNH9xQaklzg==",
+      "dek_aad": "keep-dek/v1\u001facc_TEST\u001fusr_01M4TEST0000000000000000TT",
+      "item_aad": "keep-item/v1\u001facc_TEST\u001fusr_01M4TEST0000000000000000TT\u001fkpi_01M4TEST0000000000000000KP\u001fpassport",
+      "expect": {
+        "values": {
+          "number": "PAA123456",
+          "country": "ES",
+          "expires_on": "2031-05-01"
+        },
+        "fingerprint": "hmac:28696c75590b5e1612eeeca3038a871fa215e7c1c720199d0c7f6299a5079c3d"
+      },
+      "note": "AES-256-GCM; wrapped = nonce(12) ‖ GCM(KMS key, DEK, dek_aad); the value is canonical JSON (sorted keys, no spaces)."
+    }
+  ]
+}

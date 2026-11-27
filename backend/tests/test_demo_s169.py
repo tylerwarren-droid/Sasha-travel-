@@ -25,36 +25,6 @@ class BookTheTrip(unittest.TestCase):
         for m in ("book a table at Botín", "book dinner in Hoi An", "book it at 8"):
             self.assertIsNone(TB.asked(m), m)
 
-    @unittest.skip("Sasha 198 R10: trip_book.stays() was deleted — runs of nights are basket.sync_stays, held by the BASKET suite (R3-1)")
-    def test_consecutive_nights_are_one_stay(self):
-        s = TB.stays(DAYS, date(2026, 11, 12))
-        self.assertEqual([(x["hotel"], x["checkin"], x["nights"]) for x in s],
-                         [("Metropole", "2026-11-12", 2), ("Cruise", "2026-11-14", 1), ("Nam Hai", "2026-11-15", 2)])
-
-    @unittest.skip("Sasha 198 R10: the in-memory bundle was deleted — the read-back and ONE total come from the basket, held by the "
-                   "BASKET suite (R6: read-back names stays + flight, total = the basket's)")
-    def test_the_bundle_reads_back_test_and_one_total(self):
-        async def lat(a, hint=None):
-            return {"trip_id": "t", "title": "Vietnam", "start": date(2026, 11, 12), "end": date(2026, 11, 16), "plan": {"days": DAYS}}
-
-        async def search(o, d, day, adults=1, limit=3):
-            return {"cards": [{"id": f"off_{o}", "owner": "Duffel Airways", "flights": "ZZ 1", "from": o[:3].upper(), "to": d[:3].upper(),
-                               "from_city": o, "to_city": d, "departs": f"{day}T10:00:00", "arrives": f"{day}T22:00:00", "stops": 0,
-                               "minutes": 720, "amount": "500.00", "currency": "EUR"}]}
-        async def held(c):
-            return 200, {}
-        old = PS.latest
-        PS.latest, TB.SEARCH, TB.ORDERABLE = lat, search, held
-        try:
-            b = asyncio.run(TB.bundle("11111111-1111-4111-8111-111111111111", "Madrid"))
-        finally:
-            PS.latest, TB.SEARCH, TB.ORDERABLE = old, None, None
-        self.assertIn("TEST", b["lines"][0])
-        self.assertEqual(b["eur"], 5 * 120 + 1000)
-        self.assertIn("Wed 11 Nov", b["lines"][4])     # the flight there leaves the day before day 1
-        self.assertIn("one tap pays it", b["lines"][-2])   # Sasha 364 · a hold until booked
-
-
 class OnlyFaresTheAirlineWillBook(unittest.TestCase):
     def test_a_gone_fare_is_skipped(self):
         async def check(c):

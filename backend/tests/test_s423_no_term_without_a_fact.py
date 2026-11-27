@@ -6,7 +6,7 @@ fee. Such a field, stored or defaulted, is a second copy of what AgAPI's fine-pr
 governs, and a default asserts a fact nobody read. Any one of these fails the suite:
   · a Python class attribute            `is_refundable: bool = True`
   · a Python dict literal's key         `"cancellation_policy": "48 hours notice required"`
-  · a TypeScript interface/type member  `is_refundable: boolean`
+  · a TypeScript interface/type member  `is_refundable: boolean`   (frontend/scripts/no-term-424.test.mjs, npm test)
   · a SQL column that is still standing after every file in booking_signer/sql/ has run (created and not dropped)
 A field NAME is a term field when it matches TERM_FIELD below. Words in sentences, a status ("cancelled"), an action ("booking_cancel",
 "cancel_venue") and AgAPI's own response keys read in place (`c.get("refund")`) are not fields of Sasha's, and are not matched.
@@ -22,7 +22,7 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BACKEND, FRONTEND = ROOT / "backend", ROOT / "frontend"
+BACKEND = ROOT / "backend"   # Sasha 424 · the gate runs with backend/ only (test_s283): the frontend half is frontend/scripts/no-term-424.test.mjs
 SKIP_DIRS = {"node_modules", ".next", "venv", ".venv", "__pycache__", "kanoe_contract", ".vercel"}
 
 #: refundable / non_refundable / is_refundable / refundable_until · cancellation, cancellation_policy · cancel_policy, cancel_until,
@@ -31,12 +31,14 @@ TERM_FIELD = re.compile(r"(?i)^(?:is_|has_)?(?:non_?)?refundab\w*$|^cancellation
                         r"deadline|fee|fees|terms|window|charge)\w*$|^free_?cancel\w*$|^refund_?(?:polic(?:y|ies)|until|deadline)\w*$")
 
 
-#: THE ONE NAMED DEBT (shrink-only). Sasha 301's venue terms: agapi/booking_terms.py composes a deposit / cancellation / no-show / time
-#: limit, with a "by <date>" deadline, from the venue's own reply AT VIEW TIME (no store) — read by the Trip tab (itinerary.with_terms),
-#: booking_fine_print (/s2, voice, WhatsApp) and the cancel_by reminder (proactive). It is a term about a booking not read through
-#: facts.answer. Its writer is AgAPI's `venue_words` facts (FP-4 venue words), ON ICE with venue booking (KANOE 26 Nov 12:07); the
-#: question of switching it off meanwhile is Tyler's (Sasha 423's report). When it reads facts.answer, this line goes.
-KNOWN_DEBT = ("backend/agapi/booking_terms.py cancellation",)   # file + name, never a line number
+#: Shrink-only debts: NONE (Sasha 424 deleted Sasha 301's venue terms, the last one). A new entry needs Tyler's say-so.
+KNOWN_DEBT: tuple = ()
+
+#: Sasha 424 · the sentences and readers that COMPOSED a booking term inside Sasha (Sasha 301's venue terms and cancel_by reminder, the
+#: group report's fare conditions). None may return: a term comes back ONLY as an AgAPI fact (facts.answer — FP-3/FP-4, the group
+#: fine print). Matched in code, not in tests or docs.
+COMPOSERS = ("terms_of(", "booking_terms", "by_words", "cancel_by_of", "Cancellation deadline for", "only the airline can cancel it",
+             "it can't be refunded", "it can't be changed", "with_terms(", "row_terms(", "termHead", "TERM_LABEL", "cancelBy(")
 
 def _files(base: pathlib.Path, exts):
     for p in base.rglob("*"):
@@ -56,23 +58,6 @@ def python_fields(src: str):
                     out += [(b.lineno, t.id) for t in b.targets if isinstance(t, ast.Name)]
         elif isinstance(node, ast.Dict):
             out += [(k.lineno, k.value) for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)]
-    return out
-
-
-_TS_MEMBER = re.compile(r"^\s*(?:readonly\s+)?['\"]?([A-Za-z_]\w*)['\"]?\??\s*:\s*[^=]", re.M)
-
-
-def ts_fields(src: str):
-    """(line, name) of every member inside an `interface X {…}` or `type X = {…}` block."""
-    out = []
-    for m in re.finditer(r"\b(?:interface\s+\w+[^{]*|type\s+\w+\s*=\s*)\{", src):
-        depth, i = 1, m.end()
-        while i < len(src) and depth:
-            depth += {"{": 1, "}": -1}.get(src[i], 0)
-            i += 1
-        body = src[m.end():i]
-        line0 = src.count("\n", 0, m.end()) + 1
-        out += [(line0 + body.count("\n", 0, mm.start(1)), mm.group(1)) for mm in _TS_MEMBER.finditer(body)]
     return out
 
 
@@ -105,8 +90,6 @@ def term_fields():
         except SyntaxError:
             continue
         hits += [f"{p.relative_to(ROOT)}:{n} {name}" for n, name in fields if TERM_FIELD.match(name)]
-    for p in _files(FRONTEND, {".ts", ".tsx"}):
-        hits += [f"{p.relative_to(ROOT)}:{n} {name}" for n, name in ts_fields(p.read_text()) if TERM_FIELD.match(name)]
     sql = list((BACKEND / "booking_signer" / "sql").glob("*.sql")) + list((BACKEND / "sql").glob("*.sql") if (BACKEND / "sql").is_dir() else [])
     hits += [f"sql {t}.{c} (from {f})" for (t, c), f in sql_standing_columns(sql).items() if TERM_FIELD.match(c)]
     return sorted(hits)
@@ -114,6 +97,19 @@ def term_fields():
 
 
 class NoTermWithoutAFact(unittest.TestCase):
+    def test_no_door_composes_a_term(self):
+        """Sasha 424 · every door (S2, /next, WhatsApp, voice, the Trip tab, the reminders, the group report) reads one source for a
+        booking's terms: AgAPI's facts. Nothing in Sasha's code composes one."""
+        bad = []
+        for p in _files(BACKEND, {".py"}):
+            if p.name == "test_s423_no_term_without_a_fact.py":
+                continue
+            t = p.read_text()
+            bad += [f"{p.relative_to(ROOT)}: {c}" for c in COMPOSERS if c in t]
+        self.assertEqual(bad, [])
+        self.assertFalse((BACKEND / "agapi" / "booking_terms.py").exists())
+
+
     def test_the_name_rule_catches_the_class_and_nothing_else(self):
         for name in ("is_refundable", "refundable", "non_refundable", "refundable_until", "cancellation_policy", "cancellation",
                      "cancel_policy", "cancel_until", "cancel_deadline", "free_cancellation", "free_cancel", "refund_policy", "cancel_fee"):
@@ -126,7 +122,6 @@ class NoTermWithoutAFact(unittest.TestCase):
     def test_each_reader_sees_a_field(self):
         assert ("is_refundable" in dict((n, l) for l, n in python_fields("class A:\n    is_refundable: bool = True\n")))
         assert [n for _, n in python_fields('X = {"cancellation_policy": "48 hours"}')] == ["cancellation_policy"]
-        assert [n for _, n in ts_fields("export interface I {\n  id?: string\n  is_refundable: boolean\n}")] == ["id", "is_refundable"]
 
 
     def test_a_dropped_column_is_not_standing(self):
@@ -145,14 +140,6 @@ class NoTermWithoutAFact(unittest.TestCase):
         gone = [h for h in KNOWN_DEBT if h not in found]
         assert new == [], "Sasha holds a booking-terms field of its own (Sasha 423): " + "; ".join(new)
         assert gone == [], "a Sasha 423 debt is paid — delete its line from KNOWN_DEBT: " + "; ".join(gone)
-
-
-    def test_no_screen_draws_refundable_from_sasha(self):
-        """No component says "Refundable" / "Non-refundable" / "Free cancellation" from a field of Sasha's: those words appear only where a
-        fact's own words are drawn (none today: the facts.answer reader arrives with the contract, Sasha 420 / CR 235)."""
-        bad = [f"{p.relative_to(ROOT)}" for p in _files(FRONTEND, {".tsx", ".ts"})
-               if re.search(r"['\"`>]\s*(?:(?:Non-)?[Rr]efundable|[Ff]ree [Cc]ancellation)\s*['\"`<]|\bis_refundable\b", p.read_text())]
-        assert bad == [], bad
 
 
 if __name__ == "__main__":

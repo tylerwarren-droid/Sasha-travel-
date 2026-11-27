@@ -1054,7 +1054,7 @@ SAID_AS_GIVEN = ("booking_fine_print", "keep_note")
 
 
 def fine_print_line(tool: str, r: dict) -> str:
-    """Sasha 302 · booking_fine_print's / keep_note's own `say`: the venue's terms in their quoted words, his perks — never a paraphrase."""
+    """Sasha 302 · booking_fine_print's / keep_note's own `say` (Sasha 424: no confirmed terms on record, his perks) — never a paraphrase."""
     res = (r or {}).get("result") if (r or {}).get("ok") else None
     if tool not in SAID_AS_GIVEN or not isinstance(res, dict):
         return ""

@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 
 const card = readFileSync(new URL('../app/components/cards/PlaceCard.tsx', import.meta.url), 'utf8')
 const s2 = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
+const cardsOf = readFileSync(new URL('../lib/cards-of.ts', import.meta.url), 'utf8')   // Sasha 402 · THE ONE MAPPING, moved out of S2App
 
 test('Website: their site, else their listing — a new tab, never a URL built here', () => {
   assert.match(card, /<a data-website href=\{place\.website \|\| place\.listing_url\} target="_blank" rel="noopener noreferrer"/)
@@ -20,6 +21,7 @@ test('Back to Sasha is visible on Details and closes it', () => {
 
 test("Our sources is AgAPI's page, passed through", () => {
   assert.match(card, /sourcesUrl \? <div[^>]*><a data-our-sources href=\{sourcesUrl\} target="_blank"/)
-  assert.match(s2, /sources_url: ev\.sources_url \|\| null/)
+  assert.match(cardsOf, /sources_url: ev\.sources_url \|\| null/)   // Sasha 402 MOVED: the discover card's mapping (lib/cards-of.ts)
+  assert.match(s2, /import \{ cardsOf as cardsOfEvent \} from '@\/lib\/cards-of'/)   // …and S2 draws through it
   assert.match(s2, /sources_url: c\.sources_url/)
 })

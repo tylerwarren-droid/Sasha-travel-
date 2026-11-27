@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agapi.kanoe.dev/v1/schemas/response.schema.json",
+  "title": "AgAPI v1 response envelope",
+  "type": "object",
+  "required": [
+    "agapi",
+    "request_id",
+    "ok"
+  ],
+  "properties": {
+    "agapi": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/version"
+    },
+    "request_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/request_id"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "result": {
+      "type": "object"
+    },
+    "replayed": {
+      "const": true
+    },
+    "evidence_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/evidence_id"
+    },
+    "trace": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/trace"
+    },
+    "error": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/error.schema.json"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "ok": {
+          "const": true
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "ok": {
+          "const": false
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "not": {
+        "required": [
+          "result"
+        ]
+      }
+    }
+  ]
+}

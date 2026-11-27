@@ -15,7 +15,7 @@ import unittest
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from agapi import booking_terms as BT, itinerary as IT
+from agapi import booking_perks as BP, itinerary as IT
 from app.agent import voice as V
 
 DAY = (datetime.now(ZoneInfo("Europe/Madrid")) + timedelta(days=3)).date().isoformat()
@@ -26,7 +26,7 @@ LONG = ("Hola, confirmamos la mesa para el viernes a las 21:00 para dos personas
 
 class SaidByCode(unittest.TestCase):
     def test_the_fine_print_and_the_keep_line_are_said_as_given(self):
-        r = {"ok": True, "result": {"say": "DiverXO, Friday 30 October 21:00: Deposit: they said “Pedimos una señal…”"}}
+        r = {"ok": True, "result": {"say": "DiverXO, Friday 30 October 21:00: I have no confirmed terms on record for this booking."}}
         self.assertEqual(V.fine_print_line("booking_fine_print", r), r["result"]["say"])
         self.assertEqual(V.fine_print_line("keep_note", {"ok": True, "result": {"say": "Saved your Marriott Bonvoy number in your Keep."}}),
                          "Saved your Marriott Bonvoy number in your Keep.")
@@ -44,23 +44,22 @@ class OnTheRecord(unittest.TestCase):
         return {"act_id": "act_1", "state": "confirmed", "route": "whatsapp", "venue": {"name": "Taverna"}, "at": f"{DAY}T21:00",
                 "party": 2, "venue_words": {"untrusted_text": words}}
 
-    def test_a_term_is_read_from_their_words_in_full_never_the_160_cut(self):
+    def test_their_words_are_shown_as_their_line_and_never_read_for_terms(self):
+        """Sasha 424 · the 160-character line of their reply is shown as their words; no term is read out of them (no terms_text)."""
         self.assertGreater(len(LONG), 160)
         row = IT._from_record(self.record(LONG))
         self.assertEqual(len(row["venue_said"]["untrusted_text"]), 160)   # the line shown
-        t = IT.row_terms(row)
-        self.assertEqual([x["kinds"] for x in t], [["deposit"], ["cancellation"]])
-        self.assertTrue(all(x["quote"] in LONG for x in t))
-        self.assertTrue(t[1]["by"])
+        self.assertNotIn("terms_text", row)
+        self.assertNotIn("terms", row)
 
     def test_a_stay_act_is_a_hotel_and_his_programme_shows_on_it_only(self):
         row = IT._from_record({**self.record("Confirmed."), "venue": {"name": "Marriott Test Hotel (sandbox)"}}, {"stay": {"nights": 2}})
         self.assertEqual(row["type"], "hotel")
         self.assertEqual(IT._venue_kind(row["type"]), "hotel")
         wallet = [{"item_id": "k1", "type": "loyalty", "masked": "Marriott Bonvoy ••••001", "program": "Marriott Bonvoy"}]
-        self.assertEqual([p["line"] for p in BT.perks_for("hotel", "Marriott Test Hotel (sandbox)", wallet)],
+        self.assertEqual([p["line"] for p in BP.perks_for("hotel", "Marriott Test Hotel (sandbox)", wallet)],
                          ["Use your Marriott Bonvoy number (••••001)."])
-        self.assertEqual(BT.perks_for(IT._venue_kind("restaurant"), "Taverna Correo", wallet), [])
+        self.assertEqual(BP.perks_for(IT._venue_kind("restaurant"), "Taverna Correo", wallet), [])
 
 
 
@@ -104,9 +103,10 @@ from tests.test_s300 import Base as S300Base, Ctx, run   # noqa: E402
 
 
 class OnTheCard(S300Base):
-    def test_the_plans_card_carries_the_fine_print(self):
+    def test_the_plans_card_carries_the_perks_and_no_terms(self):
         from agapi import s2_manage as SM
-        self.assertIn('"terms", "perks"', inspect.getsource(SM.my_plans))   # found live: the card never got them (301)
+        self.assertIn('"map_url", "perks", "live"', inspect.getsource(SM.my_plans))   # found live: the card never got them (301)
+        self.assertNotIn('"terms"', inspect.getsource(SM.my_plans))   # Sasha 424
         self.api.states["act_mail"] = "confirmed"
         out = run(SM.my_plans(Ctx(), {}))
         self.assertTrue(all("venue_said" not in i for i in out["items"] if i["title"] in ("Casa Lucio", "Botín")))   # not answered yet

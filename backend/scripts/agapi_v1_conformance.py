@@ -1,4 +1,4 @@
-"""CR 61 · SASHA'S AgAPI v1.0 CONFORMANCE (EU 03-conformance.md §5) — loads EU's FROZEN vector files where they live (never a copy) and
+"""CR 61 · SASHA'S AgAPI v1.0 CONFORMANCE (EU 03-conformance.md §5) — loads EU's vector files from the vendored set (agapi/spec/v1, byte-identical with EU's SHA256SUMS — Sasha 424) and
 runs them against Sasha's own code:
 
     canonical.json      15   agapi.v1.canonical / sha256 (10 byte-exact + 5 refusals)
@@ -9,7 +9,7 @@ runs them against Sasha's own code:
 It also checks that Sasha's pinned agapi/spec/approval-language.json is byte-for-byte EU's frozen file. Prints "<file> <passed>/<total>"
 and the sha256 of every file it ran on; exits 1 on any failure.
 
-    cd backend && AGAPI_V1_DIR="<path to the AD repo>/docs/agapi/v1" python -m scripts.agapi_v1_conformance
+    cd backend && python -m scripts.agapi_v1_conformance
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-DEFAULT = Path.home() / "Developer" / "Applied Diligence" / "docs" / "agapi" / "v1"
+DEFAULT = Path(__file__).resolve().parents[1] / "agapi" / "spec" / "v1"   # Sasha 424 · the vendored set (CR 232, agapi/spec/VENDORED.md), never a sibling repo on disk
 
 
 def main() -> int:

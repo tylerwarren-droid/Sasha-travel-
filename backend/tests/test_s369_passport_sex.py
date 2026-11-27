@@ -90,9 +90,13 @@ class TheAirlinesOwnReason(unittest.TestCase):
 
 class NoDefaultAnywhere(unittest.TestCase):
     def test_no_default_title_or_gender_in_sasha(self):
+        from tests import vendored as VENDORED   # Sasha 424 · EU's vendored files (their own SHA256SUMS) are not Sasha's
+        theirs = VENDORED.files()
         hits = []
         for d in ("booking_signer", "agapi", "app", "products"):
             for f in sorted((ROOT / "backend" / d).rglob("*.py")):
+                if f.resolve() in theirs:
+                    continue
                 s = f.read_text(encoding="utf-8", errors="ignore")
                 for rx in (r"PLACEHOLDERS", r"[\"']title[\"']\s*:\s*[\"']m(?:r|s|rs)?[\"']", r"[\"']gender[\"']\s*:\s*[\"'][mf][\"']",
                            r"[\"']born_on[\"']\s*:\s*[\"']\d{4}-\d{2}-\d{2}[\"']"):

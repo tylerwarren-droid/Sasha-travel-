@@ -94,6 +94,18 @@ class Base(unittest.TestCase):
         return f
 
 
+class OneReadOneClient(Base):
+    def test_a_read_is_never_handed_back_through_another_client(self):
+        """Sasha 424 · the order cache keeps who answered: a second Duffel client (the next test, the next process) reads its own order."""
+        first = self.fake(the_order={**order(), "booking_reference": "FIRST1"})
+        self.assertEqual(run(FM.order_now("ord_1"))["reference"], "FIRST1")
+        run(FM.order_now("ord_1"))
+        self.assertEqual(first.paths().count("/air/orders/ord_1"), 1)           # the same client: reused within FRESH_S
+        second = self.fake(the_order={**order(), "booking_reference": "OTHER2"})
+        self.assertEqual(run(FM.order_now("ord_1"))["reference"], "OTHER2")      # another client: never the first one's answer
+        self.assertEqual(second.paths(), ["/air/orders/ord_1"])
+
+
 class Cancel(Base):
     def test_quote_then_confirm(self):
         f = self.fake()

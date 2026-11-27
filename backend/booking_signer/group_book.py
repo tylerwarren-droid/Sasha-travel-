@@ -674,9 +674,7 @@ async def book_under_mandate(account: str, mandate_id: str, names: List[str], mo
                     await _settle(account, m.get("trip_id"), "booked", res.get("parts") or [])
                 except Exception as ex:
                     log.error("[group_book] %s: booked at AgAPI, the trip not updated: %s", m["name"], type(ex).__name__)
-                done.append({"name": m["name"], "state": res.get("state"), "parts": [p.get("reference") for p in res.get("parts") or []],
-                             "conditions": [{"kind": p.get("kind"), **(p.get("conditions") or {}), **({"cancel_by": p["cancel_by"]} if p.get("cancel_by") else {})}
-                                            for p in res.get("parts") or [] if p.get("conditions") or p.get("cancel_by")]})
+                done.append({"name": m["name"], "state": res.get("state"), "parts": [p.get("reference") for p in res.get("parts") or []]})
             elif kind in ("outside", "item"):   # Sasha 376 · a read-back waiting for the explicit tap — ON the card, never dropped
                 outside.append(x)
             elif kind == "recorded":   # Sasha 371b · AgAPI's record holds them (booked / confirming / incomplete): a state, said from the record
@@ -889,7 +887,7 @@ MANDATE_FACTS = {"worker_not_named": "not named in your instruction", "another_d
                  "mobile_needed": "no mobile on their profile — add it on the Group page",
                  "passport_detail_needed": "a detail an airline needs is missing from their passport (sex, date of birth or name) — their link is emailed", "email_needed": "no email on their profile — add it on the Group page",
                  "approval_expired": "your instruction had expired", "not_found": "the booking system didn't know your instruction",
-                 "incomplete": "part is booked (only the airline can cancel it) and the rest was refused",
+                 "incomplete": "part is booked and the rest was refused",
                  # Sasha 371b · CR 184's reasons, asked — never "failed"
                  "limits_missing": "no limit is set for them yet — what's their flight and hotel limit?",
                  "another_movement": "their booking would be on another trip than this instruction's",

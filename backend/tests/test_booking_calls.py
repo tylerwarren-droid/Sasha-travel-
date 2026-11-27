@@ -362,8 +362,20 @@ class CallRoutes:
         return r.json()
 
     def yes(self, prep):
-        return self.c.post(f"/api/booking/calls/{prep['call_id']}/place",
-                           json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
+        """The yes places the call the one way a call is placed now — AgAPI's call act (agapi/venue_calls.py: claim, Bland,
+        mark_placed). Sasha 319 (2daf1f47) retired /calls/{id}/place: it answers 410 venue_send_retired and sends nothing."""
+        cid = prep["call_id"]
+        call = self.c.portal.call(self.store.get_call, FOUNDER_ACCOUNT, cid)
+        approval = {"by": FOUNDER_ACCOUNT, "how": "agapi_act", "said": None, "at": self.now.isoformat(),
+                    "read_back_sha256": call["read_back_sha256"], "brief_sha256": call["brief_sha256"]}
+        from booking_signer.call_store import cap_window
+        claimed = self.c.portal.call(self.store.claim, FOUNDER_ACCOUNT, cid, approval, self.now,
+                                     self.now - call_routes.APPROVAL_WINDOW, call_routes.cap(), cap_window(self.now), call_routes.account_cap())
+        self.assertEqual(claimed, "claimed")
+        placed = self.c.portal.call(C.place_call, self.bland, C.bland_key(), C.bland_payload(call["brief"], cid))
+        self.assertTrue(placed.placed, placed.why)
+        self.c.portal.call(self.store.mark_placed, cid, placed, self.now)
+        return placed
 
     # ── S-57 · a placing that went unanswered ─────────────────────────────────────────────────────
 

@@ -146,16 +146,17 @@ class Ratchet(unittest.TestCase):
 
 
 class FoundLive(unittest.TestCase):
-    def test_a_fare_condition_is_said_once_for_both_legs(self):
+    def test_a_fare_condition_is_never_kept_or_said(self):
+        """Sasha 424 · NO TERM WITHOUT A FACT: a fare's conditions (who can cancel, refund, change) are AgAPI's facts or not said —
+        the trip keeps none (no cond:) and the report draws none, even when the booking result carries them."""
         with T367.World() as w:
             mv = run(G.store().movement(OWNER))
-            leg = {"kind": "flight", "cancel_by": "airline"}
+            leg = {"kind": "flight", "cancel_by": "airline", "refund": False, "change": False}
             who = run(G.view(OWNER, mv["id"]))["rows"][0]["name"]   # a traveller ON the list
-            run(GB.finish(OWNER, mv["id"], [{"name": who, "conditions": [leg, dict(leg)]}], []))
-            from booking_signer import group_report as GR   # Sasha 385 · a fare's conditions are the report's, kept on the trip, once
+            fin = run(GB.finish(OWNER, mv["id"], [{"name": who, "conditions": [leg, dict(leg)]}], []))
             kept = run(G.store().movement(OWNER, mv["id"]))["rules"]
-        conds = [v for k, v in kept.items() if k.startswith("cond:")]
-        self.assertEqual(conds, [["flight: only the airline can cancel it"]])
+        self.assertEqual([k for k in kept if k.startswith("cond:")], [])
+        self.assertNotRegex(fin["say"], r"(?i)refund|only the airline|can't be changed")
 
     def test_no_answer_and_no_record_is_said_never_left_out(self):
         with T367.World() as w:

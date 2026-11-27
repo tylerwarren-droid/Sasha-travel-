@@ -112,7 +112,8 @@ test('273 · 1 + 5: the corner only inside the visible viewport; her arrival end
 test('273 · 4 + 5: /s2 greets only from rule 4, has one return handler, and its shell is the dynamic viewport', () => {
   const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
   assert.doesNotMatch(app, /\[\.\.\.shown, \{ role: 'sasha', text: line, cards: \[\], restored: true \}\]/)   // the 11:03 append, every load
-  assert.match(app, /\.\.\.\(greet \? \[\{ role: 'sasha' as const, text: line/)
+  assert.match(app, /const greet = r\.greet && r\.lead === 'hello'/)                                 // only rule 4 greets
+  assert.match(app, /\.\.\.\(greet && line \? \[\{ role: 'sasha' as const, text: line/)            // Sasha 349 MOVED: + only with a line
   assert.equal((app.match(/addEventListener\('visibilitychange'/g) || []).length, 1)   // ONE return handler (mic + rule 4)
   assert.match(app, /voiceCtl\.current\?\.resume\(\)/)
   assert.match(app, /if \(document\.visibilityState === 'hidden'\) \{ hiddenAt\.current = hiddenAt\.current \?\? Date\.now\(\); speaker\.interrupt\(\) \}/)   // never resumes mid-sentence · Sasha 296 MOVED: + when it went
@@ -186,7 +187,7 @@ test('281 · ONE way S2Hello speaks: Face.say (her lips) and the voice are reach
   assert.match(hello, /if \(!a \|\| gone\) return false/)
   // Sasha 303 · MOVED: her quiet face is closed by the ONE gate on the server (no page idle timer); its session's end → `ended` → the corner
   assert.doesNotMatch(hello, /FACE_IDLE_S|idle\.current = setTimeout/)
-  assert.match(hello, /const ended = \(\) => \{ if \(mine && face\.current === mine\) void collapse\(\) \}/)
+  assert.match(hello, /const ended = \(\) => \{ if \(mine && face\.current === mine\) observe\(collapse\(\), 'Taking her to the corner', toConsole\) \}/)   // Sasha 347/348 MOVED: void → observe
   assert.match(hello, /if \(loud && lineToSay && !asleepRef\.current\) await settleNow\('', ''\)/)   // bye: no camera words without a camera · Sasha 296 MOVED: through settle
 })
 
@@ -223,10 +224,12 @@ test('283 · item 4c · his plain answer to "Did it go through?" — and only a 
 
 test('283 · item 3 · the mic, her sound and her corner are the shell\'s — no tab can unmount them', () => {
   const app = code(readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8'))
-  const tabs = app.indexOf("{tab === 'trip' ? (")
-  const body = app.indexOf("<div ref={end} />", tabs)
+  // Sasha 359 MOVED: the tab switch now opens on the group tab (then trip, keep, activity, and the chat's body)
+  const tabs = app.indexOf("{tab === 'group' ? (")
+  const trip = app.indexOf(") : tab === 'trip' ? (", tabs)
+  const body = app.indexOf("<div ref={end} />", trip)
   const close = app.indexOf(')}', body)
-  assert.ok(tabs > 0 && body > tabs && close > body)
+  assert.ok(tabs > 0 && trip > tabs && body > trip && close > body)
   for (const owner of ['<VoiceButton', 'id="s2-face-slot"', '<SleepButton', 'aria-label="Message Sasha"']) {
     const at = app.indexOf(owner)
     assert.ok(at > close, `${owner} sits after the tab switch closes (drawn under every tab)`)

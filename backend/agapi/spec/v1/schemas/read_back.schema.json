@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agapi.kanoe.dev/v1/schemas/read_back.schema.json",
+  "title": "AgAPI v1 ReadBack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "read_back_id",
+    "intent_id",
+    "account",
+    "operation",
+    "lines",
+    "payload_sha256",
+    "read_back_sha256",
+    "presented_to",
+    "expires_at",
+    "irreversible",
+    "state"
+  ],
+  "properties": {
+    "read_back_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/read_back_id"
+    },
+    "intent_id": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/intent_id"
+    },
+    "account": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/account_id"
+    },
+    "operation": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/operation"
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The exact words shown or spoken, in order."
+    },
+    "total": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/money"
+    },
+    "payload_sha256": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/sha256"
+    },
+    "read_back_sha256": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/sha256"
+    },
+    "presented_to": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/end_user_id"
+    },
+    "presented_at": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp"
+        }
+      ]
+    },
+    "presented_turn_id": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/turn_id"
+        }
+      ]
+    },
+    "presented_via": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "link",
+            "sdk",
+            "sasha_voice",
+            "sasha_chat"
+          ]
+        }
+      ]
+    },
+    "expires_at": {
+      "$ref": "https://agapi.kanoe.dev/v1/schemas/common.schema.json#/$defs/timestamp",
+      "description": "presented_at + 30 min (AP4); before presentation, creation + 30 min."
+    },
+    "irreversible": {
+      "type": "boolean"
+    },
+    "state": {
+      "enum": [
+        "created",
+        "presented",
+        "approved",
+        "expired",
+        "void"
+      ]
+    }
+  }
+}

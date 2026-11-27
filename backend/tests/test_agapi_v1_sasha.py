@@ -42,13 +42,11 @@ class TheYes(unittest.TestCase):
         self.assertEqual(hashlib.sha256(raw).hexdigest(), V1.LANGUAGE_SHA256)
 
 
-# Sasha 424 · CR 232's pattern: EU's frozen v1 set is VENDORED here byte-identical WITH EU's SHA256SUMS (never read from a sibling repo on
-# disk). ⛔ Waiting on EU: applied-diligence has not committed docs/agapi/v1/SHA256SUMS yet (27 Nov: only an untracked file describing
-# uncommitted v1.3 edits). Until it is vendored this class skips — and CI fails on any skip, so the wait is red, never silent.
-FROZEN = Path(__file__).resolve().parents[1] / "agapi" / "v1_frozen"
+# Sasha 424 · CR 232's pattern: EU's v1 set is VENDORED here byte-identical WITH EU's SHA256SUMS, from applied-diligence d63b7b7
+# (agapi/spec/VENDORED.md), never read from a sibling repo on disk. Any file whose sum differs from EU's fails.
+FROZEN = Path(__file__).resolve().parents[1] / "agapi" / "spec" / "v1"
 
 
-@unittest.skipUnless((FROZEN / "SHA256SUMS").exists(), "⛔ EU's v1 set + SHA256SUMS not vendored yet (backend/agapi/v1_frozen) — waiting on EU's commit")
 class Conformance(unittest.TestCase):
     def test_byte_identical_to_eus_sums_and_nothing_else(self):
         import hashlib

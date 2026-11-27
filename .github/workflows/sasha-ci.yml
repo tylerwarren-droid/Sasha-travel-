@@ -47,6 +47,8 @@ jobs:
         run: |
           cd backend && pip install -q -r requirements.txt
           cd ../frontend && npm ci
+      - name: EU's contract is byte-identical to EU's SHA256SUMS (agapi/spec/VENDORED.md — applied-diligence d63b7b7)
+        run: cd backend/agapi/spec/v1 && shasum -a 256 -c SHA256SUMS
       - name: the app imports
         run: cd backend && python -c "from app.main import app; print('BACKEND LOADS CLEAN')"
       - name: every test, in discovery order (no selection, no retry)

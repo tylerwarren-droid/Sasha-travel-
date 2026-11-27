@@ -40,7 +40,8 @@ class TheOneContract(unittest.TestCase):
         self.assertEqual((KC.CONTRACT_VERSION, agapi["version"], v["version"]), ("1.104.0", "1.104.0", "1.104.0"))   # Sasha 419 · CR 232 (offseason.deltas) · Sasha 386 · CR 203 + 204 (384: 1.94.0 (383: 1.93.0 · CR 202 (381: 1.90.0 · CR 192: 1.86.0)
 
     def test_the_ratchet_finds_no_hand_written_copy(self):
-        r = subprocess.run([sys.executable, "-m", "kanoe_contract.ratchet", ".", "--exclude", "tests"], cwd=BACKEND, capture_output=True, text=True)
+        from tests import vendored as VENDORED   # Sasha 424 · EU's vendored files are not Sasha's
+        r = subprocess.run([sys.executable, "-m", "kanoe_contract.ratchet", ".", "--exclude", "tests", *VENDORED.excludes()], cwd=BACKEND, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout[-3000:])
         self.assertIn("0 hand-written copies", r.stdout)
 

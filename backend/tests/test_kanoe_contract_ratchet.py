@@ -11,9 +11,12 @@ import unittest
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 
 
+from tests import vendored as VENDORED   # noqa: E402
+
+
 class Ratchet(unittest.TestCase):
     def test_no_hand_written_copy(self):
-        r = subprocess.run([sys.executable, "-m", "kanoe_contract.ratchet", str(BACKEND), "--exclude", str(BACKEND / "tests")],
+        r = subprocess.run([sys.executable, "-m", "kanoe_contract.ratchet", str(BACKEND), "--exclude", str(BACKEND / "tests"), *VENDORED.excludes()],   # Sasha 424 · EU's vendored files are not Sasha's
                            cwd=BACKEND, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout[-4000:])
 

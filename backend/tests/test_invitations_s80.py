@@ -120,23 +120,5 @@ class PathI(TG.Base):
         self.invite()
         self.assertIsNone(run(GW.STORE.channel_for(GW.wa_key(JON))))
 
-    @unittest.skip("Sasha 195 · THE LADDER'S WORDS: the founder's ladder (one question, its options, acted on at once) replaced this pinned conversation; covered by scripts/core_suites.py LADDER/REST checks — to rewrite to the ladder")
-
-    def test_6_the_booking_is_the_inviters(self):
-        inv = self.invite()
-        view = self.web.get(f"/invite/{inv['code']}").json()
-        with mock.patch.object(IV, "NOW", lambda: TG.NOW):
-            self.web.post(f"/invite/{inv['code']}/choose", json={"slot": 0, "consent_sha256": view["consent_sha256"]})
-        self.assertFalse(any(c[2].endswith("/place") or c[2] == "/api/booking/calls" for c in GW.api.calls))   # Jon's choice places nothing
-        self.say("Chamberí")                                                          # Ana names the area
-        self.assertEqual(GW.SENDER.contents[-1][0], "Which one?")
-        _, buttons = GW.SENDER.contents[-1]
-        self.say("x", payload=buttons[0][1])
-        prep = next(c for c in GW.api.calls if c[2] == "/api/booking/calls")
-        self.assertEqual(prep[0], TG.ACCOUNT)                                          # under ANA's account
-        self.assertEqual(prep[3]["reservation"]["who"]["name"], "Tyler Warren")
-        self.assertEqual(prep[3]["reservation"]["how_many"]["count"], 2)
-
-
 if __name__ == "__main__":
     unittest.main()

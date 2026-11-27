@@ -161,7 +161,9 @@ def _actions(order: dict) -> List[str]:
 # ── Sasha 305 · THE ORDER AS IT STANDS: the ONE reader of a booked flight (My trips, the Trip tab, what she says after a change) ─────
 
 FRESH_S = 20   # a read is reused this long (the Trip tab polls every 6 s); our own change / cancel forgets it at once
-_SEEN: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+# A read is the answer of the Duffel that gave it: it is reused only when that SAME client is asked again (Sasha 424 · a read through
+# one client was handed back through another — a test's fake order leaked into every later reader). One client in production.
+_SEEN: Dict[str, Tuple[float, Dict[str, Any], Any]] = {}
 
 
 def forget(order_id: Optional[str]) -> None:
@@ -187,8 +189,9 @@ async def order_now(order_id: Optional[str]) -> Dict[str, Any]:
     if not order_id:
         return {"why": "no Duffel order on this booking"}
     import time
+    client = HTTP or TR.HTTP
     hit = _SEEN.get(str(order_id))
-    if hit and time.monotonic() - hit[0] < FRESH_S:
+    if hit and hit[2] is client and time.monotonic() - hit[0] < FRESH_S:
         return hit[1]
     if not TR.token():
         return dict(NO_TOKEN)
@@ -200,7 +203,7 @@ async def order_now(order_id: Optional[str]) -> Dict[str, Any]:
     except Exception as e:   # a shape Duffel never promised — said, never raised
         log.warning("[flight_manage] order %s not read: %s", str(order_id)[:12], type(e).__name__)
         return {"why": f"the booking couldn't be read from Duffel ({type(e).__name__})"}
-    _SEEN[str(order_id)] = (time.monotonic(), view)
+    _SEEN[str(order_id)] = (time.monotonic(), view, client)
     return view
 
 

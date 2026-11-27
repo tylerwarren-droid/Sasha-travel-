@@ -84,16 +84,26 @@ class Base(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"})
         self.env.start()
         self.saved = FM.HTTP
-        FM._SEEN.clear()   # Sasha 424 · the order cache is module state: start empty and leave it empty, so no other test reads these fakes
 
     def tearDown(self):
         FM.HTTP = self.saved
-        FM._SEEN.clear()
         self.env.stop()
 
     def fake(self, **kw):
         FM.HTTP = f = FakeDuffel(**kw)
         return f
+
+
+class OneReadOneClient(Base):
+    def test_a_read_is_never_handed_back_through_another_client(self):
+        """Sasha 424 · the order cache keeps who answered: a second Duffel client (the next test, the next process) reads its own order."""
+        first = self.fake(the_order={**order(), "booking_reference": "FIRST1"})
+        self.assertEqual(run(FM.order_now("ord_1"))["reference"], "FIRST1")
+        run(FM.order_now("ord_1"))
+        self.assertEqual(first.paths().count("/air/orders/ord_1"), 1)           # the same client: reused within FRESH_S
+        second = self.fake(the_order={**order(), "booking_reference": "OTHER2"})
+        self.assertEqual(run(FM.order_now("ord_1"))["reference"], "OTHER2")      # another client: never the first one's answer
+        self.assertEqual(second.paths(), ["/air/orders/ord_1"])
 
 
 class Cancel(Base):

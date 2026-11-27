@@ -1,0 +1,78 @@
+# Sasha 424 · THE WHOLE SUITE, ON EVERY PR AND ON MAIN — and red blocks the merge (the project-main ruleset requires both jobs).
+# A rule in Sasha's tests is true only while something runs it: before this, only yes-one ran in CI, and 15 frontend tests and 3
+# order-dependent backend tests had gone red unseen. Never skip, isolate or retry a test here to make it pass:
+#   · every test runs — Postgres is a service here and node + the frontend are installed, so no test has a reason to skip,
+#     and the job FAILS if any test is skipped (a test CI never runs is not a rule);
+#   · the one allowed "expected failure" is CR 56's named gap (tests/test_robustness_cr56.py): it turns red the day it is fixed.
+name: sasha-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: sasha-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend · full suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      BOOKING_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres   # a scratch CI database, nothing else
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # production's (backend/runtime.txt)
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4   # some backend tests run the page's own code (cardsOf, the one request client)
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: install
+        run: |
+          cd backend && pip install -q -r requirements.txt
+          cd ../frontend && npm ci
+      - name: the app imports
+        run: cd backend && python -c "from app.main import app; print('BACKEND LOADS CLEAN')"
+      - name: every test, in discovery order (no selection, no retry)
+        # -t . : every module is tests.<name> (one copy each; tests/__init__.py installs the founder fixture before any test)
+        run: |
+          set -o pipefail
+          cd backend && python -m unittest discover -s tests -t . -p 'test_*.py' 2>&1 | tee /tmp/suite.txt
+      - name: nothing skipped
+        run: |
+          if grep -E "skipped=[0-9]+" /tmp/suite.txt; then
+            echo "::error::a test was skipped — CI runs every test (Sasha 424)"; exit 1
+          fi
+
+  frontend:
+    name: frontend · tests + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: install
+        run: cd frontend && npm ci
+      - name: every frontend test (npm test)
+        run: cd frontend && npm test
+      - name: the build (prebuild's checks included)
+        run: cd frontend && npm run build

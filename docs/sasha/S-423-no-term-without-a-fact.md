@@ -20,7 +20,7 @@ So "a trip with a fact shows the fact's words" has nothing to show yet. That rea
 | `backend/app/models/itinerary.py:43-44` | `is_refundable: bool = True`, `cancellation_policy = {}` | nobody: the model is imported nowhere |
 | `frontend/types/index.ts:39` | `is_refundable: boolean` | ItineraryPanel only |
 | `frontend/app/components/ItineraryPanel.tsx:55` | the "Refundable" / "Non-refundable" badge | nobody: the panel is mounted nowhere (no importer) |
-| `backend/app/services/vietnam_golf_database.py` | 22 hardcoded `"cancellation_policy": "NN hours notice required"` | **live**: `get_course_details` returned the whole dict to the model, so the golf agent could say it. The tool description no longer promises it either. |
+| `backend/app/services/vietnam_golf_database.py` | 22 hardcoded `"cancellation_policy": "NN hours notice required"` | `get_course_details` returned the whole dict to the golf agent's model, so it could have said it. **Corrected 27 Nov (Sasha 424):** no live door reaches it. S-32 took golf out of the conductor registry, `run_golf_intent` has no caller, and /api/agents/golf is unmounted (404). A golf turn on the live conductor returns 500 (`run_general() missing … 'general_prompt'`): the registry's fallback calls `run_general` without its prompt. That is a separate defect, reported to Tyler. The tool description no longer promises it either. |
 | `booking_signer/sql/024_payments.sql` | `payment_requests.refundable_until` | nothing writes or reads it; `062_no_refundable_until.sql` drops it (NOT APPLIED: founder approves, chat applies) |
 
 ## (3) The ratchet
@@ -33,7 +33,7 @@ So "a trip with a fact shows the fact's words" has nothing to show yet. That rea
 
 A second test checks the frontend: no screen draws "Refundable" or `is_refundable`. Red on origin/main (both tests), green on this branch.
 
-CTO drops overwrite `backend/app` and `frontend/app`. **No automatic gate runs this suite** (CI runs only yes-one, Railway and Vercel run no pytest/unittest), so it catches a returning field only when the suite is run, which is CLAUDE.md's Stage B step.
+CTO drops overwrite `backend/app` and `frontend/app`. **Sasha 424:** CI (`sasha-ci.yml`) now runs the full backend suite and `npm test` on every PR and on main, and both are required checks. The TypeScript and screen half moved to `frontend/scripts/no-term-424.test.mjs`, and the `booking_terms.py` debt below is deleted.
 
 **One named debt (shrink-only):** `agapi/booking_terms.py` (Sasha 301) composes venue terms and a "by <date>" deadline from the venue's own reply at view time. Readers:
 - the Trip tab (`itinerary.with_terms`);

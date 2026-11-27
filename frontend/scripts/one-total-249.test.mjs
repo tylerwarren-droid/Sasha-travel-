@@ -22,8 +22,12 @@ test('T6 · no surface passes a silent 1 or 2 as the travellers', () => {
   assert.match(panel, /\{pax \?\? '—'\}/)
 })
 
-test('T5 · the $ estimate is only the planner\'s guess, labelled, when the basket has no total', () => {
+// Sasha 349 RETIRED the labelled $ guess (TripPanel: "the trip record's figure, in its own currency (€) — never a guess in another
+// ("Planner's guess $0", found live)"): ONE total is the basket's € figure; with none, "Not priced yet" and no figure at all.
+test('T5 · the total is only the basket\'s € figure — no $ estimate, no guess; none yet says "Not priced yet"', () => {
   const panel = src('../app/components/workspace/TripPanel.tsx')
-  assert.match(panel, /tt \? 'All in' : "Planner's guess"/)
-  assert.doesNotMatch(panel, /'Estimated total'/)
+  assert.match(panel, /tt \? 'All in' : 'Not priced yet'/)
+  assert.match(panel, /<span className="amt">\{tt \? eur\(tt\.total_eur\) : '—'\}<\/span>/)
+  const code = panel.replace(/\{?\/\*[\s\S]*?\*\/\}?|\/\/[^\n]*/g, '')   // the code, not the comment that records the retired label
+  assert.doesNotMatch(code, /Planner's guess|estimated_total_usd|'Estimated total'/)
 })

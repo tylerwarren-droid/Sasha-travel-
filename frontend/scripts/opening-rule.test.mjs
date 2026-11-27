@@ -54,7 +54,7 @@ test('one panel, in her frame — never a second welcome under it', () => {
   assert.match(hello, /\{panel \? \(/)
   assert.match(app, /msgs\.length === 0 \? \(openingUp \? null : \(/)
   assert.doesNotMatch(app, /GREETING|chipAt/)   // no fixed welcome line, no rotating eight
-  assert.match(app, /if \(helloCtl\.current\?\.waiting\(\)\) void helloCtl\.current\.bye\('', false\)/)   // typed or spoken first: it ends
+  assert.match(app, /if \(helloCtl\.current\?\.waiting\(\)\) observe\(helloCtl\.current\.bye\('', false\), 'Her opening', toConsole\)/)   // typed or spoken first: it ends · Sasha 347 MOVED: void → observe
 })
 
 test('one cue each: speaking over thinking over listening; paused and the tap word as before', () => {
@@ -112,7 +112,7 @@ test('296 · the return is the ONE return handler: the page\'s own two moments (
   const back = app.slice(app.indexOf('const comeBack = useCallback'), app.indexOf('useEffect(() => { comeBackRef.current = comeBack }'))
   assert.match(back, /const away = hiddenAt\.current \? Date\.now\(\) - hiddenAt\.current : 0/)
   assert.ok(back.indexOf('helloCtl.current?.again(') < back.indexOf('returned({ away'))
-  assert.match(back, /helloCtl\.current\?\.returned\(fetch\('\/api\/s2-memory\?pickup=1'/)
+  assert.match(back, /helloCtl\.current\?\.returned\(reach\('\/api\/s2-memory\?pickup=1'/)   // Sasha 348 MOVED: fetch → the ONE client (reach)
   assert.doesNotMatch(back, /setTimeout|setInterval/)
   assert.equal((app.match(/addEventListener\('visibilitychange'/g) || []).length, 1)
   const rt = hello.slice(hello.indexOf('const returnedNow = '), hello.indexOf('useEffect(() => () => { keyOff()'))
@@ -146,7 +146,7 @@ test('296 · every move into the corner goes through settle — arrival, his req
   assert.match(sn, /stillHereLine\(lang\(\)\)/)
   assert.match(hello, /const how = await settleNow\(plain, plain\)/)                     // her arrival
   assert.match(hello, /await settleNow\('', ''\)/)                                          // bye (his request)
-  assert.match(hello, /const tap = p\.tap === 'collapse' \? \(\) => \{ void bye\(settleLine\(\), !muted\) \}/)   // a tap on her face
+  assert.match(hello, /const tap = p\.tap === 'collapse' \? \(\) => \{ observe\(bye\(settleLine\(\), !muted\), 'Her goodbye line', toConsole\) \}/)   // a tap on her face · Sasha 347/348 MOVED: void → observe
   assert.doesNotMatch(app, /cameraOffLine\(/)   // the page never picks the camera line itself any more
   assert.match(fl, /export function stillHereLine\(lang: string\): string/)
   assert.match(fl, /\/\^es\\b\/i\.test\(lang/)   // ES: "Aquí sigo."

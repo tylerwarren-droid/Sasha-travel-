@@ -6,11 +6,14 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const app = readFileSync(new URL('../app/s2/S2App.tsx', import.meta.url), 'utf8')
+const cardsOf = readFileSync(new URL('../lib/cards-of.ts', import.meta.url), 'utf8')   // Sasha 402 · THE ONE MAPPING, moved out of S2App
 
 test('297 · the card comes only from the server\'s kind_ask render, with its own choices', () => {
-  assert.match(app, /else if \(ev\.kind === 'kind_ask' && Array\.isArray\(ev\.choices\) && ev\.choices\.length\) add\(\{ k: 'kind_ask', ask: String\(ev\.ask \|\| ''\), choices: ev\.choices\.map\(String\) \}\)/)
+  // Sasha 402 MOVED: the event → card mapping is lib/cards-of.ts (S2App draws through it)
+  assert.match(cardsOf, /if \(k === 'kind_ask' && Array\.isArray\(ev\.choices\) && ev\.choices\.length\) return \[\{ k: 'kind_ask', ask: String\(ev\.ask \|\| ''\), choices: ev\.choices\.map\(String\) \}\]/)
+  assert.match(app, /import \{ cardsOf as cardsOfEvent \} from '@\/lib\/cards-of'/)
   assert.match(app, /if \(c\.k === 'kind_ask'\) return <KindAsk choices=\{c\.choices\} send=\{send\} \/>/)
-  assert.doesNotMatch(app, /Something special|Good value|Takeaway \/ delivery/)   // never the page's own words or list
+  assert.doesNotMatch(app + cardsOf, /Something special|Good value|Takeaway \/ delivery/)   // never the page's own words or list
 })
 
 test('297 · a tap is his answer: sent as his message, then the taps go', () => {

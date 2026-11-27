@@ -238,9 +238,15 @@ export const PITCHES: Pitch[] = [
     market: [
       // Sasha 159 · EU 160 §4 row 8: EspañaMe's market is the PUBLIC BUYER; the foreign-national rows moved to RelocateMe
       { row: 'Buyer (region)', figure: 'Comunidad de Madrid: an AI virtual assistant for municipal information in 33 municipalities — awarded 27 Aug 2025 for €194,825.84 (base €425,283.20, 22 bids)',
-        method: 'Read at source by EU 160, 5 Oct 2026 (contratos-publicos.comunidad.madrid)', marks: ['S'], sources: [] },
+        method: 'Read at source by EU 160, 5 Oct 2026 (contratos-publicos.comunidad.madrid)', marks: ['S'],
+        // Sasha 424 · the sourced row had no source (Sasha 159): the contract's own page (A/SER-007995/2025: 33 municipalities, base
+        // €425,283.20, CEDESA DIGITAL €194,825.84, contract 27 Aug 2025) and its BOCM award notice (22 bids), both opened 27 Nov 2026
+        sources: [S('https://contratos-publicos.comunidad.madrid/contrato-publico/print/pdf/node/288595', true),
+                  S('https://www.bocm.es/boletin/CM_Orden_BOCM/2025/09/10/BOCM-20250910-12.PDF', true)] },
       { row: 'Buyer (diputación)', figure: 'Ciudad Real: €3,210,830.28 for 156 digital-inclusion technicians for 12 months (approved 2 Jun 2026)',
-        method: 'Read at source by EU 160, 5 Oct 2026 (fempclm.es, the call PDF)', marks: ['S'], sources: [] },
+        method: 'Read at source by EU 160, 5 Oct 2026 (fempclm.es, the call PDF)', marks: ['S'],
+        // Sasha 424 · the call PDF itself (Junta de Gobierno Nº 14/2026, signed 2 Jun 2026: €3,210,830.28, 156 technicians, doce meses), opened 27 Nov 2026
+        sources: [S('https://www.fempclm.es/files/portalcontenidos/2732/documentos/convocatoria.pdf', true)] },
       { row: 'People', figure: '[all residents who use public services]', method: 'To compute from INE', marks: ['E'], sources: [] },
     ],
     model: [{ mark: 'concept', text: 'Public buyers: diputaciones, ayuntamientos and social services, starting with a pilot under the contrato-menor threshold (LCSP art. 118). “Every citizen arrives at your counter with the right papers — or doesn’t need to come. We never bypass your systems.” No revenue.' }],

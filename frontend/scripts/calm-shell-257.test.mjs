@@ -12,8 +12,9 @@ test('her face: live only from a frame actually drawn; ONE half-body still (268,
   assert.doesNotMatch(hello.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''), /FACE_KEY|keptFace|sasha-face\.jpg/)                   // the kept close-up is retired
   // Sasha 271 · Sasha 281 MOVED · Sasha 303 MOVED: a late face is let go (its session closed) — no face is started before his tap any
   // more, so the only late one is his tap's own (tapFace): not on screen in FACE_WAIT_MS, or the page moved on meanwhile
-  assert.match(hello, /if \(!f\) \{ p\.then\(late => \{ void late\.stop\('late'\) \}\)\.catch\(\(\) => \{\}\); return false \}/)
-  assert.match(hello, /if \(phaseRef\.current !== 'face'\) \{ void f\.stop\('late'\); return false \}/)
+  // Sasha 348 MOVED: the late face's stop is observed by name (void → observe; the silent .catch(() => {}) → noted)
+  assert.match(hello, /if \(!f\) \{ p\.then\(late => \{ observe\(late\.stop\('late'\), 'Letting her late face go', toConsole\) \}\)\.catch\(noted\('Letting her late face go'\)\); return false \}/)
+  assert.match(hello, /if \(phaseRef\.current !== 'face'\) \{ observe\(f\.stop\('late'\), 'Letting her late face go', toConsole\); return false \}/)
   assert.doesNotMatch(hello, /setTimeout\(\(\) => \{ face\.current = null; setImg\(still/)   // the old 0.9 s still is gone
 })
 
@@ -23,7 +24,11 @@ test('Jon: a message while she answers is queued, never dropped; a stalled reply
   assert.match(app, /signal: abort\.signal/)
   assert.match(app, /finished = true; rd\.cancel\(\)/)
   assert.match(app, /const \[nxt, \.\.\.rest\] = queued\.current/)
-  assert.match(app, /disabled=\{!input\.trim\(\)\}/)                                 // Send works while she answers
+  // Send works while she answers · Sasha 347 MOVED (nothing greyed): the Send button is never disabled — an empty Send says what it
+  // needs, any other goes through sendNow (queued while she answers, above)
+  assert.match(app, /<button type="submit" aria-label="Send"\s+style=/)
+  assert.match(app, /if \(!input\.trim\(\)\) \{ tell\(needs\('Send', \[[^\]]+\]\)\); return \} sendNow\(input\) \}\}/)
+  assert.doesNotMatch(app, /type="submit"[^>]*disabled=/)
 })
 
 test('a calm screen: identity quietly in the header (whoami), no floating pill on the S2 shell, no "Type instead"', () => {

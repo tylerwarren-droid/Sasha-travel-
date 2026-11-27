@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-DEFAULT = Path.home() / "Developer" / "Applied Diligence" / "docs" / "agapi" / "v1"
+DEFAULT = Path(__file__).resolve().parents[1] / "agapi" / "v1_frozen"   # Sasha 424 · the vendored set (CR 232), never a sibling repo on disk
 
 
 def main() -> int:

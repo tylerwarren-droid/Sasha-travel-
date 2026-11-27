@@ -52,10 +52,11 @@ jobs:
         # -t . : every module is tests.<name> (one copy each; tests/__init__.py installs the founder fixture before any test)
         run: |
           set -o pipefail
-          cd backend && python -m unittest discover -s tests -t . -p 'test_*.py' 2>&1 | tee /tmp/suite.txt
+          cd backend && python -m unittest discover -s tests -t . -p 'test_*.py' -v 2>&1 | tee /tmp/suite.txt
       - name: nothing skipped
         run: |
           if grep -E "skipped=[0-9]+" /tmp/suite.txt; then
+            grep -E " \.\.\. skipped " /tmp/suite.txt
             echo "::error::a test was skipped — CI runs every test (Sasha 424)"; exit 1
           fi
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import os
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from agapi import v0 as API, v1 as V1
@@ -41,15 +42,30 @@ class TheYes(unittest.TestCase):
         self.assertEqual(hashlib.sha256(raw).hexdigest(), V1.LANGUAGE_SHA256)
 
 
-FROZEN = Path(os.getenv("AGAPI_V1_DIR") or Path.home() / "Developer" / "Applied Diligence" / "docs" / "agapi" / "v1")
+# Sasha 424 · CR 232's pattern: EU's frozen v1 set is VENDORED here byte-identical WITH EU's SHA256SUMS (never read from a sibling repo on
+# disk). ⛔ Waiting on EU: applied-diligence has not committed docs/agapi/v1/SHA256SUMS yet (27 Nov: only an untracked file describing
+# uncommitted v1.3 edits). Until it is vendored this class skips — and CI fails on any skip, so the wait is red, never silent.
+FROZEN = Path(__file__).resolve().parents[1] / "agapi" / "v1_frozen"
 
 
-@unittest.skipUnless((FROZEN / "vectors" / "canonical.json").exists(), "EU's frozen v1.0 files aren't on this machine (set AGAPI_V1_DIR)")
+@unittest.skipUnless((FROZEN / "SHA256SUMS").exists(), "⛔ EU's v1 set + SHA256SUMS not vendored yet (backend/agapi/v1_frozen) — waiting on EU's commit")
 class Conformance(unittest.TestCase):
+    def test_byte_identical_to_eus_sums_and_nothing_else(self):
+        import hashlib
+        listed = {}
+        for line in (FROZEN / "SHA256SUMS").read_text().splitlines():
+            if line.strip():
+                want, name = line.split(None, 1)
+                listed[name.strip().removeprefix("./")] = want
+        for name, want in listed.items():
+            self.assertEqual(hashlib.sha256((FROZEN / name).read_bytes()).hexdigest(), want, f"{name}: re-vendor it from EU's commit")
+        here = {str(p.relative_to(FROZEN)) for p in FROZEN.rglob("*") if p.is_file()} - {"SHA256SUMS"}
+        self.assertEqual(here, set(listed), "a file here that EU's SHA256SUMS doesn't list (or the reverse)")
+
     def test_the_runner_passes(self):
         from scripts import agapi_v1_conformance as RUN
-        os.environ.setdefault("AGAPI_V1_DIR", str(FROZEN))
-        self.assertEqual(RUN.main(), 0)
+        with mock.patch.dict(os.environ, {"AGAPI_V1_DIR": str(FROZEN)}):
+            self.assertEqual(RUN.main(), 0)
 
 
 if __name__ == "__main__":

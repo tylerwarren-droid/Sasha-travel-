@@ -180,6 +180,12 @@ class OnPostgres(unittest.TestCase):
             await c.execute("drop table if exists public.s2_acts, public.s2_wa_contacts, public.s2_wa_replies")
             await c.execute(sql[sql.index("begin;"):sql.index("-- check")])
             await c.execute(sql[sql.index("begin;"):sql.index("-- check")])                       # idempotent
+            # Sasha 424 · the test builds every table it reads (CI's Postgres is empty): trips + trip_items as activity._venues reads them.
+            # Temp tables come first on the search path, so a database that HAS the real ones is never written to either.
+            await c.execute("create temp table trips (id uuid primary key default gen_random_uuid(), owner_id uuid, title text)")
+            await c.execute("create temp table trip_items (id uuid primary key default gen_random_uuid(), trip_id uuid, type text, status text, "
+                            "provider_name text, booking_reference text, date_time timestamptz, local_timezone text, party_size int, "
+                            "request_sha256 text, updated_at timestamptz default now())")
             await c.execute("create temp table trip_basket_items (id uuid primary key default gen_random_uuid(), account_id uuid, trip_id uuid, "
                             "kind text, state text, snapshot jsonb, booking_reference text, order_id text, paid_session text, "
                             "trip_item_id uuid, updated_at timestamptz default now())")
@@ -204,7 +210,7 @@ class OnPostgres(unittest.TestCase):
         async def runner(fn):
             return await fn(c)
         from tests import test_booking_ladder as TBL   # a module: its own tests are not collected twice
-        acct = TBL.FOUNDER_ACCOUNT                                                               # trips.owner_id needs a real auth user
+        acct = TBL.FOUNDER_ACCOUNT
 
         async def seed():
             trip = await c.fetchval("insert into trips (owner_id, title) values ($1, 'cr62') returning id", uuid.UUID(acct))

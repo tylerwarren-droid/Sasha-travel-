@@ -36,7 +36,7 @@ TERM_FIELD = re.compile(r"(?i)^(?:is_|has_)?(?:non_?)?refundab\w*$|^cancellation
 #: booking_fine_print (/s2, voice, WhatsApp) and the cancel_by reminder (proactive). It is a term about a booking not read through
 #: facts.answer. Its writer is AgAPI's `venue_words` facts (FP-4 venue words), ON ICE with venue booking (KANOE 26 Nov 12:07); the
 #: question of switching it off meanwhile is Tyler's (Sasha 423's report). When it reads facts.answer, this line goes.
-KNOWN_DEBT = ("backend/agapi/booking_terms.py:19 cancellation",)
+KNOWN_DEBT = ("backend/agapi/booking_terms.py cancellation",)   # file + name, never a line number
 
 def _files(base: pathlib.Path, exts):
     for p in base.rglob("*"):
@@ -140,7 +140,7 @@ class NoTermWithoutAFact(unittest.TestCase):
     def test_sasha_holds_no_term_field_of_its_own(self):
         """THE RATCHET. A term about a booking is AgAPI's fact (facts.answer) or it is not said; Sasha never stores or defaults one.
         KNOWN_DEBT may only shrink: a new hit fails, and so does a debt that has gone (delete its line)."""
-        found = term_fields()
+        found = [re.sub(r":\d+ ", " ", h) for h in term_fields()]
         new = [h for h in found if h not in KNOWN_DEBT]
         gone = [h for h in KNOWN_DEBT if h not in found]
         assert new == [], "Sasha holds a booking-terms field of its own (Sasha 423): " + "; ".join(new)
@@ -151,7 +151,7 @@ class NoTermWithoutAFact(unittest.TestCase):
         """No component says "Refundable" / "Non-refundable" / "Free cancellation" from a field of Sasha's: those words appear only where a
         fact's own words are drawn (none today: the facts.answer reader arrives with the contract, Sasha 420 / CR 235)."""
         bad = [f"{p.relative_to(ROOT)}" for p in _files(FRONTEND, {".tsx", ".ts"})
-               if re.search(r"['\"`>]\s*(?:Non-)?[Rr]efundable\s*['\"`<]|\bis_refundable\b", p.read_text())]
+               if re.search(r"['\"`>]\s*(?:(?:Non-)?[Rr]efundable|[Ff]ree [Cc]ancellation)\s*['\"`<]|\bis_refundable\b", p.read_text())]
         assert bad == [], bad
 
 

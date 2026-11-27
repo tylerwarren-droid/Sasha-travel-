@@ -8,9 +8,11 @@ KANOE 26 Nov 11:08 · "anything shown about a booking the person is making or ha
 ## (1) The one truth
 AgAPI `fine_print_facts`, read through `facts.answer {question: "of_item"}` (CR 222, agapi_service/facts.py).
 
-Two facts block the reader in Sasha:
-- **The contract.** Sasha vendors `backend/kanoe_contract` **1.104.0**, which has no `facts.answer`. AgAPI main is at 1.110.0. The re-vendor is CR 235's publication (the ticket's NEXT).
-- **The booking.** No Sasha door holds a booking whose `item_ref` the facts record keys. TAAP hotel bookings arrive with CR 230 / Sasha 420; today's Sasha itinerary is venue acts, which are on ice.
+The published contract already carries it: `facts.answer` (`of_item`) is in @kanoe/contract **1.110.0**. Sasha's vendored copy
+(`backend/kanoe_contract`) is 1.104.0, and re-vendoring is a routine step (see Sasha 386). That is not what blocks the reader. These do:
+- **No Sasha row carries an `item_ref` the record keys.** Per EU 319, `item_ref` is Kanoe's `lst_` id. TAAP bookings reach Sasha with CR 230 / Sasha 420; today's Sasha itinerary is venue acts, which are on ice.
+- **No fact stands on live for any booking.** FP-2's writer (CR 223, PR #189) is unmerged, and FP-1's scratch writer writes, reads back and forgets.
+So "a trip with a fact shows the fact's words" has nothing to show yet. That reader belongs with Sasha 420's trips door, and lands there.
 
 ## (2) The second copies: deleted
 | Where | What | Who read it |
@@ -31,7 +33,7 @@ Two facts block the reader in Sasha:
 
 A second test checks the frontend: no screen draws "Refundable" or `is_refundable`. Red on origin/main (both tests), green on this branch.
 
-CTO drops overwrite `backend/app` and `frontend/app`, so this is what catches the field coming back.
+CTO drops overwrite `backend/app` and `frontend/app`. **No automatic gate runs this suite** (CI runs only yes-one, Railway and Vercel run no pytest/unittest), so it catches a returning field only when the suite is run, which is CLAUDE.md's Stage B step.
 
 **One named debt (shrink-only):** `agapi/booking_terms.py` (Sasha 301) composes venue terms and a "by <date>" deadline from the venue's own reply at view time. Readers:
 - the Trip tab (`itinerary.with_terms`);
@@ -48,6 +50,6 @@ These terms are not read through facts.answer. Their writer is AgAPI `venue_word
 | WhatsApp (products/whatsapp, conductor) | golf strings, deleted here; Sasha 301 terms via the S2 brain (the debt) |
 | Luxury site (luxuryoffseason) | no trips door yet (Sasha 420 builds trips.open_guest). `lib/words.ts:39`'s "free cancellation" describes a measured **offer** (AgAPI observations' `refundable`), not a booking, and is AgAPI's field, not Sasha's |
 | Guestcentric hand-over | its `cancel` is the hotel engine's own words for an **offered** rate, with no frontend caller. Parser retired (KANOE B-Q4) |
-| group_report / group_book | words drawn from AgAPI's own booking result (`conditions.refund`, `cancel_by: airline`), read in place, not stored |
+| group_report / group_book | **open, Tyler's question**: tells the guest "it can't be refunded" / "only the airline can cancel it" from `group.book`'s `conditions`, an AgAPI answer but not facts.answer. Not a Sasha field (the ratchet doesn't match it); by the class's plain words, the same kind as Sasha 301 |
 
 **Live, 27 Nov:** project.kanoe.ai `/`, `/next`, `/s2`, `/vietnam2` and `/vietnam` were fetched with every JS chunk (4.4 MB). They contain 0 "Refundable" and 0 `is_refundable`.

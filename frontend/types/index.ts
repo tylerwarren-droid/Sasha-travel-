@@ -36,7 +36,6 @@ export interface ItineraryItem {
   detail: any
   price_fiat: number
   price_currency: string
-  is_refundable: boolean
   sasha_rationale?: string
   media?: any[]
 }

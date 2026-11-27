@@ -36,7 +36,7 @@ GOLF_TOOLS = [
     },
     {
         "name": "get_course_details",
-        "description": "Get full details about a specific golf course: facilities, caddy policy, dress code, cancellation policy.",
+        "description": "Get full details about a specific golf course: facilities, caddy policy, dress code.",
         "input_schema": {
             "type": "object",
             "properties": {

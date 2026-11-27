@@ -51,13 +51,7 @@ function ItemRow({ item }: { item: ItineraryItem }) {
       )}
       {expanded && (
         <div className="mt-2 ml-10 flex gap-2">
-          <span className={`text-xs px-2 py-0.5 rounded-full ${
-            item.is_refundable
-              ? 'bg-emerald-50 text-emerald-600'
-              : 'bg-red-50 text-red-500'
-          }`}>
-            {item.is_refundable ? 'Refundable' : 'Non-refundable'}
-          </span>
+          {/* Sasha 423 · no refundability badge: a term is AgAPI's fact (facts.answer) or it is not shown */}
           <span className="text-xs px-2 py-0.5 rounded-full bg-gray-50 text-gray-500 capitalize">
             {item.status}
           </span>

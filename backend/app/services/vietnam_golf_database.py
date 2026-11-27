@@ -28,7 +28,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 40,
             "available_times": ["07:00", "07:30", "08:00", "08:30", "09:00", "10:00", "11:00", "13:00", "14:00"],
             "notes": "Links-style with sand dunes and casuarina trees. 20 min from Danang airport, 15 min to Hoi An.",
-            "cancellation_policy": "48 hours notice required",
         },
         {
             "name": "Legend Danang Golf Resort - Norman Course",
@@ -48,7 +47,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 45,
             "available_times": ["06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "10:00", "11:00", "13:00", "14:00"],
             "notes": "First true links course in Southeast Asia. No out-of-bounds. Stunning dune-scape.",
-            "cancellation_policy": "48 hours notice required. Min 3 players on weekends.",
         },
         {
             "name": "Legend Danang Golf Resort - Nicklaus Course",
@@ -68,7 +66,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 45,
             "available_times": ["07:00", "07:30", "08:00", "08:30", "09:00", "10:00", "11:00", "13:00"],
             "notes": "Florida-style bulkhead course by Nicklaus Design. Pairs with Norman Course for 36-hole day.",
-            "cancellation_policy": "48 hours notice required. Min 3 players on weekends.",
         },
         {
             "name": "Ba Na Hills Golf Club",
@@ -88,7 +85,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 40,
             "available_times": ["07:00", "07:30", "08:00", "08:30", "09:00", "10:00", "11:00"],
             "notes": "Mountain course managed by IMG. Cooler temperatures than coastal courses. 30 min from city.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Hoiana Shores Golf Club",
@@ -108,7 +104,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 55,
             "available_times": ["07:00", "08:00", "09:00", "10:00", "11:00"],
             "notes": "Vietnam's #1 ranked course. Coastal links on stunning Eastern Sea shoreline. 45 min from Danang airport. Book well in advance — tee times very limited.",
-            "cancellation_policy": "72 hours notice required",
         },
         {
             "name": "Laguna Golf Lang Co",
@@ -128,7 +123,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 45,
             "available_times": ["07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "Nick Faldo design between Hue and Danang. Mountain and lagoon views. Inside Banyan Tree resort.",
-            "cancellation_policy": "48 hours notice required",
         },
     ],
 
@@ -154,7 +148,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 50,
             "available_times": ["07:00", "08:00", "09:00", "10:00", "11:00"],
             "notes": "World-ranked bucket-list links course on stunning coastline. 2 hours from HCMC. Wind is a constant factor — check conditions.",
-            "cancellation_policy": "48 hours notice required",
         },
     ],
 
@@ -180,7 +173,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 35,
             "available_times": ["06:00", "06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00", "13:00"],
             "notes": "Two 18-hole courses (West and East). West Course hosted Asian PGA Tour. 17km from HCMC centre.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Tan Son Nhat Golf Course",
@@ -200,7 +192,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 30,
             "available_times": ["06:00", "06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00"],
             "notes": "Only course in central HCMC. 15 min from airport. PGA standard. Night golf available.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Twin Doves Golf Club",
@@ -220,7 +211,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 30,
             "available_times": ["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "13:00"],
             "notes": "Tranquil setting in Cu Chi. Natural landscape with water features. 45 min from HCMC centre.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Vinpearl Golf Leman",
@@ -240,7 +230,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 40,
             "available_times": ["06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "Newest Vinpearl course, opened October 2025. Premium facilities.",
-            "cancellation_policy": "48 hours notice required",
         },
     ],
 
@@ -266,7 +255,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 35,
             "available_times": ["06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00", "13:00"],
             "notes": "Southeast Asia's jewel. Dong Mo lake views. 45 min from Hanoi centre. 36 holes total across resort.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Sky Lake Resort & Golf Club",
@@ -286,7 +274,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 35,
             "available_times": ["06:00", "06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "Sky Course and Lake Course. Korean-designed. Chuong My district, 40 min from Hanoi.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Long Bien Golf Course",
@@ -306,7 +293,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 25,
             "available_times": ["06:00", "06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00"],
             "notes": "Best value in Hanoi. Close to city centre. Good for early morning rounds.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Chi Linh Star Golf & Country Club",
@@ -326,7 +312,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 30,
             "available_times": ["06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "27 holes on the route to Halong Bay. First professional tournament venue in North Vietnam. 1.5 hours from Hanoi.",
-            "cancellation_policy": "24 hours notice required",
         },
     ],
 
@@ -352,7 +337,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 40,
             "available_times": ["07:00", "07:30", "08:00", "08:30", "09:00", "10:00", "11:00"],
             "notes": "Unique island course. Primeval forest on one side, clear blue sea on the other. Pearl Island paradise.",
-            "cancellation_policy": "48 hours notice required",
         },
     ],
 
@@ -378,7 +362,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 40,
             "available_times": ["07:00", "07:30", "08:00", "08:30", "09:00", "10:00", "11:00"],
             "notes": "On Hon Tre Island — accessed by cable car from Nha Trang. Natural terrain preserved throughout.",
-            "cancellation_policy": "48 hours notice required",
         },
         {
             "name": "Diamond Bay Golf & Villas",
@@ -398,7 +381,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 30,
             "available_times": ["06:30", "07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "Beachfront course with ocean views. Great value for Nha Trang. 10 min from city centre.",
-            "cancellation_policy": "24 hours notice required",
         },
     ],
 
@@ -424,7 +406,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 30,
             "available_times": ["07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "Vietnam's oldest golf course (1922). Cool highland climate year-round. Pine forest setting. Truly unique experience.",
-            "cancellation_policy": "24 hours notice required",
         },
         {
             "name": "Sacom Tuyen Lam Golf",
@@ -444,7 +425,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 30,
             "available_times": ["07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "Lakeside course with stunning views of Tuyen Lam Lake. Cool year-round. Inside resort complex.",
-            "cancellation_policy": "24 hours notice required",
         },
     ],
 
@@ -470,7 +450,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 40,
             "available_times": ["07:00", "07:30", "08:00", "08:30", "09:00", "10:00", "11:00"],
             "notes": "Island course on Vu Yen Island. Near Halong Bay — combine with cruise.",
-            "cancellation_policy": "48 hours notice required",
         },
         {
             "name": "Dragon Golf Links",
@@ -490,7 +469,6 @@ VIETNAM_GOLF_COURSES = {
             "club_hire_usd": 35,
             "available_times": ["07:00", "07:30", "08:00", "09:00", "10:00", "11:00"],
             "notes": "27-hole international standard. Opened 2023. Part of Dragon Hill tourism complex. Near Halong Bay.",
-            "cancellation_policy": "48 hours notice required",
         },
     ],
 }

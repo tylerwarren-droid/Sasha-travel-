@@ -1,8 +1,10 @@
 """Sasha 301 · THE FINE PRINT, ASKED AND TOLD — the two tools (/s2, voice and WhatsApp: the one brain's list, app/agent/s2.py).
 
-  booking_fine_print  "What's the fine print on Friday?" → the itinerary's rows that day (agapi/itinerary.of: THE ONE itinerary), each
-                      with the venue's own terms (quoted, with the deadline they state) and the loyalty numbers / card perks from his
-                      Keep that apply. `say` is built HERE, from the rows — the model says it as given; it never adds a term or a perk.
+  booking_fine_print  "What's the fine print on Friday?" / "Can I cancel?" → the itinerary's rows that day (agapi/itinerary.of: THE ONE
+                      itinerary). Sasha 424 · NO TERM WITHOUT A FACT: a booking's terms (a deposit, cancelling, a deadline, a fee) are
+                      AgAPI's facts (facts.answer) or they are not said — Sasha composes none, so each booking is said as having no
+                      confirmed terms on record. The loyalty numbers / card perks from his Keep that apply are said "as you told me".
+                      `say` is built HERE — the model says it as given; it never adds a term or a perk.
   keep_note           what he tells her about his loyalty memberships (programme + number) and his cards (name, the LAST FOUR only, a
                       perk in his words and what it's for) → his Keep (agapi/s2_keep: the ONE place they live). A full card number
                       never reaches her (the chat guard withholds it before the model) and is refused by the Keep in any field.
@@ -11,14 +13,12 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Any, Dict, List
+from typing import List
 
-from agapi import booking_terms as BT
-
-NO_TERMS = "nothing in their own words about a deposit, cancelling, a no-show or a time limit"
-HOW = ("Say `say` as given. A venue's terms are THEIR words, in quotes, with the deadline they state; a perk or loyalty line is from his "
-       "own Keep. Never add a term, a fee, a deadline or a perk that isn't in it, and never say a booking is free to cancel unless "
-       "their own words say so.")
+#: Sasha 424 · the ONE sentence about a booking's terms while AgAPI holds no fact for it — never a guess, never a placeholder
+NO_TERMS = "I have no confirmed terms on record for this booking"
+HOW = ("Say `say` as given. Sasha holds no booking terms of her own: never state or guess a deposit, a cancellation rule, a deadline, "
+       "a fee or whether it can be refunded or cancelled for free. A perk or loyalty line is from his own Keep, as he told her.")
 
 
 def _when_words(i: dict) -> str:
@@ -28,12 +28,9 @@ def _when_words(i: dict) -> str:
 
 
 def _item_say(i: dict) -> str:
-    lines = [BT.line(t) for t in i.get("terms") or []] + [p["line"] for p in i.get("perks") or []]
     head = f"{i.get('title')}, {_when_words(i)}".rstrip(", ")
-    if not lines:
-        tail = NO_TERMS + "." if i.get("source") == "venue" else "no terms on its record here."
-        return f"{head}: {tail}"
-    return f"{head}: " + " ".join(l if l.endswith((".", "”", "!", "?")) else l + "." for l in lines)
+    perks = [p["line"] for p in i.get("perks") or []]
+    return f"{head}: {NO_TERMS}." + "".join(" " + (l if l.endswith((".", "!", "?")) else l + ".") for l in perks)
 
 
 async def booking_fine_print(ctx, a: dict) -> dict:
@@ -50,7 +47,7 @@ async def booking_fine_print(ctx, a: dict) -> dict:
     name = re.sub(r"\s+", " ", str(a.get("venue") or "")).strip().lower()
     if name:
         items = [i for i in items if name in str(i.get("title") or "").lower()]
-    shown = [{k: i[k] for k in ("kind", "title", "when", "status_words", "id", "terms", "perks") if i.get(k)} for i in items[:8]]
+    shown = [{k: i[k] for k in ("kind", "title", "when", "status_words", "id", "perks") if i.get(k)} for i in items[:8]]
     if not items:
         say = "Nothing booked that day." if day else ("I can't find that booking." if name else "Nothing coming up.")
     else:
@@ -104,8 +101,8 @@ def tools() -> List[dict]:
     return [
         _t("booking_fine_print", "Pacioli", booking_fine_print, (
             "'What's the fine print on Friday?' / 'Is there a deposit at DiverXO?' / 'Can I cancel Saturday for free?' → the bookings "
-            "that day (on=YYYY-MM-DD) or that venue: each one's terms in the VENUE's own words (a deposit, the cancellation deadline, a "
-            "no-show charge, the time at the table) and the loyalty numbers / card perks from their Keep that apply. Say `say` as given."),
+            "that day (on=YYYY-MM-DD) or that venue, each said with the terms on record for it (none confirmed yet: say so, never guess "
+            "one) and the loyalty numbers / card perks from their Keep that apply. Say `say` as given."),
            {"on": {"type": "string", "description": "YYYY-MM-DD, one day"}, "venue": {"type": "string"}}, [],
            {"type": "object", "properties": {"say": {"type": "string"}, "items": {"type": "array"}}}, ["date_invalid"]),
         _t("keep_note", "Pacioli", keep_note, (

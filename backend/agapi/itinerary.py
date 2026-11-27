@@ -10,9 +10,9 @@
   THE VIEW     of(account) → each booking's status (asked · confirmed · offered another time · declined · cancelled · handed over),
                venue, day, time, people, the ROUTE it went by, the venue's own words (untrusted data), its map link, its trip.
                my_plans (chat, voice, WhatsApp), the Trip tab (extra_reservations) and the reminders (upcoming) read it.
-  FINE PRINT   Sasha 301 · each venue row's `terms` (the venue's own sentences: a deposit, a cancellation term with "by <date/time>",
-               a no-show charge, a time limit — agapi/booking_terms.py, read from the row's words, no store of its own) and each
-               booking's `perks` (his Keep's loyalty numbers and card perks that apply, masked). booking_fine_print reads them here.
+  FINE PRINT   Sasha 424 · NO TERM WITHOUT A FACT: a booking's terms (deposit, cancellation, deadlines) are AgAPI's facts
+               (facts.answer) or they are not said — no row carries terms composed here. Each booking's `perks` (his Keep's
+               loyalty numbers and card perks, masked, "as you told me") stay: agapi/booking_perks.py.
   MANAGE       manage_of(row) — how a change, a cancellation or "running late" goes for THIS booking: by the route it was made on,
                never chosen again. The one place that says so; s2_manage and venues.cancel_venue ask it.
 """
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, time as dtime, timedelta
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlsplit
 
@@ -170,9 +170,6 @@ def _from_record(g: dict, a: Optional[dict] = None) -> dict:
             **({"reference": g["reference"]} if g.get("reference") else {}),
             **({"venue_said": {"untrusted_text": str((g.get("venue_words") or {}).get("untrusted_text") or "")[:160]}}
                if (g.get("venue_words") or {}).get("untrusted_text") else {}),
-            # Sasha 302 · the terms read the record's words IN FULL (the 160 above is the line shown): a cut sentence is never a term
-            **({"terms_text": str((g.get("venue_words") or {}).get("untrusted_text") or "")[:4000]}
-               if (g.get("venue_words") or {}).get("untrusted_text") else {}),
             **({"type": "hotel"} if (a or {}).get("stay") or isinstance(g.get("stay"), dict) else {}),   # Sasha 302 · a stay act (CR 102) is a hotel
             # Sasha 306 · CR 137: the stay AS IT STANDS on AgAPI's record (check_in, check_out, nights — never computed here) and the
             # hotel's answer to a change, in its own words (answers.change)
@@ -255,7 +252,6 @@ async def venue_rows(account: str, include_cancelled: bool = True) -> List[dict]
                     **({"place_id": h["place_id"]} if h.get("place_id") else {}),
                     **({"filled": h["filled"]} if "filled" in h else {})})   # Sasha 408 · what the prepare's record said
     for r in out:
-        r["terms"] = row_terms(r)   # Sasha 301 · the venue's own terms, from its own words on this row
         r["status_words"] = words(r["status"], r["route"], r)
         r["route_words"] = route_words(r["route"], r.get("platform"))
         r["manage"] = "ladder" if r["source"] == "ladder" else MANAGE.get(r["route"], "their_page")
@@ -280,7 +276,7 @@ async def of(account: str) -> List[dict]:
         out.append({"kind": _venue_kind(v.get("type")), "title": v["venue"], "when": when, "status": v["status"],
                     "status_words": v["status_words"], "route": v["route"], "route_words": v["route_words"], "manage": v["manage"],
                     "party": v.get("party"), "id": v["id"], "source": "venue",
-                    **{k: v[k] for k in ("reference", "venue_said", "map_url", "address", "platform", "url", "cancel", "change", "terms",
+                    **{k: v[k] for k in ("reference", "venue_said", "map_url", "address", "platform", "url", "cancel", "change",
                                          "change_answer", "country", "agapi_act") if v.get(k)},
                     **({"minutes": v["duration_minutes"]} if v.get("duration_minutes") else {}),   # 327 · a train's length (the calendar reads it)
                     **({"where": v["location"]} if v.get("location") else {}),   # Sasha 327 · a train's "Origin → Destination"
@@ -330,9 +326,9 @@ async def of(account: str) -> List[dict]:
     await TR.view(account, out)
     wallet = await _wallet(account)   # Sasha 301 · his loyalty numbers and card perks that apply to each booking (masked)
     if wallet:
-        from agapi import booking_terms as BT
+        from agapi import booking_perks as BP
         for i in out:
-            p = BT.perks_for(i["kind"], i.get("title") or "", wallet)
+            p = BP.perks_for(i["kind"], i.get("title") or "", wallet)
             if p:
                 i["perks"] = p
     today = date.today().isoformat()
@@ -347,36 +343,6 @@ def stay_end(i: dict) -> str:
     if i.get("check_out"):
         return str(i["check_out"])[:10]
     return (date.fromisoformat(str(i["when"])[:10]) + timedelta(days=i.get("nights") or 1)).isoformat()
-
-
-def start_of(r: dict) -> Optional[datetime]:
-    """A booking's start in its own time zone (its country's), or None without a day and a time."""
-    from zoneinfo import ZoneInfo
-    try:
-        return datetime.combine(date.fromisoformat(str(r["date"])[:10]), dtime.fromisoformat(str(r["time"])[:5]),
-                                tzinfo=ZoneInfo(r.get("timezone") or _zone_of(r.get("country"))))
-    except Exception:
-        return None
-
-
-#: an act's words are cut at this many characters on its record (venue_submit._words): a sentence that reaches it unfinished is dropped
-ACT_WORDS_CUT = 240
-
-
-def row_terms(r: dict) -> List[dict]:
-    """Sasha 301 · the venue's own terms on this booking: from the VENUE's words only — an act's reply (venue_said), the old ladder's
-    venue_words (its venue_said is Sasha's status sentence, never read for terms), a reservation row's venue_words."""
-    from agapi import booking_terms as BT
-    if r.get("source") == "ladder" or (r.get("source") is None and r.get("venue_words")):
-        text = r.get("venue_words")
-        cut = None
-    elif r.get("terms_text"):   # Sasha 302 · AgAPI's record (venue.bookings): its words in full
-        text, cut = r["terms_text"], None
-    else:
-        said = r.get("venue_said")
-        text = said.get("untrusted_text") if isinstance(said, dict) else None
-        cut = ACT_WORDS_CUT if r.get("source") == "act" else None
-    return BT.terms_of(text, start_of(r), cut_at=cut) if text else []
 
 
 async def _wallet(account: str) -> List[dict]:
@@ -408,8 +374,7 @@ def as_reservation(r: dict, trip_id: Optional[str] = None) -> dict:
             "status": _RESERVATION_STATUS.get(r["status"], "requested"), "status_words": r["status_words"],
             "route_words": r["route_words"], "booking_reference": r.get("reference"), "sasha_reference": None, "receipt": None,
             "venue_words": said, "type": r.get("type") or "restaurant", "address": r.get("address"), "map_url": r.get("map_url"),
-            "itinerary": r["source"], "manage": r["manage"], **({"url": r["url"]} if r.get("url") else {}),
-            "terms": r.get("terms") or []}   # Sasha 301 · the venue's own terms (the Trip tab draws them; cancel_by reads them)
+            "itinerary": r["source"], "manage": r["manage"], **({"url": r["url"]} if r.get("url") else {})}
 
 
 def _zone_of(country: Optional[str]) -> str:
@@ -437,18 +402,12 @@ async def extra_reservations(account: str) -> List[dict]:
     return out
 
 
-def with_terms(rows: List[dict]) -> List[dict]:
-    """Sasha 301 · reservation rows (the old ladder's /reservations, as the Trip tab and the reminders read them), each with the venue's
-    own terms from its own words — the same reader as every itinerary row (row_terms)."""
-    return [r if "terms" in r else {**r, "terms": row_terms(r)} for r in rows]
-
-
 async def upcoming(account: str, ladder_rows: List[dict]) -> List[dict]:
     """The reminders' bookings: the old ladder's upcoming rows (as they were read) and the itinerary's other rows still to come."""
     today = date.today().isoformat()
     extra = [r for r in await extra_reservations(account) if r.get("date") and r["date"] >= today
              and r["status"] not in ("cancelled", "declined", "failed")]
-    return with_terms(ladder_rows) + extra   # Sasha 301 · the ladder's rows: their terms from their venue_words
+    return ladder_rows + extra
 
 
 # ── MANAGE: by the booking's own route ───────────────────────────────────────────────────────────────────────────────────────
@@ -492,4 +451,4 @@ def page_answer(row: dict, kind: str) -> dict:
 
 
 __all__ = ["of", "venue_rows", "extra_reservations", "upcoming", "find", "page_answer", "as_reservation", "words", "route_words",
-           "map_url", "handover_route", "act_route", "MANAGE", "ROUTE_WORDS", "row_terms", "start_of", "with_terms"]
+           "map_url", "handover_route", "act_route", "MANAGE", "ROUTE_WORDS"]

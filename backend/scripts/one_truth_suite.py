@@ -275,12 +275,12 @@ T = {   # invariant → (what it holds, the test classes that hold it)
             "change, a cancellation or 'running late' goes by the route it was booked on, on his yes — or is said plainly and nothing "
             "is sent (Sasha 300)",
             ["tests.test_s300"]),
-    "T79": ("Every booking's fine print is on its ONE itinerary row: the venue's terms in their own sentences (a deadline only from "
-            "the hours they stated, reminded once before it passes), and his loyalty numbers and card perks from ONE place, his Keep — "
-            "masked, the last four only, never a term or a perk nobody stated (Sasha 301)",
+    "T79": ("Every booking's fine print: no term composed by Sasha — the row, the Trip tab, the reminders and 'can I cancel?' carry "
+            "none even when the venue's words name one, and no cancellation-deadline reminder exists; his loyalty numbers and card perks "
+            "from ONE place, his Keep — masked, the last four only, never a perk nobody stated (Sasha 301 · 424)",
             ["tests.test_s301"]),
-    "T80": ("The fine print is said by code, word for word, never paraphrased; a term on AgAPI's record is read from the venue's words "
-            "in full (never the display line's cut); a hotel stay act is a hotel, so his programme shows on it only (Sasha 302)",
+    "T80": ("The fine print is said by code, word for word, never paraphrased; the venue's words are their line, never read for "
+            "terms; a hotel stay act is a hotel, so his programme shows on it only (Sasha 302 · 424)",
             ["tests.test_s302"]),
     "T81": ("ONE gate opens and closes every avatar (HeyGen) session: only a real signed-in person's tap on /s2; closed on the server "
             "after 60 s with nobody talking, a hidden or closed tab, or a cap (his minutes, Kanoe's — server settings), one log row each "
@@ -368,6 +368,9 @@ T = {   # invariant → (what it holds, the test classes that hold it)
     "T102": ("a recorded model reply that acts with a date is replayed only on the day it was recorded — never a past Saturday on a "
              "later day (Sasha 386)",
              ["tests.test_s386_dated_replies"]),
+    "T103": ("NO TERM WITHOUT A FACT: a booking's terms (refundable, a deadline, a fee) are AgAPI's facts (facts.answer) or not said — "
+             "Sasha holds no term field (Python, TypeScript, a standing SQL column) and no door composes one (Sasha 423 · 424)",
+             ["tests.test_s423_no_term_without_a_fact"]),
 }
 
 _RUNNER = """

@@ -31,12 +31,14 @@ TERM_FIELD = re.compile(r"(?i)^(?:is_|has_)?(?:non_?)?refundab\w*$|^cancellation
                         r"deadline|fee|fees|terms|window|charge)\w*$|^free_?cancel\w*$|^refund_?(?:polic(?:y|ies)|until|deadline)\w*$")
 
 
-#: THE ONE NAMED DEBT (shrink-only). Sasha 301's venue terms: agapi/booking_terms.py composes a deposit / cancellation / no-show / time
-#: limit, with a "by <date>" deadline, from the venue's own reply AT VIEW TIME (no store) — read by the Trip tab (itinerary.with_terms),
-#: booking_fine_print (/s2, voice, WhatsApp) and the cancel_by reminder (proactive). It is a term about a booking not read through
-#: facts.answer. Its writer is AgAPI's `venue_words` facts (FP-4 venue words), ON ICE with venue booking (KANOE 26 Nov 12:07); the
-#: question of switching it off meanwhile is Tyler's (Sasha 423's report). When it reads facts.answer, this line goes.
-KNOWN_DEBT = ("backend/agapi/booking_terms.py cancellation",)   # file + name, never a line number
+#: Shrink-only debts: NONE (Sasha 424 deleted Sasha 301's venue terms, the last one). A new entry needs Tyler's say-so.
+KNOWN_DEBT: tuple = ()
+
+#: Sasha 424 · the sentences and readers that COMPOSED a booking term inside Sasha (Sasha 301's venue terms and cancel_by reminder, the
+#: group report's fare conditions). None may return: a term comes back ONLY as an AgAPI fact (facts.answer — FP-3/FP-4, the group
+#: fine print). Matched in code, not in tests or docs.
+COMPOSERS = ("terms_of(", "booking_terms", "by_words", "cancel_by_of", "Cancellation deadline for", "only the airline can cancel it",
+             "it can't be refunded", "it can't be changed", "with_terms(", "row_terms(", "termHead", "TERM_LABEL", "cancelBy(")
 
 def _files(base: pathlib.Path, exts):
     for p in base.rglob("*"):
@@ -114,6 +116,19 @@ def term_fields():
 
 
 class NoTermWithoutAFact(unittest.TestCase):
+    def test_no_door_composes_a_term(self):
+        """Sasha 424 · every door (S2, /next, WhatsApp, voice, the Trip tab, the reminders, the group report) reads one source for a
+        booking's terms: AgAPI's facts. Nothing in Sasha's code composes one."""
+        bad = []
+        for p in list(_files(BACKEND, {".py"})) + list(_files(FRONTEND, {".ts", ".tsx"})):
+            if p.name == "test_s423_no_term_without_a_fact.py":
+                continue
+            t = p.read_text()
+            bad += [f"{p.relative_to(ROOT)}: {c}" for c in COMPOSERS if c in t]
+        self.assertEqual(bad, [])
+        self.assertFalse((BACKEND / "agapi" / "booking_terms.py").exists())
+
+
     def test_the_name_rule_catches_the_class_and_nothing_else(self):
         for name in ("is_refundable", "refundable", "non_refundable", "refundable_until", "cancellation_policy", "cancellation",
                      "cancel_policy", "cancel_until", "cancel_deadline", "free_cancellation", "free_cancel", "refund_policy", "cancel_fee"):

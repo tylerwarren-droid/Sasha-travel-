@@ -84,9 +84,11 @@ class Base(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"DUFFEL_ACCESS_TOKEN": "duffel_test_x"})
         self.env.start()
         self.saved = FM.HTTP
+        FM._SEEN.clear()   # Sasha 424 · the order cache is module state: start empty and leave it empty, so no other test reads these fakes
 
     def tearDown(self):
         FM.HTTP = self.saved
+        FM._SEEN.clear()
         self.env.stop()
 
     def fake(self, **kw):

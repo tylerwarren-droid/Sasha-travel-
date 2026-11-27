@@ -104,7 +104,7 @@ async def my_plans(ctx, a: dict) -> dict:
         except ValueError:
             raise _err("date_invalid", "on is YYYY-MM-DD")
     shown = [{k: i.get(k) for k in ("kind", "title", "when", "where", "status", "status_words", "route_words", "venue_said", "reference",
-                                    "id", "party", "nights", "check_in", "check_out", "change_answer", "trip", "map_url", "terms", "perks", "live") if i.get(k) is not None}   # Sasha 300 · its route, their words · 302: the fine print
+                                    "id", "party", "nights", "check_in", "check_out", "change_answer", "trip", "map_url", "perks", "live") if i.get(k) is not None}   # Sasha 300 · its route, their words · 302: the fine print
              for i in items[:20]]
     return {"items": shown, **({"on": day} if day else {}), "count": len(items), **({"calendar_updates": cal} if cal else {}),
             "say": (("Nothing booked that day." if day else "Nothing coming up.") if not items else

@@ -499,7 +499,7 @@ async def plan_view(request: Request):
         return {"plan": None, "plans": await PS.plans(account)}
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     from agapi import itinerary as IT   # Sasha 300 · THE ONE ITINERARY: AgAPI's acts and the hand-overs are in their trip's days too
-    rows = PS.truthful(IT.with_terms((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account))   # 301
+    rows = PS.truthful(((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account))   # 301
     view = await PS.view(account, p, JN.for_journey(rows, p.get("trip_id")))
     tt = await trip_total(account, p.get("trip_id"), p)
     card = PS.card(view, tt)   # Sasha 283 · item 1 · the conversation's trip card: THIS view, said as what the trip is
@@ -581,7 +581,7 @@ async def journeys_view(request: Request):
     await JN.file(account)
     s, j = await GW.api(account, "GET", "/api/booking/reservations")
     from agapi import itinerary as IT   # Sasha 300 · THE ONE ITINERARY: every route's booking, in its trip
-    rows = IT.with_terms((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account)   # Sasha 301
+    rows = ((j or {}).get("reservations") or [] if s == 200 else []) + await IT.extra_reservations(account)   # Sasha 301
     from . import trains as TR   # Sasha 327 · a train row: every field (AgAPI's act, read now) and its "Manage your ticket" page
     rows = await TR.view(account, rows)
     return await JN.journeys(account, rows)

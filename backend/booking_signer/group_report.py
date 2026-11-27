@@ -138,11 +138,12 @@ def card(mv: Dict[str, Any], q: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
     return {"read_back": [], "ask": q["ask"], "choices": q["choices"], "read_back_id": f"gfin_{str(mv.get('id') or '')[:36]}"}
 
 
-# ── what the trip record keeps beside the list: each reason, each fare's conditions, each invitation (one key per traveller) ─
+# ── what the trip record keeps beside the list: each reason, each invitation (one key per traveller) ─────────────────────────
 
 async def keep(account: str, mv: Dict[str, Any], rows: List[Dict[str, Any]], failed: List[Dict[str, Any]], done: List[Dict[str, Any]]) -> None:
-    """The reasons this run met (why:<member>) and each booked fare's conditions (cond:<member>), ON the trip — so the report, read later
-    from the trip, says them; never a second copy anywhere else."""
+    """The reasons this run met (why:<member>), ON the trip — so the report, read later from the trip, says them; never a second copy
+    anywhere else. Sasha 424 · a fare's terms (refund, change, who can cancel) are never kept or said here: they are AgAPI's facts
+    (facts.answer, the group fine print) or they are not said."""
     from . import groups as G, group_book as GB
     ids = {r["name"]: str(r.get("member_id")) for r in rows if r.get("member_id")}
     st = G.store()
@@ -152,16 +153,6 @@ async def keep(account: str, mv: Dict[str, Any], rows: List[Dict[str, Any]], fai
         if mid:
             why = f.get("why") or GB.FACTS.get(code) or GB.MANDATE_FACTS.get(code) or "not booked just now"
             await st.set_rule(account, mv["id"], f"why:{mid}", {"code": code, "why": str(why)[:300]})
-    for d in done:
-        mid, words = ids.get(d.get("name")), []
-        for c in d.get("conditions") or []:
-            for w in (("only the airline can cancel it" if c.get("cancel_by") == "airline" else ""),
-                      ("it can't be refunded" if c.get("refund") in (False, "none", "no") else ""),
-                      ("it can't be changed" if c.get("change") in (False, "none", "no") else "")):
-                if w and f"{c.get('kind') or 'booking'}: {w}" not in words:   # each fact once (both legs say it)
-                    words.append(f"{c.get('kind') or 'booking'}: {w}")
-        if mid and words:
-            await st.set_rule(account, mv["id"], f"cond:{mid}", words)
 
 
 async def invited(account: str, movement_id: str, names: List[str], rows: List[Dict[str, Any]]) -> None:
@@ -304,12 +295,11 @@ async def report(account: str, movement_id: str) -> Dict[str, Any]:
         no_mail = k == "booked" and not went and not emails.get(r["name"])
         mid = str(r.get("member_id"))
         why = (kept.get(f"why:{mid}") or {}).get("why") if k == "not_booked" else None
-        cond = kept.get(f"cond:{mid}") if k == "booked" else None
         fix = _fix_of(r, k)
         if r.get("status") == "needs vault":
             fix = ("their secure passport link was emailed — they're booked once it's in" if kept.get(f"invite:{mid}")
                    else "their secure passport link is on the Group page to forward (no email on file)")
-        return {"name": r["name"], "flight": (r.get("transport") or "—") + (f" ({'; '.join(cond)})" if cond else ""),
+        return {"name": r["name"], "flight": r.get("transport") or "—",
                 "hotel": r.get("hotel") or "—", "status": LABEL[k],
                 "references": list(r.get("references") or []), "emailed": ("yes" if went else "no") if k == "booked" else "—",
                 "missing": "their email, for the itinerary" if no_mail else (why or _missing_of(r, k)),

@@ -40,8 +40,7 @@ class ItineraryItem(BaseModel):
     price_fiat: float = 0.0
     price_currency: str = "GBP"
     price_locked_at: Optional[datetime] = None
-    is_refundable: bool = True
-    cancellation_policy: Dict[str, Any] = {}
+    # Sasha 423 · no is_refundable / cancellation_policy here: a booking's terms are AgAPI's facts (facts.answer), never a default.
     confirmation_ref: Optional[str] = None
     media: List[Dict[str, Any]] = []
     sasha_rationale: Optional[str] = None

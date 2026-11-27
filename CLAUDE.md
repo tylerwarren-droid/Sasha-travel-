@@ -158,6 +158,10 @@ each marked "S-78 input guard":
 /api/booking/health reports "chat_hooks": {"input_guard": false}, {"save_guard": false} or {"guard_first": false} if
 one is lost or moved below the hand-off; tests/test_stage_b_hooks.py and tests/test_input_guard_s78.py fail too.
 
+Sasha 423 (no term without a fact) — a CTO drop that brings back `is_refundable` / `cancellation_policy` (backend/app/models/itinerary.py,
+frontend/types/index.ts, ItineraryPanel's "Refundable" badge) or the golf `cancellation_policy` strings fails
+backend/tests/test_s423_no_term_without_a_fact.py: delete them again. A booking's terms are AgAPI's facts (facts.answer) or unsaid.
+
 ## Repo-only files that MUST survive every sync
 - app/vietnam2/ — uses LEGACY component copies app/vietnam2/SashaChatLegacy.tsx and app/vietnam2/VoiceButton.tsx (CTO's rewritten SashaChat has an incompatible props interface). vietnam2 needs leaflet + @types/leaflet in package.json.
 - app/kanoe/

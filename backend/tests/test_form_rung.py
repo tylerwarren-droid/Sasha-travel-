@@ -165,17 +165,20 @@ class OnPostgres(unittest.TestCase):
         FormRung.setUp(self)
         FR.STORE = FR.PostgresFormStore(self.base)
 
-    def test_a_form_sent_in_postgres(self):
+    def test_a_form_prepared_in_postgres_is_never_sent_by_sasha(self):
+        """Sasha 319 (2daf1f47) · ONE sender to venues, AgAPI's acts: /forms/{id}/send answers 410 venue_send_retired and sends
+        nothing (its memory half, "the yes sends it once", was deleted there). Against sql/018: the prepared form is stored,
+        the yes sends nothing, and nothing on the reservation says it was sent or confirmed."""
         v = self.read()
         prep = self.c.post("/api/booking/forms", json={"read_id": v["read_id"], "reservation": reservation()}).json()
         sent = self.c.post(f"/api/booking/forms/{prep['form_id']}/send", json={"read_back_sha256": prep["read_back"]["sha256"], "approval": {"how": "button"}})
-        self.assertEqual(sent.json()["status"], "sent", sent.text)
-        row = self._q("select status, http_status, response_sha256, approval from booking_forms where form_id = $1::uuid", prep["form_id"])[0]
-        self.assertEqual((row["status"], row["http_status"]), ("sent", 200))
+        self.assertEqual((sent.status_code, sent.json()["rule"], sent.json()["sent"]), (410, "venue_send_retired", False), sent.text)
+        self.assertEqual(self.posts, [])                                        # nothing reached the venue
+        row = self._q("select status, http_status, approval from booking_forms where form_id = $1::uuid", prep["form_id"])[0]
+        self.assertEqual((row["status"], row["http_status"], row["approval"]), ("awaiting_approval", None, None))
         item = self._q("select status, booking_reference from trip_items where id = $1::uuid", prep["trip_item_id"])[0]
-        self.assertEqual((item["status"], item["booking_reference"]), ("confirmed", sent.json()["booking_reference"]))
-        att = self._q("select method, status from booking_attempts where trip_item_id = $1::uuid", prep["trip_item_id"])
-        self.assertEqual([(a["method"], a["status"]) for a in att], [("web_form", "confirmed")])
+        self.assertEqual((item["status"], item["booking_reference"]), ("pending", None))
+        self.assertEqual(self._q("select method, status from booking_attempts where trip_item_id = $1::uuid", prep["trip_item_id"]), [])
 
 
 HANAKURA_PAGE = """<html><head><title>Hanakura</title></head><body><form method="post" enctype="multipart/form-data" > <fieldset>

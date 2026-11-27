@@ -33,22 +33,40 @@ def sign(path, form):
     return base64.b64encode(hmac.new(TOKEN.encode(), (url + "".join(f"{k}{form[k]}" for k in sorted(form))).encode(), hashlib.sha1).digest()).decode()
 
 
+def whatsapp_path(tc):
+    """What a WhatsApp message's path needs around it in these tests — ONE set-up for the memory and the Postgres halves. The
+    Postgres half kept no copy of it and missed all three as they arrived (Sasha 357, 379a, 394). AgAPI's stand-in is put back by
+    addCleanup; the store and the wait by the returned undo, which the tearDown calls FIRST — before a subclass's own tearDown
+    (test_guest_whatsapp_s75.Webhook) puts its own stores back."""
+    # Sasha 394 · CR 206 · AgAPI stands in, answering as live does for a person in Sasha: decided, not AgAPI's ({"matched": False}).
+    # (An error is UNDECIDED — delivered again, never answered: tests/test_s394_deliver_again.)
+    from agapi import venue_submit as _VS394
+    _real394 = _VS394.CALL
+
+    async def _call394(op, body, approval=None, account=None):
+        if op == "messages.whatsapp_inbound":
+            return {"ok": True, "result": {"matched": False}}
+        return await _real394(op, body, approval, account)
+    _p394 = mock.patch.object(_VS394, "CALL", _call394)
+    _p394.start()
+    tc.addCleanup(_p394.stop)
+    # Sasha 379a · a WhatsApp message is answered by REST after Twilio's ack: wait for it here
+    from booking_signer import guest_whatsapp as _GW   # Sasha 357 · the message's steps in memory (no database here): a step that
+    saved = (IP.ACK_WAIT_S, _GW.STORE)                # can't be recorded now fails CLOSED and is told — never the venue path
+    IP.ACK_WAIT_S = 30.0
+    if getattr(_GW.STORE, "_run", None) is not None:
+        _GW.STORE = _GW.MemoryGuestStore()
+
+    def undo():
+        IP.ACK_WAIT_S, _GW.STORE = saved
+    return undo
+
+
 class InboundPhone(unittest.TestCase):
     def setUp(self):
         self.env = mock.patch.dict(os.environ, {"TWILIO_AUTH_TOKEN": TOKEN, "TWILIO_WEBHOOK_BASE": BASE, "SASHA_BOOKING_KEY": "k"})
         self.env.start()
-        # Sasha 394 · CR 206 · AgAPI stands in, answering as live does for a person in Sasha: decided, not AgAPI's ({"matched": False}).
-        # (An error is UNDECIDED — delivered again, never answered: tests/test_s394_deliver_again.)
-        from agapi import venue_submit as _VS394
-        _real394 = _VS394.CALL
-
-        async def _call394(op, body, approval=None, account=None):
-            if op == "messages.whatsapp_inbound":
-                return {"ok": True, "result": {"matched": False}}
-            return await _real394(op, body, approval, account)
-        _p394 = mock.patch.object(_VS394, "CALL", _call394)
-        _p394.start()
-        self.addCleanup(_p394.stop)
+        self.undo_wa = whatsapp_path(self)
         self.calls = MemoryCallStore()
         now = datetime.now(timezone.utc)
         for cid, item, dialled in (("c-site", "t-site", SITE_NUMBER), ("c-list", "t-list", PT.number_key(LISTING_NUMBER))):
@@ -56,22 +74,14 @@ class InboundPhone(unittest.TestCase):
             self.calls.calls[cid] = {"call_id": cid, "trip_item_id": item, "dialled_number": dialled, "status": "answered",
                                      "created_at": now - timedelta(hours=1), "brief": {"venue_ids": ["places:x"], "followup": {"request": O}}}
         self.saved = (IP.STORE, S.STOP_STORE)
-        self._ack = IP.ACK_WAIT_S   # Sasha 379a · a WhatsApp message is answered by REST after Twilio's ack: wait for it here
-        IP.ACK_WAIT_S = 30.0
         IP.STORE = IP.MemoryInboundStore(self.calls)
-        from booking_signer import guest_whatsapp as _GW   # Sasha 357 · the message's steps in memory (no database here): a step that
-        self.gw_store = _GW.STORE                         # can't be recorded now fails CLOSED and is told — never the venue path
-        if getattr(_GW.STORE, "_run", None) is not None:
-            _GW.STORE = _GW.MemoryGuestStore()
         app = FastAPI()
         app.include_router(routes.router)
         self.c = TestClient(app)
 
     def tearDown(self):
-        from booking_signer import guest_whatsapp as _GW
-        _GW.STORE = self.gw_store
+        self.undo_wa()
         IP.STORE, S.STOP_STORE = self.saved
-        IP.ACK_WAIT_S = self._ack
         self.env.stop()
 
     def post(self, path, form, signed=True):
@@ -180,7 +190,8 @@ class OnPostgres(unittest.TestCase):
         TBL.OnPostgres.setUpClass.__func__(cls)
         import asyncio, asyncpg, pathlib
         d = pathlib.Path(__file__).resolve().parents[1] / "booking_signer" / "sql"
-        sqls = [(d / f).read_text() for f in ("016_inbound_phone.sql", "017_inbound_whatsapp.sql")]
+        # Sasha 118 (b609f285) · written_candidates reads booking_forms (018): a venue writes about a booking Sasha made by form too
+        sqls = [(d / f).read_text() for f in ("016_inbound_phone.sql", "017_inbound_whatsapp.sql", "018_booking_forms.sql")]
 
         async def apply():
             c = await asyncpg.connect(TBL.PG_URL)
@@ -196,29 +207,36 @@ class OnPostgres(unittest.TestCase):
         TBL.LadderRoutes.setUp(self)
         self.tok = mock.patch.dict(os.environ, {"TWILIO_AUTH_TOKEN": TOKEN, "TWILIO_WEBHOOK_BASE": BASE})
         self.tok.start()
+        self.undo_wa = whatsapp_path(self)
         v = TBL.LadderRoutes.read(self)
         prep = self.c.post("/api/booking/calls", json={"read_id": v["read_id"], **TBL.LadderRoutes.BOOKING}).json()
         self._q("update booking_calls set status = 'answered', outcome = 'unclear' where call_id = $1::uuid", prep["call_id"])
         self.item = prep["trip_item_id"]
-        self.saved_ip = IP.STORE
-        IP.STORE = IP.PostgresInboundStore(self.base)
+        # the venue writes from the number Sasha called — the read's own phone fact (the number the call dialled), never a second
+        # copy of it here: Sasha 386 (bff5c8e9) changed a hand-kept copy and the sender stopped being the venue that was called
+        self.venue = next(f["value"] for f in v["facts"] if f["kind"] == "phone")
+        # ONE clock: the call was prepared at the ladder's clock (TBL.NOW), so the inbound route reads that same clock — on the real
+        # clock the call falls out of MATCH_WINDOW 30 days after TBL.NOW, and the test rots with the calendar
+        self.saved_ip = (IP.STORE, IP.NOW)
+        IP.STORE, IP.NOW = IP.PostgresInboundStore(self.base), (lambda: self.now)
 
     def tearDown(self):
-        IP.STORE = self.saved_ip
+        self.undo_wa()
+        IP.STORE, IP.NOW = self.saved_ip
         self.tok.stop()
         TBL.LadderRoutes.tearDown(self)
 
     def test_an_sms_lands_on_the_reservation_in_postgres(self):
-        form = {"MessageSid": "SMpg1", "From": "+14155550117", "To": "+447700900000",
+        form = {"MessageSid": "SMpg1", "From": self.venue, "To": "+447700900000",
                 "Body": "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson."}
         r = self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
         self.assertEqual(r.status_code, 200, r.text)
         row = self._q("select * from booking_inbound where provider_id = 'SMpg1'")[0]
-        self.assertEqual((str(row["trip_item_id"]), row["from_key"]), (self.item, PT.number_key("+14155550117")))
+        self.assertEqual((str(row["trip_item_id"]), row["from_key"]), (self.item, PT.number_key(self.venue)))
         self.assertEqual(self._q("select status from trip_items where id = $1::uuid", self.item)[0]["status"], "confirmed")
 
     def test_a_whatsapp_message_lands_as_a_whatsapp_attempt_in_postgres(self):
-        form = {"MessageSid": "SMpgwa", "From": "whatsapp:+14155550117", "To": "whatsapp:+447700900000",
+        form = {"MessageSid": "SMpgwa", "From": f"whatsapp:{self.venue}", "To": "whatsapp:+447700900000",
                 "Body": "Confirmado: mesa para 4 personas el jueves 8 de octubre a las 20:00, a nombre de Johnson."}
         r = self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
         self.assertEqual(r.status_code, 200, r.text)
@@ -228,7 +246,7 @@ class OnPostgres(unittest.TestCase):
 
     def test_an_sms_shows_on_the_receipt_from_postgres(self):
         # Sasha 88 · what the venue WROTE is on the booking's receipt, verbatim
-        form = {"MessageSid": "SMpgrc", "From": "+14155550117", "To": "+447700900000", "Body": "Confirmada mesa jueves 20h Johnson"}
+        form = {"MessageSid": "SMpgrc", "From": self.venue, "To": "+447700900000", "Body": "Confirmada mesa jueves 20h Johnson"}
         self.c.post("/api/booking/twilio/sms", data=form, headers={"X-Twilio-Signature": sign("sms", form)})
         r = self.c.get(f"/api/booking/reservations/{self.item}/receipt")
         self.assertEqual(r.status_code, 200, r.text)
